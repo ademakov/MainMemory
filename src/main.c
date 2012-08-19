@@ -21,6 +21,7 @@
 #include <event.h>
 #include <util.h>
 
+#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -45,7 +46,7 @@ mm_signal(int signo, void (*handler)(int))
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
 	if (sigaction(signo, &sa, NULL) == -1) {
-		mm_fatal("Failed sigaction() call");
+		mm_fatal(errno, "Failed sigaction() call");
 	}
 
 	LEAVE();

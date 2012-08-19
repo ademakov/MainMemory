@@ -24,11 +24,11 @@
 void mm_print(const char *restrict msg, ...);
 void mm_flush(void);
 
-void mm_error(const char *restrict msg, ...)
-	__attribute__((format(printf, 1, 2)));
+void mm_error(int error, const char *restrict msg, ...)
+	__attribute__((format(printf, 2, 3)));
 
-void mm_fatal(const char *restrict msg, ...)
-	__attribute__((format(printf, 1, 2)))
+void mm_fatal(int error, const char *restrict msg, ...)
+	__attribute__((format(printf, 2, 3)))
 	__attribute__((noreturn));
 
 #define ABORT() mm_abort(__FILE__, __LINE__, __FUNCTION__, "ABORT")

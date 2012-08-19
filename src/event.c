@@ -21,6 +21,7 @@
 #include <event.h>
 #include <util.h>
 
+#include <errno.h>
 #include <sys/event.h>
 #include <sys/types.h>
 
@@ -35,7 +36,7 @@ mm_event_init(void)
 
 	mm_kqueue = kqueue();
 	if (mm_kqueue == -1) {
-		mm_fatal("Failed to create kqueue");
+		mm_fatal(errno, "Failed to create kqueue");
 	}
 
 	LEAVE();

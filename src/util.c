@@ -51,18 +51,22 @@ mm_flush(void)
 }
 
 void
-mm_error(const char *restrict msg, ...)
+mm_error(int error, const char *restrict msg, ...)
 {
 	va_list va;
 	va_start(va, msg);
 	mm_vprint(msg, va);
 	va_end(va);
 
-	mm_print("\n");
+	if (error) {
+		mm_print(": %s\n", strerror(error));
+	} else {
+		mm_print("\n");
+	}
 }
 
 void
-mm_fatal(const char *restrict msg, ...)
+mm_fatal(int error, const char *restrict msg, ...)
 {
 	ENTER();
 
@@ -71,7 +75,11 @@ mm_fatal(const char *restrict msg, ...)
 	mm_vprint(msg, va);
 	va_end(va);
 
-	mm_print("\n");
+	if (error) {
+		mm_print(": %s\n", strerror(error));
+	} else {
+		mm_print("\n");
+	}
 	mm_flush();
 
 	exit(EXIT_FAILURE);
