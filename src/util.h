@@ -41,7 +41,7 @@ void mm_fatal(int error, const char *restrict msg, ...)
 
 void mm_abort(const char *file, int line, const char *func,
 	      const char *restrict msg, ...)
-	__attribute__((format(printf, 4, 5)));
+	__attribute__((format(printf, 4, 5)))
 	__attribute__((noreturn));
 
 #if ENABLE_TRACE
