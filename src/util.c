@@ -1,5 +1,5 @@
 /*
- * error.c - MainMemory errors.
+ * util.c - MainMemory utilities.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -25,30 +25,102 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-void
-mm_vprintf(const char *restrict msg, va_list va)
+#if ENABLE_TRACE
+static int mm_trace_level = 0;
+#endif
+
+static void
+mm_vprint(const char *restrict msg, va_list va)
 {
 	vfprintf(stderr, msg, va);
-	fprintf(stderr, "\n");
 }
 
+void
+mm_print(const char *restrict msg, ...)
+{
+	va_list va;
+	va_start(va, msg);
+	vfprintf(stderr, msg, va);
+	va_end(va);
+}
+
+void
+mm_flush(void)
+{
+	fflush(stderr);
+}
 
 void
 mm_error(const char *restrict msg, ...)
 {
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_vprint(msg, va);
 	va_end(va);
+
+	mm_print("\n");
 }
 
 void
 mm_fatal(const char *restrict msg, ...)
 {
+	ENTER();
+
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_vprint(msg, va);
 	va_end(va);
-	
+
+	mm_print("\n");
+	mm_flush();
+
 	exit(EXIT_FAILURE);
 }
+
+void
+mm_abort(const char *file, int line, const char *func,
+	 const char *restrict msg, ...)
+{
+	ENTER();
+
+	mm_print("%s:%d, %s: ", file, line, func);
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprint(msg, va);
+	va_end(va);
+
+	mm_print("\n");
+	mm_flush();
+
+	abort();
+}
+
+#if ENABLE_TRACE
+
+void
+mm_trace_enter(void)
+{
+	++mm_trace_level;
+}
+
+void
+mm_trace_leave(void)
+{
+	--mm_trace_level;
+}
+
+void
+mm_trace(const char *file, int line, const char *func, const char *restrict msg, ...)
+{
+	mm_print("%*s%s ", mm_trace_level * 2, "", func);
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprint(msg, va);
+	va_end(va);
+
+	mm_print(" (%s:%d)\n", file, line);
+}
+
+#endif
