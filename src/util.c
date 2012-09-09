@@ -20,6 +20,9 @@
 
 #include <util.h>
 
+#include <dlmalloc/malloc.h>
+
+#include <errno.h>
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
@@ -69,8 +72,6 @@ mm_error(int error, const char *restrict msg, ...)
 void
 mm_fatal(int error, const char *restrict msg, ...)
 {
-	ENTER();
-
 	va_list va;
 	va_start(va, msg);
 	mm_vprint(msg, va);
@@ -81,6 +82,8 @@ mm_fatal(int error, const char *restrict msg, ...)
 	} else {
 		mm_print("\n");
 	}
+
+	mm_print("exiting...\n");
 	mm_flush();
 
 	exit(EXIT_FAILURE);
@@ -90,8 +93,6 @@ void
 mm_abort(const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
-	ENTER();
-
 	mm_print("%s:%d, %s: ", file, line, func);
 
 	va_list va;
@@ -99,7 +100,7 @@ mm_abort(const char *file, int line, const char *func,
 	mm_vprint(msg, va);
 	va_end(va);
 
-	mm_print("\n");
+	mm_print("aborting...\n");
 	mm_flush();
 
 	abort();
@@ -130,6 +131,56 @@ mm_trace(const char *file, int line, const char *func, const char *restrict msg,
 	va_end(va);
 
 	mm_print(" (%s:%d)\n", file, line);
+}
+
+void *
+mm_alloc(size_t size)
+{
+	void *ptr = dlmalloc(size);
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) size);
+	}
+	return ptr;
+}
+
+void *
+mm_realloc(void *ptr, size_t size)
+{
+	ptr = dlrealloc(ptr, size);
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) size);
+	}
+	return ptr;
+}
+
+void *
+mm_calloc(size_t count, size_t size)
+{
+	void *ptr = dlcalloc(count, size);
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) count * size);
+	}
+	return ptr;
+}
+
+void *
+mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
+{
+	ASSERT(old_count < new_count);
+	size_t old_amount = old_count * size;
+	size_t new_amount = new_count * size;
+	ptr = dlrealloc(ptr, new_amount);
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) new_amount);
+	}
+	memset(ptr + old_amount, 0, new_amount - old_amount);
+	return ptr;
+}
+
+void
+mm_free(void *ptr)
+{
+	dlfree(ptr);
 }
 
 #endif
