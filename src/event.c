@@ -75,6 +75,12 @@ mm_event_init_kevents(struct mm_kevents *kevents)
 }
 
 static void
+mm_event_free_kevents(struct mm_kevents *kevents)
+{
+	mm_free(kevents->kevents);
+}
+
+static void
 mm_event_grow_kevents(struct mm_kevents *kevents)
 {
 	int max_nevents = kevents->max_nevents;
@@ -240,7 +246,13 @@ mm_event_free(void)
 	ENTER();
 
 	mm_free(mm_fd_table);
-	mm_fd_table = NULL;
+
+	if (mm_kq >= 0) {
+		close(mm_kq);
+	}
+
+	mm_event_free_kevents(&mm_ev);
+	mm_event_free_kevents(&mm_ch);
 
 	LEAVE();
 }
