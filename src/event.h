@@ -23,6 +23,9 @@
 
 #include <stdint.h>
 
+#define MM_EVENT_READ	1
+#define MM_EVENT_WRITE	2
+
 void mm_event_init(void);
 void mm_event_free(void);
 void mm_event_loop(void);
@@ -30,7 +33,9 @@ void mm_event_stop(void);
 
 typedef void (*mm_event_iocb)(int fd, int flags, intptr_t data);
 
-void mm_event_set_fd(int fd, int flags, mm_event_iocb iocb, intptr_t data);
+int mm_event_verify_fd(int fd);
+void mm_event_register_fd(int fd, int flags, mm_event_iocb iocb, intptr_t data);
+void mm_event_unregister_fd(int fd);
 
 
 #endif	/* EVENT_H */
