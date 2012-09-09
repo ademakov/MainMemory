@@ -133,6 +133,8 @@ mm_trace(const char *file, int line, const char *func, const char *restrict msg,
 	mm_print(" (%s:%d)\n", file, line);
 }
 
+#endif
+
 void *
 mm_alloc(size_t size)
 {
@@ -182,5 +184,3 @@ mm_free(void *ptr)
 {
 	dlfree(ptr);
 }
-
-#endif
