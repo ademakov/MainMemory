@@ -26,6 +26,27 @@ AC_CHECK_HEADERS([stdlib.h unistd.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 
+dnl Checks for library functions.
+
+dnl Check command line arguments
+
+AC_ARG_ENABLE([debug],
+	[AS_HELP_STRING(
+		[--enable-debug],
+		[enable debug run-time checks (default=no)])],
+	[debug="$enableval"], [debug=no])
+if test "x$debug" = "xyes"; then
+	AC_DEFINE(ENABLE_DEBUG, 1, [Define to 1 to enable debug run-time checks.])
+fi
+
+AC_ARG_ENABLE([trace],
+	[AS_HELP_STRING([--enable-trace],
+		[enable function call trace (default=no)])],
+	[trace="$enableval"], [trace=no])
+if test "x$trace" = "xyes"; then
+	AC_DEFINE(ENABLE_TRACE, 1, [Define to 1 to enable function call trace.])
+fi
+
 dnl Define coro flags
 case "$host" in
 	i[[34567]]86-*-*|x86_64-*-*)
@@ -36,8 +57,6 @@ case "$host" in
 		;;
 esac
 AC_SUBST([CORO_FLAGS], [$coro_flags])
-
-dnl Checks for library functions.
 
 AC_CONFIG_FILES([
 	Makefile
