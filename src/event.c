@@ -45,7 +45,7 @@ struct mm_fd
 	/* current flags */
 	uint8_t cflags;
 	/* requested flags */
-	uint8_t rflags;
+	uint8_t nflags;
 };
 
 /* File descriptor table. */
@@ -107,12 +107,12 @@ static void
 mm_event_note_fd(int fd, int flags)
 {
 	struct mm_fd *mm_fd = &mm_fd_table[fd];
-	if (unlikely(flags == mm_fd->rflags)) {
+	if (unlikely(flags == mm_fd->nflags)) {
 		/* A duplicate request. */
 		return;
 	}
 
-	if (unlikely(mm_fd->rflags != mm_fd->cflags)) {
+	if (unlikely(mm_fd->nflags != mm_fd->cflags)) {
 		/* A different request for the same file descriptor has not yet
 		 * been put into effect as we already changed our mind. This
 		 * should not happen with a sound code. */
@@ -143,7 +143,7 @@ mm_event_note_fd(int fd, int flags)
 	 * both for reading and writing. */
 	if (likely(changes & MM_EVENT_READ) != 0) {
 		int flags;
-		if (mm_fd->rflags & MM_EVENT_READ) {
+		if (mm_fd->nflags & MM_EVENT_READ) {
 			TRACE("register fd %d for read events", fd);
 			flags = EV_ADD | EV_CLEAR;
 		} else {
@@ -156,7 +156,7 @@ mm_event_note_fd(int fd, int flags)
 	}
 	if (likely(changes & MM_EVENT_WRITE) != 0) {
 		int flags;
-		if (mm_fd->rflags & MM_EVENT_WRITE) {
+		if (mm_fd->nflags & MM_EVENT_WRITE) {
 			TRACE("register fd %d for write events", fd);
 			flags = EV_ADD | EV_CLEAR;
 		} else {
@@ -168,7 +168,7 @@ mm_event_note_fd(int fd, int flags)
 		EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
 	}
 
-	mm_fd->rflags = flags;
+	mm_fd->nflags = flags;
 }
 
 static void
