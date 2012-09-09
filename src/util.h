@@ -21,6 +21,7 @@
 #ifndef MM_UTIL_H
 #define MM_UTIL_H
 
+#include <config.h>
 #include <stddef.h>
 
 #ifdef __GNUC__
