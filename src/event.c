@@ -126,22 +126,31 @@ mm_event_free_change_list(void)
 }
 
 static void
+mm_event_grow_change_list(void)
+{
+	ENTER();
+
+	/* Double the size and keep it equal to (2^n - 2). */
+	mm_change_list_max_size *= 2;
+	mm_change_list_max_size += 2;
+
+	/* Reallocate the list. */
+	mm_print("grow fd change list to size: %d",
+		 mm_change_list_max_size);
+	mm_change_list = mm_realloc(mm_change_list,
+				    mm_change_list_max_size * sizeof(int));
+
+	LEAVE();
+}
+
+static void
 mm_event_note_fd_change(int fd)
 {
 	ENTER();
 	TRACE("fd: %d", fd);
 
-	if (unlikely(mm_change_list_size == mm_change_list_max_size)) {
-		/* Double the size and keep it equal to (2^n - 2). */
-		mm_change_list_max_size *= 2;
-		mm_change_list_max_size += 2;
-
-		/* Reallocate the list. */
-		mm_print("grow fd change list to size: %d",
-			 mm_change_list_max_size);
-		mm_change_list = mm_realloc(mm_change_list,
-					    mm_change_list_max_size * sizeof(int));
-	}
+	if (unlikely(mm_change_list_size == mm_change_list_max_size))
+		mm_event_grow_change_list();
 
 	mm_change_list[mm_change_list_size++] = fd;
 
@@ -309,7 +318,8 @@ struct kevent *mm_kevents;
 /* Current size of the kevent list. */
 int mm_nkevents = 0;
 
-/* Maximal size of the kevent list. */
+/* Maximal size of the kevent list. To accommodate malloc overhead make it
+ * equal to (2^n - 1). */
 int mm_max_nkevents = 511;
 
 static struct mm_kevent_list mm_ev;
@@ -349,9 +359,11 @@ mm_event_grow_kevents(void)
 {
 	ENTER();
 
+	/* Double the size and keep it equal to (2^n - 1). */
 	mm_max_nkevents *= 2;
 	mm_max_nkevents += 1;
 
+	/* Reallocate the list. */
  	mm_print("grow kevent list to size: %d", mm_max_nkevents);
 	mm_kevents = mm_realloc(mm_kevents,
 				mm_max_nkevents * sizeof(struct kevent));
@@ -364,7 +376,7 @@ mm_event_ensure_kevents(void)
 {
 	ENTER();
 
-	if (mm_nkevents == mm_max_nkevents)
+	if (unlikely(mm_nkevents == mm_max_nkevents))
 		mm_event_grow_kevents();
 
 	LEAVE();
@@ -375,15 +387,17 @@ mm_event_dispatch(void)
 {
 	ENTER();
 
+	/* Form the kevent change list. */
 	for (int i = 0; i < mm_change_list_size; i++) {
 		int fd = mm_change_list[i];
 		struct mm_fd *mm_fd = &mm_fd_table[fd];
 		int a, b;
 
+		/* Change a read event registration if needed. */
 		a = (mm_fd->read_id != 0);
 		b = (mm_fd->new_read_id != 0);
 		mm_fd->read_id = mm_fd->new_read_id;
-		if (a != b) {
+		if (likely(a != b)) {
 			int flags;
 			if (b) {
 				TRACE("register fd %d for read events", fd);
@@ -398,10 +412,11 @@ mm_event_dispatch(void)
 			EV_SET(kp, fd, EVFILT_READ, flags, 0, 0, 0);
 		}
 
+		/* Change a write event registration if needed. */
 		a = (mm_fd->write_id != 0);
 		b = (mm_fd->new_write_id != 0);
 		mm_fd->write_id = mm_fd->new_write_id;
-		if (a != b) {
+		if (likely(a != b)) {
 			int flags;
 			if (b) {
 				TRACE("register fd %d for write events", fd);
@@ -417,16 +432,18 @@ mm_event_dispatch(void)
 		}
 	}
 
+	/* Poll the system for events. */
 	mm_change_list_size = 0;
 	mm_nkevents = kevent(mm_kq,
 			     mm_kevents, mm_nkevents,
 			     mm_kevents, mm_max_nkevents,
 			     NULL);
-	if (mm_nkevents < 0) {
+	if (unlikely(mm_nkevents < 0)) {
 		mm_error(errno, "kevent");
 		goto done;
 	}
 
+	/* Process received system events. */
 	for (int i = 0; i < mm_nkevents; i++) {
 		if ((mm_kevents[i].flags & EV_ERROR) != 0) {
 
@@ -450,7 +467,7 @@ mm_event_dispatch(void)
 		}
 	}
 
-	/* The whole list was used up, more space may be needed. */
+	/* If the whole list was used up more space may be needed. */
 	mm_event_ensure_kevents();
 
 done:
