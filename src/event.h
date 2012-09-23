@@ -1,5 +1,5 @@
 /*
- * event.h - MainMemory events.
+ * event.h - MainMemory event loop.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -23,20 +23,36 @@
 
 #include <stdint.h>
 
-#define MM_EVENT_READ	1
-#define MM_EVENT_WRITE	2
+typedef enum mm_event {
+	MM_EVENT_READ = 1,
+	MM_EVENT_WRITE = 2,
+} mm_event;
+
+/* Event handler identifier. */
+typedef uint8_t mm_event_id;
+
+/* Event handler routine (callback). */
+typedef void (*mm_event_cb)(mm_event event, uintptr_t ident, uint32_t data);
 
 void mm_event_init(void);
 void mm_event_free(void);
+
 void mm_event_loop(void);
 void mm_event_stop(void);
 
-typedef void (*mm_event_iocb)(int fd, int flags, intptr_t data);
+mm_event_id mm_event_register_cb(mm_event_cb cb);
+
+/* Return values of mm_event_verify_fd() */
+#define MM_FD_VALID	(0)
+#define MM_FD_INVALID	(-1)
+#define MM_FD_TOO_BIG	(-2)
 
 int mm_event_verify_fd(int fd);
-void mm_event_register_fd(int fd, int flags, mm_event_iocb iocb, intptr_t data);
-void mm_event_unregister_fd(int fd);
 
+void mm_event_set_fd_data(int fd, uint32_t data);
+
+void mm_event_register_fd(int fd, mm_event_id read_id, mm_event_id write_id);
+void mm_event_unregister_fd(int fd);
 
 #endif	/* EVENT_H */
 

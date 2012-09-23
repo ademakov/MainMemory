@@ -30,22 +30,32 @@
 #include <unistd.h>
 
 #if ENABLE_TRACE
-static int mm_trace_level = 0;
+static __thread int mm_trace_level = 0;
 #endif
 
+/**********************************************************************
+ * Logging Routines.
+ **********************************************************************/
+
 static void
-mm_vprint(const char *restrict msg, va_list va)
+mm_vprintf(const char *restrict msg, va_list va)
 {
 	vfprintf(stderr, msg, va);
 }
 
-void
-mm_print(const char *restrict msg, ...)
+static void
+mm_printf(const char *restrict msg, ...)
 {
 	va_list va;
 	va_start(va, msg);
 	vfprintf(stderr, msg, va);
 	va_end(va);
+}
+
+static void
+mm_newline(void)
+{
+	fprintf(stderr, "\n");
 }
 
 void
@@ -55,18 +65,33 @@ mm_flush(void)
 }
 
 void
+mm_print(const char *restrict msg, ...)
+{
+#if ENABLE_TRACE
+	mm_printf("%*s", mm_trace_level * 2, "");
+#endif
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprintf(msg, va);
+	va_end(va);
+
+	mm_newline();
+}
+
+void
 mm_error(int error, const char *restrict msg, ...)
 {
 	va_list va;
 	va_start(va, msg);
-	mm_vprint(msg, va);
+	mm_vprintf(msg, va);
 	va_end(va);
 
 	if (error) {
-		mm_print(": %s\n", strerror(error));
-	} else {
-		mm_print("\n");
+		mm_printf(": %s", strerror(error));
 	}
+
+	mm_newline();
 }
 
 void
@@ -74,73 +99,32 @@ mm_fatal(int error, const char *restrict msg, ...)
 {
 	va_list va;
 	va_start(va, msg);
-	mm_vprint(msg, va);
+	mm_vprintf(msg, va);
 	va_end(va);
 
 	if (error) {
-		mm_print(": %s\n", strerror(error));
-	} else {
-		mm_print("\n");
+		mm_print(": %s", strerror(error));
 	}
 
-	mm_print("exiting...\n");
+	mm_newline();
+
+	mm_printf("exiting...");
+	mm_newline();
 	mm_flush();
 
 	exit(EXIT_FAILURE);
 }
 
-void
-mm_abort(const char *file, int line, const char *func,
-	 const char *restrict msg, ...)
-{
-	mm_print("%s:%d, %s: ", file, line, func);
-
-	va_list va;
-	va_start(va, msg);
-	mm_vprint(msg, va);
-	va_end(va);
-
-	mm_print("aborting...\n");
-	mm_flush();
-
-	abort();
-}
-
-#if ENABLE_TRACE
-
-void
-mm_trace_enter(void)
-{
-	++mm_trace_level;
-}
-
-void
-mm_trace_leave(void)
-{
-	--mm_trace_level;
-}
-
-void
-mm_trace(const char *file, int line, const char *func, const char *restrict msg, ...)
-{
-	mm_print("%*s%s ", mm_trace_level * 2, "", func);
-
-	va_list va;
-	va_start(va, msg);
-	mm_vprint(msg, va);
-	va_end(va);
-
-	mm_print(" (%s:%d)\n", file, line);
-}
-
-#endif
+/**********************************************************************
+ * Memory Allocation Routines.
+ **********************************************************************/
 
 void *
 mm_alloc(size_t size)
 {
 	void *ptr = dlmalloc(size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) size);
+		mm_fatal(errno, "Error allocating %zu bytes of memory", size);
 	}
 	return ptr;
 }
@@ -150,7 +134,7 @@ mm_realloc(void *ptr, size_t size)
 {
 	ptr = dlrealloc(ptr, size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) size);
+		mm_fatal(errno, "Error allocating %zu bytes of memory", size);
 	}
 	return ptr;
 }
@@ -160,7 +144,7 @@ mm_calloc(size_t count, size_t size)
 {
 	void *ptr = dlcalloc(count, size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) count * size);
+		mm_fatal(errno, "Error allocating %zu bytes of memory", count * size);
 	}
 	return ptr;
 }
@@ -173,7 +157,7 @@ mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
 	size_t new_amount = new_count * size;
 	ptr = dlrealloc(ptr, new_amount);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %ld bytes of memory", (long) new_amount);
+		mm_fatal(errno, "Error allocating %zu bytes of memory", new_amount);
 	}
 	memset(ptr + old_amount, 0, new_amount - old_amount);
 	return ptr;
@@ -184,3 +168,77 @@ mm_free(void *ptr)
 {
 	dlfree(ptr);
 }
+
+/**********************************************************************
+ * Debug & Trace Utilities.
+ **********************************************************************/
+
+void
+mm_abort(const char *file, int line, const char *func,
+	 const char *restrict msg, ...)
+{
+#if ENABLE_TRACE
+	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+#else
+	mm_printf("%s(%s:%d): ", func, file, line);
+#endif
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprintf(msg, va);
+	va_end(va);
+
+	mm_newline();
+
+	mm_printf("aborting...");
+	mm_newline();
+	mm_flush();
+
+	abort();
+}
+
+#if ENABLE_DEBUG
+
+void
+mm_debug(const char *file, int line, const char *func,
+	 const char *restrict msg, ...)
+{
+#if ENABLE_TRACE
+	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+#else
+	mm_printf("%s(%s:%d): ", func, file, line);
+#endif
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprintf(msg, va);
+	va_end(va);
+
+	mm_newline();
+}
+
+#endif
+
+#if ENABLE_TRACE
+
+void
+mm_trace(int level, const char *file, int line, const char *func, 
+	 const char *restrict msg, ...)
+{
+	if (level < 0)
+		mm_trace_level += level;
+
+	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+
+	va_list va;
+	va_start(va, msg);
+	mm_vprintf(msg, va);
+	va_end(va);
+
+	mm_newline();
+
+	if (level > 0)
+		mm_trace_level += level;
+}
+
+#endif
