@@ -128,9 +128,6 @@ main(int ac, char *av[])
 	/* Free resources. */
 	mm_event_free();
 
-	mm_print("size %d", sizeof(struct mm_net_addr));
-	mm_print("size %d", sizeof(struct mm_net_peer_addr));
-
 	LEAVE();
 	return EXIT_SUCCESS;
 }
