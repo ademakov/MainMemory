@@ -59,14 +59,14 @@ mm_event_dummy(mm_event event __attribute__((unused)),
 
 /* Initialize the event handler table. */
 static void
-mm_event_init_cb_table(void)
+mm_event_init_handlers(void)
 {
 	ENTER();
 	ASSERT(MM_CB_MAX < 256);
 
 	/* Register dummy handler with zero id. */
 	ASSERT(mm_cb_table_size == 0);
-	(void) mm_event_register_cb(mm_event_dummy);
+	(void) mm_event_install_handler(mm_event_dummy);
 	ASSERT(mm_cb_table_size == 1);
 
 	LEAVE();
@@ -74,7 +74,7 @@ mm_event_init_cb_table(void)
 
 /* Register an event handler in the table. */
 mm_event_id
-mm_event_register_cb(mm_event_cb cb)
+mm_event_install_handler(mm_event_cb cb)
 {
 	ENTER();
 
@@ -100,7 +100,7 @@ static int *mm_change_list;
 /* Current size of the list. */
 static int mm_change_list_size = 0;
 
-/* Maximal size of the list. To accommodate malloc overhead make it
+/* Maximum size of the list. To accommodate malloc overhead make it
  * equal to (2^n - 2). */
 static int mm_change_list_max_size = 510;
 
@@ -161,7 +161,7 @@ mm_event_note_fd_change(int fd)
  * File descriptor table.
  **********************************************************************/
 
-/* The maximal allowed number of open file descriptors. */
+/* The maximum allowed number of open file descriptors. */
 #define MM_FD_MAX (256 * 1024)
 
 /* File descriptor table entry. */
@@ -318,7 +318,7 @@ struct kevent *mm_kevents;
 /* Current size of the kevent list. */
 int mm_nkevents = 0;
 
-/* Maximal size of the kevent list. To accommodate malloc overhead make it
+/* Maximum size of the kevent list. To accommodate malloc overhead make it
  * equal to (2^n - 1). */
 int mm_max_nkevents = 511;
 
@@ -484,7 +484,7 @@ mm_event_init(void)
 	ENTER();
 
 	/* Initialize generic data. */
-	mm_event_init_cb_table();
+	mm_event_init_handlers();
 	mm_event_init_change_list();
 	mm_event_init_fd_table();
 

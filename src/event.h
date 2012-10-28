@@ -40,7 +40,7 @@ void mm_event_free(void);
 void mm_event_loop(void);
 void mm_event_stop(void);
 
-mm_event_id mm_event_register_cb(mm_event_cb cb);
+mm_event_id mm_event_install_handler(mm_event_cb cb);
 
 /* Return values of mm_event_verify_fd() */
 #define MM_FD_VALID	(0)
