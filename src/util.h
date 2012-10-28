@@ -42,23 +42,32 @@
 
 void mm_flush(void);
 
-void mm_print(const char *restrict msg, ...);
+void mm_print(const char *restrict msg, ...)
+	__attribute__((nonnull(1)));
 
 void mm_error(int error, const char *restrict msg, ...)
-	__attribute__((format(printf, 2, 3)));
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(2)));
 
 void mm_fatal(int error, const char *restrict msg, ...)
 	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(2)))
 	__attribute__((noreturn));
 
 /**********************************************************************
  * Memory Allocation Routines.
  **********************************************************************/
 
-void * mm_alloc(size_t size);
+void * mm_alloc(size_t size)
+	__attribute__((malloc));
+
+void * mm_calloc(size_t count, size_t size)
+	__attribute__((malloc));
+
 void * mm_realloc(void *ptr, size_t size);
-void * mm_calloc(size_t count, size_t size);
+
 void * mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size);
+
 void mm_free(void *ptr);
 
 /**********************************************************************
