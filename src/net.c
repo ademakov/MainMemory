@@ -90,7 +90,7 @@ mm_net_set_in_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 		addr->in_addr.sin_addr = (struct in_addr) { INADDR_ANY };
 	}
 	addr->in_addr.sin_family = AF_INET;
-	addr->in_addr.sin_port = port;
+	addr->in_addr.sin_port = htons(port);
 	memset(addr->in_addr.sin_zero, 0, sizeof addr->in_addr.sin_zero);
 
 done:
@@ -119,7 +119,7 @@ mm_net_set_in6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port
 		addr->in6_addr.sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
 	}
 	addr->in6_addr.sin6_family = AF_INET6;
-	addr->in6_addr.sin6_port = port;
+	addr->in6_addr.sin6_port = htons(port);
 	addr->in6_addr.sin6_flowinfo = 0;
 	addr->in6_addr.sin6_scope_id = 0;
 
@@ -227,8 +227,8 @@ mm_net_accept_client_socket(int sock, int options)
  **********************************************************************/
 
 static struct mm_net_server *mm_srv_table;
-static int mm_srv_table_size;
-static int mm_srv_count;
+static size_t mm_srv_table_size;
+static size_t mm_srv_count;
 
 static void
 mm_net_init_server_table(void)
@@ -244,7 +244,7 @@ mm_net_free_server_table(void)
 	mm_free(mm_srv_table);
 }
 
-static inline int
+static inline size_t
 mm_net_get_server_index(struct mm_net_server *srv)
 {
 	ASSERT(srv < (mm_srv_table + mm_srv_count));
@@ -280,7 +280,18 @@ static void
 mm_net_accept_event(mm_event event, uintptr_t ident, uint32_t data)
 {
 	ENTER();
+	ASSERT(data < mm_srv_count);
 
+	struct mm_net_server *srv = &mm_srv_table[data];
+	int sock = accept(srv->sock, NULL, 0);
+	if (sock < 0) {
+		mm_error(errno, "accept()");
+		goto done;
+	}
+
+	close(sock);
+
+done:
 	LEAVE();
 }
 
@@ -415,7 +426,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	/* Register the socket with event loop. */
 	mm_event_register_fd(srv->sock, mm_net_accept_id, 0);
-	mm_event_set_fd_data(srv->sock, mm_net_get_server_index(srv));
+	mm_event_set_fd_data(srv->sock, (uint32_t) mm_net_get_server_index(srv));
 
 	LEAVE();
 }
