@@ -135,8 +135,7 @@ mm_event_grow_change_list(void)
 	mm_change_list_size_max += 2;
 
 	/* Reallocate the list. */
-	mm_print("grow fd change list to size: %d",
-		 mm_change_list_size_max);
+	mm_print("grow fd change list to size: %d", mm_change_list_size_max);
 	mm_change_list = mm_realloc(mm_change_list,
 				    mm_change_list_size_max * sizeof(int));
 
@@ -452,6 +451,7 @@ mm_event_dispatch(void)
 			int fd = mm_kevents[i].ident;
 			int id = mm_fd_table[fd].read_id;
 			ASSERT(id < mm_cb_table_size);
+			TRACE("read event on fd %d", fd);
 
 			mm_event_cb cb = mm_cb_table[id];
 			cb(MM_EVENT_READ, fd, mm_fd_table[fd].data);
@@ -461,6 +461,7 @@ mm_event_dispatch(void)
 			int fd = mm_kevents[i].ident;
 			int id = mm_fd_table[fd].write_id;
 			ASSERT(id < mm_cb_table_size);
+			TRACE("write event on fd %d", fd);
 
 			mm_event_cb cb = mm_cb_table[id];
 			cb(MM_EVENT_WRITE, fd, mm_fd_table[fd].data);
