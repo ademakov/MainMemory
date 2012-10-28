@@ -153,6 +153,8 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	int sock = socket(addr->addr.sa_family, SOCK_STREAM, 0);
 	if (sock < 0)
 		mm_fatal(errno, "socket()");
+	if (mm_event_verify_fd(sock) != MM_FD_VALID)
+		mm_fatal(0, "");
 
 	/* Set socket options. */
 	int val = 1;
@@ -413,6 +415,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	/* Register the socket with event loop. */
 	mm_event_register_fd(srv->sock, mm_net_accept_id, 0);
+	mm_event_set_fd_data(srv->sock, mm_net_get_server_index(srv));
 
 	LEAVE();
 }

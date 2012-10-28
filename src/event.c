@@ -224,13 +224,13 @@ mm_event_verify_fd(int fd)
 {
 	if (fd < 0) {
 		/* The fd is invalid. */
-		return -1;
+		return MM_FD_INVALID;
 	} else if (fd < mm_fd_table_size) {
 		/* The fd is okay. */
-		return 0;
+		return MM_FD_VALID;
 	} else {
 		/* The fd exceeds the table capacity. */
-		return -2;
+		return MM_FD_TOO_BIG;
 	}
 }
 
