@@ -102,15 +102,15 @@ static int mm_change_list_size = 0;
 
 /* Maximum size of the list. To accommodate malloc overhead make it
  * equal to (2^n - 2). */
-static int mm_change_list_max_size = 510;
+static int mm_change_list_size_max = 510;
 
 static void
 mm_event_init_change_list(void)
 {
 	ENTER();
 
-	mm_print("fd change list size: %d", mm_change_list_max_size);
-	mm_change_list = mm_alloc(mm_change_list_max_size * sizeof(int));
+	mm_print("fd change list size: %d", mm_change_list_size_max);
+	mm_change_list = mm_alloc(mm_change_list_size_max * sizeof(int));
 
 	LEAVE();
 }
@@ -131,14 +131,14 @@ mm_event_grow_change_list(void)
 	ENTER();
 
 	/* Double the size and keep it equal to (2^n - 2). */
-	mm_change_list_max_size *= 2;
-	mm_change_list_max_size += 2;
+	mm_change_list_size_max *= 2;
+	mm_change_list_size_max += 2;
 
 	/* Reallocate the list. */
 	mm_print("grow fd change list to size: %d",
-		 mm_change_list_max_size);
+		 mm_change_list_size_max);
 	mm_change_list = mm_realloc(mm_change_list,
-				    mm_change_list_max_size * sizeof(int));
+				    mm_change_list_size_max * sizeof(int));
 
 	LEAVE();
 }
@@ -149,7 +149,7 @@ mm_event_note_fd_change(int fd)
 	ENTER();
 	TRACE("fd: %d", fd);
 
-	if (unlikely(mm_change_list_size == mm_change_list_max_size))
+	if (unlikely(mm_change_list_size == mm_change_list_size_max))
 		mm_event_grow_change_list();
 
 	mm_change_list[mm_change_list_size++] = fd;
