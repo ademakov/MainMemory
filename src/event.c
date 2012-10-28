@@ -221,10 +221,10 @@ mm_event_free_fd_table(void)
 int
 mm_event_verify_fd(int fd)
 {
-	if (fd < 0) {
+	if (unlikely(fd < 0)) {
 		/* The fd is invalid. */
 		return MM_FD_INVALID;
-	} else if (fd < mm_fd_table_size) {
+	} else if (likely(fd < mm_fd_table_size)) {
 		/* The fd is okay. */
 		return MM_FD_VALID;
 	} else {
