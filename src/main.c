@@ -18,9 +18,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <event.h>
-#include <net.h>
-#include <util.h>
+#include "event.h"
+#include "net.h"
+#include "sched.h"
+#include "util.h"
 
 #include <errno.h>
 #include <signal.h>
@@ -114,6 +115,7 @@ main(int ac, char *av[])
 
 	/* Initialize. */
 	mm_signal_init();
+	mm_sched_init();
 	mm_event_init();
 
 	/* Open server sockets. */
@@ -122,11 +124,12 @@ main(int ac, char *av[])
 	/* Execute main loop. */
 	mm_event_loop();
 
-	/* Close Server sockets. */
+	/* Close server sockets. */
 	mm_server_close(); 
 
 	/* Free resources. */
 	mm_event_free();
+	mm_sched_free();
 
 	LEAVE();
 	return EXIT_SUCCESS;

@@ -18,9 +18,9 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <util.h>
+#include "util.h"
 
-#include <dlmalloc/malloc.h>
+#include "dlmalloc/malloc.h"
 
 #include <errno.h>
 #include <stdio.h>

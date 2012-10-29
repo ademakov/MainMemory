@@ -18,9 +18,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <event.h>
+#include "event.h"
 
-#include <util.h>
+#include "sched.h"
+#include "util.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -517,6 +518,7 @@ mm_event_loop(void)
 
 	while (!mm_exit_loop) {
 		mm_event_dispatch();
+		mm_sched_dispatch();
 	}
 
 	LEAVE();
