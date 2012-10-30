@@ -388,6 +388,7 @@ mm_event_dispatch(void)
 	ENTER();
 
 	/* Form the kevent change list. */
+	mm_nkevents = 0;
 	for (int i = 0; i < mm_change_list_size; i++) {
 		int fd = mm_change_list[i];
 		struct mm_fd *mm_fd = &mm_fd_table[fd];
@@ -419,10 +420,10 @@ mm_event_dispatch(void)
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
-				TRACE("register fd %d for write events", fd);
+				DEBUG("register fd %d for write events", fd);
 				flags = EV_ADD | EV_CLEAR;
 			} else {
-				TRACE("unregister fd %d for write events", fd);
+				DEBUG("unregister fd %d for write events", fd);
 				flags = EV_DELETE;
 			}
 
@@ -431,6 +432,8 @@ mm_event_dispatch(void)
 			EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
 		}
 	}
+
+	DEBUG("event change count: %d", mm_nkevents);
 
 	/* Poll the system for events. */
 	mm_change_list_size = 0;
@@ -442,6 +445,8 @@ mm_event_dispatch(void)
 		mm_error(errno, "kevent");
 		goto done;
 	}
+
+	DEBUG("event count: %d", mm_nkevents);
 
 	/* Process received system events. */
 	for (int i = 0; i < mm_nkevents; i++) {

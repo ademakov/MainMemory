@@ -18,15 +18,16 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include <net.h>
+#include "net.h"
 
-#include <event.h>
-#include <util.h>
+#include "event.h"
+#include "util.h"
 
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <arpa/inet.h>
+#include <netinet/tcp.h>
 #include <unistd.h>
 
 /**********************************************************************
@@ -61,7 +62,7 @@ mm_net_set_un_addr(struct mm_net_addr *addr, const char *path)
 		memcpy(addr->un_addr.sun_path, path, len + 1);
 		addr->un_addr.sun_family = AF_UNIX;
 	} else {
-		mm_error(0, "Unix-domain socket path is too long.");
+		mm_error(0, "unix-domain socket path is too long.");
 		rc = -1;
 	}
 
@@ -154,7 +155,7 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	if (sock < 0)
 		mm_fatal(errno, "socket()");
 	if (mm_event_verify_fd(sock) != MM_FD_VALID)
-		mm_fatal(0, "");
+		mm_fatal(0, "server socket no is too high: %d", sock);
 
 	/* Set socket options. */
 	int val = 1;
@@ -165,8 +166,8 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 		mm_fatal(errno, "setsockopt(..., IPV6_V6ONLY, ...)");
 
 	/* Bind the socket to the given address. */
-	socklen_t len = mm_net_sockaddr_len(addr->addr.sa_family);
-	if (bind(sock, &addr->addr, len) < 0)
+	socklen_t salen = mm_net_sockaddr_len(addr->addr.sa_family);
+	if (bind(sock, &addr->addr, salen) < 0)
 		mm_fatal(errno, "bind()");
 
 	/* Make the socket ready to accept connections. */
@@ -187,7 +188,7 @@ mm_net_remove_unix_socket(struct mm_net_addr *addr)
 	ENTER();
 
 	if (addr->addr.sa_family == AF_UNIX) {
-		mm_print("Removing %s", addr->un_addr.sun_path);
+		mm_print("removing %s", addr->un_addr.sun_path);
 		if (unlink(addr->un_addr.sun_path) < 0)
 			mm_error(errno, "unlink(\"%s\")", addr->un_addr.sun_path);
 	}
@@ -210,25 +211,21 @@ mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 	LEAVE();
 }
 
-static int
-mm_net_accept_client_socket(int sock, int options)
-{
-	/* Set socket options. */
-	int val = 1;
-	if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
-		mm_fatal(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
-
-	/* Make the socket non-blocking. */
-	mm_net_set_nonblocking(sock);
-}
-
 /**********************************************************************
  * Server table.
  **********************************************************************/
 
 static struct mm_net_server *mm_srv_table;
-static size_t mm_srv_table_size;
-static size_t mm_srv_count;
+static uint32_t mm_srv_table_size;
+static uint32_t mm_srv_count;
+
+static inline size_t
+mm_net_server_index(struct mm_net_server *srv)
+{
+	ASSERT(srv < (mm_srv_table + mm_srv_count));
+	ASSERT(srv >= mm_srv_table);
+	return srv - mm_srv_table;
+}
 
 static void
 mm_net_init_server_table(void)
@@ -244,16 +241,8 @@ mm_net_free_server_table(void)
 	mm_free(mm_srv_table);
 }
 
-static inline size_t
-mm_net_get_server_index(struct mm_net_server *srv)
-{
-	ASSERT(srv < (mm_srv_table + mm_srv_count));
-	ASSERT(srv >= mm_srv_table);
-	return srv - mm_srv_table;
-}
-
 static struct mm_net_server *
-mm_net_new_server(void)
+mm_net_alloc_server(void)
 {
 	if (mm_srv_table_size == mm_srv_count) {
 		mm_srv_table_size += 4;
@@ -266,6 +255,72 @@ mm_net_new_server(void)
 	srv->sock = -1;
 
 	return srv;
+}
+
+/**********************************************************************
+ * Client table.
+ **********************************************************************/
+
+#define MM_CLI_NIL ((uint32_t) -1)
+
+static struct mm_net_client *mm_cli_table;
+static uint32_t mm_cli_table_size;
+static uint32_t mm_cli_count;
+static uint32_t mm_cli_free_index;
+
+static inline size_t
+mm_net_client_index(struct mm_net_client *cli)
+{
+	ASSERT(cli < (mm_cli_table + mm_cli_count));
+	ASSERT(cli >= mm_cli_table);
+	return cli - mm_cli_table;
+}
+
+static void
+mm_net_init_client_table(void)
+{
+	mm_cli_table_size = 100;
+	mm_cli_table = mm_alloc(mm_cli_table_size * sizeof(struct mm_net_client));
+	mm_cli_count = 0;
+	mm_cli_free_index = MM_CLI_NIL;
+}
+
+static void
+mm_net_free_client_table(void)
+{
+	mm_free(mm_cli_table);
+}
+
+static struct mm_net_client *
+mm_net_alloc_client(void)
+{
+	struct mm_net_client *cli;
+	if (mm_cli_free_index != MM_CLI_NIL) {
+		cli = &mm_cli_table[mm_cli_free_index];
+		mm_cli_free_index = cli->free_index;
+	} else {
+		if (unlikely(mm_cli_table_size == mm_cli_count)) {
+			/* Check for integer overflow. */
+			uint32_t size = mm_cli_table_size * 2;
+			if (unlikely(size < mm_cli_table_size))
+				return NULL;
+
+			mm_cli_table_size = size;
+			mm_print("client table size: %lu", (unsigned long) mm_cli_table_size);
+			mm_cli_table = mm_realloc(
+				mm_cli_table,
+				mm_cli_table_size * sizeof(struct mm_net_client));
+		}
+		cli = &mm_cli_table[mm_cli_count++];
+	}
+	return cli;
+}
+
+static void
+mm_net_free_client(struct mm_net_client *cli)
+{
+	cli->free_index = mm_cli_free_index;
+	mm_cli_free_index = mm_net_client_index(cli);
 }
 
 /**********************************************************************
@@ -282,14 +337,56 @@ mm_net_accept_event(mm_event event, uintptr_t ident, uint32_t data)
 	ENTER();
 	ASSERT(data < mm_srv_count);
 
+	/* Find the pertinent server. */
 	struct mm_net_server *srv = &mm_srv_table[data];
-	int sock = accept(srv->sock, NULL, 0);
-	if (sock < 0) {
+	ASSERT(srv->proto != NULL);
+
+	/* Accept a client socket. */
+	struct sockaddr_storage sa;
+	socklen_t salen = sizeof sa;
+	int sock = accept(srv->sock, (struct sockaddr *) &sa, &salen);
+	if (unlikely(sock < 0)) {
 		mm_error(errno, "accept()");
 		goto done;
 	}
+	if (unlikely(mm_event_verify_fd(sock) != MM_FD_VALID)) {
+		mm_error(0, "socket no is too high: %d", sock);
+		close(sock);
+		goto done;
+	}
 
-	close(sock);
+	/* Allocate a new client structure. */
+	struct mm_net_client *cli = mm_net_alloc_client();
+	if (cli == NULL) {
+		mm_error(0, "client table overflow");
+		close(sock);
+		goto done;
+	}
+
+	/* Initialize the client structure. */
+	cli->sock = sock;
+	cli->flags = (MM_NET_READ_READY | MM_NET_WRITE_READY);
+	cli->srv = srv;
+	if (sa.ss_family == AF_INET)
+		memcpy(&cli->peer.in_addr, &sa, sizeof(cli->peer.in_addr));
+	else if (sa.ss_family == AF_INET6)
+		memcpy(&cli->peer.in6_addr, &sa, sizeof(cli->peer.in6_addr));
+	else
+		cli->peer.addr.sa_family = sa.ss_family;
+
+	/* Set the socket options. */
+	int val = 1;
+	if (setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
+	if (setsockopt(sock, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
+
+	/* Make the socket non-blocking. */
+	mm_net_set_nonblocking(sock);
+
+	/* Register the socket with event loop. */
+	mm_event_register_fd(cli->sock, mm_net_read_id, mm_net_write_id);
+	mm_event_set_fd_data(cli->sock, (uint32_t) mm_net_client_index(cli));
 
 done:
 	LEAVE();
@@ -299,6 +396,19 @@ static void
 mm_net_read_event(mm_event event, uintptr_t ident, uint32_t data)
 {
 	ENTER();
+	ASSERT(data < mm_cli_count);
+
+	/* Find the pertinent client. */
+	struct mm_net_client *cli = &mm_cli_table[data];
+
+	char buf[1026];
+	int n = read(cli->sock, buf, sizeof(buf));
+	if (n <= 0) {
+		if (n < 0)
+			mm_error(errno, "read()");
+		mm_event_unregister_fd(cli->sock);
+		close(cli->sock);
+	}
 
 	LEAVE();
 }
@@ -307,6 +417,14 @@ static void
 mm_net_write_event(mm_event event, uintptr_t ident, uint32_t data)
 {
 	ENTER();
+	ASSERT(data < mm_cli_count);
+
+	/* Find the pertinent client. */
+	struct mm_net_client *cli = &mm_cli_table[data];
+
+	write(cli->sock, "test\n", 5);
+	mm_event_unregister_fd(cli->sock);
+	close(cli->sock);
 
 	LEAVE();
 }
@@ -335,6 +453,7 @@ mm_net_init(void)
 	ENTER();
 
 	mm_net_init_server_table();
+	mm_net_init_client_table();
 	mm_net_init_handlers();
 
 	mm_net_initialized = 1;
@@ -355,6 +474,7 @@ mm_net_free(void)
 			mm_net_close_server_socket(&srv->addr, srv->sock);
 	}
 
+	mm_net_free_client_table();
 	mm_net_free_server_table();
 
 	LEAVE();
@@ -381,9 +501,9 @@ mm_net_create_unix_server(const char *path)
 {
 	ENTER();
 
-	struct mm_net_server *srv = mm_net_new_server();
+	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_un_addr(&srv->addr, path) < 0)
-		mm_fatal(0, "Invalid server socket address");
+		mm_fatal(0, "invalid server socket address");
 
 	LEAVE();
 	return srv;
@@ -394,9 +514,9 @@ mm_net_create_inet_server(const char *addrstr, uint16_t port)
 {
 	ENTER();
 
-	struct mm_net_server *srv = mm_net_new_server();
+	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "Invalid server socket address");
+		mm_fatal(0, "invalid server socket address");
 
 	LEAVE();
 	return srv;
@@ -407,12 +527,23 @@ mm_net_create_inet6_server(const char *addrstr, uint16_t port)
 {
 	ENTER();
 
-	struct mm_net_server *srv = mm_net_new_server();
+	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "Invalid server socket address");
+		mm_fatal(0, "invalid server socket address");
 
 	LEAVE();
 	return srv;
+}
+
+void
+mm_net_set_server_proto(struct mm_net_server *srv, struct mm_net_proto *proto, uintptr_t proto_data)
+{
+	ENTER();
+
+	srv->proto = proto;
+	srv->proto_data = proto_data;
+
+	LEAVE();
 }
 
 void
@@ -426,7 +557,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	/* Register the socket with event loop. */
 	mm_event_register_fd(srv->sock, mm_net_accept_id, 0);
-	mm_event_set_fd_data(srv->sock, (uint32_t) mm_net_get_server_index(srv));
+	mm_event_set_fd_data(srv->sock, (uint32_t) mm_net_server_index(srv));
 
 	LEAVE();
 }

@@ -78,6 +78,8 @@ mm_signal_init(void)
 	LEAVE();
 }
 
+struct mm_net_proto cmd_proto;
+
 static void
 mm_server_open(void)
 {
@@ -86,6 +88,9 @@ mm_server_open(void)
 	mm_net_init();
 	u_cmd_server = mm_net_create_unix_server("mm_cmd.sock");
 	i_cmd_server = mm_net_create_inet_server("127.0.0.1", 8000);
+
+	mm_net_set_server_proto(u_cmd_server, &cmd_proto, 0);
+	mm_net_set_server_proto(i_cmd_server, &cmd_proto, 0);
 
 	mm_net_start_server(u_cmd_server);
 	mm_net_start_server(i_cmd_server);

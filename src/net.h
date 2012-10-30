@@ -51,6 +51,10 @@ struct mm_net_peer_addr
 	};
 };
 
+struct mm_net_proto
+{
+};
+
 /* Network server data. */
 struct mm_net_server
 {
@@ -58,17 +62,51 @@ struct mm_net_server
 	int sock;
 	/* Server socket address. */
 	struct mm_net_addr addr;
+	/* Protocol data. */
+	struct mm_net_proto *proto;
+	intptr_t proto_data;
+};
+
+/* Client flags. */
+#define MM_NET_READ_READY	0x01
+#define MM_NET_WRITE_READY	0x02
+#define MM_NET_REQUEST_READY	0x04
+#define MM_NET_RESPONSE_READY	0x08
+
+/* Network client data. */
+struct mm_net_client
+{
+	/* Client socket. */
+	int sock;
+	/* Client flags. */
+	union
+	{
+		int flags;
+		uint32_t free_index;
+	};
+	/* Client server. */
+	struct mm_net_server *srv;
+	/* Client address. */
+	struct mm_net_peer_addr peer;
 };
 
 void mm_net_init(void);
 void mm_net_free(void);
 void mm_net_exit(void);
 
-struct mm_net_server *mm_net_create_unix_server(const char *path) __attribute__((nonnull(1)));
-struct mm_net_server *mm_net_create_inet_server(const char *addrstr, uint16_t port);
-struct mm_net_server *mm_net_create_inet6_server(const char *addrstr, uint16_t port);
+struct mm_net_server *mm_net_create_unix_server(const char *path)
+	__attribute__((nonnull(1)));
+struct mm_net_server *mm_net_create_inet_server(const char *addrstr, uint16_t port)
+	__attribute__((nonnull(1)));
+struct mm_net_server *mm_net_create_inet6_server(const char *addrstr, uint16_t port)
+	__attribute__((nonnull(1)));
 
-void mm_net_start_server(struct mm_net_server *srv) __attribute__((nonnull(1)));
-void mm_net_stop_server(struct mm_net_server *srv) __attribute__((nonnull(1)));
+void mm_net_set_server_proto(struct mm_net_server *srv, struct mm_net_proto *proto, uintptr_t proto_data)
+	__attribute__((nonnull(1)));
+
+void mm_net_start_server(struct mm_net_server *srv)
+	__attribute__((nonnull(1)));
+void mm_net_stop_server(struct mm_net_server *srv)
+	__attribute__((nonnull(1)));
 
 #endif
