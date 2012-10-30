@@ -452,12 +452,16 @@ mm_event_dispatch(void)
 	for (int i = 0; i < mm_nkevents; i++) {
 		if ((mm_kevents[i].flags & EV_ERROR) != 0) {
 
+			int fd = mm_kevents[i].ident;
+			DEBUG("error event on fd %d", fd);
+
 		} else if (mm_kevents[i].filter == EVFILT_READ) {
 
 			int fd = mm_kevents[i].ident;
+			DEBUG("read event on fd %d", fd);
+
 			int id = mm_fd_table[fd].read_id;
 			ASSERT(id < mm_cb_table_size);
-			TRACE("read event on fd %d", fd);
 
 			mm_event_cb cb = mm_cb_table[id];
 			cb(MM_EVENT_READ, fd, mm_fd_table[fd].data);
@@ -465,9 +469,10 @@ mm_event_dispatch(void)
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
 
 			int fd = mm_kevents[i].ident;
+			DEBUG("write event on fd %d", fd);
+
 			int id = mm_fd_table[fd].write_id;
 			ASSERT(id < mm_cb_table_size);
-			TRACE("write event on fd %d", fd);
 
 			mm_event_cb cb = mm_cb_table[id];
 			cb(MM_EVENT_WRITE, fd, mm_fd_table[fd].data);
