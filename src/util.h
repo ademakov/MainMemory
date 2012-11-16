@@ -21,20 +21,7 @@
 #ifndef MM_UTIL_H
 #define MM_UTIL_H
 
-#include <config.h>
-#include <stddef.h>
-
-/**********************************************************************
- * Compiler Helpers.
- **********************************************************************/
-
-#ifdef __GNUC__
-# define likely(x)	__builtin_expect(!!(x), 1)
-# define unlikely(x)	__builtin_expect(!!(x), 0)
-#else
-# define likely(x)	(x)
-# define unlikely(x)	(x)
-#endif
+#include "common.h"
 
 /**********************************************************************
  * Logging Routines.
@@ -101,18 +88,21 @@ void mm_free(void *ptr);
 void mm_abort(const char *file, int line, const char *func,
 	      const char *restrict msg, ...)
 	__attribute__((format(printf, 4, 5)))
+	__attribute__((nonnull(4)))
 	__attribute__((noreturn));
 
 #if ENABLE_DEBUG
 void mm_debug(const char *file, int line, const char *func,
 	      const char *restrict msg, ...)
-	__attribute__((format(printf, 4, 5)));
+	__attribute__((format(printf, 4, 5)))
+	__attribute__((nonnull(4)));
 #endif
 
 #if ENABLE_TRACE
 void mm_trace(int level, const char *file, int line, const char *func,
 	      const char *restrict msg, ...)
-	__attribute__((format(printf, 5, 6)));
+	__attribute__((format(printf, 5, 6)))
+	__attribute__((nonnull(4)));
 #endif
 
 #endif
