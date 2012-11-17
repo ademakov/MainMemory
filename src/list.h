@@ -23,9 +23,6 @@
 
 #include "common.h"
 
-#define MM_LIST_ENTRY(list, type, field) \
-	((type *) ((char *)(list) - offsetof(type, field)))
-
 struct mm_list
 {
 	struct mm_list *next;
@@ -38,26 +35,59 @@ mm_list_init(struct mm_list *list)
 	list->next = list->prev = list;
 }
 
-static inline int
+static inline struct mm_list *
+mm_list_head(struct mm_list *list)
+{
+	return list->next;
+}
+
+static inline struct mm_list *
+mm_list_tail(struct mm_list *list)
+{
+	return list->prev;
+}
+
+static inline bool
+mm_list_has_next(struct mm_list *list, struct mm_list *item)
+{
+	return item->next != list;
+}
+
+static inline bool
+mm_list_has_prev(struct mm_list *list, struct mm_list *item)
+{
+	return item->prev != list;
+}
+
+static inline bool
 mm_list_is_empty(struct mm_list *list)
 {
-	return (list == list->next);
+	return mm_list_has_next(list, list);
 }
 
 static inline void
-mm_list_delete(struct mm_list *elem)
+mm_list_insert(struct mm_list *list, struct mm_list *item)
 {
-	elem->next->prev = elem->prev;
-	elem->prev->next = elem->next;
+	item->next = list->next;
+	list->next->prev = item;
+	item->prev = list;
+	list->next = item;
 }
 
 static inline void
-mm_list_insert(struct mm_list *list, struct mm_list *elem)
+mm_list_insert_tail(struct mm_list *list, struct mm_list *item)
 {
-	elem->next = list->next;
-	list->next->prev = elem;
-	elem->prev = list;
-	list->next = elem;
+	item->prev = list->prev;
+	list->prev->next = item;
+	item->next = list;
+	list->prev = item;
+}
+
+static inline void
+mm_list_delete(struct mm_list *item)
+{
+	item->next->prev = item->prev;
+	item->prev->next = item->next;
 }
 
 #endif /* LIST_H */
