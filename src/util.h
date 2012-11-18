@@ -18,8 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef MM_UTIL_H
-#define MM_UTIL_H
+#ifndef UTIL_H
+#define UTIL_H
 
 #include "common.h"
 
@@ -105,4 +105,4 @@ void mm_trace(int level, const char *file, int line, const char *func,
 	__attribute__((nonnull(4)));
 #endif
 
-#endif
+#endif /* UTIL_H */
