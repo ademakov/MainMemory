@@ -20,12 +20,24 @@
 
 #include "sched.h"
 
+#include "task.h"
 #include "util.h"
+
+/* The list of ready to run tasks. */
+static struct mm_list mm_run_queue;
+
+/* The currently running task. */
+static struct mm_task *mm_current_task;
+
+/* A dummy task. */
+static struct mm_task mm_null_task;
 
 void
 mm_sched_init(void)
 {
 	ENTER();
+
+	mm_list_init(&mm_run_queue);
 
 	LEAVE();
 }
@@ -39,9 +51,43 @@ mm_sched_free(void)
 }
 
 void
+mm_sched_enqueue(struct mm_task *task)
+{
+	ENTER();
+
+	ASSERT(task->state != MM_TASK_WAITING);
+
+	mm_list_insert_tail(&mm_run_queue, &task->queue);
+	task->state = MM_TASK_WAITING;
+
+	LEAVE();
+}
+
+void
 mm_sched_dispatch(void)
 {
 	ENTER();
+
+	while (!mm_list_is_empty(&mm_run_queue)) {
+		struct mm_list *head = mm_list_head(&mm_run_queue);
+		mm_list_delete(head);
+
+		struct mm_task *task = containerof(head, struct mm_task, queue);
+		if (task == MM_TASK_WAITING) {
+			task->state = MM_TASK_RUNNING;
+
+			mm_current_task = task;
+			task->routine(task->routine_arg);
+
+			if ((task->flags & MM_TASK_RUNNABLE) == 0) {
+				task->state = MM_TASK_STOPPED;
+			} else {
+				mm_sched_enqueue(task);
+			}
+		}
+	}
+
+	mm_current_task = &mm_null_task;
 
 	LEAVE();
 }

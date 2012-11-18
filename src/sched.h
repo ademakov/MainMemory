@@ -1,5 +1,5 @@
 /*
- * sched.h - MainMemory event scheduler.
+ * sched.h - MainMemory task scheduler.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -19,11 +19,18 @@
  */
 
 #ifndef SCHED_H
-#define	SCHED_H
+#define SCHED_H
+
+#include "common.h"
+
+/* Forward declaration. */
+struct mm_task;
 
 void mm_sched_init(void);
 void mm_sched_free(void);
 
+void mm_sched_enqueue(struct mm_task *task);
+
 void mm_sched_dispatch(void);
 
-#endif
+#endif /* SCHED_H */
