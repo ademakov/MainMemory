@@ -53,4 +53,4 @@
 #define containerof(field_ptr, type, field) \
 	((type *) ((char *)(field_ptr) - offsetof(type, field)))
 
-#endif /* LIST_H */
+#endif /* COMMON_H */
