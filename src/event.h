@@ -19,9 +19,9 @@
  */
 
 #ifndef EVENT_H
-#define	EVENT_H
+#define EVENT_H
 
-#include <stdint.h>
+#include "common.h"
 
 typedef enum mm_event {
 	MM_EVENT_READ = 1,
@@ -54,5 +54,5 @@ void mm_event_set_fd_data(int fd, uint32_t data);
 void mm_event_register_fd(int fd, mm_event_id read_id, mm_event_id write_id);
 void mm_event_unregister_fd(int fd);
 
-#endif	/* EVENT_H */
+#endif /* EVENT_H */
 

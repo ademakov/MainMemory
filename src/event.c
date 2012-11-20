@@ -23,8 +23,6 @@
 #include "sched.h"
 #include "util.h"
 
-#include <errno.h>
-#include <limits.h>
 #include <string.h>
 #include <sys/event.h>
 #include <sys/types.h>
