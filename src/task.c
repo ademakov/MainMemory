@@ -20,12 +20,18 @@
 
 #include "task.h"
 
+#include "pool.h"
+#include "sched.h"
 #include "util.h"
+
+static struct mm_pool mm_task_pool;
 
 void
 mm_task_init(void)
 {
 	ENTER();
+
+	mm_pool_init(&mm_task_pool, sizeof (struct mm_task));
 
 	LEAVE();
 }
@@ -35,22 +41,49 @@ mm_task_free(void)
 {
 	ENTER();
 
+	mm_pool_discard(&mm_task_pool);
+
 	LEAVE();
 }
 
 struct mm_task *
-mm_task_create(uint16_t flags, mm_routine routine, uintptr_t routine_arg)
+mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
 {
 	ENTER();
 
+	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
+	task->state = MM_TASK_STOPPED;
+	task->flags = flags;
+	task->start = start;
+	task->start_arg = start_arg;
+
 	LEAVE();
-	return NULL;
+	return task;
+}
+
+void
+mm_task_destroy(struct mm_task *task)
+{
+	ENTER();
+	ASSERT(task->state != MM_TASK_BLOCKED);
+
+	if (task->state == MM_TASK_WAITING) {
+		mm_sched_dequeue(task);
+	}
+
+	mm_pool_free(&mm_task_pool, task);
+
+	LEAVE();
 }
 
 void
 mm_task_start(struct mm_task *task)
 {
 	ENTER();
+	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_STOPPED);
+
+	mm_sched_enqueue(task);
+	task->state = MM_TASK_WAITING;
 
 	LEAVE();
 }
@@ -59,6 +92,12 @@ void
 mm_task_block(struct mm_task *task)
 {
 	ENTER();
+
+	if (task->state == MM_TASK_WAITING) {
+		mm_sched_dequeue(task);
+	}
+
+	task->state = MM_TASK_BLOCKED;
 
 	LEAVE();
 }

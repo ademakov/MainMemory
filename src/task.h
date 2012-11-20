@@ -33,7 +33,7 @@
 /* Task flags. */
 #define MM_TASK_RUNNABLE	1
 
-typedef void (*mm_routine)(uintptr_t data);
+typedef void (*mm_routine)(uintptr_t arg);
 
 struct mm_task
 {
@@ -43,14 +43,16 @@ struct mm_task
 
 	struct mm_list queue;  /* running task list */
 
-	mm_routine routine;
-	uintptr_t routine_arg;
+	mm_routine start;
+	uintptr_t start_arg;
 };
 
 void mm_task_init(void);
 void mm_task_free(void);
 
-struct mm_task * mm_task_create(uint16_t flags, mm_routine routine, uintptr_t routine_arg);
+struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg);
+void mm_task_destroy(struct mm_task *task);
+
 void mm_task_start(struct mm_task *task);
 void mm_task_block(struct mm_task *task);
 

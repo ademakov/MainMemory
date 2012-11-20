@@ -55,10 +55,17 @@ mm_sched_enqueue(struct mm_task *task)
 {
 	ENTER();
 
-	ASSERT(task->state != MM_TASK_WAITING);
-
 	mm_list_insert_tail(&mm_run_queue, &task->queue);
-	task->state = MM_TASK_WAITING;
+
+	LEAVE();
+}
+
+void
+mm_sched_dequeue(struct mm_task *task)
+{
+	ENTER();
+
+	mm_list_delete(&task->queue);
 
 	LEAVE();
 }
@@ -77,7 +84,7 @@ mm_sched_dispatch(void)
 			task->state = MM_TASK_RUNNING;
 
 			mm_current_task = task;
-			task->routine(task->routine_arg);
+			task->start(task->start_arg);
 
 			if ((task->flags & MM_TASK_RUNNABLE) == 0) {
 				task->state = MM_TASK_STOPPED;
