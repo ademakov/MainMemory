@@ -1,5 +1,5 @@
 /*
- * task.h - MainMemory tasks.
+ * port.h - MainMemory ports.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -18,46 +18,27 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef TASK_H
-#define TASK_H
+#ifndef PORT_H
+#define PORT_H
 
 #include "common.h"
 #include "list.h"
 
-/* Task state values. */
-#define MM_TASK_PENDING		0
-#define MM_TASK_RUNNING		1
-#define MM_TASK_BLOCKED		2
-#define MM_TASK_INVALID		3
+struct mm_task;
 
-/* Task flags. */
-#define MM_TASK_RUNNABLE	1
-
-typedef void (*mm_routine)(uintptr_t arg);
-
-struct mm_task
+struct mm_port
 {
-	uint16_t state;
-	uint16_t flags;
-	uint32_t reserved;
+	/* The port owner. */
+	struct mm_task *task;
 
-	/* A link in a run/wait queue. */
-	struct mm_list queue;
-
-	/* The list of task's ports. */
+	/* A link in the task's ports list. */
 	struct mm_list ports;
-
-	mm_routine start;
-	uintptr_t start_arg;
 };
 
-void mm_task_init(void);
-void mm_task_free(void);
+void mm_port_init(void);
+void mm_port_free(void);
 
-struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg);
-void mm_task_destroy(struct mm_task *task);
+struct mm_port * mm_port_create(struct mm_task *task);
+void mm_port_destroy(struct mm_port *port);
 
-void mm_task_start(struct mm_task *task);
-void mm_task_block(struct mm_task *task);
-
-#endif /* TASK_H */
+#endif /* PORT_H */

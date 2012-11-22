@@ -80,15 +80,14 @@ mm_sched_dispatch(void)
 		mm_list_delete(head);
 
 		struct mm_task *task = containerof(head, struct mm_task, queue);
-		if (task == MM_TASK_WAITING) {
+		if (task == MM_TASK_PENDING) {
 			task->state = MM_TASK_RUNNING;
 
 			mm_current_task = task;
 			task->start(task->start_arg);
 
-			if ((task->flags & MM_TASK_RUNNABLE) == 0) {
-				task->state = MM_TASK_STOPPED;
-			} else {
+			if (task->state == MM_TASK_RUNNING) {
+				task->state = MM_TASK_PENDING;
 				mm_sched_enqueue(task);
 			}
 		}

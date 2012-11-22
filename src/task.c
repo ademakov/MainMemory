@@ -52,10 +52,12 @@ mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
 	ENTER();
 
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
-	task->state = MM_TASK_STOPPED;
+	task->state = MM_TASK_INVALID;
 	task->flags = flags;
 	task->start = start;
 	task->start_arg = start_arg;
+
+	mm_list_init(&task->ports);
 
 	LEAVE();
 	return task;
@@ -67,7 +69,7 @@ mm_task_destroy(struct mm_task *task)
 	ENTER();
 	ASSERT(task->state != MM_TASK_BLOCKED);
 
-	if (task->state == MM_TASK_WAITING) {
+	if (task->state == MM_TASK_PENDING) {
 		mm_sched_dequeue(task);
 	}
 
@@ -80,10 +82,10 @@ void
 mm_task_start(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_STOPPED);
+	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_INVALID);
 
 	mm_sched_enqueue(task);
-	task->state = MM_TASK_WAITING;
+	task->state = MM_TASK_PENDING;
 
 	LEAVE();
 }
@@ -93,7 +95,7 @@ mm_task_block(struct mm_task *task)
 {
 	ENTER();
 
-	if (task->state == MM_TASK_WAITING) {
+	if (task->state == MM_TASK_PENDING) {
 		mm_sched_dequeue(task);
 	}
 

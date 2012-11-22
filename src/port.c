@@ -1,5 +1,5 @@
 /*
- * pool.h - MainMemory memory pools.
+ * port.c - MainMemory ports.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -18,23 +18,56 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef POOL_H
-#define POOL_H
+#include "port.h"
 
-#include "common.h"
+#include "pool.h"
+#include "sched.h"
+#include "task.h"
+#include "util.h"
 
-struct mm_pool
+static struct mm_pool mm_port_pool;
+
+void
+mm_port_init(void)
 {
-	uint32_t item_count;
-	uint32_t free_index;
-	uint32_t pool_size;
-	uint32_t item_size;
-	void *pool;
-};
+	ENTER();
 
-void mm_pool_init(struct mm_pool *pool, size_t item_size);
-void mm_pool_discard(struct mm_pool *pool);
-void * mm_pool_alloc(struct mm_pool *pool);
-void mm_pool_free(struct mm_pool *pool, void *item);
+	mm_pool_init(&mm_port_pool, sizeof (struct mm_port));
 
-#endif /* POOL_H */
+	LEAVE();
+}
+
+void
+mm_port_free(void)
+{
+	ENTER();
+
+	mm_pool_discard(&mm_port_pool);
+
+	LEAVE();
+}
+
+struct mm_port *
+mm_port_create(struct mm_task *task)
+{
+	ENTER();
+
+	struct mm_port *port = mm_pool_alloc(&mm_port_pool);
+	port->task = task;
+	mm_list_insert_tail(&task->ports, &port->ports);
+
+	LEAVE();
+	return port;
+}
+
+void
+mm_port_destroy(struct mm_port *port)
+{
+	ENTER();
+
+	mm_list_delete(&port->ports);
+	mm_pool_free(&mm_port_pool,&port);
+
+	LEAVE();
+}
+
