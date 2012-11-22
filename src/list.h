@@ -62,7 +62,7 @@ mm_list_has_prev(struct mm_list *list, struct mm_list *item)
 static inline bool
 mm_list_is_empty(struct mm_list *list)
 {
-	return mm_list_has_next(list, list);
+	return !mm_list_has_next(list, list);
 }
 
 static inline void
