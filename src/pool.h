@@ -32,9 +32,16 @@ struct mm_pool
 	void *pool;
 };
 
-void mm_pool_init(struct mm_pool *pool, size_t item_size);
-void mm_pool_discard(struct mm_pool *pool);
-void * mm_pool_alloc(struct mm_pool *pool);
-void mm_pool_free(struct mm_pool *pool, void *item);
+void mm_pool_init(struct mm_pool *pool, size_t item_size)
+	__attribute__((nonnull(1)));
+
+void mm_pool_discard(struct mm_pool *pool)
+	__attribute__((nonnull(1)));
+
+void * mm_pool_alloc(struct mm_pool *pool)
+	__attribute__((nonnull(1)));
+
+void mm_pool_free(struct mm_pool *pool, void *item)
+	__attribute__((nonnull(1, 2)));
 
 #endif /* POOL_H */
