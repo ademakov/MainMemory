@@ -54,10 +54,16 @@ struct mm_task
 void mm_task_init(void);
 void mm_task_free(void);
 
-struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg);
-void mm_task_destroy(struct mm_task *task);
+struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
+	__attribute__((nonnull(2)));
 
-void mm_task_start(struct mm_task *task);
-void mm_task_block(struct mm_task *task);
+void mm_task_destroy(struct mm_task *task)
+	__attribute__((nonnull(1)));
+
+void mm_task_start(struct mm_task *task)
+	__attribute__((nonnull(1)));
+
+void mm_task_block(struct mm_task *task)
+	__attribute__((nonnull(1)));
 
 #endif /* TASK_H */
