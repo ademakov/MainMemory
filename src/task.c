@@ -21,6 +21,7 @@
 #include "task.h"
 
 #include "pool.h"
+#include "port.h"
 #include "sched.h"
 #include "util.h"
 
@@ -71,6 +72,13 @@ mm_task_destroy(struct mm_task *task)
 
 	if (task->state == MM_TASK_PENDING) {
 		mm_sched_dequeue(task);
+	}
+
+	while (!mm_list_is_empty(&task->ports)) {
+		// TODO: ensure that ports are not referenced from elsewhere.
+		struct mm_list *head = mm_list_head(&task->ports);
+		struct mm_port *port = containerof(head, struct mm_port, ports);
+		mm_port_destroy(port);
 	}
 
 	mm_pool_free(&mm_task_pool, task);

@@ -24,7 +24,11 @@
 #include "common.h"
 #include "list.h"
 
+/* Forward declaration. */
 struct mm_task;
+
+/* */
+#define MM_PORT_SIZE	248
 
 struct mm_port
 {
@@ -33,12 +37,26 @@ struct mm_port
 
 	/* A link in the task's ports list. */
 	struct mm_list ports;
+
+	/* Message buffer. */
+	uint16_t start;
+	uint16_t count;
+	uint32_t ring[MM_PORT_SIZE];
 };
 
 void mm_port_init(void);
 void mm_port_free(void);
 
-struct mm_port * mm_port_create(struct mm_task *task);
-void mm_port_destroy(struct mm_port *port);
+struct mm_port * mm_port_create(struct mm_task *task)
+	__attribute__((nonnull(1)));
+
+void mm_port_destroy(struct mm_port *port)
+	__attribute__((nonnull(1)));
+
+int mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
+	__attribute__((nonnull(1, 2)));
+
+int mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
+	__attribute__((nonnull(1, 2)));
 
 #endif /* PORT_H */
