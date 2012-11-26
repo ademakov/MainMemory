@@ -34,7 +34,7 @@ struct mm_free_item
 static inline size_t
 mm_pool_grow_size(uint32_t item_size, uint32_t pool_size)
 {
-	ASSERT(item_size < 0x400);
+	ASSERT(item_size < 0x200);
 
 	// Round the size up to a 4k multiple.
 	size_t size = (pool_size == 0 ? 0x1000 : (item_size * pool_size + 0xfff) & ~0xfff);

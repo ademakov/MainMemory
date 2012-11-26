@@ -50,6 +50,18 @@
  * Common Macros.
  **********************************************************************/
 
+#define min(a, b) ({			\
+		typeof(a) _a = (a);	\
+		typeof(b) _b = (b);	\
+		_a < _b ? _a : _b;	\
+	})
+
+#define max(a, b) ({			\
+		typeof(a) _a = (a);	\
+		typeof(b) _b = (b);	\
+		_a > _b ? _a : _b;	\
+	})
+
 #define containerof(field_ptr, type, field) \
 	((type *) ((char *)(field_ptr) - offsetof(type, field)))
 
