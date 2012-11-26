@@ -47,9 +47,13 @@ struct mm_task
 	/* The list of task's ports. */
 	struct mm_list ports;
 
+	/* The port the task is blocked on. */
+	struct mm_port *blocked_on;
+
 	mm_routine start;
 	uintptr_t start_arg;
 };
+
 
 void mm_task_init(void);
 void mm_task_free(void);

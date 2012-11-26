@@ -55,6 +55,7 @@ mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
 	task->state = MM_TASK_INVALID;
 	task->flags = flags;
+	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;
 
