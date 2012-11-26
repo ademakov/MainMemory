@@ -30,7 +30,7 @@ static struct mm_list mm_run_queue;
 static struct mm_task mm_null_task;
 
 /* The currently running task. */
-struct mm_task *mm_running_task;
+struct mm_task *mm_running_task = &mm_null_task;
 
 void
 mm_sched_init(void)
@@ -80,7 +80,7 @@ mm_sched_dispatch(void)
 		mm_list_delete(head);
 
 		struct mm_task *task = containerof(head, struct mm_task, queue);
-		if (task == MM_TASK_PENDING) {
+		if (task->state == MM_TASK_PENDING) {
 			task->state = MM_TASK_RUNNING;
 
 			mm_running_task = task;
