@@ -18,15 +18,20 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef MM_NET_H
-#define MM_NET_H
+#ifndef NET_H
+#define NET_H
 
-#include <event.h>
+#include "common.h"
+#include "event.h"
 
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <netinet/in.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/uio.h>
 #include <sys/un.h>
+
+/* Forward declaration. */
+struct mm_port;
 
 /* Socket address. */
 struct mm_net_addr
@@ -51,10 +56,6 @@ struct mm_net_peer_addr
 	};
 };
 
-struct mm_net_proto
-{
-};
-
 /* Network server data. */
 struct mm_net_server
 {
@@ -62,16 +63,12 @@ struct mm_net_server
 	int sock;
 	/* Server socket address. */
 	struct mm_net_addr addr;
-	/* Protocol data. */
+	/* Protocol handlers. */
 	struct mm_net_proto *proto;
-	intptr_t proto_data;
+	struct mm_port *read_ready_port;
+	struct mm_port *write_ready_port;
+	mm_io_handler io_handler;
 };
-
-/* Client flags. */
-#define MM_NET_READ_READY	0x01
-#define MM_NET_WRITE_READY	0x02
-#define MM_NET_REQUEST_READY	0x04
-#define MM_NET_RESPONSE_READY	0x08
 
 /* Network client data. */
 struct mm_net_client
@@ -81,13 +78,21 @@ struct mm_net_client
 	/* Client flags. */
 	union
 	{
-		int flags;
 		uint32_t free_index;
 	};
 	/* Client server. */
 	struct mm_net_server *srv;
 	/* Client address. */
 	struct mm_net_peer_addr peer;
+};
+
+/* Protocol handler. */
+struct mm_net_proto
+{
+	bool (*accept)(struct mm_net_client *client);
+	void (*read_ready)(struct mm_net_client *client);
+	void (*write_ready)(struct mm_net_client *client);
+	void (*cleanup)(struct mm_net_client *client);
 };
 
 void mm_net_init(void);
@@ -101,12 +106,9 @@ struct mm_net_server *mm_net_create_inet_server(const char *addrstr, uint16_t po
 struct mm_net_server *mm_net_create_inet6_server(const char *addrstr, uint16_t port)
 	__attribute__((nonnull(1)));
 
-void mm_net_set_server_proto(struct mm_net_server *srv, struct mm_net_proto *proto, uintptr_t proto_data)
-	__attribute__((nonnull(1)));
-
-void mm_net_start_server(struct mm_net_server *srv)
-	__attribute__((nonnull(1)));
+void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+	__attribute__((nonnull(1, 2)));
 void mm_net_stop_server(struct mm_net_server *srv)
 	__attribute__((nonnull(1)));
 
-#endif
+#endif /* NET_H */

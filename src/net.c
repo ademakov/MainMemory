@@ -21,9 +21,10 @@
 #include "net.h"
 
 #include "event.h"
+#include "port.h"
+#include "task.h"
 #include "util.h"
 
-#include <errno.h>
 #include <fcntl.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -324,30 +325,51 @@ mm_net_free_client(struct mm_net_client *cli)
 }
 
 /**********************************************************************
- * Net I/O event handlers.
+ * Net I/O routines.
  **********************************************************************/
 
-static mm_event_id mm_net_accept_id;
-static mm_event_id mm_net_read_id;
-static mm_event_id mm_net_write_id;
+#define MM_ACCEPT_COUNT		10
+#define MM_IO_COUNT		10
+
+
+static struct mm_port *mm_accept_port;
+static mm_io_handler mm_accept_handler;
 
 static void
-mm_net_accept_event(mm_event event, uintptr_t ident, uint32_t data)
+mm_net_accept(void *dummy __attribute__((unused)))
 {
 	ENTER();
-	ASSERT(data < mm_srv_count);
+
+	/* Client socket data. */
+	int sock;
+	socklen_t salen;
+	struct sockaddr_storage sa;
+
+	/* Repeat count. */
+	uint32_t count = 0;
+	/* The server index received from I/O handler. */
+	uint32_t index;
+next:
+	/* Receive a ready server index. */
+	if (mm_port_receive(mm_accept_port, &index, 1) < 0) {
+		goto done;
+	}
+	ASSERT(index < mm_srv_count);
 
 	/* Find the pertinent server. */
-	struct mm_net_server *srv = &mm_srv_table[data];
+	struct mm_net_server *srv = &mm_srv_table[index];
 	ASSERT(srv->proto != NULL);
 
 	/* Accept a client socket. */
-	struct sockaddr_storage sa;
-	socklen_t salen = sizeof sa;
-	int sock = accept(srv->sock, (struct sockaddr *) &sa, &salen);
+retry:
+	salen = sizeof sa;
+	sock = accept(srv->sock, (struct sockaddr *) &sa, &salen);
 	if (unlikely(sock < 0)) {
-		mm_error(errno, "accept()");
-		goto done;
+		if (errno == EINTR)
+			goto retry;
+		if (errno != EAGAIN && errno != EWOULDBLOCK)
+			mm_error(errno, "accept()");
+		goto next;
 	}
 	if (unlikely(mm_event_verify_fd(sock) != MM_FD_VALID)) {
 		mm_error(0, "socket no is too high: %d", sock);
@@ -365,7 +387,6 @@ mm_net_accept_event(mm_event event, uintptr_t ident, uint32_t data)
 
 	/* Initialize the client structure. */
 	cli->sock = sock;
-	cli->flags = (MM_NET_READ_READY | MM_NET_WRITE_READY);
 	cli->srv = srv;
 	if (sa.ss_family == AF_INET)
 		memcpy(&cli->peer.in_addr, &sa, sizeof(cli->peer.in_addr));
@@ -384,61 +405,97 @@ mm_net_accept_event(mm_event event, uintptr_t ident, uint32_t data)
 	/* Make the socket non-blocking. */
 	mm_net_set_nonblocking(sock);
 
-	/* Register the socket with event loop. */
-	mm_event_register_fd(cli->sock, mm_net_read_id, mm_net_write_id);
-	mm_event_set_fd_data(cli->sock, (uint32_t) mm_net_client_index(cli));
+	/* Register the socket with the event loop. */
+	mm_event_register_fd(cli->sock, srv->io_handler, (uint32_t) mm_net_client_index(cli));
 
+	/* Let the protocol layer to check the socket. */
+	if (srv->proto->accept && !(srv->proto->accept)(cli)) {
+		mm_error(0, "connection refused");
+		mm_net_free_client(cli);
+		// TODO: set linger off and/or close concurrently to avoid stalls.
+		close(sock);
+		goto done;
+	}
+
+	/* Check to see if there is some more work. */
+	if (++count < MM_ACCEPT_COUNT)
+		goto next;
 done:
 	LEAVE();
 }
 
 static void
-mm_net_read_event(mm_event event, uintptr_t ident, uint32_t data)
+mm_net_read_ready(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT(data < mm_cli_count);
 
-	/* Find the pertinent client. */
-	struct mm_net_client *cli = &mm_cli_table[data];
-
-	char buf[1026];
-	int n = read(cli->sock, buf, sizeof(buf));
-	if (n <= 0) {
-		if (n < 0)
-			mm_error(errno, "read()");
-		mm_event_unregister_fd(cli->sock);
-		close(cli->sock);
+	/* Repeat count. */
+	uint32_t count = 0;
+	/* The client index received from I/O handler. */
+	uint32_t index;
+next:
+	/* Receive a ready client index. */
+	if (mm_port_receive(srv->read_ready_port, &index, 1) < 0) {
+		goto done;
 	}
 
+	/* Find the pertinent client. */
+	ASSERT(index < mm_cli_count);
+	struct mm_net_client *cli = &mm_cli_table[index];
+
+	/* Handle read on the protocol layer. */
+	(cli->srv->proto->read_ready)(cli);
+
+	/* Check to see if there is some more work. */
+	if (++count < MM_IO_COUNT)
+		goto next;
+done:
 	LEAVE();
 }
 
 static void
-mm_net_write_event(mm_event event, uintptr_t ident, uint32_t data)
+mm_net_write_ready(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT(data < mm_cli_count);
+
+	/* Repeat count. */
+	uint32_t count = 0;
+	/* The client index received from I/O handler. */
+	uint32_t index;
+next:
+	/* Receive a ready client index. */
+	if (mm_port_receive(srv->write_ready_port, &index, 1) < 0) {
+		goto done;
+	}
 
 	/* Find the pertinent client. */
-	struct mm_net_client *cli = &mm_cli_table[data];
+	ASSERT(index < mm_cli_count);
+	struct mm_net_client *cli = &mm_cli_table[index];
 
-	write(cli->sock, "test\n", 5);
-	mm_event_unregister_fd(cli->sock);
-	close(cli->sock);
+	/* Handle write on the protocol layer. */
+	(cli->srv->proto->write_ready)(cli);
 
+	/* Check to see if there is some more work. */
+	if (++count < MM_IO_COUNT)
+		goto next;
+done:
 	LEAVE();
 }
 
 static void
-mm_net_init_handlers(void)
+mm_net_init_accept_task(void)
 {
-	ENTER();
+	/* Create accept task. */
+	struct mm_task *task = mm_task_create(0, (mm_routine) mm_net_accept, 0);
 
-	mm_net_accept_id = mm_event_install_handler(mm_net_accept_event);
-	mm_net_read_id = mm_event_install_handler(mm_net_read_event);
-	mm_net_write_id = mm_event_install_handler(mm_net_write_event);
+	/* Create accept port. */
+	mm_accept_port = mm_port_create(task);
 
-	LEAVE();
+	/* Queue the accept task. */
+	mm_task_start(task);
+
+	/* Add I/O handler. */
+	mm_accept_handler = mm_event_add_io_handler(mm_accept_port, NULL);
 }
 
 /**********************************************************************
@@ -454,7 +511,7 @@ mm_net_init(void)
 
 	mm_net_init_server_table();
 	mm_net_init_client_table();
-	mm_net_init_handlers();
+	mm_net_init_accept_task();
 
 	mm_net_initialized = 1;
 
@@ -470,8 +527,9 @@ mm_net_free(void)
 
 	for (int i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
-		if (srv->sock >= 0)
+		if (srv->sock >= 0) {
 			mm_net_close_server_socket(&srv->addr, srv->sock);
+		}
 	}
 
 	mm_net_free_client_table();
@@ -488,8 +546,9 @@ mm_net_exit(void)
 	if (mm_net_initialized) {
 		for (int i = 0; i < mm_srv_count; i++) {
 			struct mm_net_server *srv = &mm_srv_table[i];
-			if (srv->sock >= 0)
+			if (srv->sock >= 0) {
 				mm_net_remove_unix_socket(&srv->addr);
+			}
 		}
 	}
 
@@ -536,28 +595,40 @@ mm_net_create_inet6_server(const char *addrstr, uint16_t port)
 }
 
 void
-mm_net_set_server_proto(struct mm_net_server *srv, struct mm_net_proto *proto, uintptr_t proto_data)
-{
-	ENTER();
-
-	srv->proto = proto;
-	srv->proto_data = proto_data;
-
-	LEAVE();
-}
-
-void
-mm_net_start_server(struct mm_net_server *srv)
+mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 {
 	ENTER();
 	ASSERT(srv->sock == -1);
 
+	/* Store protocol handlers. */
+	srv->proto = proto;
+
 	/* Create the server socket. */
 	srv->sock = mm_net_open_server_socket(&srv->addr, 0);
+	if (mm_event_verify_fd(srv->sock)) {
+		mm_fatal(0, "socket no is too high: %d", srv->sock);
+	}
 
-	/* Register the socket with event loop. */
-	mm_event_register_fd(srv->sock, mm_net_accept_id, 0);
-	mm_event_set_fd_data(srv->sock, (uint32_t) mm_net_server_index(srv));
+	/* Create server tasks. */
+	struct mm_task *read_ready_task = mm_task_create(
+		0, (mm_routine) mm_net_read_ready, (intptr_t) srv);
+	struct mm_task *write_ready_task = mm_task_create(
+		0, (mm_routine) mm_net_write_ready, (intptr_t) srv);
+
+	/* Create server ports. */
+	srv->read_ready_port = mm_port_create(read_ready_task);
+	srv->write_ready_port = mm_port_create(write_ready_task);
+
+	/* Queue the server tasks. */
+	mm_task_start(read_ready_task);
+	mm_task_start(write_ready_task);
+
+	/* Register the ports with the event loop. */
+	srv->io_handler = mm_event_add_io_handler(srv->read_ready_port,
+						  srv->write_ready_port);
+
+	/* Register the socket with the event loop. */
+	mm_event_register_fd(srv->sock, mm_accept_handler, (uint32_t) mm_net_server_index(srv));
 
 	LEAVE();
 }

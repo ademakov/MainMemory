@@ -23,16 +23,12 @@
 
 #include "common.h"
 
-typedef enum mm_event {
-	MM_EVENT_READ = 1,
-	MM_EVENT_WRITE = 2,
-} mm_event;
+/* Forward declaration. */
+struct mm_port;
 
-/* Event handler identifier. */
-typedef uint8_t mm_event_id;
-
-/* Event handler routine (callback). */
-typedef void (*mm_event_cb)(mm_event event, uintptr_t ident, uint32_t data);
+/**********************************************************************
+ * Common event routines.
+ **********************************************************************/
 
 void mm_event_init(void);
 void mm_event_free(void);
@@ -40,19 +36,38 @@ void mm_event_free(void);
 void mm_event_loop(void);
 void mm_event_stop(void);
 
-mm_event_id mm_event_install_handler(mm_event_cb cb);
+/**********************************************************************
+ * I/O Event Support.
+ **********************************************************************/
 
 /* Return values of mm_event_verify_fd() */
 #define MM_FD_VALID	(0)
 #define MM_FD_INVALID	(-1)
 #define MM_FD_TOO_BIG	(-2)
 
+/* I/O handler identifier. */
+typedef uint8_t mm_io_handler;
+
+mm_io_handler mm_event_add_io_handler(struct mm_port *read_ready_port,
+				      struct mm_port *write_ready_port);
+
 int mm_event_verify_fd(int fd);
 
-void mm_event_set_fd_data(int fd, uint32_t data);
+void mm_event_register_fd(int fd, mm_io_handler handler, uint32_t data);
 
-void mm_event_register_fd(int fd, mm_event_id read_id, mm_event_id write_id);
 void mm_event_unregister_fd(int fd);
+
+/**********************************************************************
+ * Other Event Support.
+ **********************************************************************/
+
+/* Event handler identifier. */
+typedef uint8_t mm_handler_id;
+
+/* Event handler routine (callback). */
+typedef void (*mm_handler)(uintptr_t ident, uint32_t data);
+
+mm_handler_id mm_event_install_handler(mm_handler cb);
 
 #endif /* EVENT_H */
 

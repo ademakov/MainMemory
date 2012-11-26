@@ -20,6 +20,7 @@
 
 #include "event.h"
 
+#include "port.h"
 #include "sched.h"
 #include "util.h"
 
@@ -35,6 +36,60 @@
 static volatile int mm_exit_loop = 0;
 
 /**********************************************************************
+ * I/O handler table.
+ **********************************************************************/
+
+/* I/0 handler table size. */
+#define MM_IO_MAX 32
+
+/* I/O handler. */
+struct mm_io
+{
+	struct mm_port *read_ready;
+	struct mm_port *write_ready;
+};
+
+/* I/O handler table. */
+static struct mm_io mm_io_table[MM_IO_MAX];
+
+/* The number of registered I/O handlers. */
+static int mm_io_table_size;
+
+/* Initialize the event handler table. */
+static void
+mm_event_init_io_handlers(void)
+{
+	ENTER();
+	ASSERT(MM_IO_MAX < (1ul << (8 * sizeof(mm_io_handler))));
+
+	/* Register a dummy I/O handler with zero id. */
+	ASSERT(mm_io_table_size == 0);
+	(void) mm_event_add_io_handler(NULL, NULL);
+	ASSERT(mm_io_table_size == 1);
+
+	LEAVE();
+}
+
+/* Register an I/O handler in the table. */
+mm_io_handler
+mm_event_add_io_handler(struct mm_port *read_ready_port,
+			struct mm_port *write_ready_port)
+{
+	ENTER();
+
+	ASSERT(mm_io_table_size < MM_IO_MAX);
+
+	mm_io_handler id = mm_io_table_size++;
+	mm_io_table[id].read_ready = read_ready_port;
+	mm_io_table[id].write_ready = write_ready_port;
+
+	DEBUG("registered I/O handler %d", id);
+
+	LEAVE();
+	return id;
+}
+
+/**********************************************************************
  * Event handler table.
  **********************************************************************/
 
@@ -42,15 +97,14 @@ static volatile int mm_exit_loop = 0;
 #define MM_CB_MAX 64
 
 /* Event handler table. */
-static mm_event_cb mm_cb_table[MM_CB_MAX];
+static mm_handler mm_cb_table[MM_CB_MAX];
 
 /* The number of registered event handlers. */
 static int mm_cb_table_size;
 
 /* A dummy event handler. */
 static void
-mm_event_dummy(mm_event event __attribute__((unused)),
-	       uintptr_t ident __attribute__((unused)),
+mm_event_dummy(uintptr_t ident __attribute__((unused)),
 	       uint32_t data __attribute__((unused)))
 {
 	DEBUG("hmm, dummy event handler invoked.");
@@ -72,15 +126,15 @@ mm_event_init_handlers(void)
 }
 
 /* Register an event handler in the table. */
-mm_event_id
-mm_event_install_handler(mm_event_cb cb)
+mm_handler_id
+mm_event_install_handler(mm_handler cb)
 {
 	ENTER();
 
 	ASSERT(cb != NULL);
 	ASSERT(mm_cb_table_size < MM_CB_MAX);
 
-	mm_event_id id = mm_cb_table_size++;
+	mm_handler_id id = mm_cb_table_size++;
 	mm_cb_table[id] = cb;
 
 	DEBUG("registered event handler %d", id);
@@ -167,14 +221,12 @@ struct mm_fd
 {
 	/* event handler data */
 	uint32_t data;
-	/* current read event handler id */
-	mm_event_id read_id;
-	/* current write event handler id */
-	mm_event_id write_id;
-	/* requested read event handler id */
-	mm_event_id new_read_id;
-	/* requested write event handler id */
-	mm_event_id new_write_id;
+	/* file descriptor flags */
+	uint16_t flags;
+	/* current I/O handler id */
+	mm_io_handler io;
+	/* requested I/O handler id */
+	mm_io_handler new_io;
 };
 
 /* File descriptor table. */
@@ -233,50 +285,26 @@ mm_event_verify_fd(int fd)
 }
 
 void
-mm_event_set_fd_data(int fd, uint32_t data)
+mm_event_register_fd(int fd, mm_io_handler io, uint32_t data)
 {
 	ENTER();
 	TRACE("fd: %d", fd);
 
 	ASSERT(fd >= 0);
 	ASSERT(fd < mm_fd_table_size);
-
-	mm_fd_table[fd].data = data;
-
-	LEAVE();
-}
-
-void
-mm_event_register_fd(int fd, mm_event_id read_id, mm_event_id write_id)
-{
-	ENTER();
-	TRACE("fd: %d", fd);
-
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_fd_table_size);
-	ASSERT(read_id < mm_cb_table_size);
-	ASSERT(write_id < mm_cb_table_size);
+	ASSERT(io != 0);
+	ASSERT(io < mm_io_table_size);
 
 	struct mm_fd *mm_fd = &mm_fd_table[fd];
 
 	/* Add the fd to the change list if needed. */
-	int a = (mm_fd->read_id != 0);
-	int b = (mm_fd->new_read_id != 0);
-	int c = (read_id != 0);
-	if (likely(((a ^ c) & (b ^ c)))) {
+	if (likely(mm_fd->io == 0 && mm_fd->new_io == 0)) {
 		mm_event_note_fd_change(fd);
-	} else {
-		a = (mm_fd->write_id != 0);
-		b = (mm_fd->new_write_id != 0);
-		c = (write_id != 0);
-		if (likely(((a ^ c) & (b ^ c)))) {
-			mm_event_note_fd_change(fd);
-		}
 	}
 
 	/* Store new handlers. */
-	mm_fd->new_read_id = read_id;
-	mm_fd->new_write_id = write_id;
+	mm_fd->new_io = io;
+	mm_fd->data = data;
 
 	LEAVE();
 }
@@ -292,12 +320,11 @@ mm_event_unregister_fd(int fd)
 
 	struct mm_fd *mm_fd = &mm_fd_table[fd];
 
-	if (likely(mm_fd->read_id != 0 && mm_fd->new_read_id != 0)
-	    || likely(mm_fd->write_id != 0 && mm_fd->new_write_id != 0))
+	if (likely(mm_fd->io != 0 && mm_fd->new_io != 0)) {
 		mm_event_note_fd_change(fd);
+	}
 
-	mm_fd->new_read_id = 0;
-	mm_fd->new_write_id = 0;
+	mm_fd->new_io = 0;
 	mm_fd->data = 0;
 
 	LEAVE();
@@ -393,9 +420,8 @@ mm_event_dispatch(void)
 		int a, b;
 
 		/* Change a read event registration if needed. */
-		a = (mm_fd->read_id != 0);
-		b = (mm_fd->new_read_id != 0);
-		mm_fd->read_id = mm_fd->new_read_id;
+		a = (mm_fd->io && mm_io_table[mm_fd->io].read_ready);
+		b = (mm_fd->new_io && mm_io_table[mm_fd->new_io].read_ready);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -412,9 +438,8 @@ mm_event_dispatch(void)
 		}
 
 		/* Change a write event registration if needed. */
-		a = (mm_fd->write_id != 0);
-		b = (mm_fd->new_write_id != 0);
-		mm_fd->write_id = mm_fd->new_write_id;
+		a = (mm_fd->io && mm_io_table[mm_fd->io].write_ready);
+		b = (mm_fd->new_io && mm_io_table[mm_fd->new_io].write_ready);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -429,6 +454,9 @@ mm_event_dispatch(void)
 			struct kevent *kp = &mm_kevents[mm_nkevents++];
 			EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
 		}
+
+		/* Store the requested I/O handler. */
+		mm_fd->io = mm_fd->new_io;
 	}
 
 	DEBUG("event change count: %d", mm_nkevents);
@@ -458,22 +486,29 @@ mm_event_dispatch(void)
 			int fd = mm_kevents[i].ident;
 			DEBUG("read event on fd %d", fd);
 
-			int id = mm_fd_table[fd].read_id;
-			ASSERT(id < mm_cb_table_size);
+			mm_io_handler io = mm_fd_table[fd].io;
+			ASSERT(io < mm_io_table_size);
 
-			mm_event_cb cb = mm_cb_table[id];
-			cb(MM_EVENT_READ, fd, mm_fd_table[fd].data);
-
+			struct mm_io *handlers = &mm_io_table[io];
+			if (likely(handlers->read_ready)) {
+				int rc = mm_port_send(
+					handlers->read_ready,
+					&mm_fd_table[fd].data, 1);
+			}
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
 
 			int fd = mm_kevents[i].ident;
 			DEBUG("write event on fd %d", fd);
 
-			int id = mm_fd_table[fd].write_id;
-			ASSERT(id < mm_cb_table_size);
+			mm_io_handler io = mm_fd_table[fd].io;
+			ASSERT(io < mm_io_table_size);
 
-			mm_event_cb cb = mm_cb_table[id];
-			cb(MM_EVENT_WRITE, fd, mm_fd_table[fd].data);
+			struct mm_io *handlers = &mm_io_table[io];
+			if (likely(handlers->write_ready)) {
+				int rc = mm_port_send(
+					handlers->write_ready,
+					&mm_fd_table[fd].data, 1);
+			}
 		}
 	}
 
@@ -494,6 +529,7 @@ mm_event_init(void)
 	ENTER();
 
 	/* Initialize generic data. */
+	mm_event_init_io_handlers();
 	mm_event_init_handlers();
 	mm_event_init_change_list();
 	mm_event_init_fd_table();
@@ -525,8 +561,8 @@ mm_event_loop(void)
 	ENTER();
 
 	while (!mm_exit_loop) {
-		mm_event_dispatch();
 		mm_sched_dispatch();
+		mm_event_dispatch();
 	}
 
 	LEAVE();

@@ -18,12 +18,14 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "common.h"
 #include "event.h"
 #include "net.h"
+#include "port.h"
 #include "sched.h"
+#include "task.h"
 #include "util.h"
 
-#include <errno.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -78,7 +80,33 @@ mm_signal_init(void)
 	LEAVE();
 }
 
-struct mm_net_proto cmd_proto;
+static void
+mm_read_ready(struct mm_net_client *cli)
+{
+	char buf[1026];
+	int n = read(cli->sock, buf, sizeof(buf));
+	if (n <= 0) {
+		if (n < 0)
+			mm_error(errno, "read()");
+		mm_event_unregister_fd(cli->sock);
+		close(cli->sock);
+	}
+}
+
+static void
+mm_write_ready(struct mm_net_client *cli)
+{
+	write(cli->sock, "test\n", 5);
+	mm_event_unregister_fd(cli->sock);
+	close(cli->sock);
+}
+
+struct mm_net_proto cmd_proto = {
+	.accept = NULL,
+	.read_ready = mm_read_ready,
+	.write_ready = mm_write_ready,
+	.cleanup = NULL,
+};
 
 static void
 mm_server_open(void)
@@ -89,11 +117,8 @@ mm_server_open(void)
 	u_cmd_server = mm_net_create_unix_server("mm_cmd.sock");
 	i_cmd_server = mm_net_create_inet_server("127.0.0.1", 8000);
 
-	mm_net_set_server_proto(u_cmd_server, &cmd_proto, 0);
-	mm_net_set_server_proto(i_cmd_server, &cmd_proto, 0);
-
-	mm_net_start_server(u_cmd_server);
-	mm_net_start_server(i_cmd_server);
+	mm_net_start_server(u_cmd_server, &cmd_proto);
+	mm_net_start_server(i_cmd_server, &cmd_proto);
 
 	LEAVE();
 }
@@ -120,6 +145,8 @@ main(int ac, char *av[])
 
 	/* Initialize. */
 	mm_signal_init();
+	mm_task_init();
+	mm_port_init();
 	mm_sched_init();
 	mm_event_init();
 
@@ -135,6 +162,8 @@ main(int ac, char *av[])
 	/* Free resources. */
 	mm_event_free();
 	mm_sched_free();
+	mm_task_free();
+	mm_port_free();
 
 	LEAVE();
 	return EXIT_SUCCESS;
