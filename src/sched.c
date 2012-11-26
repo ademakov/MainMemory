@@ -26,11 +26,11 @@
 /* The list of ready to run tasks. */
 static struct mm_list mm_run_queue;
 
-/* The currently running task. */
-static struct mm_task *mm_current_task;
-
 /* A dummy task. */
 static struct mm_task mm_null_task;
+
+/* The currently running task. */
+struct mm_task *mm_running_task;
 
 void
 mm_sched_init(void)
@@ -83,7 +83,7 @@ mm_sched_dispatch(void)
 		if (task == MM_TASK_PENDING) {
 			task->state = MM_TASK_RUNNING;
 
-			mm_current_task = task;
+			mm_running_task = task;
 			task->start(task->start_arg);
 
 			if (task->state == MM_TASK_RUNNING) {
@@ -93,7 +93,7 @@ mm_sched_dispatch(void)
 		}
 	}
 
-	mm_current_task = &mm_null_task;
+	mm_running_task = &mm_null_task;
 
 	LEAVE();
 }
