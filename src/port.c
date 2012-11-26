@@ -25,6 +25,29 @@
 #include "task.h"
 #include "util.h"
 
+/**********************************************************************
+ * Internal Port Functions.
+ **********************************************************************/
+
+static void
+mm_port_block_on_send(struct mm_port *port)
+{
+	mm_running_task->blocked_on = port;
+	mm_list_insert_tail(&port->blocked_senders, &mm_running_task->queue);
+	mm_task_block(mm_running_task);
+}
+
+static void
+mm_port_block_on_receive(struct mm_port *port)
+{
+	mm_running_task->blocked_on = port;
+	mm_task_block(mm_running_task);
+}
+
+/**********************************************************************
+ * External Port Functions.
+ **********************************************************************/
+
 void
 mm_port_init(void)
 {
@@ -44,6 +67,7 @@ mm_port_create(struct mm_task *task)
 	port->task = task;
 	port->start = 0;
 	port->count = 0;
+	mm_list_init(&port->blocked_senders);
 
 	mm_list_insert_tail(&task->ports, &port->ports);
 
@@ -66,12 +90,14 @@ int
 mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
-	ASSERT(count <= MM_PORT_SIZE);
+	ASSERT(count <= (MM_PORT_SIZE / 2));
+	ASSERT(port->task != mm_running_task);
 
 	int rc = 0;
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
-		rc = -1;
+		mm_port_block_on_send(port);
 		errno = EAGAIN;
+		rc = -1;
 		goto done;
 	}
 
@@ -80,7 +106,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	port->count += count;
 
-	if ((ring_end + count) > MM_PORT_SIZE) {
+	if (unlikely((ring_end + count) > MM_PORT_SIZE)) {
 		uint32_t top_count = MM_PORT_SIZE - ring_end;
 		count -= top_count;
 		while (top_count--) {
@@ -94,6 +120,10 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 		*ring_ptr++ = *start++;
 	}
 
+	if (port->task->state == MM_TASK_BLOCKED && port->task->blocked_on == port) {
+		mm_task_start(port->task);
+	}
+
 done:
 	LEAVE();
 	return rc;
@@ -103,12 +133,14 @@ int
 mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
-	ASSERT(count <= MM_PORT_SIZE);
+	ASSERT(count <= (MM_PORT_SIZE / 2));
+	ASSERT(port->task == mm_running_task);
 
 	int rc = 0;
 	if (port->count < count) {
-		rc = -1;
+		mm_port_block_on_receive(port);
 		errno = EAGAIN;
+		rc = -1;
 		goto done;
 	}
 
@@ -116,7 +148,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	port->count -= count;
 
-	if ((port->start + count) > MM_PORT_SIZE) {
+	if (unlikely((port->start + count) > MM_PORT_SIZE)) {
 		uint32_t top_count = MM_PORT_SIZE - port->start;
 		count -= top_count;
 		while (top_count--) {
@@ -127,9 +159,18 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 		port->start = 0;
 	}
 
-	port->start += count;
+	port->start = (port->start + count) % MM_PORT_SIZE;
 	while (count--) {
 		*start++ = *ring_ptr++;
+	}
+
+	while (!mm_list_is_empty(&port->blocked_senders)) {
+		struct mm_list *head = mm_list_head(&port->blocked_senders);
+		mm_list_delete(head);
+
+		struct mm_task *task = containerof(head, struct mm_task, queue);
+		ASSERT(task->state == MM_TASK_BLOCKED && task->blocked_on == port);
+		mm_task_start(task);
 	}
 
 done:

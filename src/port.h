@@ -38,6 +38,9 @@ struct mm_port
 	/* A link in the task's ports list. */
 	struct mm_list ports;
 
+	/* The tasks blocked on the port send. */
+	struct mm_list blocked_senders;
+
 	/* Message buffer. */
 	uint16_t start;
 	uint16_t count;
