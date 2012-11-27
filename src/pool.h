@@ -29,7 +29,7 @@ struct mm_pool
 	uint32_t free_index;
 	uint32_t pool_size;
 	uint32_t item_size;
-	void *pool;
+	void *pool_data;
 };
 
 void mm_pool_init(struct mm_pool *pool, size_t item_size)
@@ -37,6 +37,12 @@ void mm_pool_init(struct mm_pool *pool, size_t item_size)
 
 void mm_pool_discard(struct mm_pool *pool)
 	__attribute__((nonnull(1)));
+
+void * mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)
+	__attribute__((nonnull(1)));
+
+uint32_t mm_pool_ptr2idx(struct mm_pool *pool, void *item)
+	__attribute__((nonnull(1, 2)));
 
 void * mm_pool_alloc(struct mm_pool *pool)
 	__attribute__((nonnull(1)));

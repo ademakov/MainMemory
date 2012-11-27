@@ -23,7 +23,7 @@
 #include "util.h"
 
 #define MM_POOL_FREE_NIL	0xffffffff
-#define MM_POOL_FREE_PAD	0xdead4001
+#define MM_POOL_FREE_PAD	0xdeadbeaf
 
 struct mm_free_item
 {
@@ -47,18 +47,6 @@ mm_pool_grow_size(uint32_t item_size, uint32_t pool_size)
 	return size / item_size;
 }
 
-static inline uint32_t
-mm_pool_get_index(struct mm_pool *pool, void *item)
-{
-	ASSERT(item >= pool->pool);
-	ASSERT(item < pool->pool + (pool->item_size * pool->item_count));
-
-	size_t offset = (char *) item - (char *) pool->pool;
-	ASSERT((offset % pool->item_size) == 0);
-
-	return (uint32_t) (offset / pool->item_size);
-}
-
 void
 mm_pool_init(struct mm_pool *pool, size_t item_size)
 {
@@ -73,7 +61,7 @@ mm_pool_init(struct mm_pool *pool, size_t item_size)
 	pool->item_count = 0;
 	pool->free_index = MM_POOL_FREE_NIL;
 
-	pool->pool = mm_alloc(pool->item_size * pool->pool_size);
+	pool->pool_data = mm_alloc(pool->pool_size * pool->item_size);
 
 	LEAVE();
 }
@@ -83,10 +71,31 @@ mm_pool_discard(struct mm_pool *pool)
 {
 	ENTER();
 
-	mm_free(pool->pool);
+	mm_free(pool->pool_data);
 
 	LEAVE();
 }
+
+void *
+mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)
+{
+	ASSERT(index < pool->item_count);
+
+	return (char *) pool->pool_data + (size_t) index * pool->item_size;
+}
+
+uint32_t
+mm_pool_ptr2idx(struct mm_pool *pool, void *item)
+{
+	ASSERT(item >= pool->pool_data);
+	ASSERT(item < pool->pool_data + pool->item_count * pool->item_size);
+
+	size_t offset = (char *) item - (char *) pool->pool_data;
+	ASSERT((offset % pool->item_size) == 0);
+
+	return (uint32_t) (offset / pool->item_size);
+}
+
 
 void *
 mm_pool_alloc(struct mm_pool *pool)
@@ -95,7 +104,7 @@ mm_pool_alloc(struct mm_pool *pool)
 
 	void *item;
 	if (pool->free_index != MM_POOL_FREE_NIL) {
-		item = pool->pool + pool->free_index * pool->item_size;
+		item = (char *) pool->pool_data + (size_t) pool->free_index * pool->item_size;
 		pool->free_index = ((struct mm_free_item *) item)->next;
 	} else {
 		if (unlikely(pool->item_count == pool->pool_size)) {
@@ -110,10 +119,9 @@ mm_pool_alloc(struct mm_pool *pool)
 				 size, (unsigned long) pool->item_size * size);
 
 			pool->pool_size = size;
-			pool->pool = mm_realloc(pool->pool,
-						pool->item_size * pool->pool_size);
+			pool->pool_data = mm_realloc(pool->pool_data, size * pool->item_size);
 		}
-		item = pool->pool + pool->item_size * pool->item_count++;
+		item = pool->pool_data + pool->item_size * pool->item_count++;
 	}
 
 	LEAVE();
@@ -127,7 +135,7 @@ mm_pool_free(struct mm_pool *pool, void *item)
 
 	((struct mm_free_item *) item)->pad = MM_POOL_FREE_PAD;
 	((struct mm_free_item *) item)->next = pool->free_index;
-	pool->free_index = mm_pool_get_index(pool, item);
+	pool->free_index = mm_pool_ptr2idx(pool, item);
 
 	LEAVE();
 }
