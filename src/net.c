@@ -21,6 +21,7 @@
 #include "net.h"
 
 #include "event.h"
+#include "pool.h"
 #include "port.h"
 #include "task.h"
 #include "util.h"
@@ -262,66 +263,47 @@ mm_net_alloc_server(void)
  * Client table.
  **********************************************************************/
 
-#define MM_CLI_NIL ((uint32_t) -1)
-
-static struct mm_net_client *mm_cli_table;
-static uint32_t mm_cli_table_size;
-static uint32_t mm_cli_count;
-static uint32_t mm_cli_free_index;
-
-static inline size_t
-mm_net_client_index(struct mm_net_client *cli)
-{
-	ASSERT(cli < (mm_cli_table + mm_cli_count));
-	ASSERT(cli >= mm_cli_table);
-	return cli - mm_cli_table;
-}
+static struct mm_pool mm_cli_pool;
 
 static void
 mm_net_init_client_table(void)
 {
-	mm_cli_table_size = 100;
-	mm_cli_table = mm_alloc(mm_cli_table_size * sizeof(struct mm_net_client));
-	mm_cli_count = 0;
-	mm_cli_free_index = MM_CLI_NIL;
+	ENTER();
+
+	mm_pool_init(&mm_cli_pool, sizeof (struct mm_net_client));
+
+	LEAVE();
 }
 
 static void
 mm_net_free_client_table(void)
 {
-	mm_free(mm_cli_table);
+	ENTER();
+
+	mm_pool_discard(&mm_cli_pool);
+
+	LEAVE();
 }
 
 static struct mm_net_client *
-mm_net_alloc_client(void)
+mm_net_create_client(void)
 {
-	struct mm_net_client *cli;
-	if (mm_cli_free_index != MM_CLI_NIL) {
-		cli = &mm_cli_table[mm_cli_free_index];
-		mm_cli_free_index = cli->free_index;
-	} else {
-		if (unlikely(mm_cli_table_size == mm_cli_count)) {
-			/* Check for integer overflow. */
-			uint32_t size = mm_cli_table_size * 2;
-			if (unlikely(size < mm_cli_table_size))
-				return NULL;
+	ENTER();
 
-			mm_cli_table_size = size;
-			mm_print("client table size: %lu", (unsigned long) mm_cli_table_size);
-			mm_cli_table = mm_realloc(
-				mm_cli_table,
-				mm_cli_table_size * sizeof(struct mm_net_client));
-		}
-		cli = &mm_cli_table[mm_cli_count++];
-	}
+	struct mm_net_client *cli = mm_pool_alloc(&mm_cli_pool);
+
+	LEAVE();
 	return cli;
 }
 
 static void
-mm_net_free_client(struct mm_net_client *cli)
+mm_net_destroy_client(struct mm_net_client *cli)
 {
-	cli->free_index = mm_cli_free_index;
-	mm_cli_free_index = mm_net_client_index(cli);
+	ENTER();
+
+	mm_pool_free(&mm_cli_pool, cli);
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -330,7 +312,6 @@ mm_net_free_client(struct mm_net_client *cli)
 
 #define MM_ACCEPT_COUNT		10
 #define MM_IO_COUNT		10
-
 
 static struct mm_port *mm_accept_port;
 static mm_io_handler mm_accept_handler;
@@ -378,7 +359,7 @@ retry:
 	}
 
 	/* Allocate a new client structure. */
-	struct mm_net_client *cli = mm_net_alloc_client();
+	struct mm_net_client *cli = mm_net_create_client();
 	if (cli == NULL) {
 		mm_error(0, "client table overflow");
 		close(sock);
@@ -406,12 +387,13 @@ retry:
 	mm_net_set_nonblocking(sock);
 
 	/* Register the socket with the event loop. */
-	mm_event_register_fd(cli->sock, srv->io_handler, (uint32_t) mm_net_client_index(cli));
+	uint32_t cli_index = mm_pool_ptr2idx(&mm_cli_pool, cli);
+	mm_event_register_fd(cli->sock, srv->io_handler, cli_index);
 
 	/* Let the protocol layer to check the socket. */
 	if (srv->proto->accept && !(srv->proto->accept)(cli)) {
 		mm_error(0, "connection refused");
-		mm_net_free_client(cli);
+		mm_net_destroy_client(cli);
 		// TODO: set linger off and/or close concurrently to avoid stalls.
 		close(sock);
 		goto done;
@@ -440,8 +422,7 @@ next:
 	}
 
 	/* Find the pertinent client. */
-	ASSERT(index < mm_cli_count);
-	struct mm_net_client *cli = &mm_cli_table[index];
+	struct mm_net_client *cli = mm_pool_idx2ptr(&mm_cli_pool, index);
 
 	/* Handle read on the protocol layer. */
 	(cli->srv->proto->read_ready)(cli);
@@ -469,8 +450,7 @@ next:
 	}
 
 	/* Find the pertinent client. */
-	ASSERT(index < mm_cli_count);
-	struct mm_net_client *cli = &mm_cli_table[index];
+	struct mm_net_client *cli = mm_pool_idx2ptr(&mm_cli_pool, index);
 
 	/* Handle write on the protocol layer. */
 	(cli->srv->proto->write_ready)(cli);

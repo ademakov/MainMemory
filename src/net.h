@@ -75,11 +75,6 @@ struct mm_net_client
 {
 	/* Client socket. */
 	int sock;
-	/* Client flags. */
-	union
-	{
-		uint32_t free_index;
-	};
 	/* Client server. */
 	struct mm_net_server *srv;
 	/* Client address. */
