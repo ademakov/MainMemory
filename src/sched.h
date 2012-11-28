@@ -30,7 +30,7 @@ struct mm_task;
 struct mm_task *mm_running_task;
 
 void mm_sched_init(void);
-void mm_sched_free(void);
+void mm_sched_term(void);
 
 void mm_sched_enqueue(struct mm_task *task);
 void mm_sched_dequeue(struct mm_task *task);

@@ -54,7 +54,7 @@ mm_port_init(void)
 }
 
 void
-mm_port_free(void)
+mm_port_term(void)
 {
 }
 

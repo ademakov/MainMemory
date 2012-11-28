@@ -541,7 +541,7 @@ mm_event_init(void)
 }
 
 void
-mm_event_free(void)
+mm_event_term(void)
 {
 	ENTER();
 

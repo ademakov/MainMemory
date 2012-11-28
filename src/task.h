@@ -56,7 +56,7 @@ struct mm_task
 
 
 void mm_task_init(void);
-void mm_task_free(void);
+void mm_task_term(void);
 
 struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
 	__attribute__((nonnull(2)));

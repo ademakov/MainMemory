@@ -91,8 +91,7 @@ struct mm_net_proto
 };
 
 void mm_net_init(void);
-void mm_net_free(void);
-void mm_net_exit(void);
+void mm_net_term(void);
 
 struct mm_net_server *mm_net_create_unix_server(const char *path)
 	__attribute__((nonnull(1)));

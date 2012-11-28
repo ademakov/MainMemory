@@ -34,16 +34,6 @@ static struct mm_net_server *u_cmd_server;
 static struct mm_net_server *i_cmd_server;
 
 static void
-mm_exit_handler(void)
-{
-	ENTER();
-
-	mm_net_exit();
-
-	LEAVE();
-}
-
-static void
 mm_term_handler(int signo __attribute__((unused)))
 {
 	ENTER();
@@ -109,11 +99,41 @@ struct mm_net_proto cmd_proto = {
 };
 
 static void
+mm_init(void)
+{
+	ENTER();
+
+	/* Initialize subsystems. */
+	mm_signal_init();
+	mm_task_init();
+	mm_port_init();
+	mm_sched_init();
+	mm_event_init();
+	mm_net_init();
+
+	LEAVE();
+}
+
+static void
+mm_term(void)
+{
+	ENTER();
+
+	/* Terminate subsystems. */
+	mm_net_term();
+	mm_event_term();
+	mm_sched_term();
+	mm_task_term();
+	mm_port_term();
+
+	LEAVE();
+}
+
+static void
 mm_server_open(void)
 {
 	ENTER();
 
-	mm_net_init();
 	u_cmd_server = mm_net_create_unix_server("mm_cmd.sock");
 	i_cmd_server = mm_net_create_inet_server("127.0.0.1", 8000);
 
@@ -130,7 +150,6 @@ mm_server_close(void)
 
 	mm_net_stop_server(u_cmd_server);
 	mm_net_stop_server(i_cmd_server);
-	mm_net_free();
 
 	LEAVE();
 }
@@ -140,30 +159,20 @@ main(int ac, char *av[])
 {
 	ENTER();
 
-	/* Register exit cleanup handler. */
-	atexit(&mm_exit_handler);
-
 	/* Initialize. */
-	mm_signal_init();
-	mm_task_init();
-	mm_port_init();
-	mm_sched_init();
-	mm_event_init();
+	mm_init();
 
-	/* Open server sockets. */
+	/* Start server. */
 	mm_server_open();
 
 	/* Execute main loop. */
 	mm_event_loop();
 
-	/* Close server sockets. */
+	/* Shutdown server. */
 	mm_server_close(); 
 
-	/* Free resources. */
-	mm_event_free();
-	mm_sched_free();
-	mm_task_free();
-	mm_port_free();
+	/* Terminate. */
+	mm_term();
 
 	LEAVE();
 	return EXIT_SUCCESS;

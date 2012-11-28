@@ -484,10 +484,31 @@ mm_net_init_accept_task(void)
 
 static int mm_net_initialized = 0;
 
+static void
+mm_net_exit_cleanup(void)
+{
+	ENTER();
+
+	if (!mm_net_initialized)
+		goto done;
+
+	for (int i = 0; i < mm_srv_count; i++) {
+		struct mm_net_server *srv = &mm_srv_table[i];
+		if (srv->sock >= 0) {
+			mm_net_remove_unix_socket(&srv->addr);
+		}
+	}
+
+done:
+	LEAVE();
+}
+
 void
 mm_net_init(void)
 {
 	ENTER();
+
+	mm_atexit(mm_net_exit_cleanup);
 
 	mm_net_init_server_table();
 	mm_net_init_client_table();
@@ -499,7 +520,7 @@ mm_net_init(void)
 }
 
 void
-mm_net_free(void)
+mm_net_term(void)
 {
 	ENTER();
 
@@ -514,23 +535,6 @@ mm_net_free(void)
 
 	mm_net_free_client_table();
 	mm_net_free_server_table();
-
-	LEAVE();
-}
-
-void
-mm_net_exit(void)
-{
-	ENTER();
-
-	if (mm_net_initialized) {
-		for (int i = 0; i < mm_srv_count; i++) {
-			struct mm_net_server *srv = &mm_srv_table[i];
-			if (srv->sock >= 0) {
-				mm_net_remove_unix_socket(&srv->addr);
-			}
-		}
-	}
 
 	LEAVE();
 }

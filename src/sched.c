@@ -43,7 +43,7 @@ mm_sched_init(void)
 }
 
 void
-mm_sched_free(void)
+mm_sched_term(void)
 {
 	ENTER();
 

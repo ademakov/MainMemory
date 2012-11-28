@@ -48,7 +48,7 @@ struct mm_port
 };
 
 void mm_port_init(void);
-void mm_port_free(void);
+void mm_port_term(void);
 
 struct mm_port * mm_port_create(struct mm_task *task)
 	__attribute__((nonnull(1)));

@@ -38,7 +38,7 @@ mm_task_init(void)
 }
 
 void
-mm_task_free(void)
+mm_task_term(void)
 {
 	ENTER();
 

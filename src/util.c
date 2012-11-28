@@ -34,6 +34,47 @@ static __thread int mm_trace_level = 0;
 #endif
 
 /**********************************************************************
+ * Exit Handling.
+ **********************************************************************/
+
+struct mm_exit_rec
+{
+	struct mm_exit_rec *next;
+	void (*func)(void);
+};
+
+static struct mm_exit_rec *mm_exit_list;
+
+void
+mm_atexit(void (*func)(void))
+{
+	ASSERT(func != NULL);
+
+	struct mm_exit_rec *rec = mm_alloc(sizeof(struct mm_exit_rec));
+	rec->func = func;
+	rec->next = mm_exit_list;
+	mm_exit_list = rec;
+}
+
+static void
+mm_do_atexit(void)
+{
+	while (mm_exit_list != NULL) {
+		struct mm_exit_rec *rec = mm_exit_list;
+		mm_exit_list = mm_exit_list->next;
+		(rec->func)();
+		mm_free(rec);
+	}
+}
+
+void
+mm_exit(int status)
+{
+	mm_do_atexit();
+	exit(status);
+}
+
+/**********************************************************************
  * Logging Routines.
  **********************************************************************/
 
@@ -112,7 +153,7 @@ mm_fatal(int error, const char *restrict msg, ...)
 	mm_newline();
 	mm_flush();
 
-	exit(EXIT_FAILURE);
+	mm_exit(EXIT_FAILURE);
 }
 
 /**********************************************************************
@@ -194,6 +235,7 @@ mm_abort(const char *file, int line, const char *func,
 	mm_newline();
 	mm_flush();
 
+	mm_do_atexit();
 	abort();
 }
 
