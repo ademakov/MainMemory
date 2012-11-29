@@ -34,7 +34,7 @@ struct mm_pool
 };
 
 void mm_pool_init(struct mm_pool *pool, const char *name, size_t item_size)
-	__attribute__((nonnull(1)));
+	__attribute__((nonnull(1, 2)));
 
 void mm_pool_discard(struct mm_pool *pool)
 	__attribute__((nonnull(1)));
