@@ -211,6 +211,30 @@ mm_strdup(const char *s)
 	return memcpy(mm_alloc(len), s, len);
 }
 
+char *
+mm_asprintf(const char *restrict fmt, ...)
+{
+	size_t len;
+	va_list va;
+	char dummy[1];
+
+	va_start(va, fmt);
+	len = vsnprintf(dummy, sizeof dummy, fmt, va);
+	va_end(va);
+
+	if (unlikely(len < 0)) {
+		mm_fatal(errno, "invalid format string");
+	}
+
+	char *ptr = mm_alloc(++len);
+
+	va_start(va, fmt);
+	vsnprintf(ptr, len, fmt, va);
+	va_end(va);
+
+	return ptr;
+}
+
 void
 mm_free(void *ptr)
 {

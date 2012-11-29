@@ -39,6 +39,7 @@ void mm_exit(int status)
 void mm_flush(void);
 
 void mm_print(const char *restrict msg, ...)
+	__attribute__((format(printf, 1, 2)))
 	__attribute__((nonnull(1)));
 
 void mm_error(int error, const char *restrict msg, ...)
@@ -65,6 +66,10 @@ void * mm_realloc(void *ptr, size_t size);
 void * mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size);
 
 char * mm_strdup(const char *s);
+
+char * mm_asprintf(const char *restrict fmt, ...)
+	__attribute__((format(printf, 1, 2)))
+	__attribute__((nonnull(1)));
 
 void mm_free(void *ptr);
 
