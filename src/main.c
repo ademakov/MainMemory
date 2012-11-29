@@ -134,8 +134,8 @@ mm_server_open(void)
 {
 	ENTER();
 
-	u_cmd_server = mm_net_create_unix_server("mm_cmd.sock");
-	i_cmd_server = mm_net_create_inet_server("127.0.0.1", 8000);
+	u_cmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
+	i_cmd_server = mm_net_create_inet_server("test", "127.0.0.1", 8000);
 
 	mm_net_start_server(u_cmd_server, &cmd_proto);
 	mm_net_start_server(i_cmd_server, &cmd_proto);

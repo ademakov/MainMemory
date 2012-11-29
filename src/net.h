@@ -61,8 +61,10 @@ struct mm_net_server
 {
 	/* Server socket. */
 	int sock;
-	/* Server socket address. */
+	/* Server address. */
 	struct mm_net_addr addr;
+	/* Server name. */
+	char *name;
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 	struct mm_port *read_ready_port;
@@ -93,12 +95,12 @@ struct mm_net_proto
 void mm_net_init(void);
 void mm_net_term(void);
 
-struct mm_net_server *mm_net_create_unix_server(const char *path)
-	__attribute__((nonnull(1)));
-struct mm_net_server *mm_net_create_inet_server(const char *addrstr, uint16_t port)
-	__attribute__((nonnull(1)));
-struct mm_net_server *mm_net_create_inet6_server(const char *addrstr, uint16_t port)
-	__attribute__((nonnull(1)));
+struct mm_net_server *mm_net_create_unix_server(const char *name, const char *path)
+	__attribute__((nonnull(1, 2)));
+struct mm_net_server *mm_net_create_inet_server(const char *name, const char *addrstr, uint16_t port)
+	__attribute__((nonnull(1, 2)));
+struct mm_net_server *mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
+	__attribute__((nonnull(1, 2)));
 
 void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	__attribute__((nonnull(1, 2)));

@@ -240,6 +240,10 @@ mm_net_init_server_table(void)
 static void
 mm_net_free_server_table(void)
 {
+	for (int i = 0; i < mm_srv_count; i++) {
+		mm_free(mm_srv_table[i].name);
+	}
+
 	mm_free(mm_srv_table);
 }
 
@@ -349,11 +353,11 @@ retry:
 		if (errno == EINTR)
 			goto retry;
 		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			mm_error(errno, "accept()");
+			mm_error(errno, "%s: accept()", srv->name);
 		goto next;
 	}
 	if (unlikely(mm_event_verify_fd(sock) != MM_FD_VALID)) {
-		mm_error(0, "socket no is too high: %d", sock);
+		mm_error(0, "%s: socket no is too high: %d", srv->name, sock);
 		close(sock);
 		goto done;
 	}
@@ -361,7 +365,7 @@ retry:
 	/* Allocate a new client structure. */
 	struct mm_net_client *cli = mm_net_create_client();
 	if (cli == NULL) {
-		mm_error(0, "client table overflow");
+		mm_error(0, "%s: client table overflow", srv->name);
 		close(sock);
 		goto done;
 	}
@@ -392,7 +396,7 @@ retry:
 
 	/* Let the protocol layer to check the socket. */
 	if (srv->proto->accept && !(srv->proto->accept)(cli)) {
-		mm_error(0, "connection refused");
+		mm_error(0, "%s: connection refused", srv->name);
 		mm_net_destroy_client(cli);
 		// TODO: set linger off and/or close concurrently to avoid stalls.
 		close(sock);
@@ -540,39 +544,48 @@ mm_net_term(void)
 }
 
 struct mm_net_server *
-mm_net_create_unix_server(const char *path)
+mm_net_create_unix_server(const char *name, const char *path)
 {
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_un_addr(&srv->addr, path) < 0)
-		mm_fatal(0, "invalid server socket address");
+		mm_fatal(0, "failed to create '%s' server with path '%s'",
+			 name, path);
+
+	srv->name = mm_asprintf("%s (%s)", name, path);
 
 	LEAVE();
 	return srv;
 }
 
 struct mm_net_server *
-mm_net_create_inet_server(const char *addrstr, uint16_t port)
+mm_net_create_inet_server(const char *name, const char *addrstr, uint16_t port)
 {
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "invalid server socket address");
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
+			 name, addrstr, port);
+
+	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
 
 	LEAVE();
 	return srv;
 }
 
 struct mm_net_server *
-mm_net_create_inet6_server(const char *addrstr, uint16_t port)
+mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
 {
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "invalid server socket address");
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
+			 name, addrstr, port);
+
+	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
 
 	LEAVE();
 	return srv;
@@ -584,13 +597,15 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	ENTER();
 	ASSERT(srv->sock == -1);
 
+	mm_print("Start server: %s", srv->name);
+
 	/* Store protocol handlers. */
 	srv->proto = proto;
 
 	/* Create the server socket. */
 	srv->sock = mm_net_open_server_socket(&srv->addr, 0);
 	if (mm_event_verify_fd(srv->sock)) {
-		mm_fatal(0, "socket no is too high: %d", srv->sock);
+		mm_fatal(0, "%s: server socket no is too high: %d", srv->name, srv->sock);
 	}
 
 	/* Create server tasks. */
@@ -622,6 +637,8 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->sock != -1);
+
+	mm_print("Stop server: %s", srv->name);
 
 	/* Unregister the socket. */
 	mm_event_unregister_fd(srv->sock);
