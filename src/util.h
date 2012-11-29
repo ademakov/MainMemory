@@ -64,6 +64,8 @@ void * mm_realloc(void *ptr, size_t size);
 
 void * mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size);
 
+char * mm_strdup(const char *s);
+
 void mm_free(void *ptr);
 
 /**********************************************************************

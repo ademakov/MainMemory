@@ -204,6 +204,13 @@ mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
 	return ptr;
 }
 
+char *
+mm_strdup(const char *s)
+{
+	size_t len = strlen(s) + 1;
+	return memcpy(mm_alloc(len), s, len);
+}
+
 void
 mm_free(void *ptr)
 {
