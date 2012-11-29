@@ -32,7 +32,7 @@ mm_task_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_task_pool, sizeof (struct mm_task));
+	mm_pool_init(&mm_task_pool, "task", sizeof (struct mm_task));
 
 	LEAVE();
 }

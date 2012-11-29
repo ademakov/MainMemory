@@ -30,9 +30,10 @@ struct mm_pool
 	uint32_t pool_size;
 	uint32_t item_size;
 	void *pool_data;
+	char *pool_name;
 };
 
-void mm_pool_init(struct mm_pool *pool, size_t item_size)
+void mm_pool_init(struct mm_pool *pool, const char *name, size_t item_size)
 	__attribute__((nonnull(1)));
 
 void mm_pool_discard(struct mm_pool *pool)

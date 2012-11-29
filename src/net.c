@@ -270,7 +270,7 @@ mm_net_init_client_table(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_cli_pool, sizeof (struct mm_net_client));
+	mm_pool_init(&mm_cli_pool, "network client", sizeof (struct mm_net_client));
 
 	LEAVE();
 }

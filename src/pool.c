@@ -48,13 +48,14 @@ mm_pool_grow_size(uint32_t item_size, uint32_t pool_size)
 }
 
 void
-mm_pool_init(struct mm_pool *pool, size_t item_size)
+mm_pool_init(struct mm_pool *pool, const char *name, size_t item_size)
 {
 	ENTER();
 
 	if (item_size < sizeof(struct mm_free_item))
 		item_size = sizeof(struct mm_free_item);
 
+	pool->pool_name = mm_strdup(name);
 	pool->item_size = item_size;
 	pool->pool_size = mm_pool_grow_size(item_size, 0);
 
@@ -62,6 +63,10 @@ mm_pool_init(struct mm_pool *pool, size_t item_size)
 	pool->free_index = MM_POOL_FREE_NIL;
 
 	pool->pool_data = mm_alloc(pool->pool_size * pool->item_size);
+	mm_print("allocate the '%s' memory pool with size %u (%lu bytes)",
+		 pool->pool_name,
+		 pool->pool_size,
+		 (unsigned long) pool->item_size * pool->pool_size);
 
 	LEAVE();
 }
@@ -71,6 +76,7 @@ mm_pool_discard(struct mm_pool *pool)
 {
 	ENTER();
 
+	mm_free(pool->pool_name);
 	mm_free(pool->pool_data);
 
 	LEAVE();
@@ -112,11 +118,13 @@ mm_pool_alloc(struct mm_pool *pool)
 			uint32_t size = mm_pool_grow_size(pool->item_size,
 							  pool->pool_size);
 			if (unlikely(size < pool->pool_size)) {
-				mm_error(0, "memory pool overflow");
+				mm_error(0, "the '%s' memory pool overflow", pool->pool_name);
 				return NULL;
 			}
-			mm_print("new memory pool size: %u (%lu bytes))",
-				 size, (unsigned long) pool->item_size * size);
+			mm_print("reallocate the '%s' memory pool with size %u (%lu bytes)",
+				 pool->pool_name,
+				 pool->pool_size,
+				 (unsigned long) pool->item_size * pool->pool_size);
 
 			pool->pool_size = size;
 			pool->pool_data = mm_realloc(pool->pool_data, size * pool->item_size);
