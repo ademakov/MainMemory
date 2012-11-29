@@ -165,7 +165,7 @@ mm_alloc(size_t size)
 {
 	void *ptr = dlmalloc(size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %zu bytes of memory", size);
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	}
 	return ptr;
 }
@@ -175,7 +175,7 @@ mm_realloc(void *ptr, size_t size)
 {
 	ptr = dlrealloc(ptr, size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %zu bytes of memory", size);
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	}
 	return ptr;
 }
@@ -185,7 +185,7 @@ mm_calloc(size_t count, size_t size)
 {
 	void *ptr = dlcalloc(count, size);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %zu bytes of memory", count * size);
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
 	}
 	return ptr;
 }
@@ -198,7 +198,7 @@ mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
 	size_t new_amount = new_count * size;
 	ptr = dlrealloc(ptr, new_amount);
 	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "Error allocating %zu bytes of memory", new_amount);
+		mm_fatal(errno, "error allocating %zu bytes of memory", new_amount);
 	}
 	memset(ptr + old_amount, 0, new_amount - old_amount);
 	return ptr;
