@@ -50,16 +50,21 @@ struct mm_task
 	/* The port the task is blocked on. */
 	struct mm_port *blocked_on;
 
+	/* The task start routine and its argument. */
 	mm_routine start;
 	uintptr_t start_arg;
+
+	/* The task name. */
+	char *name;
 };
 
 
 void mm_task_init(void);
 void mm_task_term(void);
 
-struct mm_task * mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
-	__attribute__((nonnull(2)));
+struct mm_task * mm_task_create(const char *name, uint16_t flags,
+				mm_routine start, uintptr_t start_arg)
+	__attribute__((nonnull(1, 3)));
 
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));

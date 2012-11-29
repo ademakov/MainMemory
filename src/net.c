@@ -274,7 +274,7 @@ mm_net_init_client_table(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_cli_pool, "network client", sizeof (struct mm_net_client));
+	mm_pool_init(&mm_cli_pool, "net-client", sizeof (struct mm_net_client));
 
 	LEAVE();
 }
@@ -470,7 +470,8 @@ static void
 mm_net_init_accept_task(void)
 {
 	/* Create accept task. */
-	struct mm_task *task = mm_task_create(0, (mm_routine) mm_net_accept, 0);
+	struct mm_task *task = mm_task_create(
+		"net-accept", 0, (mm_routine) mm_net_accept, 0);
 
 	/* Create accept port. */
 	mm_accept_port = mm_port_create(task);
@@ -608,11 +609,19 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 		mm_fatal(0, "%s: server socket no is too high: %d", srv->name, srv->sock);
 	}
 
+	/* Prepare names for server tasks. */
+	char *read_ready_name = mm_asprintf("read-ready[%s]", srv->name);
+	char *write_ready_name = mm_asprintf("write-ready[%s]", srv->name);
+
 	/* Create server tasks. */
 	struct mm_task *read_ready_task = mm_task_create(
-		0, (mm_routine) mm_net_read_ready, (intptr_t) srv);
+		read_ready_name, 0, (mm_routine) mm_net_read_ready, (intptr_t) srv);
 	struct mm_task *write_ready_task = mm_task_create(
-		0, (mm_routine) mm_net_write_ready, (intptr_t) srv);
+		write_ready_name, 0, (mm_routine) mm_net_write_ready, (intptr_t) srv);
+
+	/* Task names are no longer needed. */
+	mm_free(read_ready_name);
+	mm_free(write_ready_name);
 
 	/* Create server ports. */
 	srv->read_ready_port = mm_port_create(read_ready_task);

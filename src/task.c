@@ -48,11 +48,12 @@ mm_task_term(void)
 }
 
 struct mm_task *
-mm_task_create(uint16_t flags, mm_routine start, uintptr_t start_arg)
+mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t start_arg)
 {
 	ENTER();
 
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
+	task->name = mm_strdup(name);
 	task->state = MM_TASK_INVALID;
 	task->flags = flags;
 	task->blocked_on = NULL;
