@@ -1,6 +1,6 @@
 Main Memory
 ===========
 
-Main Memory is a substrate for networked servers of all sorts. However handling
-of in-memory workloads is the top priority. For instance, it should be suitable
-for creating a memcached clone with superior performance and scalability.
+Main Memory is a substrate for networked servers of all sorts. However in-memory
+workloads is the top priority. For instance, Main Memory should be suitable for
+creating a memcached clone with superior performance and scalability.
