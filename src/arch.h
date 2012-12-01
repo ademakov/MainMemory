@@ -1,5 +1,5 @@
 /*
- * stack_init.c - MainMemory arch-specific stack support.
+ * arch.h - MainMemory arch-specific .
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -18,24 +18,15 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#include "arch.h"
+#ifndef ARCH_H
+#define ARCH_H
 
-void *
-mm_stack_init(void (*func)(void), char *stack, size_t size)
-{
-	intptr_t *sp = (intptr_t *) (stack + size) - 2;
+#include "common.h"
 
-	// padding
-	1[sp] = 0;
-	// return address pointed by rsp
-	0[sp] = (intptr_t) func;
-	// callee-saved registers
-	(-1)[sp] = -1L;	// rbp
-	(-2)[sp] = 0;	// rbx
-	(-3)[sp] = 0;	// r12
-	(-4)[sp] = 0;	// r13
-	(-5)[sp] = 0;	// r15
-	(-6)[sp] = 0;	// r16
+void * mm_stack_init(void (*func)(void), char *stack, size_t size)
+	__attribute__((nonnull(1, 2)));
 
-	return (void *) sp;
-}
+void mm_stack_switch(void **old_sp, void **new_sp)
+	__attribute__((nonnull(1, 2)));
+
+#endif /* ARCH_H */

@@ -30,8 +30,8 @@ PROC_START
 	movq %r13, -32(%rsp)
 	movq %r14, -40(%rsp)
 	movq %r15, -48(%rsp)
-	movq %rsp, (%rsi)
-	movq %rdi, %rsp
+	movq %rsp, (%rdi)
+	movq (%rsi), %rsp
 	movq -8(%rsp), %rbp
 	movq -16(%rsp), %rbx
 	movq -24(%rsp), %r12
