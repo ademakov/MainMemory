@@ -17,6 +17,7 @@ dnl Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
 AM_PROG_AR
+AM_PROG_AS
 AC_PROG_RANLIB
 
 dnl Checks for libraries.
@@ -60,6 +61,5 @@ AC_SUBST([CORO_FLAGS], [$coro_flags])
 
 AC_CONFIG_FILES([
 	Makefile
-	src/Makefile
-	src/libcoro/Makefile])
+	src/Makefile])
 AC_OUTPUT
