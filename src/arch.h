@@ -1,5 +1,5 @@
 /*
- * arch.h - MainMemory arch-specific .
+ * arch.h - MainMemory architecture-specific layer.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
