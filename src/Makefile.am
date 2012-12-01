@@ -1,5 +1,5 @@
 
-SUBDIRS = libcoro
+#SUBDIRS =
 
 bin_PROGRAMS = mmem
 
