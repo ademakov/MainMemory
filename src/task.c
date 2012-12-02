@@ -20,12 +20,24 @@
 
 #include "task.h"
 
+#include "arch.h"
 #include "pool.h"
 #include "port.h"
 #include "sched.h"
+#include "stack.h"
 #include "util.h"
 
+#define MM_TASK_STACK_SIZE (28 * 1024)
+
 static struct mm_pool mm_task_pool;
+
+static void
+mm_task_trap(void)
+{
+	(mm_running_task)->start(mm_running_task->start_arg);
+
+	mm_fatal(0, "task has run too far");
+}
 
 void
 mm_task_init(void)
@@ -60,6 +72,11 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->start = start;
 	task->start_arg = start_arg;
 
+	task->stack_size = MM_TASK_STACK_SIZE;
+	task->stack_base = mm_stack_create(task->stack_size);
+	task->stack_ptr = mm_stack_init(mm_task_trap,
+					task->stack_base, task->stack_size);
+
 	mm_list_init(&task->ports);
 
 	LEAVE();
@@ -82,6 +99,8 @@ mm_task_destroy(struct mm_task *task)
 		struct mm_port *port = containerof(head, struct mm_port, ports);
 		mm_port_destroy(port);
 	}
+
+	mm_stack_destroy(task->stack_base, MM_TASK_STACK_SIZE);
 
 	mm_pool_free(&mm_task_pool, task);
 

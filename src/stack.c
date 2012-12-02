@@ -28,6 +28,8 @@
 void *
 mm_stack_create(uint32_t size)
 {
+	ENTER();
+
 	int pagesize = getpagesize();
 
 	ASSERT(pagesize > 0);
@@ -46,12 +48,15 @@ mm_stack_create(uint32_t size)
 	if (unlikely(mprotect(stack, size, PROT_READ | PROT_WRITE) < 0))
 		mm_fatal(errno, "failed to setup memory access for a stack");
 
+	LEAVE();
 	return stack;
 }
 
 void
 mm_stack_destroy(void *stack, uint32_t size)
 {
+	ENTER();
+
 	int pagesize = getpagesize();
 
 	ASSERT(pagesize > 0);
@@ -63,4 +68,6 @@ mm_stack_destroy(void *stack, uint32_t size)
 	char *p = stack - pagesize;
 	if (unlikely(munmap(p, fullsize) < 0))
 		mm_error(errno, "failed to release a stack");
+
+	LEAVE();
 }

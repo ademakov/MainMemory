@@ -56,6 +56,11 @@ struct mm_task
 
 	/* The task name. */
 	char *name;
+
+	/* The task stack. */
+	void *stack_ptr;
+	void *stack_base;
+	uint32_t stack_size;
 };
 
 
