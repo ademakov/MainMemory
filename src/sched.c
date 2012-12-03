@@ -20,17 +20,35 @@
 
 #include "sched.h"
 
+#include "arch.h"
 #include "task.h"
 #include "util.h"
 
-/* The list of ready to run tasks. */
+// The list of ready to run tasks.
 static struct mm_list mm_run_queue;
 
-/* A dummy task. */
-static struct mm_task mm_null_task;
+// The original stack pointer.
+static void *mm_start_stack_ptr = NULL;
 
-/* The currently running task. */
-struct mm_task *mm_running_task = &mm_null_task;
+// The currently running task.
+struct mm_task *mm_running_task = NULL;
+
+static struct mm_task *
+mm_sched_pop_task(void)
+{
+	ENTER();
+
+	struct mm_task *task = NULL;
+	if (likely(!mm_list_is_empty(&mm_run_queue))) {
+		struct mm_list *head = mm_list_head(&mm_run_queue);
+		task = containerof(head, struct mm_task, queue);
+		mm_list_delete(head);
+	}
+
+done:
+	LEAVE();
+	return task;
+}
 
 void
 mm_sched_init(void)
@@ -71,29 +89,39 @@ mm_sched_dequeue(struct mm_task *task)
 }
 
 void
-mm_sched_dispatch(void)
+mm_sched_start(void)
 {
 	ENTER();
+	ASSERT(mm_running_task == NULL);
 
-	while (!mm_list_is_empty(&mm_run_queue)) {
-		struct mm_list *head = mm_list_head(&mm_run_queue);
-		mm_list_delete(head);
-
-		struct mm_task *task = containerof(head, struct mm_task, queue);
-		if (task->state == MM_TASK_PENDING) {
-			task->state = MM_TASK_RUNNING;
-
-			mm_running_task = task;
-			task->start(task->start_arg);
-
-			if (task->state == MM_TASK_RUNNING) {
-				task->state = MM_TASK_PENDING;
-				mm_sched_enqueue(task);
-			}
-		}
+	mm_running_task = mm_sched_pop_task();
+	if (likely(mm_running_task != NULL)) {
+		mm_running_task->state = MM_TASK_RUNNING;
+		mm_stack_switch(&mm_start_stack_ptr, &mm_running_task->stack_ptr);
 	}
 
-	mm_running_task = &mm_null_task;
+	LEAVE();
+}
+
+void
+mm_sched_yield(void)
+{
+	ENTER();
+	ASSERT(mm_running_task != NULL);
+
+	struct mm_task *prev_task = mm_running_task;
+	if (prev_task->state == MM_TASK_RUNNING) {
+		prev_task->state = MM_TASK_PENDING;
+		mm_sched_enqueue(prev_task);
+	}
+
+	mm_running_task = mm_sched_pop_task();
+	if (likely(mm_running_task != NULL)) {
+		mm_running_task->state = MM_TASK_RUNNING;
+		mm_stack_switch(&prev_task->stack_ptr, &mm_running_task->stack_ptr);
+	} else {
+		mm_stack_switch(&prev_task->stack_ptr, &mm_start_stack_ptr);
+	}
 
 	LEAVE();
 }

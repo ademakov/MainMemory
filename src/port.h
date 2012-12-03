@@ -62,4 +62,10 @@ int mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 int mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 	__attribute__((nonnull(1, 2)));
 
+void mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
+	__attribute__((nonnull(1, 2)));
+
+void mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
+	__attribute__((nonnull(1, 2)));
+
 #endif /* PORT_H */

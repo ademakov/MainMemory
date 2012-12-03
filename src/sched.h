@@ -35,6 +35,7 @@ void mm_sched_term(void);
 void mm_sched_enqueue(struct mm_task *task);
 void mm_sched_dequeue(struct mm_task *task);
 
-void mm_sched_dispatch(void);
+void mm_sched_start(void);
+void mm_sched_yield(void);
 
 #endif /* SCHED_H */

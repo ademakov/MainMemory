@@ -33,7 +33,7 @@ struct mm_port;
 void mm_event_init(void);
 void mm_event_term(void);
 
-void mm_event_loop(void);
+void mm_event_start(void);
 void mm_event_stop(void);
 
 /**********************************************************************

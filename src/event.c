@@ -22,6 +22,7 @@
 
 #include "port.h"
 #include "sched.h"
+#include "task.h"
 #include "util.h"
 
 #include <string.h>
@@ -31,9 +32,6 @@
 
 /* Check if a kevent filter is either read or write filter. */
 #define MM_IS_IOF(f) ((f) == EVFILT_READ || (f) == EVFILT_WRITE)
-
-/* Event loop exit flag. */
-static volatile int mm_exit_loop = 0;
 
 /**********************************************************************
  * I/O handler table.
@@ -491,7 +489,7 @@ mm_event_dispatch(void)
 
 			struct mm_io *handlers = &mm_io_table[io];
 			if (likely(handlers->read_ready)) {
-				int rc = mm_port_send(
+				mm_port_send_blocking(
 					handlers->read_ready,
 					&mm_fd_table[fd].data, 1);
 			}
@@ -505,7 +503,7 @@ mm_event_dispatch(void)
 
 			struct mm_io *handlers = &mm_io_table[io];
 			if (likely(handlers->write_ready)) {
-				int rc = mm_port_send(
+				mm_port_send_blocking(
 					handlers->write_ready,
 					&mm_fd_table[fd].data, 1);
 			}
@@ -523,19 +521,42 @@ done:
  * Event loop control.
  **********************************************************************/
 
+/* Event loop exit flag. */
+static volatile int mm_exit_loop = 0;
+
+static struct mm_task *mm_event_task;
+
+static void
+mm_event_loop(uintptr_t arg __attribute__((unused)))
+{
+	ENTER();
+
+	while (!mm_exit_loop) {
+		mm_event_dispatch();
+		mm_sched_yield();
+	}
+	mm_task_block(mm_event_task);
+	mm_sched_yield();
+
+	LEAVE();
+}
+
 void
 mm_event_init(void)
 {
 	ENTER();
 
-	/* Initialize generic data. */
+	// Initialize generic data.
 	mm_event_init_io_handlers();
 	mm_event_init_handlers();
 	mm_event_init_change_list();
 	mm_event_init_fd_table();
 
-	/* Initialize system specific data. */
+	// Initialize system specific data.
 	mm_event_init_kqueue();
+
+	// Create the event loop task.
+	mm_event_task = mm_task_create("event loop", 0, mm_event_loop, 0);
 
 	LEAVE();
 }
@@ -545,25 +566,25 @@ mm_event_term(void)
 {
 	ENTER();
 
-	/* Release generic data. */
+	// Release the event loop task.
+	mm_task_destroy(mm_event_task);
+
+	// Release generic data.
 	mm_event_free_change_list();
 	mm_event_free_fd_table();
 
-	/* Release system specific data. */
+	// Release system specific data.
 	mm_event_free_kqueue();
 
 	LEAVE();
 }
 
 void
-mm_event_loop(void)
+mm_event_start(void)
 {
 	ENTER();
 
-	while (!mm_exit_loop) {
-		mm_sched_dispatch();
-		mm_event_dispatch();
-	}
+	mm_task_start(mm_event_task);
 
 	LEAVE();
 }

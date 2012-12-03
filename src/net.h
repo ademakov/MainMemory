@@ -23,6 +23,7 @@
 
 #include "common.h"
 #include "event.h"
+#include "list.h"
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -56,29 +57,63 @@ struct mm_net_peer_addr
 	};
 };
 
+/* Server flags. */
+#define MM_NET_ACCEPT_READY	1
+
 /* Network server data. */
 struct mm_net_server
 {
 	/* Server socket. */
 	int sock;
-	/* Server address. */
-	struct mm_net_addr addr;
-	/* Server name. */
-	char *name;
+	/* Server flags. */
+	int flags;
+
+	/* A list of all clients. */
+	struct mm_list clients;
+	/* A list of read ready clients. */
+	struct mm_list read_ready;
+	/* A list of write ready clients. */
+	struct mm_list write_ready;
+
+	/* A link in the accept ready list. */
+	struct mm_list accept_ready;
+
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
+	struct mm_task *read_ready_task;
+	struct mm_task *write_ready_task;
 	struct mm_port *read_ready_port;
 	struct mm_port *write_ready_port;
 	mm_io_handler io_handler;
+
+	/* Server name. */
+	char *name;
+	/* Server address. */
+	struct mm_net_addr addr;
 };
+
+/* Client flags. */
+#define MM_NET_READ_READY	1
+#define MM_NET_WRITE_READY	2
 
 /* Network client data. */
 struct mm_net_client
 {
 	/* Client socket. */
 	int sock;
+	/* Client flags. */
+	int flags;
+
 	/* Client server. */
 	struct mm_net_server *srv;
+
+	/* A link in the server's list of all clients. */
+	struct mm_list clients;
+	/* A link in the server's list of read ready clients. */
+	struct mm_list read_ready;
+	/* A link in the server's list of write ready clients. */
+	struct mm_list write_ready;
+
 	/* Client address. */
 	struct mm_net_peer_addr peer;
 };

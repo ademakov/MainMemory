@@ -28,7 +28,8 @@
 #define MM_TASK_PENDING		0
 #define MM_TASK_RUNNING		1
 #define MM_TASK_BLOCKED		2
-#define MM_TASK_INVALID		3
+#define MM_TASK_CREATED		3
+#define MM_TASK_INVALID		4
 
 /* Task flags. */
 #define MM_TASK_RUNNABLE	1

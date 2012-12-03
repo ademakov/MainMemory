@@ -66,7 +66,7 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
 	task->name = mm_strdup(name);
-	task->state = MM_TASK_INVALID;
+	task->state = MM_TASK_CREATED;
 	task->flags = flags;
 	task->blocked_on = NULL;
 	task->start = start;
@@ -87,7 +87,6 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state != MM_TASK_BLOCKED);
 
 	if (task->state == MM_TASK_PENDING) {
 		mm_sched_dequeue(task);
@@ -111,7 +110,7 @@ void
 mm_task_start(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_INVALID);
+	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_CREATED);
 
 	mm_sched_enqueue(task);
 	task->state = MM_TASK_PENDING;

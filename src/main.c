@@ -166,7 +166,8 @@ main(int ac, char *av[])
 	mm_server_open();
 
 	/* Execute main loop. */
-	mm_event_loop();
+	mm_event_start();
+	mm_sched_start();
 
 	/* Shutdown server. */
 	mm_server_close(); 

@@ -35,6 +35,7 @@ mm_port_block_on_send(struct mm_port *port)
 	mm_running_task->blocked_on = port;
 	mm_list_insert_tail(&port->blocked_senders, &mm_running_task->queue);
 	mm_task_block(mm_running_task);
+	mm_sched_yield();
 }
 
 static void
@@ -42,6 +43,7 @@ mm_port_block_on_receive(struct mm_port *port)
 {
 	mm_running_task->blocked_on = port;
 	mm_task_block(mm_running_task);
+	mm_sched_yield();
 }
 
 /**********************************************************************
@@ -95,8 +97,6 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	int rc = 0;
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
-		mm_port_block_on_send(port);
-		errno = EAGAIN;
 		rc = -1;
 		goto done;
 	}
@@ -120,7 +120,9 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 		*ring_ptr++ = *start++;
 	}
 
-	if (port->task->state == MM_TASK_BLOCKED && port->task->blocked_on == port) {
+	if (port->task->state == MM_TASK_CREATED
+	    || (port->task->state == MM_TASK_BLOCKED
+	        && port->task->blocked_on == port)) {
 		mm_task_start(port->task);
 	}
 
@@ -138,8 +140,6 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	int rc = 0;
 	if (port->count < count) {
-		mm_port_block_on_receive(port);
-		errno = EAGAIN;
 		rc = -1;
 		goto done;
 	}
@@ -176,4 +176,27 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 done:
 	LEAVE();
 	return rc;
+}
+
+
+void
+mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
+{
+	ENTER();
+
+	while (mm_port_send(port, start, count) < 0)
+		mm_port_block_on_send(port);
+
+	LEAVE();
+}
+
+void
+mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
+{
+	ENTER();
+
+	while (mm_port_receive(port, start, count) < 0)
+		mm_port_block_on_receive(port);
+
+	LEAVE();
 }
