@@ -45,7 +45,6 @@ mm_sched_pop_task(void)
 		mm_list_delete(head);
 	}
 
-done:
 	LEAVE();
 	return task;
 }
