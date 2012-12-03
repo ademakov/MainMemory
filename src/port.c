@@ -33,7 +33,7 @@ static void
 mm_port_block_on_send(struct mm_port *port)
 {
 	mm_running_task->blocked_on = port;
-	mm_list_insert_tail(&port->blocked_senders, &mm_running_task->queue);
+	mm_list_append(&port->blocked_senders, &mm_running_task->queue);
 	mm_task_block(mm_running_task);
 	mm_sched_yield();
 }
@@ -71,7 +71,7 @@ mm_port_create(struct mm_task *task)
 	port->count = 0;
 	mm_list_init(&port->blocked_senders);
 
-	mm_list_insert_tail(&task->ports, &port->ports);
+	mm_list_append(&task->ports, &port->ports);
 
 	LEAVE();
 	return port;
@@ -164,7 +164,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 		*start++ = *ring_ptr++;
 	}
 
-	while (!mm_list_is_empty(&port->blocked_senders)) {
+	while (!mm_list_empty(&port->blocked_senders)) {
 		struct mm_list *head = mm_list_head(&port->blocked_senders);
 		mm_list_delete(head);
 

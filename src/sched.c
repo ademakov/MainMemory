@@ -1,5 +1,5 @@
 /*
- * sched.c - MainMemory event scheduler.
+ * sched.c - MainMemory task scheduler.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -39,7 +39,7 @@ mm_sched_pop_task(void)
 	ENTER();
 
 	struct mm_task *task = NULL;
-	if (likely(!mm_list_is_empty(&mm_run_queue))) {
+	if (likely(!mm_list_empty(&mm_run_queue))) {
 		struct mm_list *head = mm_list_head(&mm_run_queue);
 		task = containerof(head, struct mm_task, queue);
 		mm_list_delete(head);
@@ -72,7 +72,7 @@ mm_sched_enqueue(struct mm_task *task)
 {
 	ENTER();
 
-	mm_list_insert_tail(&mm_run_queue, &task->queue);
+	mm_list_append(&mm_run_queue, &task->queue);
 
 	LEAVE();
 }

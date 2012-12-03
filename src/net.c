@@ -306,7 +306,7 @@ mm_net_create_client(int sock, struct mm_net_server *srv)
 	cli->sock = sock;
 	cli->srv = srv;
 
-	mm_list_insert_tail(&srv->clients, &cli->clients);
+	mm_list_append(&srv->clients, &cli->clients);
 
 	LEAVE();
 	return cli;
@@ -357,7 +357,7 @@ mm_net_add_accept_ready(uint32_t index)
 	struct mm_net_server *srv = &mm_srv_table[index];
 	if (likely((srv->flags & MM_NET_ACCEPT_READY) == 0)) {
 		srv->flags |= MM_NET_ACCEPT_READY;
-		mm_list_insert_tail(&mm_accept_ready, &srv->accept_ready);
+		mm_list_append(&mm_accept_ready, &srv->accept_ready);
 	}
 
 	LEAVE();
@@ -372,7 +372,7 @@ mm_net_add_read_ready(struct mm_net_server *srv, uint32_t index)
 	struct mm_net_client *cli = mm_pool_idx2ptr(&mm_cli_pool, index);
 	if (likely((cli->flags & MM_NET_READ_READY) == 0)) {
 		cli->flags |= MM_NET_READ_READY;
-		mm_list_insert_tail(&srv->read_ready, &cli->read_ready);
+		mm_list_append(&srv->read_ready, &cli->read_ready);
 	}
 
 	LEAVE();
@@ -387,7 +387,7 @@ mm_net_add_write_ready(struct mm_net_server *srv, uint32_t index)
 	struct mm_net_client *cli = mm_pool_idx2ptr(&mm_cli_pool, index);
 	if (likely((cli->flags & MM_NET_WRITE_READY) == 0)) {
 		cli->flags |= MM_NET_WRITE_READY;
-		mm_list_insert_tail(&srv->write_ready, &cli->write_ready);
+		mm_list_append(&srv->write_ready, &cli->write_ready);
 	}
 
 	LEAVE();
@@ -477,10 +477,10 @@ mm_net_accept_ready(void)
 
 	// If there are no ready servers yet then block waiting for an
 	// accept event.
-	if (mm_list_is_empty(&mm_accept_ready)) {
+	if (mm_list_empty(&mm_accept_ready)) {
 		mm_port_receive_blocking(mm_accept_port, &index, 1);
 		mm_net_add_accept_ready(index);
-		ASSERT(!mm_list_is_empty(&mm_accept_ready));
+		ASSERT(!mm_list_empty(&mm_accept_ready));
 	}
 
 	// Drain all pending accept events without blocking.
@@ -492,24 +492,23 @@ mm_net_accept_ready(void)
 	do {
 		// Get the pertinent server.
 		struct mm_list *head = mm_list_head(&mm_accept_ready);
-		struct mm_net_server *srv
-			= containerof(head, struct mm_net_server, accept_ready);
+		struct mm_net_server *srv = containerof(head, struct mm_net_server, accept_ready);
 
 		// Accept a single connection on it.
 		mm_net_accept(srv);
 
-		// Check to see if too many connections are accepted in a row.
-		// This is to prevent starvation of other tasks.
+		// Check to see if too many connections has been handled in
+		// a row. This is to prevent starvation of other tasks.
 		if (++accept_count == MM_ACCEPT_COUNT) {
 			// Move the last server to the queue tail.
 			if ((srv->flags & MM_NET_ACCEPT_READY) != 0) {
 				mm_list_delete(&srv->accept_ready);
-				mm_list_insert_tail(&mm_accept_ready, &srv->accept_ready);
+				mm_list_append(&mm_accept_ready, &srv->accept_ready);
 			}
 			break;
 		}
 	}
-	while (!mm_list_is_empty(&mm_accept_ready));
+	while (!mm_list_empty(&mm_accept_ready));
 
 	LEAVE();
 }
@@ -524,10 +523,10 @@ mm_net_read_ready(struct mm_net_server *srv)
 
 	// If there are no ready clients yet then block waiting for a
 	// read event.
-	if (mm_list_is_empty(&srv->read_ready)) {
+	if (mm_list_empty(&srv->read_ready)) {
 		mm_port_receive_blocking(srv->read_ready_port, &index, 1);
 		mm_net_add_read_ready(srv, index);
-		ASSERT(!mm_list_is_empty(&srv->read_ready));
+		ASSERT(!mm_list_empty(&srv->read_ready));
 	}
 
 	// Drain all pending read events without blocking.
@@ -539,24 +538,23 @@ mm_net_read_ready(struct mm_net_server *srv)
 	do {
 		// Get the pertinent client.
 		struct mm_list *head = mm_list_head(&srv->read_ready);
-		struct mm_net_client *cli
-			= containerof(head, struct mm_net_client, read_ready);
+		struct mm_net_client *cli = containerof(head, struct mm_net_client, read_ready);
 
 		/* Handle read at the protocol layer. */
 		(cli->srv->proto->read_ready)(cli);
 
-		// Check to see if too many connection are handled in a row.
-		// This is to prevent starvation of other tasks.
-		if (++io_count < MM_IO_COUNT) {
+		// Check to see if too many connections has been handled in
+		// a row. This is to prevent starvation of other tasks.
+		if (++io_count == MM_IO_COUNT) {
 			// Move the last client to the queue tail.
 			if ((cli->flags & MM_NET_READ_READY) != 0) {
 				mm_list_delete(&cli->read_ready);
-				mm_list_insert_tail(&srv->read_ready, &cli->read_ready);
+				mm_list_append(&srv->read_ready, &cli->read_ready);
 			}
 			break;
 		}
 	}
-	while (!mm_list_is_empty(&srv->read_ready));
+	while (!mm_list_empty(&srv->read_ready));
 
 	LEAVE();
 }
@@ -571,10 +569,10 @@ mm_net_write_ready(struct mm_net_server *srv)
 
 	// If there are no ready clients yet then block waiting for a
 	// write event.
-	if (mm_list_is_empty(&srv->write_ready)) {
+	if (mm_list_empty(&srv->write_ready)) {
 		mm_port_receive_blocking(srv->write_ready_port, &index, 1);
 		mm_net_add_write_ready(srv, index);
-		ASSERT(!mm_list_is_empty(&srv->write_ready));
+		ASSERT(!mm_list_empty(&srv->write_ready));
 	}
 
 	// Drain all pending write events without blocking.
@@ -586,24 +584,23 @@ mm_net_write_ready(struct mm_net_server *srv)
 	do {
 		// Get the pertinent client.
 		struct mm_list *head = mm_list_head(&srv->write_ready);
-		struct mm_net_client *cli
-			= containerof(head, struct mm_net_client, write_ready);
+		struct mm_net_client *cli = containerof(head, struct mm_net_client, write_ready);
 
 		/* Handle write at the protocol layer. */
 		(cli->srv->proto->write_ready)(cli);
 
-		// Check to see if too many connection are handled in a row.
-		// This is to prevent starvation of other tasks.
-		if (++io_count < MM_IO_COUNT) {
+		// Check to see if too many connections has been handled in
+		// a row. This is to prevent starvation of other tasks.
+		if (++io_count == MM_IO_COUNT) {
 			// Move the last client to the queue tail.
 			if ((cli->flags & MM_NET_WRITE_READY) != 0) {
 				mm_list_delete(&cli->write_ready);
-				mm_list_insert_tail(&srv->write_ready, &cli->write_ready);
+				mm_list_append(&srv->write_ready, &cli->write_ready);
 			}
 			break;
 		}
 	}
-	while (!mm_list_is_empty(&srv->write_ready));
+	while (!mm_list_empty(&srv->write_ready));
 
 	LEAVE();
 }

@@ -92,7 +92,7 @@ mm_task_destroy(struct mm_task *task)
 		mm_sched_dequeue(task);
 	}
 
-	while (!mm_list_is_empty(&task->ports)) {
+	while (!mm_list_empty(&task->ports)) {
 		// TODO: ensure that ports are not referenced from elsewhere.
 		struct mm_list *head = mm_list_head(&task->ports);
 		struct mm_port *port = containerof(head, struct mm_port, ports);

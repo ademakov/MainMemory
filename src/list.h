@@ -60,34 +60,48 @@ mm_list_has_prev(struct mm_list *list, struct mm_list *item)
 }
 
 static inline bool
-mm_list_is_empty(struct mm_list *list)
+mm_list_empty(struct mm_list *list)
 {
 	return !mm_list_has_next(list, list);
 }
 
 static inline void
-mm_list_insert(struct mm_list *list, struct mm_list *item)
+mm_list_splice_next(struct mm_list *item, struct mm_list *head, struct mm_list *tail)
 {
-	item->next = list->next;
-	list->next->prev = item;
-	item->prev = list;
-	list->next = item;
+	head->prev = item;
+	tail->next = item->next;
+	item->next->prev = tail;
+	item->next = head;
 }
 
 static inline void
-mm_list_insert_tail(struct mm_list *list, struct mm_list *item)
+mm_list_splice_prev(struct mm_list *item, struct mm_list *head, struct mm_list *tail)
 {
-	item->prev = list->prev;
-	list->prev->next = item;
-	item->next = list;
-	list->prev = item;
+	tail->next = item;
+	head->prev = item->prev;
+	item->prev->next = head;
+	item->prev = tail;
+}
+
+static inline void
+mm_list_cleave(struct mm_list *head, struct mm_list *tail)
+{
+	struct mm_list *prev = head->prev;
+	struct mm_list *next = tail->next;
+	prev->next = next;
+	next->prev = prev;
+}
+
+static inline void
+mm_list_append(struct mm_list *list, struct mm_list *item)
+{
+	mm_list_splice_prev(list, item, item);
 }
 
 static inline void
 mm_list_delete(struct mm_list *item)
 {
-	item->next->prev = item->prev;
-	item->prev->next = item->next;
+	mm_list_cleave(item, item);
 }
 
 #endif /* LIST_H */
