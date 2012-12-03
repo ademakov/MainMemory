@@ -68,21 +68,13 @@ mm_sched_term(void)
 }
 
 void
-mm_sched_enqueue(struct mm_task *task)
+mm_sched_run(struct mm_task *task)
 {
 	ENTER();
+	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_CREATED);
 
 	mm_list_append(&mm_run_queue, &task->queue);
-
-	LEAVE();
-}
-
-void
-mm_sched_dequeue(struct mm_task *task)
-{
-	ENTER();
-
-	mm_list_delete(&task->queue);
+	task->state = MM_TASK_PENDING;
 
 	LEAVE();
 }
@@ -96,7 +88,7 @@ mm_sched_start(void)
 	mm_running_task = mm_sched_pop_task();
 	if (likely(mm_running_task != NULL)) {
 		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&mm_start_stack_ptr, &mm_running_task->stack_ptr);
+		mm_stack_switch(&mm_start_stack_ptr, &mm_running_task->sp);
 	}
 
 	LEAVE();
@@ -108,19 +100,32 @@ mm_sched_yield(void)
 	ENTER();
 	ASSERT(mm_running_task != NULL);
 
-	struct mm_task *prev_task = mm_running_task;
-	if (prev_task->state == MM_TASK_RUNNING) {
-		prev_task->state = MM_TASK_PENDING;
-		mm_sched_enqueue(prev_task);
+	struct mm_task *task = mm_running_task;
+	if (task->state == MM_TASK_RUNNING) {
+		task->state = MM_TASK_PENDING;
+		mm_list_append(&mm_run_queue, &task->queue);
 	}
 
 	mm_running_task = mm_sched_pop_task();
 	if (likely(mm_running_task != NULL)) {
 		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&prev_task->stack_ptr, &mm_running_task->stack_ptr);
+		mm_stack_switch(&task->sp, &mm_running_task->sp);
 	} else {
-		mm_stack_switch(&prev_task->stack_ptr, &mm_start_stack_ptr);
+		mm_stack_switch(&task->sp, &mm_start_stack_ptr);
 	}
+
+	LEAVE();
+}
+
+void
+mm_sched_block(void)
+{
+	ENTER();
+	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
+
+	mm_running_task->state = MM_TASK_BLOCKED;
+	mm_sched_yield();
 
 	LEAVE();
 }

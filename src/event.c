@@ -535,8 +535,6 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 		mm_event_dispatch();
 		mm_sched_yield();
 	}
-	mm_task_block(mm_event_task);
-	mm_sched_yield();
 
 	LEAVE();
 }
@@ -584,7 +582,7 @@ mm_event_start(void)
 {
 	ENTER();
 
-	mm_task_start(mm_event_task);
+	mm_sched_run(mm_event_task);
 
 	LEAVE();
 }

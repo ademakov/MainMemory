@@ -32,10 +32,11 @@ struct mm_task *mm_running_task;
 void mm_sched_init(void);
 void mm_sched_term(void);
 
-void mm_sched_enqueue(struct mm_task *task);
-void mm_sched_dequeue(struct mm_task *task);
+void mm_sched_run(struct mm_task *task);
 
 void mm_sched_start(void);
+
 void mm_sched_yield(void);
+void mm_sched_block(void);
 
 #endif /* SCHED_H */

@@ -29,14 +29,24 @@
 
 #define MM_TASK_STACK_SIZE (28 * 1024)
 
+// The memory pool for tasks.
 static struct mm_pool mm_task_pool;
 
+// The list of tasks that were finished.
+static struct mm_list mm_dead_list;
+
+// Entry point for a task.
 static void
-mm_task_trap(void)
+mm_task_entry(void)
 {
+	TRACE("enter task %d", mm_running_task->name);
+
+	// Execute the task using a fresh stack.
 	(mm_running_task)->start(mm_running_task->start_arg);
 
-	mm_fatal(0, "task has run too far");
+	// Make sure that there is no return from this call
+	// as there is no valid stack frame after it.
+	mm_task_exit(0);
 }
 
 void
@@ -45,6 +55,7 @@ mm_task_init(void)
 	ENTER();
 
 	mm_pool_init(&mm_task_pool, "task", sizeof (struct mm_task));
+	mm_list_init(&mm_dead_list);
 
 	LEAVE();
 }
@@ -53,6 +64,8 @@ void
 mm_task_term(void)
 {
 	ENTER();
+
+	// TODO: stop and destroy all tasks.
 
 	mm_pool_discard(&mm_task_pool);
 
@@ -72,12 +85,13 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->start = start;
 	task->start_arg = start_arg;
 
+	// initialize ports
+	mm_list_init(&task->ports);
+
+	// initialize stack
 	task->stack_size = MM_TASK_STACK_SIZE;
 	task->stack_base = mm_stack_create(task->stack_size);
-	task->stack_ptr = mm_stack_init(mm_task_trap,
-					task->stack_base, task->stack_size);
-
-	mm_list_init(&task->ports);
+	task->sp = mm_stack_init(mm_task_entry, task->stack_base, task->stack_size);
 
 	LEAVE();
 	return task;
@@ -87,10 +101,7 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-
-	if (task->state == MM_TASK_PENDING) {
-		mm_sched_dequeue(task);
-	}
+	//ASSERT(task->state == MM_TASK_INVALID);
 
 	while (!mm_list_empty(&task->ports)) {
 		// TODO: ensure that ports are not referenced from elsewhere.
@@ -107,27 +118,19 @@ mm_task_destroy(struct mm_task *task)
 }
 
 void
-mm_task_start(struct mm_task *task)
+mm_task_exit(int status)
 {
-	ENTER();
-	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_CREATED);
+	TRACE("exiting task '%s' with status %d", mm_running_task->name, status);
 
-	mm_sched_enqueue(task);
-	task->state = MM_TASK_PENDING;
+	// TODO: invalidate ports ?
 
-	LEAVE();
-}
+	// Be done with the task.
+	mm_running_task->state = MM_TASK_INVALID;
+	mm_list_append(&mm_dead_list, &mm_running_task->queue);
 
-void
-mm_task_block(struct mm_task *task)
-{
-	ENTER();
+	// Give the control to still running tasks.
+	mm_sched_yield();
 
-	if (task->state == MM_TASK_PENDING) {
-		mm_sched_dequeue(task);
-	}
-
-	task->state = MM_TASK_BLOCKED;
-
-	LEAVE();
+	// Must never get here after the yield above.
+	ABORT();
 }

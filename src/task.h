@@ -59,11 +59,10 @@ struct mm_task
 	char *name;
 
 	/* The task stack. */
-	void *stack_ptr;
+	void *sp;
 	void *stack_base;
 	uint32_t stack_size;
 };
-
 
 void mm_task_init(void);
 void mm_task_term(void);
@@ -75,10 +74,7 @@ struct mm_task * mm_task_create(const char *name, uint16_t flags,
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_start(struct mm_task *task)
-	__attribute__((nonnull(1)));
-
-void mm_task_block(struct mm_task *task)
-	__attribute__((nonnull(1)));
+void mm_task_exit(int status)
+	__attribute__((noreturn));
 
 #endif /* TASK_H */

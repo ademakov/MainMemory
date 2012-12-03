@@ -641,21 +641,22 @@ mm_net_write_ready_loop(struct mm_net_server *srv)
 static void
 mm_net_init_accept_task(void)
 {
+	ENTER();
+
+	// Initialize the accept queue.
+	mm_list_init(&mm_accept_ready);
+
 	// Create the accept task.
 	struct mm_task *task = mm_task_create(
 		"net-accept", 0, (mm_routine) mm_net_accept_ready_loop, 0);
 
-	// Create the port for accept-ready events.
+	// Create the port for accept events.
 	mm_accept_port = mm_port_create(task);
 
-	// Register the I/O handler for accept-ready events.
+	// Register the I/O handler for accept events.
 	mm_accept_handler = mm_event_add_io_handler(mm_accept_port, NULL);
 
-	// Initialize the accept-ready queue.
-	mm_list_init(&mm_accept_ready);
-
-	// Queue the accept task.
-	//mm_task_start(task);
+	LEAVE();
 }
 
 static void
@@ -684,10 +685,6 @@ mm_net_init_server_tasks(struct mm_net_server *srv)
 	// Register the ports with the event loop.
 	srv->io_handler = mm_event_add_io_handler(srv->read_ready_port,
 						  srv->write_ready_port);
-
-	// Queue the server tasks.
-	//mm_task_start(read_ready_task);
-	//mm_task_start(write_ready_task);
 
 	LEAVE();
 }
@@ -726,6 +723,7 @@ mm_net_init(void)
 
 	mm_net_init_server_table();
 	mm_net_init_client_table();
+
 	mm_net_init_accept_task();
 
 	mm_net_initialized = 1;

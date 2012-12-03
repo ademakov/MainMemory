@@ -34,16 +34,14 @@ mm_port_block_on_send(struct mm_port *port)
 {
 	mm_running_task->blocked_on = port;
 	mm_list_append(&port->blocked_senders, &mm_running_task->queue);
-	mm_task_block(mm_running_task);
-	mm_sched_yield();
+	mm_sched_block();
 }
 
 static void
 mm_port_block_on_receive(struct mm_port *port)
 {
 	mm_running_task->blocked_on = port;
-	mm_task_block(mm_running_task);
-	mm_sched_yield();
+	mm_sched_block();
 }
 
 /**********************************************************************
@@ -123,7 +121,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 	if (port->task->state == MM_TASK_CREATED
 	    || (port->task->state == MM_TASK_BLOCKED
 	        && port->task->blocked_on == port)) {
-		mm_task_start(port->task);
+		mm_sched_run(port->task);
 	}
 
 done:
@@ -170,7 +168,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 
 		struct mm_task *task = containerof(head, struct mm_task, queue);
 		ASSERT(task->state == MM_TASK_BLOCKED && task->blocked_on == port);
-		mm_task_start(task);
+		mm_sched_run(task);
 	}
 
 done:
