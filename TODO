@@ -1,0 +1,40 @@
+
+Various items:
+* ensure correct client and server object destruction
+* linux port (epoll)
+* resolve socket close issues: time wait, event loop
+* add task-specific context for tracing
+* add task cleanup handlers
+* add task-local alloc & free
+* take care of dead tasks
+* add task cancel and kill
+* add timers and task sleep
+* resolve port destruction issues
+* support signals
+* UDP servers
+* fs notifications
+* configuration file parsing
+* command line argument parsing
+* worker threads
+* system call threads
+* disk I/O threads
+* syslog
+* daemonize
+* statistics
+* failure trace records
+* performance instrumentation
+* better scheduler
+
+Ports:
+* x86
+* arm
+
+Memory:
+* buddy allocator
+* slab allocators
+* region allocator
+* garbage collection
+
+Sample modules:
+* memcached
+* HTTP
