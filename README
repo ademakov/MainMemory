@@ -2,9 +2,9 @@ Main Memory
 ===========
 
 Main Memory is a light-weight framework for networked servers of all sorts.
-However efficient handling of in-memory workloads is its primary goal. For
-instance, Main Memory could be used as a base for a memcached clone or a
-caching HTTP server with superior performance and scalability.
+However efficient handling of in-memory workloads is its primary priority.
+For instance, Main Memory could be used as a base for a memcached clone or
+a caching HTTP server with superior performance and scalability.
 
 The purpose of the Main Memory project is a bit akin to SGI's State Threads
 Library (http://state-threads.sourceforge.net/). But Main Memory also aims
