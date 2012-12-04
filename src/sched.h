@@ -27,7 +27,7 @@
 struct mm_task;
 
 /* The currently running task. */
-struct mm_task *mm_running_task;
+extern __thread struct mm_task *mm_running_task;
 
 void mm_sched_init(void);
 void mm_sched_term(void);

@@ -28,18 +28,23 @@
 static struct mm_list mm_run_queue;
 
 // The original stack pointer.
-static void *mm_start_stack_ptr = NULL;
+static struct mm_task mm_null_task = {
+	.state = MM_TASK_RUNNING,
+	.name = "null task",
+};
 
 // The currently running task.
-struct mm_task *mm_running_task = NULL;
+__thread struct mm_task *mm_running_task = &mm_null_task;
 
 static struct mm_task *
 mm_sched_pop_task(void)
 {
 	ENTER();
 
-	struct mm_task *task = NULL;
-	if (likely(!mm_list_empty(&mm_run_queue))) {
+	struct mm_task *task;
+	if (unlikely(mm_list_empty(&mm_run_queue))) {
+		task = &mm_null_task;
+	} else {
 		struct mm_list *head = mm_list_head(&mm_run_queue);
 		task = containerof(head, struct mm_task, queue);
 		mm_list_delete(head);
@@ -83,12 +88,12 @@ void
 mm_sched_start(void)
 {
 	ENTER();
-	ASSERT(mm_running_task == NULL);
+	ASSERT(mm_running_task == &mm_null_task);
 
 	mm_running_task = mm_sched_pop_task();
-	if (likely(mm_running_task != NULL)) {
+	if (likely(mm_running_task != &mm_null_task)) {
 		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&mm_start_stack_ptr, &mm_running_task->sp);
+		mm_stack_switch(&mm_null_task.sp, &mm_running_task->sp);
 	}
 
 	LEAVE();
@@ -98,7 +103,7 @@ void
 mm_sched_yield(void)
 {
 	ENTER();
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_running_task != &mm_null_task);
 
 	struct mm_task *task = mm_running_task;
 	if (task->state == MM_TASK_RUNNING) {
@@ -107,12 +112,8 @@ mm_sched_yield(void)
 	}
 
 	mm_running_task = mm_sched_pop_task();
-	if (likely(mm_running_task != NULL)) {
-		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&task->sp, &mm_running_task->sp);
-	} else {
-		mm_stack_switch(&task->sp, &mm_start_stack_ptr);
-	}
+	mm_running_task->state = MM_TASK_RUNNING;
+	mm_stack_switch(&task->sp, &mm_running_task->sp);
 
 	LEAVE();
 }
