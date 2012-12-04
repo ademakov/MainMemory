@@ -55,13 +55,17 @@ struct mm_task
 	mm_routine start;
 	uintptr_t start_arg;
 
-	/* The task name. */
-	char *name;
-
 	/* The task stack. */
 	void *sp;
 	void *stack_base;
 	uint32_t stack_size;
+
+	/* The task name. */
+	char *name;
+
+#if ENABLE_TRACE
+	int trace_level;
+#endif
 };
 
 void mm_task_init(void);

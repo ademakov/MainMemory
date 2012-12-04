@@ -20,6 +20,9 @@
 
 #include "util.h"
 
+#include "sched.h"
+#include "task.h"
+
 #include "dlmalloc/malloc.h"
 
 #include <errno.h>
@@ -28,10 +31,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#if ENABLE_TRACE
-static __thread int mm_trace_level = 0;
-#endif
 
 /**********************************************************************
  * Exit Handling.
@@ -109,7 +108,9 @@ void
 mm_print(const char *restrict msg, ...)
 {
 #if ENABLE_TRACE
-	mm_printf("%*s", mm_trace_level * 2, "");
+	mm_printf("[%s] %*s",
+		  mm_running_task->name,
+		  mm_running_task->trace_level * 2, "");
 #endif
 
 	va_list va;
@@ -250,7 +251,9 @@ mm_abort(const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
 #if ENABLE_TRACE
-	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+	mm_printf("[%s] %*s%s(%s:%d): ",
+		  mm_running_task->name,
+		  mm_running_task->trace_level * 2, "", func, file, line);
 #else
 	mm_printf("%s(%s:%d): ", func, file, line);
 #endif
@@ -277,7 +280,9 @@ mm_debug(const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
 #if ENABLE_TRACE
-	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+	mm_printf("[%s] %*s%s(%s:%d): ",
+		  mm_running_task->name,
+		  mm_running_task->trace_level * 2, "", func, file, line);
 #else
 	mm_printf("%s(%s:%d): ", func, file, line);
 #endif
@@ -299,9 +304,11 @@ mm_trace(int level, const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
 	if (level < 0)
-		mm_trace_level += level;
+		mm_running_task->trace_level += level;
 
-	mm_printf("%*s%s(%s:%d): ", mm_trace_level * 2, "", func, file, line);
+	mm_printf("[%s] %*s%s(%s:%d): ",
+		  mm_running_task->name,
+		  mm_running_task->trace_level * 2, "", func, file, line);
 
 	va_list va;
 	va_start(va, msg);
@@ -311,7 +318,7 @@ mm_trace(int level, const char *file, int line, const char *func,
 	mm_newline();
 
 	if (level > 0)
-		mm_trace_level += level;
+		mm_running_task->trace_level += level;
 }
 
 #endif

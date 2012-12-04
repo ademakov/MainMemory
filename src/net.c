@@ -880,6 +880,7 @@ mm_net_close(struct mm_net_client *cli)
 	// Close the socket.
 	// TODO: might need to wait until next event loop cycle really
 	// unregisters it from the system (for anything but kevent).
+	// TODO: set linger off and/or close concurrently to avoid stalls.
 	close(cli->sock);
 
 	// Remove the client from the server lists.

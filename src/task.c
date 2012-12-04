@@ -93,6 +93,10 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->stack_base = mm_stack_create(task->stack_size);
 	task->sp = mm_stack_init(mm_task_entry, task->stack_base, task->stack_size);
 
+#if ENABLE_TRACE
+	int trace_level;
+#endif
+
 	LEAVE();
 	return task;
 }

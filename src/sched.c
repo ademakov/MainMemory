@@ -39,19 +39,14 @@ __thread struct mm_task *mm_running_task = &mm_null_task;
 static struct mm_task *
 mm_sched_pop_task(void)
 {
-	ENTER();
-
-	struct mm_task *task;
 	if (unlikely(mm_list_empty(&mm_run_queue))) {
-		task = &mm_null_task;
+		return &mm_null_task;
 	} else {
 		struct mm_list *head = mm_list_head(&mm_run_queue);
-		task = containerof(head, struct mm_task, queue);
+		struct mm_task *task = containerof(head, struct mm_task, queue);
 		mm_list_delete(head);
+		return task;
 	}
-
-	LEAVE();
-	return task;
 }
 
 void
