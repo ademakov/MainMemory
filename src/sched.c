@@ -30,7 +30,7 @@ static struct mm_list mm_run_queue;
 // The original stack pointer.
 static struct mm_task mm_null_task = {
 	.state = MM_TASK_RUNNING,
-	.name = "null task",
+	.name = "null-task",
 };
 
 // The currently running task.
@@ -117,7 +117,7 @@ void
 mm_sched_block(void)
 {
 	ENTER();
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_running_task != &mm_null_task);
 	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
 
 	mm_running_task->state = MM_TASK_BLOCKED;

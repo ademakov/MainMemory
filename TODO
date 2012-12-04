@@ -3,7 +3,6 @@ Various items:
 * ensure correct client and server object destruction
 * linux port (epoll)
 * resolve socket close issues: time wait, event loop
-* add task-specific context for tracing
 * add task cleanup handlers
 * add task-local alloc & free
 * take care of dead tasks

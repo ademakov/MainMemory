@@ -554,7 +554,7 @@ mm_event_init(void)
 	mm_event_init_kqueue();
 
 	// Create the event loop task.
-	mm_event_task = mm_task_create("event loop", 0, mm_event_loop, 0);
+	mm_event_task = mm_task_create("event-loop", 0, mm_event_loop, 0);
 
 	LEAVE();
 }
