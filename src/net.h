@@ -71,9 +71,9 @@ struct mm_net_server
 	/* A list of all clients. */
 	struct mm_list clients;
 	/* A list of read ready clients. */
-	struct mm_list read_ready;
+	struct mm_list read_queue;
 	/* A list of write ready clients. */
-	struct mm_list write_ready;
+	struct mm_list write_queue;
 
 	/* A link in the accept ready list. */
 	struct mm_list accept_ready;
@@ -93,8 +93,10 @@ struct mm_net_server
 };
 
 /* Client flags. */
-#define MM_NET_READ_READY	1
-#define MM_NET_WRITE_READY	2
+#define MM_NET_READ_READY	0x01
+#define MM_NET_WRITE_READY	0x02
+#define MM_NET_READ_QUEUE	0x04
+#define MM_NET_WRITE_QUEUE	0x08
 
 /* Network client data. */
 struct mm_net_client
@@ -110,9 +112,9 @@ struct mm_net_client
 	/* A link in the server's list of all clients. */
 	struct mm_list clients;
 	/* A link in the server's list of read ready clients. */
-	struct mm_list read_ready;
+	struct mm_list read_queue;
 	/* A link in the server's list of write ready clients. */
-	struct mm_list write_ready;
+	struct mm_list write_queue;
 
 	/* Client address. */
 	struct mm_net_peer_addr peer;
@@ -141,5 +143,7 @@ void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	__attribute__((nonnull(1, 2)));
 void mm_net_stop_server(struct mm_net_server *srv)
 	__attribute__((nonnull(1)));
+
+void mm_net_close(struct mm_net_client *cli);
 
 #endif /* NET_H */

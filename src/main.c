@@ -87,8 +87,8 @@ static void
 mm_write_ready(struct mm_net_client *cli)
 {
 	write(cli->sock, "test\n", 5);
-	mm_event_unregister_fd(cli->sock);
-	close(cli->sock);
+
+	mm_net_close(cli);
 }
 
 struct mm_net_proto cmd_proto = {

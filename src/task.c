@@ -39,7 +39,7 @@ static struct mm_list mm_dead_list;
 static void
 mm_task_entry(void)
 {
-	TRACE("enter task %d", mm_running_task->name);
+	TRACE("enter task %s", mm_running_task->name);
 
 	// Execute the task using a fresh stack.
 	(mm_running_task)->start(mm_running_task->start_arg);
