@@ -1,7 +1,7 @@
 dnl Process this file with autoconf to produce a configure script.
 
 dnl Initialize autoconf.
-AC_PREREQ(2.69)
+AC_PREREQ(2.68)
 AC_INIT([MainMemory], [0.0], [ademakov@gmail.com])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([src/dlmalloc/malloc.c])
@@ -23,7 +23,7 @@ AC_PROG_RANLIB
 dnl Checks for libraries.
 
 dnl Checks for header files.
-AC_CHECK_HEADERS([stdlib.h unistd.h])
+AC_CHECK_HEADERS([stdlib.h unistd.h sys/epoll.h sys/event.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 
@@ -47,17 +47,6 @@ AC_ARG_ENABLE([trace],
 if test "x$trace" = "xyes"; then
 	AC_DEFINE(ENABLE_TRACE, 1, [Define to 1 to enable function call trace.])
 fi
-
-dnl Define coro flags
-case "$host" in
-	i[[34567]]86-*-*|x86_64-*-*)
-		coro_flags=-DCORO_ASM
-		;;
-	*)
-		coro_flags=-DCORO_SJLJ
-		;;
-esac
-AC_SUBST([CORO_FLAGS], [$coro_flags])
 
 AC_CONFIG_FILES([
 	Makefile

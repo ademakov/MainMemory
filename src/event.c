@@ -26,7 +26,12 @@
 #include "util.h"
 
 #include <string.h>
-#include <sys/event.h>
+#if HAVE_SYS_EPOLL_H
+# include <sys/epoll.h>
+#endif
+#if HAVE_SYS_EVENT_H
+# include <sys/event.h>
+#endif
 #include <sys/types.h>
 #include <unistd.h>
 
