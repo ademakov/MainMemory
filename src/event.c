@@ -334,8 +334,40 @@ mm_event_unregister_fd(int fd)
 }
 
 /**********************************************************************
+ * epoll support.
+ **********************************************************************/
+
+#ifdef HAVE_SYS_EPOLL_H
+
+static void
+mm_event_init_epoll(void)
+{
+	ENTER();
+
+	LEAVE();
+}
+
+static void
+mm_event_free_epoll(void)
+{
+	ENTER();
+
+
+	LEAVE();
+}
+
+static void
+mm_event_dispatch(void)
+{
+}
+
+#endif // HAVE_SYS_EPOLL_H
+
+/**********************************************************************
  * kqueue/kevent support.
  **********************************************************************/
+
+#ifdef HAVE_SYS_EVENT_H
 
 /* The kqueue descriptor. */
 static int mm_kq;
@@ -522,6 +554,8 @@ done:
 	LEAVE();
 }
 
+#endif // HAVE_SYS_EVENT_H
+
 /**********************************************************************
  * Event loop control.
  **********************************************************************/
@@ -556,7 +590,12 @@ mm_event_init(void)
 	mm_event_init_fd_table();
 
 	// Initialize system specific data.
+#ifdef HAVE_SYS_EPOLL_H
+	mm_event_init_epoll();
+#endif
+#ifdef HAVE_SYS_EVENT_H
 	mm_event_init_kqueue();
+#endif
 
 	// Create the event loop task.
 	mm_event_task = mm_task_create("event-loop", 0, mm_event_loop, 0);
@@ -577,7 +616,12 @@ mm_event_term(void)
 	mm_event_free_fd_table();
 
 	// Release system specific data.
+#ifdef HAVE_SYS_EPOLL_H
+	mm_event_free_epoll();
+#endif
+#ifdef HAVE_SYS_EVENT_H
 	mm_event_free_kqueue();
+#endif
 
 	LEAVE();
 }
