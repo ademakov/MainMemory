@@ -13,6 +13,20 @@ AM_INIT_AUTOMAKE([-Wall -Werror foreign subdir-objects])
 dnl Determine the host system type.
 AC_CANONICAL_HOST
 
+AC_MSG_CHECKING([host architecture])
+case "$host" in
+	x86_64-*-*)
+		HOST_ARCH=x86-64
+		;;
+	*)
+		HOST_ARCH=generic
+		;;
+esac
+AC_MSG_RESULT([$HOST_ARCH])
+AM_CONDITIONAL([ARCH_X86], [test "$HOST_ARCH" = "x86"])
+AM_CONDITIONAL([ARCH_X86_64], [test "$HOST_ARCH" = "x86-64"])
+AM_CONDITIONAL([ARCH_GENERIC], [test "$HOST_ARCH" = "generic"])
+
 dnl Checks for programs.
 AC_PROG_CC
 AM_PROG_CC_C_O
@@ -37,7 +51,7 @@ AC_ARG_ENABLE([debug],
 		[enable debug run-time checks (default=no)])],
 	[debug="$enableval"], [debug=no])
 if test "x$debug" = "xyes"; then
-	AC_DEFINE(ENABLE_DEBUG, 1, [Define to 1 to enable debug run-time checks.])
+	AC_DEFINE([ENABLE_DEBUG], 1, [Define to 1 to enable debug run-time checks.])
 fi
 
 AC_ARG_ENABLE([trace],
@@ -45,7 +59,7 @@ AC_ARG_ENABLE([trace],
 		[enable function call trace (default=no)])],
 	[trace="$enableval"], [trace=no])
 if test "x$trace" = "xyes"; then
-	AC_DEFINE(ENABLE_TRACE, 1, [Define to 1 to enable function call trace.])
+	AC_DEFINE([ENABLE_TRACE], 1, [Define to 1 to enable function call trace.])
 fi
 
 AC_CONFIG_FILES([
