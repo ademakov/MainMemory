@@ -499,16 +499,14 @@ done:
 static int mm_kq;
 
 /* The kevent list. */
-struct kevent *mm_kevents;
+static struct kevent *mm_kevents;
 
 /* Current size of the kevent list. */
-int mm_nkevents = 0;
+static int mm_nkevents = 0;
 
 /* Maximum size of the kevent list. To accommodate malloc overhead make it
  * equal to (2^n - 1). */
-int mm_max_nkevents = 511;
-
-static struct mm_kevent_list mm_ev;
+static int mm_max_nkevents = 511;
 
 static void
 mm_event_init_kqueue(void)
