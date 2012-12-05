@@ -346,7 +346,7 @@ static struct mm_port *mm_accept_port;
 static mm_io_handler mm_accept_handler;
 
 // The list of servers ready to accept connections.
-static struct mm_list mm_accept_ready;
+static struct mm_list mm_accept_queue;
 
 static void
 mm_net_add_accept_ready(uint32_t index)
@@ -356,9 +356,9 @@ mm_net_add_accept_ready(uint32_t index)
 
 	// Find the pertinent server and add it to the accept queue if needed.
 	struct mm_net_server *srv = &mm_srv_table[index];
-	if (likely((srv->flags & MM_NET_ACCEPT_READY) == 0)) {
-		srv->flags |= MM_NET_ACCEPT_READY;
-		mm_list_append(&mm_accept_ready, &srv->accept_ready);
+	if (likely((srv->flags & MM_NET_ACCEPT_QUEUE) == 0)) {
+		srv->flags |= MM_NET_ACCEPT_QUEUE;
+		mm_list_append(&mm_accept_queue, &srv->accept_queue);
 	}
 
 	LEAVE();
@@ -408,7 +408,7 @@ static void
 mm_net_accept(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT((srv->flags & MM_NET_ACCEPT_READY) != 0);
+	ASSERT((srv->flags & MM_NET_ACCEPT_QUEUE) != 0);
 
 	// Client socket.
 	int sock;
@@ -423,8 +423,8 @@ retry:
 		if (errno == EINTR)
 			goto retry;
 		if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			mm_list_delete(&srv->accept_ready);
-			srv->flags &= ~MM_NET_ACCEPT_READY;
+			mm_list_delete(&srv->accept_queue);
+			srv->flags &= ~MM_NET_ACCEPT_QUEUE;
 		} else {
 			mm_error(errno, "%s: accept()", srv->name);
 		}
@@ -488,10 +488,10 @@ mm_net_accept_ready(void)
 
 	// If there are no ready servers yet then block waiting for an
 	// accept event.
-	if (mm_list_empty(&mm_accept_ready)) {
+	if (mm_list_empty(&mm_accept_queue)) {
 		mm_port_receive_blocking(mm_accept_port, &index, 1);
 		mm_net_add_accept_ready(index);
-		ASSERT(!mm_list_empty(&mm_accept_ready));
+		ASSERT(!mm_list_empty(&mm_accept_queue));
 	}
 
 	// Drain all pending accept events without blocking.
@@ -502,8 +502,8 @@ mm_net_accept_ready(void)
 	int accept_count = 0;
 	do {
 		// Get the pertinent server.
-		struct mm_list *head = mm_list_head(&mm_accept_ready);
-		struct mm_net_server *srv = containerof(head, struct mm_net_server, accept_ready);
+		struct mm_list *head = mm_list_head(&mm_accept_queue);
+		struct mm_net_server *srv = containerof(head, struct mm_net_server, accept_queue);
 
 		// Accept a single connection on it.
 		mm_net_accept(srv);
@@ -512,16 +512,16 @@ mm_net_accept_ready(void)
 		// a row. This is to prevent starvation of other tasks.
 		if (++accept_count == MM_ACCEPT_COUNT) {
 			// Move the last server to the queue tail.
-			if ((srv->flags & MM_NET_ACCEPT_READY) != 0) {
-				mm_list_delete(&srv->accept_ready);
-				mm_list_append(&mm_accept_ready, &srv->accept_ready);
+			if ((srv->flags & MM_NET_ACCEPT_QUEUE) != 0) {
+				mm_list_delete(&srv->accept_queue);
+				mm_list_append(&mm_accept_queue, &srv->accept_queue);
 			}
 			// Give other tasks a chance to run.
 			mm_sched_yield();
 			break;
 		}
 	}
-	while (!mm_list_empty(&mm_accept_ready));
+	while (!mm_list_empty(&mm_accept_queue));
 
 	LEAVE();
 }
@@ -655,7 +655,7 @@ mm_net_init_accept_task(void)
 	ENTER();
 
 	// Initialize the accept queue.
-	mm_list_init(&mm_accept_ready);
+	mm_list_init(&mm_accept_queue);
 
 	// Create the accept task.
 	struct mm_task *task = mm_task_create(

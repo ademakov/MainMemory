@@ -58,7 +58,7 @@ struct mm_net_peer_addr
 };
 
 /* Server flags. */
-#define MM_NET_ACCEPT_READY	1
+#define MM_NET_ACCEPT_QUEUE	1
 
 /* Network server data. */
 struct mm_net_server
@@ -76,7 +76,7 @@ struct mm_net_server
 	struct mm_list write_queue;
 
 	/* A link in the accept ready list. */
-	struct mm_list accept_ready;
+	struct mm_list accept_queue;
 
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
