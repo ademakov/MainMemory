@@ -35,9 +35,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-/* Check if a kevent filter is either read or write filter. */
-#define MM_IS_IOF(f) ((f) == EVFILT_READ || (f) == EVFILT_WRITE)
-
 /**********************************************************************
  * I/O handler table.
  **********************************************************************/
@@ -341,9 +338,9 @@ mm_event_unregister_fd(int fd)
 
 #define MM_EPOLL_MAX 512
 
-int mm_epoll_fd;
+static int mm_epoll_fd;
 
-struct epoll_event mm_epoll_events[MM_EPOLL_MAX];
+static struct epoll_event mm_epoll_events[MM_EPOLL_MAX];
 
 static void
 mm_event_init_epoll(void)
@@ -449,7 +446,7 @@ mm_event_dispatch(void)
 		goto done;
 	}
 
-	/* Process received system events. */
+	/* Process the received system events. */
 	for (int i = 0; i < nevents; i++) {
 		if ((mm_epoll_events[i].events
 		     & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
@@ -634,7 +631,7 @@ mm_event_dispatch(void)
 
 	DEBUG("event count: %d", mm_nkevents);
 
-	/* Process received system events. */
+	/* Process the received system events. */
 	for (int i = 0; i < mm_nkevents; i++) {
 		if ((mm_kevents[i].flags & EV_ERROR) != 0) {
 
