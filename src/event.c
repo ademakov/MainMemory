@@ -339,10 +339,20 @@ mm_event_unregister_fd(int fd)
 
 #ifdef HAVE_SYS_EPOLL_H
 
+#define MM_EPOLL_MAX 512
+
+int mm_epoll_fd;
+
+struct epoll_event mm_epoll_events[MM_EPOLL_MAX];
+
 static void
 mm_event_init_epoll(void)
 {
 	ENTER();
+
+	mm_epoll_fd = epoll_create(511);
+	if (mm_epoll_fd < 0)
+		mm_fatal(errno, "Failed to create epoll fd");
 
 	LEAVE();
 }
@@ -352,6 +362,8 @@ mm_event_free_epoll(void)
 {
 	ENTER();
 
+	if (mm_epoll_fd >= 0)
+		close(mm_epoll_fd);
 
 	LEAVE();
 }
@@ -359,6 +371,123 @@ mm_event_free_epoll(void)
 static void
 mm_event_dispatch(void)
 {
+	ENTER();
+
+	// Make changes to the fd set watched by epoll.
+	for (int i = 0; i < mm_change_list_size; i++) {
+		int fd = mm_change_list[i];
+		struct mm_fd *mm_fd = &mm_fd_table[fd];
+		uint32_t events = 0, new_events = 0;
+		int a, b;
+
+		/* Check if a read event registration if needed. */
+		a = (mm_fd->io && mm_io_table[mm_fd->io].read_ready);
+		b = (mm_fd->new_io && mm_io_table[mm_fd->new_io].read_ready);
+		if (a) {
+			events |= EPOLLIN;
+		}
+		if (b) {
+			new_events |= EPOLLIN;
+		}
+#if ENABLE_DEBUG
+		if (likely(a != b)) {
+			if (b) {
+				DEBUG("register fd %d for read events", fd);
+			} else {
+				DEBUG("unregister fd %d for read events", fd);
+			}
+		}
+#endif
+
+		/* Check if a write event registration if needed. */
+		a = (mm_fd->io && mm_io_table[mm_fd->io].write_ready);
+		b = (mm_fd->new_io && mm_io_table[mm_fd->new_io].write_ready);
+		if (a) {
+			events |= EPOLLOUT;
+		}
+		if (b) {
+			new_events |= EPOLLOUT;
+		}
+#if ENABLE_DEBUG
+		if (likely(a != b)) {
+			if (b) {
+				DEBUG("register fd %d for write events", fd);
+			} else {
+				DEBUG("unregister fd %d for write events", fd);
+			}
+		}
+#endif
+
+		if (likely(events != new_events)) {
+			int op;
+			if (new_events == 0)
+				op = EPOLL_CTL_DEL;
+			else if (events == 0)
+				op = EPOLL_CTL_ADD;
+			else
+				op = EPOLL_CTL_MOD;
+
+			struct epoll_event ev;
+			ev.events = new_events | EPOLLET | EPOLLRDHUP;
+			ev.data.fd = fd;
+
+			int rc = epoll_ctl(mm_epoll_fd, op, fd, &ev);
+			if (unlikely(rc < 0)) {
+				mm_error(errno, "epoll_ctl");
+			}
+		}
+
+		/* Store the requested I/O handler. */
+		mm_fd->io = mm_fd->new_io;
+	}
+
+	/* Poll the system for events. */
+	mm_change_list_size = 0;
+	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX, -1);
+	if (unlikely(nevents < 0)) {
+		mm_error(errno, "epoll_wait");
+		goto done;
+	}
+
+	/* Process received system events. */
+	for (int i = 0; i < nevents; i++) {
+		if ((mm_epoll_events[i].events
+		     & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			int fd = mm_epoll_events[i].data.fd;
+			DEBUG("error event on fd %d", fd);
+		}
+		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
+			int fd = mm_epoll_events[i].data.fd;
+			DEBUG("read event on fd %d", fd);
+
+			mm_io_handler io = mm_fd_table[fd].io;
+			ASSERT(io < mm_io_table_size);
+
+			struct mm_io *handlers = &mm_io_table[io];
+			if (likely(handlers->read_ready)) {
+				mm_port_send_blocking(
+					handlers->read_ready,
+					&mm_fd_table[fd].data, 1);
+			}
+		}
+		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
+			int fd = mm_epoll_events[i].data.fd;
+			DEBUG("write event on fd %d", fd);
+
+			mm_io_handler io = mm_fd_table[fd].io;
+			ASSERT(io < mm_io_table_size);
+
+			struct mm_io *handlers = &mm_io_table[io];
+			if (likely(handlers->write_ready)) {
+				mm_port_send_blocking(
+					handlers->write_ready,
+					&mm_fd_table[fd].data, 1);
+			}
+		}
+	}
+
+done:
+	LEAVE();
 }
 
 #endif // HAVE_SYS_EPOLL_H
@@ -390,9 +519,8 @@ mm_event_init_kqueue(void)
 	ENTER();
 
 	mm_kq = kqueue();
-	if (mm_kq == -1) {
+	if (mm_kq == -1)
 		mm_fatal(errno, "Failed to create kqueue");
-	}
 
  	mm_print("kevent list size: %d", mm_max_nkevents);
 	mm_kevents = mm_alloc(mm_max_nkevents * sizeof(struct kevent));
@@ -405,9 +533,8 @@ mm_event_free_kqueue(void)
 {
 	ENTER();
 
-	if (mm_kq >= 0) {
+	if (mm_kq >= 0)
 		close(mm_kq);
-	}
 
 	mm_free(mm_kevents);
 
@@ -460,13 +587,12 @@ mm_event_dispatch(void)
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
-				TRACE("register fd %d for read events", fd);
+				DEBUG("register fd %d for read events", fd);
 				flags = EV_ADD | EV_CLEAR;
 			} else {
-				TRACE("unregister fd %d for read events", fd);
+				DEBUG("unregister fd %d for read events", fd);
 				flags = EV_DELETE;
 			}
-
 			mm_event_ensure_kevents();
 			struct kevent *kp = &mm_kevents[mm_nkevents++];
 			EV_SET(kp, fd, EVFILT_READ, flags, 0, 0, 0);
@@ -484,7 +610,6 @@ mm_event_dispatch(void)
 				DEBUG("unregister fd %d for write events", fd);
 				flags = EV_DELETE;
 			}
-
 			mm_event_ensure_kevents();
 			struct kevent *kp = &mm_kevents[mm_nkevents++];
 			EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
