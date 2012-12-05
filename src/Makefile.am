@@ -13,3 +13,6 @@ mmem_SOURCES = \
 if ARCH_X86_64
 mmem_SOURCES += arch/x86-64/stack-init.c arch/x86-64/stack-switch.S
 endif
+if ARCH_GENERIC
+mmem_SOURCES += arch/generic/stack.c
+endif
