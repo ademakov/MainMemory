@@ -2,41 +2,40 @@
 ASAP:
 * ensure correct client and server object destruction
 * resolve socket close issues: time wait, event loop coordination
-* add task cleanup handlers
-* add task local storage (tls)
 * take care of dead tasks
-* add task cancel and kill
 * add timers and task sleep
-* resolve port destruction issues (refcount? capabilities?)
 * support signals
 * net I/O routines (read,write,readv,writev)
-* better scheduler (with task priorities)
-* x86 port
 
-Essential:
+Essentials:
+* better scheduler (with task priorities)
 * UDP servers
 * SSL servers
 * fs notifications
+* add task cleanup handlers
+* add task local storage (tls)
+* add task cancel and kill
+* resolve port destruction issues (refcount? capabilities?)
 * memory management:
 ** region allocator
 ** add task local memory alloc & free
-* configuration file parsing
-* command line argument parsing
 * worker threads
 * system call threads
 * disk I/O threads
 * syslog
 * daemonize
 * statistics
-* failure trace records
 * performance instrumentation
-* arm port
 
 Enhancements:
+* configuration file parsing
+* command line argument parsing
 * memory management:
 ** slab allocator (to base object pools on)
 ** buddy allocator (for I/O buffers and slabs)
 ** garbage collection
+* failure trace records
+* arm port
 
 Sample modules:
 * memcached
