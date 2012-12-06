@@ -22,6 +22,7 @@
 #define TASK_H
 
 #include "common.h"
+#include "arch.h"
 #include "list.h"
 
 /* Task state values. */
@@ -56,7 +57,7 @@ struct mm_task
 	uintptr_t start_arg;
 
 	/* The task stack. */
-	void *sp;
+	mm_stack_ctx_t stack_ctx;
 	void *stack_base;
 	uint32_t stack_size;
 

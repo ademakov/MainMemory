@@ -17,9 +17,11 @@ AC_MSG_CHECKING([host architecture])
 case "$host" in
 	x86_64-*-*)
 		HOST_ARCH=x86-64
+		AC_DEFINE([ARCH_X86_64], 1, [Build for x86-64 architecture.])
 		;;
 	*)
 		HOST_ARCH=generic
+		AC_DEFINE([ARCH_GENERIC], 1, [Build for generic architecture.])
 		;;
 esac
 AC_MSG_RESULT([$HOST_ARCH])
@@ -37,7 +39,8 @@ AC_PROG_RANLIB
 dnl Checks for libraries.
 
 dnl Checks for header files.
-AC_CHECK_HEADERS([stdlib.h unistd.h sys/epoll.h sys/event.h])
+AC_CHECK_HEADERS([stdlib.h unistd.h ucontext.h])
+AC_CHECK_HEADERS([sys/epoll.h sys/event.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 

@@ -88,7 +88,8 @@ mm_sched_start(void)
 	mm_running_task = mm_sched_pop_task();
 	if (likely(mm_running_task != &mm_null_task)) {
 		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&mm_null_task.sp, &mm_running_task->sp);
+		mm_stack_switch(&mm_null_task.stack_ctx,
+				&mm_running_task->stack_ctx);
 	}
 
 	LEAVE();
@@ -108,7 +109,8 @@ mm_sched_yield(void)
 
 	mm_running_task = mm_sched_pop_task();
 	mm_running_task->state = MM_TASK_RUNNING;
-	mm_stack_switch(&task->sp, &mm_running_task->sp);
+	mm_stack_switch(&task->stack_ctx,
+			&mm_running_task->stack_ctx);
 
 	LEAVE();
 }

@@ -20,8 +20,10 @@
 
 #include "arch.h"
 
-void *
-mm_stack_init(void (*func)(void), char *stack, size_t size)
+void
+mm_stack_init(mm_stack_ctx_t *ctx,
+	      void (*func)(void),
+	      char *stack, size_t size)
 {
 	intptr_t *sp = (intptr_t *) (stack + size) - 2;
 
@@ -37,5 +39,5 @@ mm_stack_init(void (*func)(void), char *stack, size_t size)
 	(-5)[sp] = 0;	// r15
 	(-6)[sp] = 0;	// r16
 
-	return (void *) sp;
+	*ctx = (void *) sp;
 }

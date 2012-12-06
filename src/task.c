@@ -91,7 +91,8 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	// initialize stack
 	task->stack_size = MM_TASK_STACK_SIZE;
 	task->stack_base = mm_stack_create(task->stack_size);
-	task->sp = mm_stack_init(mm_task_entry, task->stack_base, task->stack_size);
+	mm_stack_init(&task->stack_ctx, mm_task_entry,
+		      task->stack_base, task->stack_size);
 
 #if ENABLE_TRACE
 	int trace_level;

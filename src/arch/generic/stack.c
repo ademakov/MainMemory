@@ -19,14 +19,24 @@
  */
 
 #include "arch.h"
+#include "util.h"
 
-void *
-mm_stack_init(void (*func)(void), char *stack, size_t size)
+void
+mm_stack_init(mm_stack_ctx_t *ctx,
+	      void (*func)(void),
+	      char *stack, size_t size)
 {
-	return NULL;
+	if (unlikely(getcontext(ctx) < 0))
+		mm_fatal(errno, "getcontext");
+	ctx->uc_link = NULL;
+	ctx->uc_stack.ss_sp = stack;
+	ctx->uc_stack.ss_size = size;
+	makecontext(ctx, func, 0);
 }
 
 void
-mm_stack_switch(void **old_sp, void **new_sp)
+mm_stack_switch(mm_stack_ctx_t *old_ctx,
+		mm_stack_ctx_t *new_ctx)
 {
+	swapcontext(old_ctx, new_ctx);
 }
