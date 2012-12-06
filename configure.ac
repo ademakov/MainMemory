@@ -15,19 +15,23 @@ AC_CANONICAL_HOST
 
 AC_MSG_CHECKING([host architecture])
 case "$host" in
+	i[[3456789]]86-*-*)
+		arch=x86
+		AC_DEFINE([ARCH_X86], 1, [Build for x86 architecture.])
+		;;
 	x86_64-*-*)
-		HOST_ARCH=x86-64
+		arch=x86-64
 		AC_DEFINE([ARCH_X86_64], 1, [Build for x86-64 architecture.])
 		;;
 	*)
-		HOST_ARCH=generic
+		arch=generic
 		AC_DEFINE([ARCH_GENERIC], 1, [Build for generic architecture.])
 		;;
 esac
-AC_MSG_RESULT([$HOST_ARCH])
-AM_CONDITIONAL([ARCH_X86], [test "$HOST_ARCH" = "x86"])
-AM_CONDITIONAL([ARCH_X86_64], [test "$HOST_ARCH" = "x86-64"])
-AM_CONDITIONAL([ARCH_GENERIC], [test "$HOST_ARCH" = "generic"])
+AC_MSG_RESULT([$arch])
+AM_CONDITIONAL([ARCH_X86], [test "$arch" = "x86"])
+AM_CONDITIONAL([ARCH_X86_64], [test "$arch" = "x86-64"])
+AM_CONDITIONAL([ARCH_GENERIC], [test "$arch" = "generic"])
 
 dnl Checks for programs.
 AC_PROG_CC

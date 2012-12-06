@@ -10,6 +10,9 @@ mmem_SOURCES = \
 	pool.c pool.h port.c port.h sched.c sched.h stack.c stack.h \
 	task.c task.h util.c util.h dlmalloc/malloc.c dlmalloc/malloc.h
 
+if ARCH_X86
+mmem_SOURCES += arch/x86/stack-init.c arch/x86/stack-switch.S
+endif
 if ARCH_X86_64
 mmem_SOURCES += arch/x86-64/stack-init.c arch/x86-64/stack-switch.S
 endif
