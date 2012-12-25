@@ -53,17 +53,14 @@ dnl Checks for library functions.
 dnl Check command line arguments
 
 AC_ARG_ENABLE([debug],
-	[AS_HELP_STRING(
-		[--enable-debug],
-		[enable debug run-time checks (default=no)])],
+	[AS_HELP_STRING([--enable-debug], [enable debug run-time checks (default=no)])],
 	[debug="$enableval"], [debug=no])
 if test "x$debug" = "xyes"; then
 	AC_DEFINE([ENABLE_DEBUG], 1, [Define to 1 to enable debug run-time checks.])
 fi
 
 AC_ARG_ENABLE([trace],
-	[AS_HELP_STRING([--enable-trace],
-		[enable function call trace (default=no)])],
+	[AS_HELP_STRING([--enable-trace], [enable function call trace (default=no)])],
 	[trace="$enableval"], [trace=no])
 if test "x$trace" = "xyes"; then
 	AC_DEFINE([ENABLE_TRACE], 1, [Define to 1 to enable function call trace.])
@@ -71,5 +68,6 @@ fi
 
 AC_CONFIG_FILES([
 	Makefile
-	src/Makefile])
+	src/Makefile
+	src/memcache/Makefile])
 AC_OUTPUT

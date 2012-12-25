@@ -26,6 +26,9 @@
 /* Forward declaration. */
 struct mm_port;
 
+/* Event handler identifier. */
+typedef uint8_t mm_event_handler_t;
+
 /**********************************************************************
  * Common event routines.
  **********************************************************************/
@@ -40,20 +43,26 @@ void mm_event_stop(void);
  * I/O Event Support.
  **********************************************************************/
 
+/* I/O event handler codes. */
+#define MM_EVENT_IO_READ	1
+#define MM_EVENT_IO_WRITE	2
+#define MM_EVENT_IO_READ_WRITE	(MM_EVENT_IO_READ | MM_EVENT_IO_WRITE)
+#define MM_EVENT_IO_REG		(1 << 2)
+#define MM_EVENT_IO_UNREG	(2 << 2)
+#define MM_EVENT_IO_ERROR	(3 << 2)
+#define MM_EVENT_IO_EOF		(4 << 2)
+
 /* Return values of mm_event_verify_fd() */
 #define MM_FD_VALID	(0)
 #define MM_FD_INVALID	(-1)
 #define MM_FD_TOO_BIG	(-2)
 
-/* I/O handler identifier. */
-typedef uint8_t mm_io_handler;
-
-mm_io_handler mm_event_add_io_handler(struct mm_port *read_ready_port,
-				      struct mm_port *write_ready_port);
+mm_event_handler_t mm_event_add_io_handler(int flags, struct mm_port *port)
+	__attribute__((nonnull(2)));
 
 int mm_event_verify_fd(int fd);
 
-void mm_event_register_fd(int fd, mm_io_handler handler, uint32_t data);
+void mm_event_register_fd(int fd, mm_event_handler_t handler, uint32_t data);
 
 void mm_event_unregister_fd(int fd);
 

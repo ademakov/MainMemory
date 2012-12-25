@@ -26,12 +26,14 @@
 #include "task.h"
 #include "util.h"
 
+#include "memcache/memcache.h"
+
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-static struct mm_net_server *u_cmd_server;
-static struct mm_net_server *i_cmd_server;
+static struct mm_net_server *mm_ucmd_server;
+static struct mm_net_server *mm_icmd_server;
 
 static void
 mm_term_handler(int signo __attribute__((unused)))
@@ -71,32 +73,32 @@ mm_signal_init(void)
 }
 
 static void
-mm_read_ready(struct mm_net_client *cli)
+mm_read_ready(struct mm_net_socket *cli)
 {
+	ENTER();
+
 	char buf[1026];
-	int n = read(cli->sock, buf, sizeof(buf));
+	int n = read(cli->fd, buf, sizeof(buf));
 	if (n <= 0) {
 		if (n < 0)
 			mm_error(errno, "read()");
-		mm_event_unregister_fd(cli->sock);
-		close(cli->sock);
+		mm_net_close(cli);
 	}
+
+	LEAVE();
 }
 
 static void
-mm_write_ready(struct mm_net_client *cli)
+mm_write_ready(struct mm_net_socket *cli)
 {
-	write(cli->sock, "test\n", 5);
+	ENTER();
+
+	write(cli->fd, "test\n", 5);
 
 	mm_net_close(cli);
-}
 
-struct mm_net_proto cmd_proto = {
-	.accept = NULL,
-	.read_ready = mm_read_ready,
-	.write_ready = mm_write_ready,
-	.cleanup = NULL,
-};
+	LEAVE();
+}
 
 static void
 mm_init(void)
@@ -134,11 +136,20 @@ mm_server_open(void)
 {
 	ENTER();
 
-	u_cmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
-	i_cmd_server = mm_net_create_inet_server("test", "127.0.0.1", 8000);
+	static struct mm_net_proto proto = {
+		.prepare = NULL,
+		.read_ready = mm_read_ready,
+		.write_ready = mm_write_ready,
+		.cleanup = NULL,
+	};
 
-	mm_net_start_server(u_cmd_server, &cmd_proto);
-	mm_net_start_server(i_cmd_server, &cmd_proto);
+	mm_ucmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
+	mm_icmd_server = mm_net_create_inet_server("test", "127.0.0.1", 8000);
+
+	mm_net_start_server(mm_ucmd_server, &proto);
+	mm_net_start_server(mm_icmd_server, &proto);
+
+	mm_memcache_init();
 
 	LEAVE();
 }
@@ -148,8 +159,10 @@ mm_server_close(void)
 {
 	ENTER();
 
-	mm_net_stop_server(u_cmd_server);
-	mm_net_stop_server(i_cmd_server);
+	mm_memcache_term();
+
+	mm_net_stop_server(mm_ucmd_server);
+	mm_net_stop_server(mm_icmd_server);
 
 	LEAVE();
 }

@@ -64,27 +64,18 @@ struct mm_net_peer_addr
 struct mm_net_server
 {
 	/* Server socket. */
-	int sock;
+	int fd;
 	/* Server flags. */
 	int flags;
 
 	/* A list of all clients. */
 	struct mm_list clients;
-	/* A list of read ready clients. */
-	struct mm_list read_queue;
-	/* A list of write ready clients. */
-	struct mm_list write_queue;
 
 	/* A link in the accept ready list. */
 	struct mm_list accept_queue;
 
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
-	struct mm_task *read_ready_task;
-	struct mm_task *write_ready_task;
-	struct mm_port *read_ready_port;
-	struct mm_port *write_ready_port;
-	mm_io_handler io_handler;
 
 	/* Server name. */
 	char *name;
@@ -92,28 +83,33 @@ struct mm_net_server
 	struct mm_net_addr addr;
 };
 
-/* Client flags. */
+/* Socket flags. */
 #define MM_NET_READ_READY	0x01
 #define MM_NET_WRITE_READY	0x02
 #define MM_NET_READ_QUEUE	0x04
 #define MM_NET_WRITE_QUEUE	0x08
+#define MM_NET_CLOSED		0x10
 
-/* Network client data. */
-struct mm_net_client
+/* Network client socket data. */
+struct mm_net_socket
 {
-	/* Client socket. */
-	int sock;
-	/* Client flags. */
+	/* Socket file descriptor. */
+	int fd;
+	/* Socket flags. */
 	int flags;
 
-	/* Client server. */
+	/* Protocol data. */
+	intptr_t proto_data;
+
+	/* Socket server. */
 	struct mm_net_server *srv;
 
-	/* A link in the server's list of all clients. */
+	/* A link in the server's list of all client sockets. */
 	struct mm_list clients;
-	/* A link in the server's list of read ready clients. */
+
+	/* A link in the list of read ready sockets. */
 	struct mm_list read_queue;
-	/* A link in the server's list of write ready clients. */
+	/* A link in the list of write ready sockets. */
 	struct mm_list write_queue;
 
 	/* Client address. */
@@ -123,10 +119,11 @@ struct mm_net_client
 /* Protocol handler. */
 struct mm_net_proto
 {
-	bool (*accept)(struct mm_net_client *client);
-	void (*read_ready)(struct mm_net_client *client);
-	void (*write_ready)(struct mm_net_client *client);
-	void (*cleanup)(struct mm_net_client *client);
+	void (*prepare)(struct mm_net_socket *sock);
+	void (*cleanup)(struct mm_net_socket *sock);
+
+	void (*read_ready)(struct mm_net_socket *sock);
+	void (*write_ready)(struct mm_net_socket *sock);
 };
 
 void mm_net_init(void);
@@ -144,6 +141,6 @@ void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 void mm_net_stop_server(struct mm_net_server *srv)
 	__attribute__((nonnull(1)));
 
-void mm_net_close(struct mm_net_client *cli);
+void mm_net_close(struct mm_net_socket *sp);
 
 #endif /* NET_H */
