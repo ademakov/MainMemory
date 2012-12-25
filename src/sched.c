@@ -71,10 +71,13 @@ void
 mm_sched_run(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state == MM_TASK_BLOCKED || task->state == MM_TASK_CREATED);
+	TRACE("enqueue task: %s %d", task->name, task->state);
+	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
-	mm_list_append(&mm_run_queue, &task->queue);
-	task->state = MM_TASK_PENDING;
+	if (task->state != MM_TASK_PENDING) {
+		mm_list_append(&mm_run_queue, &task->queue);
+		task->state = MM_TASK_PENDING;
+	}
 
 	LEAVE();
 }
