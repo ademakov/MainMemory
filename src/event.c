@@ -319,16 +319,23 @@ mm_event_dispatch(void)
 {
 	ENTER();
 
+	// Indicate if there were any events sent before the poll call.
+	bool sent_msgs = false;
+
 	// Make changes to the fd set watched by epoll.
-	for (int i = 0; i < mm_change_list_size; i++) {
-		int fd = mm_change_list[i];
-		struct mm_event_fd *mm_event_fd = &mm_fd_table[fd];
+	uint32_t msg[3];
+	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
+		int fd = msg[0];
+		uint32_t data = msg[2];
+		mm_event_handler_t handler = msg[1];
+
+		struct mm_event_fd *mm_fd = &mm_fd_table[fd];
 		uint32_t events = 0, new_events = 0;
 		int a, b;
 
-		/* Check if a read event registration if needed. */
-		a = (mm_io_table[mm_event_fd->handler].read_ready != NULL);
-		b = (mm_io_table[mm_event_fd->new_io].read_ready != NULL);
+		// Check if a read event registration if needed.
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_READ);
+		b = (mm_io_table[handler].flags & MM_EVENT_IO_READ);
 		if (a) {
 			events |= EPOLLIN;
 		}
@@ -345,9 +352,9 @@ mm_event_dispatch(void)
 		}
 #endif
 
-		/* Check if a write event registration if needed. */
-		a = (mm_io_table[mm_event_fd->handler].write_ready != NULL);
-		b = (mm_io_table[mm_event_fd->new_io].write_ready != NULL);
+		// Check if a write event registration if needed.
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_WRITE);
+		b = (mm_io_table[handler].flags & MM_EVENT_IO_WRITE);
 		if (a) {
 			events |= EPOLLOUT;
 		}
@@ -383,24 +390,38 @@ mm_event_dispatch(void)
 			}
 		}
 
-		/* Store the requested I/O handler. */
-		mm_event_fd->handler = mm_event_fd->new_io;
+		if (mm_fd->handler) {
+			uint32_t msg[2] = { MM_EVENT_IO_UNREG, mm_fd->data };
+			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
+			mm_port_send_blocking(io->port, msg, 2);
+			sent_msgs = true;
+		}
+
+		// Store the requested I/O handler.
+		mm_fd->data = data;
+		mm_fd->handler = handler;
+
+		if (mm_fd->handler) {
+			uint32_t msg[2] = { MM_EVENT_IO_REG, mm_fd->data };
+			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
+			mm_port_send_blocking(io->port, msg, 2);
+			sent_msgs = true;
+		}
 	}
 
-	/* Poll the system for events. */
-	mm_change_list_size = 0;
-	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX, -1);
+	// Poll the system for events.
+	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX,
+				 sent_msgs ? 0 : 10 * 1000000);
 	if (unlikely(nevents < 0)) {
 		mm_error(errno, "epoll_wait");
 		goto done;
 	}
 
-	/* Process the received system events. */
+	// Process the received system events.
 	for (int i = 0; i < nevents; i++) {
-		if ((mm_epoll_events[i].events
-		     & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			DEBUG("error event on fd %d", fd);
+			mm_error(0, "error event on fd %d", fd);
 		}
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
@@ -409,12 +430,9 @@ mm_event_dispatch(void)
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 
-			struct mm_event_io_handler *handlers = &mm_io_table[io];
-			if (likely(handlers->read_ready)) {
-				mm_port_send_blocking(
-					handlers->read_ready,
-					&mm_fd_table[fd].data, 1);
-			}
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+			uint32_t data[2] = { MM_EVENT_IO_READ, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, data, 2);
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
@@ -423,12 +441,9 @@ mm_event_dispatch(void)
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 
-			struct mm_event_io_handler *handlers = &mm_io_table[io];
-			if (likely(handlers->write_ready)) {
-				mm_port_send_blocking(
-					handlers->write_ready,
-					&mm_fd_table[fd].data, 1);
-			}
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+			uint32_t data[2] = { MM_EVENT_IO_WRITE, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, data, 2);
 		}
 	}
 
@@ -503,6 +518,9 @@ mm_event_dispatch(void)
 
 	// The kevent list size.
 	int nkevents = 0;
+
+	// Indicate if there were any events sent before the poll call.
+	bool sent_msgs = false;
 
 	// Pick the delayed change if any.
 	if (mm_event_fd_delayed_is_set) {
@@ -628,7 +646,6 @@ mm_event_dispatch(void)
 			mm_error(mm_kevents[i].data, "error event on fd %d", fd);
 
 		} else if (mm_kevents[i].filter == EVFILT_READ) {
-
 			int fd = mm_kevents[i].ident;
 			DEBUG("read event on fd %d", fd);
 
@@ -639,7 +656,6 @@ mm_event_dispatch(void)
 			uint32_t data[2] = { MM_EVENT_IO_READ, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, data, 2);
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
-
 			int fd = mm_kevents[i].ident;
 			DEBUG("write event on fd %d", fd);
 
