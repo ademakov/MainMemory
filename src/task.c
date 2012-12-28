@@ -77,7 +77,16 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 {
 	ENTER();
 
-	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
+	struct mm_task *task;
+
+	if (!mm_list_empty(&mm_dead_list)) {
+		struct mm_list *head = mm_list_head(&mm_dead_list);
+		task = containerof(head, struct mm_task, queue);
+		mm_list_delete(head);
+	} else {
+		task = mm_pool_alloc(&mm_task_pool);
+	}
+
 	task->name = mm_strdup(name);
 	task->state = MM_TASK_CREATED;
 	task->flags = flags;
@@ -93,10 +102,6 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->stack_base = mm_stack_create(task->stack_size);
 	mm_stack_init(&task->stack_ctx, mm_task_entry,
 		      task->stack_base, task->stack_size);
-
-#if ENABLE_TRACE
-	int trace_level;
-#endif
 
 	LEAVE();
 	return task;
