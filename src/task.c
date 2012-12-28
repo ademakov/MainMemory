@@ -79,27 +79,35 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 
 	struct mm_task *task;
 
-	if (!mm_list_empty(&mm_dead_list)) {
+	if (mm_list_empty(&mm_dead_list)) {
+		// Allocate a new task.
+		task = mm_pool_alloc(&mm_task_pool);
+
+		// Allocate the task stack.
+		task->stack_size = MM_TASK_STACK_SIZE;
+		task->stack_base = mm_stack_create(task->stack_size);
+	} else {
+		// Reuse a finished task along with its stack.
 		struct mm_list *head = mm_list_head(&mm_dead_list);
 		task = containerof(head, struct mm_task, queue);
 		mm_list_delete(head);
-	} else {
-		task = mm_pool_alloc(&mm_task_pool);
 	}
 
+	// Initialize the task info.
 	task->name = mm_strdup(name);
 	task->state = MM_TASK_CREATED;
 	task->flags = flags;
 	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;
+#if ENABLE_TRACE
+	task->trace_level = 0;
+#endif
 
-	// initialize ports
+	// Initialize the task ports list.
 	mm_list_init(&task->ports);
 
-	// initialize stack
-	task->stack_size = MM_TASK_STACK_SIZE;
-	task->stack_base = mm_stack_create(task->stack_size);
+	// Initialize the task stack.
 	mm_stack_init(&task->stack_ctx, mm_task_entry,
 		      task->stack_base, task->stack_size);
 
