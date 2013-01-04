@@ -34,17 +34,27 @@
 #include <stdint.h>
 #include <string.h>
 
+#ifndef __GNUC__
+# error "Only GCC is currently supported."
+#endif
+
 /**********************************************************************
  * Compiler Helpers.
  **********************************************************************/
 
-#ifdef __GNUC__
-# define likely(x)	__builtin_expect(!!(x), 1)
-# define unlikely(x)	__builtin_expect(!!(x), 0)
-#else
-# define likely(x)	(x)
-# define unlikely(x)	(x)
-#endif
+#define likely(x)	__builtin_expect(!!(x), 1)
+#define unlikely(x)	__builtin_expect(!!(x), 0)
+
+/**********************************************************************
+ * Bit Manipulation.
+ **********************************************************************/
+
+/* Count leading zeros (from MSB). Zero argument is not allowed. */
+#define clz(x)		__builtin_clz(x)
+/* Count trailing zeros (from LSB). Zero argument is not allowed. */
+#define ctz(z)		__builtin_ctz(x)
+/* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
+#define ffs(x)		__builtin_ffs(x)
 
 /**********************************************************************
  * Common Macros.
