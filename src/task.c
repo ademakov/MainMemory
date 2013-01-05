@@ -1,7 +1,7 @@
 /*
  * task.c - MainMemory tasks.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -97,6 +97,7 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->name = mm_strdup(name);
 	task->state = MM_TASK_CREATED;
 	task->flags = flags;
+	task->priority = MM_TASK_PRIO_DEFAULT;
 	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;

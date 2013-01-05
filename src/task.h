@@ -1,7 +1,7 @@
 /*
  * task.h - MainMemory tasks.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,18 +33,32 @@
 #define MM_TASK_INVALID		4
 
 /* Task flags. */
-#define MM_TASK_RUNNABLE	1
+#define MM_TASK_CANCELLABLE	1
+#define MM_TASK_CANCELLED	2
+
+/* Task priorities. */
+#define MM_TASK_PRIO_LOWEST	31
+#define MM_TASK_PRIO_DEFAULT	15
+#define MM_TASK_PRIO_HIGHEST	0
 
 typedef void (*mm_routine)(uintptr_t arg);
 
 struct mm_task
 {
-	uint16_t state;
-	uint16_t flags;
-	uint32_t reserved;
-
-	/* A link in a run/wait queue. */
+	/* A link in a run/wait/dead queue. */
 	struct mm_list queue;
+
+	/* The task status. */
+	uint8_t state;
+	uint8_t flags;
+
+	/* Task scheduling priority. */
+	uint8_t priority;
+
+	/* The task stack. */
+	uint32_t stack_size;
+	void *stack_base;
+	mm_stack_ctx_t stack_ctx;
 
 	/* The list of task's ports. */
 	struct mm_list ports;
@@ -55,11 +69,6 @@ struct mm_task
 	/* The task start routine and its argument. */
 	mm_routine start;
 	uintptr_t start_arg;
-
-	/* The task stack. */
-	mm_stack_ctx_t stack_ctx;
-	void *stack_base;
-	uint32_t stack_size;
 
 	/* The task name. */
 	char *name;
