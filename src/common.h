@@ -1,7 +1,7 @@
 /*
  * common.h - MainMemory common definitions.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +52,7 @@
 /* Count leading zeros (from MSB). Zero argument is not allowed. */
 #define clz(x)		__builtin_clz(x)
 /* Count trailing zeros (from LSB). Zero argument is not allowed. */
-#define ctz(z)		__builtin_ctz(x)
+#define ctz(x)		__builtin_ctz(x)
 /* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
 #define ffs(x)		__builtin_ffs(x)
 
