@@ -1,7 +1,7 @@
 /*
  * sched.c - MainMemory task scheduler.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,10 +22,11 @@
 
 #include "arch.h"
 #include "task.h"
+#include "runq.h"
 #include "util.h"
 
 // The list of ready to run tasks.
-static struct mm_list mm_run_queue;
+static struct mm_runq mm_run_queue;
 
 // The original stack pointer.
 static struct mm_task mm_null_task = {
@@ -39,14 +40,10 @@ __thread struct mm_task *mm_running_task = &mm_null_task;
 static struct mm_task *
 mm_sched_pop_task(void)
 {
-	if (unlikely(mm_list_empty(&mm_run_queue))) {
-		return &mm_null_task;
-	} else {
-		struct mm_list *head = mm_list_head(&mm_run_queue);
-		struct mm_task *task = containerof(head, struct mm_task, queue);
-		mm_list_delete(head);
-		return task;
-	}
+	struct mm_task *task = mm_runq_get_task(&mm_run_queue);
+	if (unlikely(task == NULL))
+		task = &mm_null_task;
+	return task;
 }
 
 void
@@ -54,7 +51,7 @@ mm_sched_init(void)
 {
 	ENTER();
 
-	mm_list_init(&mm_run_queue);
+	mm_runq_init(&mm_run_queue);
 
 	LEAVE();
 }
@@ -75,7 +72,7 @@ mm_sched_run(struct mm_task *task)
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
 	if (task->state != MM_TASK_PENDING) {
-		mm_list_append(&mm_run_queue, &task->queue);
+		mm_runq_add_task(&mm_run_queue, task);
 		task->state = MM_TASK_PENDING;
 	}
 
@@ -107,7 +104,7 @@ mm_sched_yield(void)
 	struct mm_task *task = mm_running_task;
 	if (task->state == MM_TASK_RUNNING) {
 		task->state = MM_TASK_PENDING;
-		mm_list_append(&mm_run_queue, &task->queue);
+		mm_runq_add_task(&mm_run_queue, task);
 	}
 
 	mm_running_task = mm_sched_pop_task();
