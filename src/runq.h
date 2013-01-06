@@ -43,8 +43,8 @@ struct mm_runq
 
 void mm_runq_init(struct mm_runq *runq);
 
+void mm_runq_put_task(struct mm_runq *runq, struct mm_task *task);
 struct mm_task *mm_runq_get_task(struct mm_runq *runq);
-void mm_runq_add_task(struct mm_runq *runq, struct mm_task *task);
 void mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task);
 
 #endif /* RUNQ_H */

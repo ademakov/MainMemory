@@ -37,13 +37,12 @@ static struct mm_task mm_null_task = {
 // The currently running task.
 __thread struct mm_task *mm_running_task = &mm_null_task;
 
-static struct mm_task *
-mm_sched_pop_task(void)
+static void
+mm_sched_switch(struct mm_task *old_task, struct mm_task *new_task)
 {
-	struct mm_task *task = mm_runq_get_task(&mm_run_queue);
-	if (unlikely(task == NULL))
-		task = &mm_null_task;
-	return task;
+	mm_running_task = new_task;
+	mm_running_task->state = MM_TASK_RUNNING;
+	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
 }
 
 void
@@ -72,7 +71,7 @@ mm_sched_run(struct mm_task *task)
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
 	if (task->state != MM_TASK_PENDING) {
-		mm_runq_add_task(&mm_run_queue, task);
+		mm_runq_put_task(&mm_run_queue, task);
 		task->state = MM_TASK_PENDING;
 	}
 
@@ -85,12 +84,9 @@ mm_sched_start(void)
 	ENTER();
 	ASSERT(mm_running_task == &mm_null_task);
 
-	mm_running_task = mm_sched_pop_task();
-	if (likely(mm_running_task != &mm_null_task)) {
-		mm_running_task->state = MM_TASK_RUNNING;
-		mm_stack_switch(&mm_null_task.stack_ctx,
-				&mm_running_task->stack_ctx);
-	}
+	struct mm_task *task = mm_runq_get_task(&mm_run_queue);
+	if (likely(task != NULL))
+		mm_sched_switch(&mm_null_task, task);
 
 	LEAVE();
 }
@@ -101,16 +97,16 @@ mm_sched_yield(void)
 	ENTER();
 	ASSERT(mm_running_task != &mm_null_task);
 
-	struct mm_task *task = mm_running_task;
-	if (task->state == MM_TASK_RUNNING) {
-		task->state = MM_TASK_PENDING;
-		mm_runq_add_task(&mm_run_queue, task);
+	if (mm_running_task->state == MM_TASK_RUNNING) {
+		mm_running_task->state = MM_TASK_PENDING;
+		mm_runq_put_task(&mm_run_queue, mm_running_task);
 	}
 
-	mm_running_task = mm_sched_pop_task();
-	mm_running_task->state = MM_TASK_RUNNING;
-	mm_stack_switch(&task->stack_ctx,
-			&mm_running_task->stack_ctx);
+	struct mm_task *task = mm_runq_get_task(&mm_run_queue);
+	if (likely(task != NULL))
+		mm_sched_switch(mm_running_task, task);
+	else
+		mm_sched_switch(mm_running_task, &mm_null_task);
 
 	LEAVE();
 }

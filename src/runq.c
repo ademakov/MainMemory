@@ -33,27 +33,6 @@ mm_runq_init(struct mm_runq *runq)
 	}
 }
 
-void
-mm_runq_add_task(struct mm_runq *runq, struct mm_task *task)
-{
-	int priority = task->priority;
-	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
-
-	runq->bmap |= (1 << priority);
-	mm_list_append(&runq->bins[priority], &task->queue);
-}
-
-void
-mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task)
-{
-	int priority = task->priority;
-	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
-
-	mm_list_delete(&task->queue);
-	if (mm_list_empty(&runq->bins[priority]))
-		runq->bmap &= ~(1 << priority);
-}
-
 struct mm_task *
 mm_runq_get_task(struct mm_runq *runq)
 {
@@ -73,4 +52,25 @@ mm_runq_get_task(struct mm_runq *runq)
 		runq->bmap &= ~(1 << priority);
 
 	return task;
+}
+
+void
+mm_runq_put_task(struct mm_runq *runq, struct mm_task *task)
+{
+	int priority = task->priority;
+	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
+
+	runq->bmap |= (1 << priority);
+	mm_list_append(&runq->bins[priority], &task->queue);
+}
+
+void
+mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task)
+{
+	int priority = task->priority;
+	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
+
+	mm_list_delete(&task->queue);
+	if (mm_list_empty(&runq->bins[priority]))
+		runq->bmap &= ~(1 << priority);
 }
