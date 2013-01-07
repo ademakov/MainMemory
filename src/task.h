@@ -36,13 +36,7 @@
 #define MM_TASK_CANCELLABLE	1
 #define MM_TASK_CANCELLED	2
 
-/* Task priorities. */
-#define MM_TASK_PRIO_LOWEST	31
-#define MM_TASK_PRIO_DEFAULT	15
-#define MM_TASK_PRIO_HIGHEST	0
-
-typedef void (*mm_routine)(uintptr_t arg);
-
+/* A user-space (green) thread. */
 struct mm_task
 {
 	/* A link in a run/wait/dead queue. */

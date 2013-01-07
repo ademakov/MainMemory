@@ -21,6 +21,10 @@
 #ifndef COMMON_H
 #define COMMON_H
 
+#ifndef __GNUC__
+# error "Only GCC is currently supported."
+#endif
+
 /**********************************************************************
  * Common Headers.
  **********************************************************************/
@@ -34,27 +38,12 @@
 #include <stdint.h>
 #include <string.h>
 
-#ifndef __GNUC__
-# error "Only GCC is currently supported."
-#endif
-
 /**********************************************************************
  * Compiler Helpers.
  **********************************************************************/
 
 #define likely(x)	__builtin_expect(!!(x), 1)
 #define unlikely(x)	__builtin_expect(!!(x), 0)
-
-/**********************************************************************
- * Bit Manipulation.
- **********************************************************************/
-
-/* Count leading zeros (from MSB). Zero argument is not allowed. */
-#define clz(x)		__builtin_clz(x)
-/* Count trailing zeros (from LSB). Zero argument is not allowed. */
-#define ctz(x)		__builtin_ctz(x)
-/* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
-#define ffs(x)		__builtin_ffs(x)
 
 /**********************************************************************
  * Common Macros.
@@ -74,5 +63,17 @@
 
 #define containerof(field_ptr, type, field) \
 	((type *) ((char *)(field_ptr) - offsetof(type, field)))
+
+/**********************************************************************
+ * Basic Definitions.
+ **********************************************************************/
+
+/* Task priorities. */
+#define MM_PRIO_LOWEST		31
+#define MM_PRIO_DEFAULT		15
+#define MM_PRIO_HIGHEST		0
+
+/* Task execution routine. */
+typedef void (*mm_routine)(uintptr_t arg);
 
 #endif /* COMMON_H */

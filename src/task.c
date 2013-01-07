@@ -97,7 +97,7 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->name = mm_strdup(name);
 	task->state = MM_TASK_CREATED;
 	task->flags = flags;
-	task->priority = MM_TASK_PRIO_DEFAULT;
+	task->priority = MM_PRIO_DEFAULT;
 	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;

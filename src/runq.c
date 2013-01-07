@@ -19,6 +19,7 @@
  */
 
 #include "runq.h"
+#include "bits.h"
 #include "util.h"
 #include "task.h"
 
@@ -43,7 +44,7 @@ mm_runq_get_task(struct mm_runq *runq)
 
 	struct mm_task *task = NULL;
 	if (likely(runq->bmap)) {
-		int priority = ctz(runq->bmap);
+		int priority = mm_ctz(runq->bmap);
 		ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 		ASSERT(!mm_list_empty(&runq->bins[priority]));
 

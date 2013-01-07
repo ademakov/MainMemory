@@ -1,5 +1,5 @@
 /*
- * work.h - MainMemory work queue.
+ * bits.h - Bit manipulation.
  *
  * Copyright (C) 2013  Aleksey Demakov
  *
@@ -18,32 +18,16 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef WORK_H
-#define WORK_H
+#ifndef BITS_H
+#define BITS_H
 
-#include "common.h"
-#include "list.h"
+/* Count leading zeros (from MSB). Zero argument is not allowed. */
+#define mm_clz(x)	__builtin_clz(x)
 
-/* A batch of work. */
-struct mm_work
-{
-	/* A link in the work queue. */
-	struct mm_list queue;
-	/* The work routine. */
-	mm_routine routine;
-	/* Work items count. */
-	uint32_t count;
-	/* Work items array. */
-	uintptr_t items[];
-};
+/* Count trailing zeros (from LSB). Zero argument is not allowed. */
+#define mm_ctz(x)	__builtin_ctz(x)
 
-void mm_work_init(void);
-void mm_work_term(void);
+/* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
+#define mm_ffs(x)	__builtin_ffs(x)
 
-struct mm_work * mm_work_create(mm_routine routine, uint32_t count);
-void mm_work_destroy(struct mm_work *work);
-
-struct mm_work * mm_work_get(void);
-void mm_work_put(struct mm_work *work);
-
-#endif /* WORK_H */
+#endif /* BITS_H */
