@@ -163,11 +163,10 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 	}
 
 	while (!mm_list_empty(&port->blocked_senders)) {
-		struct mm_list *head = mm_list_head(&port->blocked_senders);
-		mm_list_delete(head);
-
-		struct mm_task *task = containerof(head, struct mm_task, queue);
+		struct mm_list *link = mm_list_head(&port->blocked_senders);
+		struct mm_task *task = containerof(link, struct mm_task, queue);
 		ASSERT(task->state == MM_TASK_BLOCKED && task->blocked_on == port);
+		mm_list_delete(link);
 		mm_sched_run(task);
 	}
 

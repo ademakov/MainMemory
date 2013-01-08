@@ -105,9 +105,9 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 		task->stack_base = mm_stack_create(task->stack_size);
 	} else {
 		// Reuse a finished task along with its stack.
-		struct mm_list *head = mm_list_head(&mm_dead_list);
-		task = containerof(head, struct mm_task, queue);
-		mm_list_delete(head);
+		struct mm_list *link = mm_list_head(&mm_dead_list);
+		task = containerof(link, struct mm_task, queue);
+		mm_list_delete(link);
 	}
 
 	// Set the task name.
