@@ -64,6 +64,9 @@ struct mm_task
 	mm_routine start;
 	uintptr_t start_arg;
 
+	/* The list of task-local dynamically-allocated memory. */
+	struct mm_list chunks;
+
 	/* The task name. */
 	char *name;
 
@@ -79,10 +82,18 @@ struct mm_task * mm_task_create(const char *name, uint16_t flags,
 				mm_routine start, uintptr_t start_arg)
 	__attribute__((nonnull(1, 3)));
 
+void mm_task_set_name(struct mm_task *task, const char *name)
+	__attribute__((nonnull(1, 2)));
+
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
 void mm_task_exit(int status)
 	__attribute__((noreturn));
+
+void * mm_task_alloc(size_t size)
+	__attribute__((malloc));
+
+void mm_task_free(void *ptr);
 
 #endif /* TASK_H */
