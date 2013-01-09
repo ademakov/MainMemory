@@ -1,42 +1,41 @@
 
 ASAP:
-* ensure correct client and server object destruction
-* resolve socket close issues: time wait, event loop coordination
-* take care of dead tasks
+* pool of worker tasks serving the work queue
+* crude memcache module
 * add timers and task sleep
 * support signals
-* net I/O routines (read,write,readv,writev)
+* ensure correct client and server object destruction
+** ensure destroyed client objects are not accessed anymore
+* resolve port destruction issues (refcount? capabilities?)
+* ensure I/O spawn flag is not enabled spuriously
 
 Essentials:
-* better scheduler (with task priorities)
+* resolve socket close issues: time wait
 * UDP servers
 * SSL servers
 * fs notifications
 * add task cleanup handlers
 * add task local storage (tls)
 * add task cancel and kill
-* resolve port destruction issues (refcount? capabilities?)
-* memory management:
-** region allocator
-** add task local memory alloc & free
-* worker threads
+* region allocator
+* worker threads, multithreaded task & work schedulers
 * system call threads
 * disk I/O threads
 * syslog
 * daemonize
 * statistics
 * performance instrumentation
+* refined memcache module
+* HTTP module
 
 Enhancements:
 * configuration file parsing
 * command line argument parsing
+* reap dead tasks pending for too long
 * memory management:
+** use separate mspace for task local dynamic memory ?
 ** slab allocator (to base object pools on)
 ** buddy allocator (for I/O buffers and slabs)
 ** garbage collection
 * failure trace records
 * arm port
-
-Sample modules:
-* memcached
-* HTTP
