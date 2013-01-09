@@ -1,7 +1,7 @@
 /*
  * net.h - MainMemory networking.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include "common.h"
 #include "event.h"
 #include "list.h"
+#include "util.h"
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -31,8 +32,10 @@
 #include <sys/uio.h>
 #include <sys/un.h>
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mm_port;
+struct mm_task;
+
 
 /* Socket address. */
 struct mm_net_addr
@@ -84,11 +87,14 @@ struct mm_net_server
 };
 
 /* Socket flags. */
-#define MM_NET_READ_READY	0x01
-#define MM_NET_WRITE_READY	0x02
-#define MM_NET_READ_QUEUE	0x04
-#define MM_NET_WRITE_QUEUE	0x08
-#define MM_NET_CLOSED		0x10
+#define MM_NET_CLOSED		0x0001
+#define MM_NET_NONBLOCK		0x0002
+#define MM_NET_READ_SPAWN	0x0004
+#define MM_NET_WRITE_SPAWN	0x0008
+#define MM_NET_READ_READY	0x0010
+#define MM_NET_WRITE_READY	0x0020
+#define MM_NET_READ_QUEUE	0x0040
+#define MM_NET_WRITE_QUEUE	0x0080
 
 /* Network client socket data. */
 struct mm_net_socket
@@ -98,6 +104,10 @@ struct mm_net_socket
 	/* Socket flags. */
 	int flags;
 
+	/* Tasks pending on the socket I/O. */
+	struct mm_task *reader;
+	struct mm_task *writer;
+
 	/* Protocol data. */
 	intptr_t proto_data;
 
@@ -106,7 +116,6 @@ struct mm_net_socket
 
 	/* A link in the server's list of all client sockets. */
 	struct mm_list clients;
-
 	/* A link in the list of read ready sockets. */
 	struct mm_list read_queue;
 	/* A link in the list of write ready sockets. */
@@ -122,8 +131,8 @@ struct mm_net_proto
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
 
-	void (*read_ready)(struct mm_net_socket *sock);
-	void (*write_ready)(struct mm_net_socket *sock);
+	void (*reader_routine)(struct mm_net_socket *sock);
+	void (*writer_routine)(struct mm_net_socket *sock);
 };
 
 void mm_net_init(void);
@@ -141,6 +150,56 @@ void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 void mm_net_stop_server(struct mm_net_server *srv)
 	__attribute__((nonnull(1)));
 
-void mm_net_close(struct mm_net_socket *sp);
+ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
+ssize_t mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes);
+
+ssize_t mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
+ssize_t mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
+
+void mm_net_close(struct mm_net_socket *sock);
+
+static inline void
+mm_net_set_nonblock(struct mm_net_socket *sock)
+{
+	sock->flags |= MM_NET_NONBLOCK;
+}
+
+static inline void
+mm_net_clear_nonblock(struct mm_net_socket *sock)
+{
+	sock->flags &= ~MM_NET_NONBLOCK;
+}
+
+static inline void
+mm_net_enable_read_spawn(struct mm_net_socket *sock)
+{
+	ASSERT(sock->srv != NULL && sock->srv->proto->reader_routine != NULL);
+	sock->flags |= MM_NET_READ_SPAWN;
+}
+
+static inline void
+mm_net_disable_read_spawn(struct mm_net_socket *sock)
+{
+	sock->flags &= ~MM_NET_READ_SPAWN;
+}
+
+static inline void
+mm_net_enable_write_spawn(struct mm_net_socket *sock)
+{
+	ASSERT(sock->srv != NULL && sock->srv->proto->writer_routine != NULL);
+	sock->flags |= MM_NET_WRITE_SPAWN;
+}
+
+static inline void
+mm_net_disable_write_spawn(struct mm_net_socket *sock)
+{
+	sock->flags &= ~MM_NET_WRITE_SPAWN;
+}
+
+static inline bool
+mm_net_is_closed(struct mm_net_socket *sock)
+{
+	return (sock->flags & MM_NET_CLOSED) != 0;
+}
 
 #endif /* NET_H */

@@ -1,7 +1,7 @@
 /*
  * net.c - MainMemory networking.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -299,13 +299,24 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 {
 	ENTER();
 
+	// Allocate the socket.
 	struct mm_net_socket *sock = mm_pool_alloc(&mm_socket_pool);
 
+	// Initialize the fields.
 	sock->fd = fd;
-	sock->flags = 0;
 	sock->proto_data = 0;
+	sock->reader = NULL;
+	sock->writer = NULL;
 	sock->srv = srv;
 
+	// Set the socket flags.
+	sock->flags = 0;
+	if (srv->proto->reader_routine != NULL)
+		sock->flags |= MM_NET_READ_SPAWN;
+	if (srv->proto->writer_routine != NULL)
+		sock->flags |= MM_NET_WRITE_SPAWN;
+
+	// Register with the server.
 	mm_list_append(&srv->clients, &sock->clients);
 
 	LEAVE();
@@ -321,6 +332,64 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
 	mm_pool_free(&mm_socket_pool, sock);
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Socket I/O tasks.
+ **********************************************************************/
+
+static void
+mm_net_attach_reader(struct mm_net_socket *sock)
+{
+	ASSERT(sock->reader == NULL);
+	sock->reader = mm_running_task;
+}
+
+static void
+mm_net_detach_reader(struct mm_net_socket *sock)
+{
+	ASSERT(sock->reader == mm_running_task);
+	sock->reader = NULL;
+}
+
+static void
+mm_net_attach_writer(struct mm_net_socket *sock)
+{
+	ASSERT(sock->writer == NULL);
+	sock->writer = mm_running_task;
+}
+
+static void
+mm_net_detach_writer(struct mm_net_socket *sock)
+{
+	ASSERT(sock->writer == mm_running_task);
+	sock->writer = NULL;
+}
+
+static void
+mm_net_reader(uintptr_t arg)
+{
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+
+	// Run the protocol handler routine.
+	(sock->srv->proto->reader_routine)(sock);
+
+	// Release the socket.
+	// TODO: check if it is still owned.
+	mm_net_enable_read_spawn(sock);
+}
+
+static void
+mm_net_writer(uintptr_t arg)
+{
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+
+	// Run the protocol handler routine.
+	(sock->srv->proto->writer_routine)(sock);
+
+	// Release the socket.
+	// TODO: check if it is still owned.
+	mm_net_enable_write_spawn(sock);
 }
 
 /**********************************************************************
@@ -345,9 +414,9 @@ static mm_event_handler_t mm_net_io_handler;
 // The list of servers ready to accept connections.
 static struct mm_list mm_accept_queue;
 // The list of read ready sockets.
-static struct mm_list mm_read_ready_queue;
+static struct mm_list mm_read_queue;
 // The list of write ready sockets.
-static struct mm_list mm_write_ready_queue;
+static struct mm_list mm_write_queue;
 
 static void
 mm_net_add_accept_ready(uint32_t index)
@@ -370,9 +439,16 @@ mm_net_set_read_ready(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (likely((sock->flags & MM_NET_READ_QUEUE) == 0))
-		mm_list_append(&mm_read_ready_queue, &sock->read_queue);
-	sock->flags |= (MM_NET_READ_READY | MM_NET_READ_QUEUE);
+	if (sock->reader != NULL) {
+		sock->flags |= MM_NET_READ_READY;
+		mm_sched_run(sock->reader);
+	} else if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
+		if (likely((sock->flags & MM_NET_READ_QUEUE) == 0))
+			mm_list_append(&mm_read_queue, &sock->read_queue);
+		sock->flags |= (MM_NET_READ_READY | MM_NET_READ_QUEUE);
+	} else {
+		sock->flags |= MM_NET_READ_READY;
+	}
 
 	LEAVE();
 }
@@ -382,7 +458,7 @@ mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (likely((sock->flags & MM_NET_READ_QUEUE) != 0))
+	if ((sock->flags & MM_NET_READ_QUEUE) != 0)
 		mm_list_delete(&sock->read_queue);
 	sock->flags &= ~(MM_NET_READ_READY | MM_NET_READ_QUEUE);
 
@@ -394,9 +470,16 @@ mm_net_set_write_ready(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (likely((sock->flags & MM_NET_WRITE_QUEUE) == 0))
-		mm_list_append(&mm_write_ready_queue, &sock->write_queue);
-	sock->flags |= (MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
+	if (sock->writer != NULL) {
+		sock->flags |= MM_NET_WRITE_READY;
+		mm_sched_run(sock->writer);
+	} else if (sock->srv->proto->writer_routine != NULL) {
+		if (likely((sock->flags & MM_NET_WRITE_QUEUE) == 0))
+			mm_list_append(&mm_write_queue, &sock->write_queue);
+		sock->flags |= (MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
+	} else {
+		sock->flags |= MM_NET_WRITE_READY;
+	}
 
 	LEAVE();
 }
@@ -406,58 +489,9 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (likely((sock->flags & MM_NET_WRITE_QUEUE) != 0))
+	if ((sock->flags & MM_NET_WRITE_QUEUE) != 0)
 		mm_list_delete(&sock->write_queue);
 	sock->flags &= ~(MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
-
-	LEAVE();
-}
-
-
-static void
-mm_net_add_read_write_ready(uint32_t event, uint32_t index)
-{
-	ENTER();
-
-	// Find the pertinent socket.
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, index);
-
-	switch (event) {
-	case MM_EVENT_IO_READ:
-		// Mark the socket as read ready.
-		if ((sock->flags & MM_NET_CLOSED) == 0)
-			mm_net_set_read_ready(sock);
-		break;
-
-	case MM_EVENT_IO_WRITE:
-		// Mark the socket as write ready.
-		if ((sock->flags & MM_NET_CLOSED) == 0)
-			mm_net_set_write_ready(sock);
-		break;
-
-	case MM_EVENT_IO_REG:
-		// Let the protocol layer prepare the socket data.
-		if (sock->srv->proto->prepare != NULL)
-			(sock->srv->proto->prepare)(sock);
-		break;
-
-	case MM_EVENT_IO_UNREG:
-		// Let the protocol layer cleanup the socket data.
-		if (sock->srv->proto->cleanup != NULL)
-			(sock->srv->proto->cleanup)(sock);
-
-		// Close the socket.
-		// TODO: set linger off and/or close concurrently to avoid stalls.
-		close(sock->fd);
-
-		// Remove the socket from the server lists.
-		mm_net_destroy_socket(sock);
-		break;
-
-	default:
-		mm_print("%x %x", event, index);
-		ABORT();
-	}
 
 	LEAVE();
 }
@@ -540,11 +574,11 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 		if (!mm_list_empty(&mm_accept_queue)) {
 
 			// Get the pertinent server.
-			struct mm_list *head = mm_list_head(&mm_accept_queue);
-			struct mm_net_server *srv = containerof(head, struct mm_net_server, accept_queue);
+			struct mm_list *link = mm_list_head(&mm_accept_queue);
+			struct mm_net_server *srv = containerof(link, struct mm_net_server, accept_queue);
 
 			// Move the last server to the queue tail.
-			mm_list_delete(&srv->accept_queue);
+			mm_list_delete(link);
 			mm_list_append(&mm_accept_queue, &srv->accept_queue);
 
 			// Accept a single connection on it.
@@ -576,6 +610,56 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 }
 
 static void
+mm_net_add_read_write_ready(uint32_t event, uint32_t index)
+{
+	ENTER();
+
+	// Find the pertinent socket.
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, index);
+
+	switch (event) {
+	case MM_EVENT_IO_READ:
+		// Mark the socket as read ready.
+		if ((sock->flags & MM_NET_CLOSED) == 0)
+			mm_net_set_read_ready(sock);
+		break;
+
+	case MM_EVENT_IO_WRITE:
+		// Mark the socket as write ready.
+		if ((sock->flags & MM_NET_CLOSED) == 0)
+			mm_net_set_write_ready(sock);
+		break;
+
+	case MM_EVENT_IO_REG:
+		// Let the protocol layer prepare the socket data.
+		if (sock->srv->proto->prepare != NULL)
+			(sock->srv->proto->prepare)(sock);
+		break;
+
+	case MM_EVENT_IO_UNREG:
+		ASSERT((sock->flags & MM_NET_CLOSED) != 0);
+
+		// Let the protocol layer cleanup the socket data.
+		if (sock->srv->proto->cleanup != NULL)
+			(sock->srv->proto->cleanup)(sock);
+
+		// Close the socket.
+		// TODO: set linger off and/or close concurrently to avoid stalls.
+		close(sock->fd);
+
+		// Remove the socket from the server lists.
+		mm_net_destroy_socket(sock);
+		break;
+
+	default:
+		mm_print("%x %x", event, index);
+		ABORT();
+	}
+
+	LEAVE();
+}
+
+static void
 mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 {
 	ENTER();
@@ -586,39 +670,55 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 		bool no_events = true;
 
 		// Handle a read event.
-		if (!mm_list_empty(&mm_read_ready_queue)) {
+		if (!mm_list_empty(&mm_read_queue)) {
 
 			// Get the pertinent socket.
-			struct mm_list *head = mm_list_head(&mm_read_ready_queue);
-			struct mm_net_socket *sock = containerof(head, struct mm_net_socket, read_queue);
+			struct mm_list *link = mm_list_head(&mm_read_queue);
+			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, read_queue);
 
-			// Move the socket to the queue tail.
-			mm_list_delete(&sock->read_queue);
-			mm_list_append(&mm_read_ready_queue, &sock->read_queue);
+			// Remove it from the queue.
+			mm_list_delete(link);
+			sock->flags &= ~MM_NET_READ_QUEUE;
 
-			// Handle read at the protocol layer.
-			(sock->srv->proto->read_ready)(sock);
+			if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
+				// Create a new task that will execute
+				// the protocol read routine.
+				struct mm_task *task = mm_task_create(
+					"worker", 0, mm_net_reader, (intptr_t) sock);
+				mm_sched_run(task);
 
-			++io_count;
-			no_events = false;
+				// Disable new tasks until this one is done.
+				mm_net_disable_read_spawn(sock);
+
+				++io_count;
+				no_events = false;
+			}
 		}
 
 		// Handle a write event.
-		if (!mm_list_empty(&mm_write_ready_queue)) {
+		if (!mm_list_empty(&mm_write_queue)) {
 
 			// Get the pertinent socket.
-			struct mm_list *head = mm_list_head(&mm_write_ready_queue);
-			struct mm_net_socket *sock = containerof(head, struct mm_net_socket, write_queue);
+			struct mm_list *link = mm_list_head(&mm_write_queue);
+			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, write_queue);
 
-			// Move the last socket to the queue tail.
-			mm_list_delete(&sock->write_queue);
-			mm_list_append(&mm_write_ready_queue, &sock->write_queue);
+			// Remove it from the queue.
+			mm_list_delete(link);
+			sock->flags &= ~MM_NET_WRITE_QUEUE;
 
-			// Handle write at the protocol layer.
-			(sock->srv->proto->write_ready)(sock);
+			if ((sock->flags & MM_NET_WRITE_SPAWN) != 0) {
+				// Create a new task that will execute
+				// the protocol write routine.
+				struct mm_task *task = mm_task_create(
+					"worker", 0, mm_net_writer, (intptr_t) sock);
+				mm_sched_run(task);
 
-			++io_count;
-			no_events = false;
+				// Disable new tasks until this one is done.
+				mm_net_disable_write_spawn(sock);
+
+				++io_count;
+				no_events = false;
+			}
 		}
 
 		if (no_events) {
@@ -653,12 +753,16 @@ mm_net_init_tasks(void)
 
 	// Initialize I/O queues.
 	mm_list_init(&mm_accept_queue);
-	mm_list_init(&mm_read_ready_queue);
-	mm_list_init(&mm_write_ready_queue);
+	mm_list_init(&mm_read_queue);
+	mm_list_init(&mm_write_queue);
 
 	// Create I/O tasks.
-	mm_net_accept_task = mm_task_create( "net-accept", 0, mm_net_accept_loop, 0);
-	mm_net_io_task = mm_task_create( "net-io", 0, mm_net_io_loop, 0);
+	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
+	mm_net_io_task = mm_task_create("net-io", 0, mm_net_io_loop, 0);
+
+	// Make I/O task priority higher.
+	mm_net_accept_task->priority /= 2;
+	mm_net_io_task->priority /= 2;
 
 	// Create I/O task ports.
 	mm_net_accept_port = mm_port_create(mm_net_accept_task);
@@ -837,10 +941,32 @@ ssize_t
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
-
 	ssize_t n;
 
+	// Register the current task as reader.
+	mm_net_attach_reader(sock);
+
 retry:
+	// Check to see if the socket is closed.
+	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+		n = -1;
+		errno = EBADF;
+		goto done;
+	}
+	// Check to see if the socket is ready for reading.
+	if ((sock->flags & MM_NET_READ_READY) == 0) {
+		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
+			// Block waiting to become read ready.
+			mm_sched_block();
+			goto retry;
+		}
+
+		n = -1;
+		errno = EAGAIN;
+		goto done;
+	}
+
+	// Try to read (nonblocking).
 	n = read(sock->fd, buffer, nbytes);
 	if (n > 0) {
 		if (n < nbytes) {
@@ -851,10 +977,20 @@ retry:
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			mm_net_reset_read_ready(sock);
+			goto retry;
 		} else {
-			mm_error(errno, "read()");
+			int saved_errno = errno;
+			if (errno != EINVAL && errno != EFAULT)
+				mm_net_close(sock);
+			mm_error(saved_errno, "read()");
 		}
+	} else {
+		mm_net_close(sock);
 	}
+
+done:
+	// Unregister the current task as reader.
+	mm_net_detach_reader(sock);
 
 	LEAVE();
 	return n;
@@ -864,10 +1000,31 @@ ssize_t
 mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
-
 	ssize_t n;
 
+	// Register the current task as writer.
+	mm_net_attach_writer(sock);
+
 retry:
+	// Check to see if the socket is closed.
+	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+		n = -1;
+		errno = EBADF;
+		goto done;
+	}
+	// Check to see if the socket is ready for writing.
+	if ((sock->flags & MM_NET_WRITE_READY) == 0) {
+		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
+			// Block waiting to become write ready.
+			mm_sched_block();
+			goto retry;
+		}
+		n = -1;
+		errno = EAGAIN;
+		goto done;
+	}
+
+	// Try to write (nonblocking).
 	n = write(sock->fd, buffer, nbytes);
 	if (n > 0) {
 		if (n < nbytes) {
@@ -878,10 +1035,141 @@ retry:
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
 			mm_net_reset_write_ready(sock);
+			goto retry;
 		} else {
-			mm_error(errno, "write()");
+			int saved_errno = errno;
+			if (errno != EINVAL && errno != EFAULT)
+				mm_net_close(sock);
+			mm_error(saved_errno, "write()");
 		}
 	}
+
+done:
+	// Unregister the current task as writer.
+	mm_net_detach_writer(sock);
+
+	LEAVE();
+	return n;
+}
+
+ssize_t
+mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
+{
+	ENTER();
+	ssize_t n;
+
+	// Register the current task as reader.
+	mm_net_attach_reader(sock);
+
+retry:
+	// Check to see if the socket is closed.
+	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+		n = -1;
+		errno = EBADF;
+		goto done;
+	}
+	// Check to see if the socket is ready for reading.
+	if ((sock->flags & MM_NET_READ_READY) == 0) {
+		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
+			// Block waiting to become read ready.
+			mm_sched_block();
+			goto retry;
+		}
+
+		n = -1;
+		errno = EAGAIN;
+		goto done;
+	}
+
+	// Try to read (nonblocking).
+	n = readv(sock->fd, iov, iovcnt);
+	if (n > 0) {
+		// FIXME: count nbytes in iov or do nothing here and let
+		// the next call to hit EAGAIN.
+#if 0
+		if (n < nbytes) {
+			mm_net_reset_read_ready(sock);
+		}
+#endif
+	} else if (n < 0) {
+		if (errno == EINTR) {
+			goto retry;
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			mm_net_reset_read_ready(sock);
+			goto retry;
+		} else {
+			int saved_errno = errno;
+			if (errno != EINVAL && errno != EFAULT)
+				mm_net_close(sock);
+			mm_error(saved_errno, "readv()");
+		}
+	} else {
+		mm_net_close(sock);
+	}
+
+done:
+	// Unregister the current task as reader.
+	mm_net_detach_reader(sock);
+
+	LEAVE();
+	return n;
+}
+
+ssize_t
+mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
+{
+	ENTER();
+	ssize_t n;
+
+	// Register the current task as writer.
+	mm_net_attach_writer(sock);
+
+retry:
+	// Check to see if the socket is closed.
+	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+		n = -1;
+		errno = EBADF;
+		goto done;
+	}
+	// Check to see if the socket is ready for writing.
+	if ((sock->flags & MM_NET_WRITE_READY) == 0) {
+		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
+			// Block waiting to become write ready.
+			mm_sched_block();
+			goto retry;
+		}
+		n = -1;
+		errno = EAGAIN;
+		goto done;
+	}
+
+	// Try to write (nonblocking).
+	n = writev(sock->fd, iov, iovcnt);
+	if (n > 0) {
+		// FIXME: count nbytes in iov or do nothing here and let
+		// the next call to hit EAGAIN.
+#if 0
+		if (n < nbytes) {
+			mm_net_reset_write_ready(sock);
+		}
+#endif
+	} else if (n < 0) {
+		if (errno == EINTR) {
+			goto retry;
+		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+			mm_net_reset_write_ready(sock);
+			goto retry;
+		} else {
+			int saved_errno = errno;
+			if (errno != EINVAL && errno != EFAULT)
+				mm_net_close(sock);
+			mm_error(saved_errno, "writev()");
+		}
+	}
+
+done:
+	// Unregister the current task as writer.
+	mm_net_detach_writer(sock);
 
 	LEAVE();
 	return n;
@@ -891,6 +1179,9 @@ void
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
+
+	if ((sock->flags & MM_NET_CLOSED) != 0)
+		goto done;
 
 	// Remove the socket from I/O queues and mark as closed.
 	if ((sock->flags & MM_NET_READ_QUEUE) != 0)
@@ -902,5 +1193,6 @@ mm_net_close(struct mm_net_socket *sock)
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(sock->fd);
 
+done:
 	LEAVE();
 }

@@ -24,6 +24,7 @@
 #include "port.h"
 #include "sched.h"
 #include "task.h"
+#include "work.h"
 #include "util.h"
 
 #include "memcache/memcache.h"
@@ -73,40 +74,13 @@ mm_signal_init(void)
 }
 
 static void
-mm_read_ready(struct mm_net_socket *cli)
-{
-	ENTER();
-
-	char buf[1026];
-	int n = read(cli->fd, buf, sizeof(buf));
-	if (n <= 0) {
-		if (n < 0)
-			mm_error(errno, "read()");
-		mm_net_close(cli);
-	}
-
-	LEAVE();
-}
-
-static void
-mm_write_ready(struct mm_net_socket *cli)
-{
-	ENTER();
-
-	write(cli->fd, "test\n", 5);
-
-	mm_net_close(cli);
-
-	LEAVE();
-}
-
-static void
 mm_init(void)
 {
 	ENTER();
 
 	/* Initialize subsystems. */
 	mm_signal_init();
+	mm_work_init();
 	mm_task_init();
 	mm_port_init();
 	mm_sched_init();
@@ -126,7 +100,27 @@ mm_term(void)
 	mm_event_term();
 	mm_sched_term();
 	mm_task_term();
+	mm_work_term();
 	mm_port_term();
+
+	LEAVE();
+}
+
+static void
+mm_cmd_process(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	char buf[1026];
+	int n = mm_net_read(sock, buf, sizeof(buf));
+	if (n <= 0) {
+		if (n < 0)
+			mm_error(errno, "read()");
+		mm_net_close(sock);
+	}
+
+	mm_net_write(sock, "test\n", 5);
+	mm_net_close(sock);
 
 	LEAVE();
 }
@@ -138,9 +132,9 @@ mm_server_open(void)
 
 	static struct mm_net_proto proto = {
 		.prepare = NULL,
-		.read_ready = mm_read_ready,
-		.write_ready = mm_write_ready,
 		.cleanup = NULL,
+		.reader_routine = mm_cmd_process,
+		.writer_routine = NULL,
 	};
 
 	mm_ucmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
