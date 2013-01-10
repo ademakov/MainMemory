@@ -38,5 +38,6 @@ void mm_sched_start(void);
 
 void mm_sched_yield(void);
 void mm_sched_block(void);
+void mm_sched_abort(void) __attribute__((noreturn));
 
 #endif /* SCHED_H */

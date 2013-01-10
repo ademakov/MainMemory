@@ -29,39 +29,15 @@
 
 #define MM_TASK_STACK_SIZE (28 * 1024)
 
-// The memory pool for tasks.
+/* The memory pool for tasks. */
 static struct mm_pool mm_task_pool;
 
-// The list of tasks that were finished.
+/* The list of tasks that were finished. */
 static struct mm_list mm_dead_list;
 
-// Entry point for a task.
-static void
-mm_task_entry(void)
-{
-	TRACE("enter task %s", mm_running_task->name);
-
-	// Execute the task using a fresh stack.
-	(mm_running_task)->start(mm_running_task->start_arg);
-
-	// Make sure that there is no return from this call
-	// as there is no valid stack frame after it.
-	mm_task_exit(0);
-}
-
-static void
-mm_task_free_chunks(struct mm_task *task)
-{
-	ENTER();
-
-	while (!mm_list_empty(&task->chunks)) {
-		struct mm_list *link = mm_list_head(&task->chunks);
-		mm_list_delete(link);
-		mm_free(link);
-	}
-
-	LEAVE();
-}
+/**********************************************************************
+ * Global task data initialization and termination.
+ **********************************************************************/
 
 void
 mm_task_init(void)
@@ -86,6 +62,40 @@ mm_task_term(void)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Task creation and destruction.
+ **********************************************************************/
+
+/* Entry point for a task. */
+static void
+mm_task_entry(void)
+{
+	TRACE("enter task %s", mm_running_task->name);
+
+	/* Execute the task using a fresh stack. */
+	(mm_running_task)->start(mm_running_task->start_arg);
+
+	/* Make sure that there is no return from this call as there is no
+	 * valid stack frame after it. */
+	mm_task_exit(0);
+}
+
+/* Free task-local dynamic memory. */
+static void
+mm_task_free_chunks(struct mm_task *task)
+{
+	ENTER();
+
+	while (!mm_list_empty(&task->chunks)) {
+		struct mm_list *link = mm_list_head(&task->chunks);
+		mm_list_delete(link);
+		mm_free(link);
+	}
+
+	LEAVE();
+}
+
+/* Create a new task. */
 struct mm_task *
 mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t start_arg)
 {
@@ -94,26 +104,26 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	struct mm_task *task;
 
 	if (mm_list_empty(&mm_dead_list)) {
-		// Allocate a new task.
+		/* Allocate a new task. */
 		task = mm_pool_alloc(&mm_task_pool);
 
-		// Initialize the task name.
+		/* Initialize the task name. */
 		task->name = NULL;
 
-		// Allocate the task stack.
+		/* Allocate the task stack. */
 		task->stack_size = MM_TASK_STACK_SIZE;
 		task->stack_base = mm_stack_create(task->stack_size);
 	} else {
-		// Reuse a finished task along with its stack.
+		/* Reuse a dead task. */
 		struct mm_list *link = mm_list_head(&mm_dead_list);
 		task = containerof(link, struct mm_task, queue);
 		mm_list_delete(link);
 	}
 
-	// Set the task name.
+	/* Set the task name. */
 	mm_task_set_name(task, name);
 
-	// Initialize the task info.
+	/* Initialize the task info. */
 	task->state = MM_TASK_CREATED;
 	task->flags = flags;
 	task->priority = MM_PRIO_DEFAULT;
@@ -124,13 +134,13 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->trace_level = 0;
 #endif
 
-	// Initialize the task ports list.
+	/* Initialize the task ports list. */
 	mm_list_init(&task->ports);
 
-	// Initialize the dynamic memory list.
+	/* Initialize the dynamic memory list. */
 	mm_list_init(&task->chunks);
 
-	// Initialize the task stack.
+	/* Initialize the task stack. */
 	mm_stack_init(&task->stack_ctx, mm_task_entry,
 		      task->stack_base, task->stack_size);
 
@@ -138,13 +148,15 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	return task;
 }
 
+/* Destroy a task. The task should not run at the moment and it
+ * should be absolutely guaranteed from being used afterwards. */
 void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-	//ASSERT(task->state == MM_TASK_INVALID);
+	ASSERT(task->state != MM_TASK_RUNNING);
 
-	// Destroy the ports.
+	/* Destroy the ports. */
 	while (!mm_list_empty(&task->ports)) {
 		// TODO: ensure that ports are not referenced from elsewhere.
 		struct mm_list *link = mm_list_head(&task->ports);
@@ -152,40 +164,52 @@ mm_task_destroy(struct mm_task *task)
 		mm_port_destroy(port);
 	}
 
-	// Free the dynamic memory.
+	/* Free the dynamic memory. */
 	mm_task_free_chunks(task);
 	mm_free(task->name);
 
-	// Free the stack.
+	/* Free the stack. */
 	mm_stack_destroy(task->stack_base, MM_TASK_STACK_SIZE);
 
-	// At last free the task struct.
+	/* At last free the task struct. */
 	mm_pool_free(&mm_task_pool, task);
 
 	LEAVE();
 }
 
+/* Let the task to be either reused or destroyed. The task may still run
+ * at the moment but it should be guaranteed that it is not going to be
+ * used after it yields. That is it should not be referenced in any queue. */
+void
+mm_task_recycle(struct mm_task *task)
+{
+	ENTER();
+	ASSERT(task->state != MM_TASK_PENDING);
+
+	mm_list_append(&mm_dead_list, &task->queue);
+
+	LEAVE();
+}
+
+/* Finish the current task. */
 void
 mm_task_exit(int status)
 {
+	ENTER();
 	TRACE("exiting task '%s' with status %d", mm_running_task->name, status);
 
 	// TODO: invalidate ports ?
 
-	// Free the dynamic memory.
+	/* Free the dynamic memory. */
 	mm_task_free_chunks(mm_running_task);
 
-	// Be done with the task.
-	mm_running_task->state = MM_TASK_INVALID;
-	mm_list_append(&mm_dead_list, &mm_running_task->queue);
+	/* Give the control to still running tasks. */
+	mm_sched_abort();
 
-	// Give the control to still running tasks.
-	mm_sched_yield();
-
-	// Must never get here after the yield above.
-	ABORT();
+	LEAVE();
 }
 
+/* Set or change the task name. */
 void
 mm_task_set_name(struct mm_task *task, const char *name)
 {
@@ -208,19 +232,23 @@ mm_task_set_name(struct mm_task *task, const char *name)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Task-local dynamic memory.
+ **********************************************************************/
+
 void *
 mm_task_alloc(size_t size)
 {
 	ENTER();
 	ASSERT(size > 0);
 
-	// Allocate the requested memory plus some extra for the list link.
+	/* Allocate the requested memory plus some extra for the list link. */
 	void *ptr = mm_alloc(size + sizeof(struct mm_list));
 
-	// Keep the allocated memory in the task's chunk list.
+	/* Keep the allocated memory in the task's chunk list. */
 	mm_list_append(&mm_running_task->chunks, (struct mm_list *) ptr);
 
-	// Get the address past the list link.
+	/* Get the address past the list link. */
 	ptr = (void *) (((char *) ptr) + sizeof(struct mm_list));
 
 	LEAVE();
@@ -233,13 +261,13 @@ mm_task_free(void *ptr)
 	ENTER();
 
 	if (likely(ptr != NULL)) {
-		// Get the real start address of the chunk.
+		/* Get the real start address of the chunk. */
 		struct mm_list *link = (struct mm_list *) (((char *) ptr) - sizeof(struct mm_list));
 
-		// Remove it from the task's chunk list.
+		/* Remove it from the task's chunk list. */
 		mm_list_delete(link);
 
-		// Free the memory.
+		/* Free the memory. */
 		mm_free(link);
 	}
 
