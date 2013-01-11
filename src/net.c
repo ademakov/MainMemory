@@ -366,17 +366,62 @@ mm_net_detach_writer(struct mm_net_socket *sock)
 	sock->writer = NULL;
 }
 
+static inline void
+mm_net_bind_reader(struct mm_net_socket *sock)
+{
+	sock->flags &= ~MM_NET_READ_SPAWN;
+}
+
+static inline void
+mm_net_bind_writer(struct mm_net_socket *sock)
+{
+	sock->flags &= ~MM_NET_WRITE_SPAWN;
+}
+
+void
+mm_net_unbind_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	// Enable creating new reader tasks on the socket if it was so far
+	// bound to this one.
+	if ((mm_running_task->flags & MM_TASK_READING) != 0) {
+		// TODO: check that the socket is bound to mm_running_task?
+		mm_running_task->flags &= ~MM_TASK_READING;
+		sock->flags |= MM_NET_READ_SPAWN;
+	}
+
+	LEAVE();
+}
+
+void
+mm_net_unbind_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	// Enable creating new writer tasks on the socket if it was so far
+	// bound to this one.
+	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
+		// TODO: check that the socket is bound to mm_running_task?
+		mm_running_task->flags &= ~MM_TASK_WRITING;
+		sock->flags |= MM_NET_WRITE_SPAWN;
+	}
+
+	LEAVE();
+}
+
 static void
 mm_net_reader(uintptr_t arg)
 {
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 
+	/* Make sure the socket will be unbound from the task. */
+	mm_task_cleanup_push(mm_net_unbind_reader, sock);
+
 	// Run the protocol handler routine.
 	(sock->srv->proto->reader_routine)(sock);
 
-	// Release the socket.
-	// TODO: check if it is still owned.
-	mm_net_enable_read_spawn(sock);
+	mm_task_cleanup_pop(true);
 }
 
 static void
@@ -384,12 +429,13 @@ mm_net_writer(uintptr_t arg)
 {
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 
+	/* Make sure the socket will be unbound from the task. */
+	mm_task_cleanup_push(mm_net_unbind_writer, sock);
+
 	// Run the protocol handler routine.
 	(sock->srv->proto->writer_routine)(sock);
 
-	// Release the socket.
-	// TODO: check if it is still owned.
-	mm_net_enable_write_spawn(sock);
+	mm_task_cleanup_pop(true);
 }
 
 /**********************************************************************
@@ -684,11 +730,13 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 				// Create a new task that will execute
 				// the protocol read routine.
 				struct mm_task *task = mm_task_create(
-					"worker", 0, mm_net_reader, (intptr_t) sock);
-				mm_sched_run(task);
+					"worker", MM_TASK_READING,
+					mm_net_reader, (intptr_t) sock);
 
 				// Disable new tasks until this one is done.
-				mm_net_disable_read_spawn(sock);
+				mm_net_bind_reader(sock);
+
+				mm_sched_run(task);
 
 				++io_count;
 				no_events = false;
@@ -710,11 +758,13 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 				// Create a new task that will execute
 				// the protocol write routine.
 				struct mm_task *task = mm_task_create(
-					"worker", 0, mm_net_writer, (intptr_t) sock);
-				mm_sched_run(task);
+					"worker", MM_TASK_WRITING,
+					mm_net_writer, (intptr_t) sock);
 
 				// Disable new tasks until this one is done.
-				mm_net_disable_write_spawn(sock);
+				mm_net_bind_writer(sock);
+
+				mm_sched_run(task);
 
 				++io_count;
 				no_events = false;

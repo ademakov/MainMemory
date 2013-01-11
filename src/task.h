@@ -35,8 +35,37 @@ typedef enum {
 } mm_task_state_t;
 
 /* Task flags. */
-#define MM_TASK_CANCELLABLE	1
-#define MM_TASK_CANCELLED	2
+#define MM_TASK_CANCELLABLE	0x01
+#define MM_TASK_CANCELLED	0x02
+#define MM_TASK_READING		0x10
+#define MM_TASK_WRITING		0x20
+
+/* A task cleanup handler record. */
+struct mm_task_cleanup_rec
+{
+	struct mm_task_cleanup_rec *next;
+	mm_routine routine;
+	uintptr_t routine_arg;
+};
+
+/* Register a cleanup handler. */
+#define mm_task_cleanup_push(rtn, arg)					\
+	do {								\
+		struct mm_task_cleanup_rec __cleanup = {		\
+				.next = mm_running_task->cleanup,	\
+				.routine = (mm_routine) (rtn),		\
+				.routine_arg = (uintptr_t) (arg),	\
+			};						\
+		do {
+
+/* Unregister a cleanup handler optionally executing it. */
+#define mm_task_cleanup_pop(execute)					\
+		} while (0);						\
+		if (execute) {						\
+			mm_running_task->cleanup = __cleanup.next;	\
+			__cleanup.routine(__cleanup.routine_arg);	\
+		}							\
+	} while (0)
 
 /* A user-space (green) thread. */
 struct mm_task
@@ -65,6 +94,9 @@ struct mm_task
 	/* The task start routine and its argument. */
 	mm_routine start;
 	uintptr_t start_arg;
+
+	/* The list of task cleanup records. */
+	struct mm_task_cleanup_rec *cleanup;
 
 	/* The list of task-local dynamically-allocated memory. */
 	struct mm_list chunks;

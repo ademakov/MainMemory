@@ -3,21 +3,18 @@ ASAP:
 * pool of worker tasks serving the work queue
 * crude memcache module
 * add timers and task sleep
-* support signals
 * ensure correct client and server object destruction
 ** ensure destroyed client objects are not accessed anymore
 * resolve port destruction issues (refcount? capabilities?)
-* ensure I/O spawn flag is not enabled spuriously
 
 Essentials:
 * resolve socket close issues: time wait
 * UDP servers
 * SSL servers
 * fs notifications
-* add task cleanup handlers
+* support signals
 * add task local storage (tls)
 * add task cancel and kill
-* region allocator
 * worker threads, multithreaded task & work schedulers
 * system call threads
 * disk I/O threads
@@ -36,6 +33,7 @@ Enhancements:
 ** use separate mspace for task local dynamic memory ?
 ** slab allocator (to base object pools on)
 ** buddy allocator (for I/O buffers and slabs)
+** region allocator
 ** garbage collection
 * failure trace records
 * arm port

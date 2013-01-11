@@ -156,6 +156,9 @@ ssize_t mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes);
 ssize_t mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
 ssize_t mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
 
+void mm_net_unbind_reader(struct mm_net_socket *sock);
+void mm_net_unbind_writer(struct mm_net_socket *sock);
+
 void mm_net_close(struct mm_net_socket *sock);
 
 static inline void
@@ -168,32 +171,6 @@ static inline void
 mm_net_clear_nonblock(struct mm_net_socket *sock)
 {
 	sock->flags &= ~MM_NET_NONBLOCK;
-}
-
-static inline void
-mm_net_enable_read_spawn(struct mm_net_socket *sock)
-{
-	ASSERT(sock->srv != NULL && sock->srv->proto->reader_routine != NULL);
-	sock->flags |= MM_NET_READ_SPAWN;
-}
-
-static inline void
-mm_net_disable_read_spawn(struct mm_net_socket *sock)
-{
-	sock->flags &= ~MM_NET_READ_SPAWN;
-}
-
-static inline void
-mm_net_enable_write_spawn(struct mm_net_socket *sock)
-{
-	ASSERT(sock->srv != NULL && sock->srv->proto->writer_routine != NULL);
-	sock->flags |= MM_NET_WRITE_SPAWN;
-}
-
-static inline void
-mm_net_disable_write_spawn(struct mm_net_socket *sock)
-{
-	sock->flags &= ~MM_NET_WRITE_SPAWN;
 }
 
 static inline bool

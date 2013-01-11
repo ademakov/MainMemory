@@ -80,6 +80,21 @@ mm_task_entry(void)
 	mm_task_exit(0);
 }
 
+static void
+mm_task_cleanup(struct mm_task *task)
+{
+	ENTER();
+
+	while (task->cleanup != NULL) {
+		mm_routine routine = task->cleanup->routine;
+		uintptr_t routine_arg = task->cleanup->routine_arg;
+		task->cleanup = task->cleanup->next;
+		routine(routine_arg);
+	}
+
+	LEAVE();
+}
+
 /* Free task-local dynamic memory. */
 static void
 mm_task_free_chunks(struct mm_task *task)
@@ -130,6 +145,7 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;
+	task->cleanup = NULL;
 #if ENABLE_TRACE
 	task->trace_level = 0;
 #endif
@@ -199,6 +215,9 @@ mm_task_exit(int status)
 	TRACE("exiting task '%s' with status %d", mm_running_task->name, status);
 
 	// TODO: invalidate ports ?
+
+	/* Call the cleanup handlers. */
+	mm_task_cleanup(mm_running_task);
 
 	/* Free the dynamic memory. */
 	mm_task_free_chunks(mm_running_task);
