@@ -93,6 +93,12 @@ mm_list_cleave(struct mm_list *head, struct mm_list *tail)
 }
 
 static inline void
+mm_list_insert(struct mm_list *list, struct mm_list *item)
+{
+	mm_list_splice_next(list, item, item);
+}
+
+static inline void
 mm_list_append(struct mm_list *list, struct mm_list *item)
 {
 	mm_list_splice_prev(list, item, item);
