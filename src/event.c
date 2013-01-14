@@ -219,65 +219,6 @@ mm_event_verify_fd(int fd)
 	}
 }
 
-#if 0
-void
-mm_event_register_fd(int fd, mm_event_handler_t io, uint32_t data)
-{
-	ENTER();
-	TRACE("fd: %d", fd);
-
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_fd_table_size);
-	ASSERT(io != 0);
-	ASSERT(io < mm_io_table_size);
-
-	struct mm_event_fd *mm_event_fd = &mm_fd_table[fd];
-
-	if (likely(mm_event_fd->handler != io)) {
-
-		// Add the fd to the change list if needed.
-		if (likely((mm_event_fd->flags & MM_EVENT_FD_CHANGE) == 0)) {
-			mm_event_fd->flags |= MM_EVENT_FD_CHANGE;
-			mm_event_note_fd_change(fd);
-		}
-
-		// Store the handler.
-		mm_event_fd->new_io = io;
-	}
-
-	// Store the handler data.
-	mm_event_fd->data = data;
-
-	LEAVE();
-}
-
-void
-mm_event_unregister_fd(int fd)
-{
-	ENTER();
-	TRACE("fd: %d", fd);
-
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_fd_table_size);
-
-	struct mm_event_fd *mm_event_fd = &mm_fd_table[fd];
-
-	if (likely(mm_event_fd->handler != 0)) {
-
-		// Add the fd to the change list if needed.
-		if (likely((mm_event_fd->flags & MM_EVENT_FD_CHANGE) == 0)) {
-			mm_event_fd->flags |= MM_EVENT_FD_CHANGE;
-			mm_event_note_fd_change(fd);
-		}
-
-		// Clear the handler.
-		mm_event_fd->new_io = 0;
-	}
-
-	LEAVE();
-}
-#endif
-
 /**********************************************************************
  * epoll support.
  **********************************************************************/
@@ -517,9 +458,6 @@ mm_event_dispatch(void)
 
 	// The kevent list size.
 	int nkevents = 0;
-
-	// Indicate if there were any events sent before the poll call.
-	bool sent_msgs = false;
 
 	// Pick the delayed change if any.
 	if (mm_event_fd_delayed_is_set) {
