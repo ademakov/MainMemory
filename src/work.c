@@ -109,7 +109,7 @@ mm_work_put(struct mm_work *work)
 	mm_list_insert(&mm_work_queue, &work->queue);
 
 	/* If there is a task waiting for a work then let it run now. */
-	mm_task_wakeup(&mm_wait_queue);
+	mm_task_signal(&mm_wait_queue);
 
 	LEAVE();
 }

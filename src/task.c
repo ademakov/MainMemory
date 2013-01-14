@@ -292,15 +292,28 @@ mm_task_wait_lifo(struct mm_list *queue)
 }
 
 void
-mm_task_wakeup(struct mm_list *queue)
+mm_task_signal(struct mm_list *queue)
 {
 	ENTER();
 
 	if (!mm_list_empty(queue)) {
 		struct mm_list *link = mm_list_head(queue);
 		struct mm_task *task = containerof(link, struct mm_task, queue);
-		mm_list_delete(link);
+		mm_sched_run(task);
+	}
 
+	LEAVE();
+}
+
+void
+mm_task_broadcast(struct mm_list *queue)
+{
+	ENTER();
+
+	struct mm_list *link = queue;
+	while (mm_list_has_next(queue, link)) {
+		link = link->next;
+		struct mm_task *task = containerof(link, struct mm_task, queue);
 		mm_sched_run(task);
 	}
 
