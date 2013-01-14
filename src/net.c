@@ -26,6 +26,7 @@
 #include "task.h"
 #include "sched.h"
 #include "util.h"
+#include "work.h"
 
 #include <fcntl.h>
 #include <string.h>
@@ -241,7 +242,7 @@ mm_net_init_server_table(void)
 static void
 mm_net_free_server_table(void)
 {
-	for (int i = 0; i < mm_srv_count; i++) {
+	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		mm_free(mm_srv_table[i].name);
 	}
 
@@ -727,16 +728,16 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 			sock->flags &= ~MM_NET_READ_QUEUE;
 
 			if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
-				// Create a new task that will execute
-				// the protocol read routine.
-				struct mm_task *task = mm_task_create(
-					"worker", MM_TASK_READING,
-					mm_net_reader, (intptr_t) sock);
-
 				// Disable new tasks until this one is done.
 				mm_net_bind_reader(sock);
 
-				mm_sched_run(task);
+				// Create a new work item that will execute
+				// the protocol read routine.
+				struct mm_work *work = mm_work_create(1);
+				work->flags = MM_TASK_READING;
+				work->routine = mm_net_reader;
+				work->items[0] = (intptr_t) sock;
+				mm_work_put(work);
 
 				++io_count;
 				no_events = false;
@@ -755,16 +756,16 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 			sock->flags &= ~MM_NET_WRITE_QUEUE;
 
 			if ((sock->flags & MM_NET_WRITE_SPAWN) != 0) {
-				// Create a new task that will execute
-				// the protocol write routine.
-				struct mm_task *task = mm_task_create(
-					"worker", MM_TASK_WRITING,
-					mm_net_writer, (intptr_t) sock);
-
 				// Disable new tasks until this one is done.
 				mm_net_bind_writer(sock);
 
-				mm_sched_run(task);
+				// Create a new work item that will execute
+				// the protocol write routine.
+				struct mm_work *work = mm_work_create(1);
+				work->flags = MM_TASK_WRITING;
+				work->routine = mm_net_writer;
+				work->items[0] = (intptr_t) sock;
+				mm_work_put(work);
 
 				++io_count;
 				no_events = false;
@@ -841,7 +842,7 @@ mm_net_exit_cleanup(void)
 	if (!mm_net_initialized)
 		goto done;
 
-	for (int i = 0; i < mm_srv_count; i++) {
+	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
 		if (srv->fd >= 0) {
 			mm_net_remove_unix_socket(&srv->addr);
@@ -875,7 +876,7 @@ mm_net_term(void)
 
 	mm_net_initialized = 0;
 
-	for (int i = 0; i < mm_srv_count; i++) {
+	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
 		if (srv->fd >= 0) {
 			mm_net_close_server_socket(&srv->addr, srv->fd);
@@ -1019,7 +1020,7 @@ retry:
 	// Try to read (nonblocking).
 	n = read(sock->fd, buffer, nbytes);
 	if (n > 0) {
-		if (n < nbytes) {
+		if ((size_t) n < nbytes) {
 			mm_net_reset_read_ready(sock);
 		}
 	} else if (n < 0) {
@@ -1077,7 +1078,7 @@ retry:
 	// Try to write (nonblocking).
 	n = write(sock->fd, buffer, nbytes);
 	if (n > 0) {
-		if (n < nbytes) {
+		if ((size_t) n < nbytes) {
 			mm_net_reset_write_ready(sock);
 		}
 	} else if (n < 0) {
