@@ -21,12 +21,10 @@
 #include "sched.h"
 
 #include "arch.h"
-#include "task.h"
+#include "core.h"
 #include "runq.h"
+#include "task.h"
 #include "util.h"
-
-/* The queue of ready to run tasks. */
-static struct mm_runq mm_run_queue;
 
 /* A pseudo-task that represents the initial process. */
 static struct mm_task mm_null_task = {
@@ -51,10 +49,10 @@ mm_sched_switch(mm_task_state_t state)
 	old_task->state = state;
 
 	if (state == MM_TASK_PENDING) {
-		mm_runq_put_task(&mm_run_queue, old_task);
-		new_task = mm_runq_get_task(&mm_run_queue);
+		mm_runq_put_task(&mm_core->run_queue, old_task);
+		new_task = mm_runq_get_task(&mm_core->run_queue);
 	} else {
-		new_task = mm_runq_get_task(&mm_run_queue);
+		new_task = mm_runq_get_task(&mm_core->run_queue);
 		if (unlikely(new_task == NULL)) {
 			new_task = &mm_null_task;
 		}
@@ -72,24 +70,6 @@ mm_sched_switch(mm_task_state_t state)
 }
 
 void
-mm_sched_init(void)
-{
-	ENTER();
-
-	mm_runq_init(&mm_run_queue);
-
-	LEAVE();
-}
-
-void
-mm_sched_term(void)
-{
-	ENTER();
-
-	LEAVE();
-}
-
-void
 mm_sched_run(struct mm_task *task)
 {
 	ENTER();
@@ -97,7 +77,7 @@ mm_sched_run(struct mm_task *task)
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
 	if (task->state != MM_TASK_PENDING) {
-		mm_runq_put_task(&mm_run_queue, task);
+		mm_runq_put_task(&mm_core->run_queue, task);
 		task->state = MM_TASK_PENDING;
 	}
 

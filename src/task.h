@@ -39,6 +39,9 @@ typedef enum {
 #define MM_TASK_CANCELLED	0x02
 #define MM_TASK_READING		0x10
 #define MM_TASK_WRITING		0x20
+#define MM_TASK_WAITING		0x40
+
+typedef uint8_t mm_task_flags_t;
 
 /* A task cleanup handler record. */
 struct mm_task_cleanup_rec
@@ -67,6 +70,7 @@ struct mm_task_cleanup_rec
 		}							\
 	} while (0)
 
+
 /* A user-space (green) thread. */
 struct mm_task
 {
@@ -74,8 +78,8 @@ struct mm_task
 	struct mm_list queue;
 
 	/* The task status. */
-	uint8_t state;
-	uint8_t flags;
+	mm_task_state_t state;
+	mm_task_flags_t flags;
 
 	/* Task scheduling priority. */
 	uint8_t priority;
@@ -112,7 +116,7 @@ struct mm_task
 void mm_task_init(void);
 void mm_task_term(void);
 
-struct mm_task * mm_task_create(const char *name, uint16_t flags,
+struct mm_task * mm_task_create(const char *name, mm_task_flags_t flags,
 				mm_routine start, uintptr_t start_arg)
 	__attribute__((nonnull(1, 3)));
 
@@ -127,6 +131,10 @@ void mm_task_exit(int status)
 
 void mm_task_set_name(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
+
+void mm_task_wait_fifo(struct mm_list *queue);
+void mm_task_wait_lifo(struct mm_list *queue);
+void mm_task_wakeup(struct mm_list *queue);
 
 void * mm_task_alloc(size_t size)
 	__attribute__((malloc));

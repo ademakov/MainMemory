@@ -19,9 +19,16 @@
  */
 
 #include "work.h"
+
+#include "core.h"
+#include "sched.h"
+#include "task.h"
 #include "util.h"
 
-struct mm_list mm_work_queue;
+
+static struct mm_list mm_work_queue;
+static struct mm_list mm_wait_queue;
+
 
 void
 mm_work_init(void)
@@ -29,6 +36,7 @@ mm_work_init(void)
 	ENTER();
 
 	mm_list_init(&mm_work_queue);
+	mm_list_init(&mm_wait_queue);
 
 	LEAVE();
 }
@@ -48,14 +56,12 @@ mm_work_term(void)
 }
 
 struct mm_work *
-mm_work_create(mm_routine routine, uint32_t count)
+mm_work_create(uint32_t count)
 {
 	ENTER();
 
 	size_t size = sizeof(struct mm_work) + count * sizeof(intptr_t);
 	struct mm_work *work = mm_alloc(size);
-
-	work->routine = routine;
 	work->count = count;
 
 	LEAVE();
@@ -78,9 +84,17 @@ mm_work_get(void)
 	ENTER();
 
 	struct mm_work *work = NULL;
-	if (!mm_list_empty(&mm_work_queue)) {
-		struct mm_list *link = mm_list_head(&mm_work_queue);
-		work = containerof(link, struct mm_work, queue);
+	for (;;) {
+		/* If there is a work available then take it. */
+		if (!mm_list_empty(&mm_work_queue)) {
+			struct mm_list *link = mm_list_head(&mm_work_queue);
+			work = containerof(link, struct mm_work, queue);
+			mm_list_delete(link);
+			break;
+		}
+
+		/* Otherwise wait for a work to become available. */
+		mm_task_wait_lifo(&mm_wait_queue);
 	}
 
 	LEAVE();
@@ -92,7 +106,11 @@ mm_work_put(struct mm_work *work)
 {
 	ENTER();
 
-	mm_list_append(&mm_work_queue, &work->queue);
+	/* Add the work to the stack. */
+	mm_list_insert(&mm_work_queue, &work->queue);
+
+	/* If there is a task waiting for a work then let it run now. */
+	mm_task_wakeup(&mm_wait_queue);
 
 	LEAVE();
 }

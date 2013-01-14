@@ -19,12 +19,9 @@
  */
 
 #include "common.h"
+#include "core.h"
 #include "event.h"
 #include "net.h"
-#include "port.h"
-#include "sched.h"
-#include "task.h"
-#include "work.h"
 #include "util.h"
 
 #include "memcache/memcache.h"
@@ -80,10 +77,7 @@ mm_init(void)
 
 	/* Initialize subsystems. */
 	mm_signal_init();
-	mm_work_init();
-	mm_task_init();
-	mm_port_init();
-	mm_sched_init();
+	mm_core_init();
 	mm_event_init();
 	mm_net_init();
 
@@ -98,10 +92,7 @@ mm_term(void)
 	/* Terminate subsystems. */
 	mm_net_term();
 	mm_event_term();
-	mm_sched_term();
-	mm_task_term();
-	mm_work_term();
-	mm_port_term();
+	mm_core_term();
 
 	LEAVE();
 }
@@ -174,7 +165,7 @@ main(int ac, char *av[])
 
 	/* Execute main loop. */
 	mm_event_start();
-	mm_sched_start();
+	mm_core_start();
 
 	/* Shutdown server. */
 	mm_server_close(); 

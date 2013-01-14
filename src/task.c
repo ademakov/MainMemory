@@ -21,6 +21,7 @@
 #include "task.h"
 
 #include "arch.h"
+#include "core.h"
 #include "pool.h"
 #include "port.h"
 #include "sched.h"
@@ -32,9 +33,6 @@
 /* The memory pool for tasks. */
 static struct mm_pool mm_task_pool;
 
-/* The list of tasks that were finished. */
-static struct mm_list mm_dead_list;
-
 /**********************************************************************
  * Global task data initialization and termination.
  **********************************************************************/
@@ -45,7 +43,6 @@ mm_task_init(void)
 	ENTER();
 
 	mm_pool_init(&mm_task_pool, "task", sizeof (struct mm_task));
-	mm_list_init(&mm_dead_list);
 
 	LEAVE();
 }
@@ -112,13 +109,14 @@ mm_task_free_chunks(struct mm_task *task)
 
 /* Create a new task. */
 struct mm_task *
-mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t start_arg)
+mm_task_create(const char *name, mm_task_flags_t flags,
+	       mm_routine start, uintptr_t start_arg)
 {
 	ENTER();
 
 	struct mm_task *task;
 
-	if (mm_list_empty(&mm_dead_list)) {
+	if (mm_list_empty(&mm_core->dead_list)) {
 		/* Allocate a new task. */
 		task = mm_pool_alloc(&mm_task_pool);
 
@@ -130,7 +128,7 @@ mm_task_create(const char *name, uint16_t flags, mm_routine start, uintptr_t sta
 		task->stack_base = mm_stack_create(task->stack_size);
 	} else {
 		/* Reuse a dead task. */
-		struct mm_list *link = mm_list_head(&mm_dead_list);
+		struct mm_list *link = mm_list_head(&mm_core->dead_list);
 		task = containerof(link, struct mm_task, queue);
 		mm_list_delete(link);
 	}
@@ -170,7 +168,8 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state != MM_TASK_RUNNING);
+	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
+	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
 	/* Destroy the ports. */
 	while (!mm_list_empty(&task->ports)) {
@@ -200,9 +199,10 @@ void
 mm_task_recycle(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state != MM_TASK_PENDING);
+	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
+	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
-	mm_list_append(&mm_dead_list, &task->queue);
+	mm_list_append(&mm_core->dead_list, &task->queue);
 
 	LEAVE();
 }
@@ -215,6 +215,11 @@ mm_task_exit(int status)
 	TRACE("exiting task '%s' with status %d", mm_running_task->name, status);
 
 	// TODO: invalidate ports ?
+
+	if ((mm_running_task->flags & MM_TASK_WAITING) != 0) {
+		mm_list_delete(&mm_running_task->queue);
+		mm_running_task->flags &= ~MM_TASK_WAITING;
+	}
 
 	/* Call the cleanup handlers. */
 	mm_task_cleanup(mm_running_task);
@@ -246,6 +251,58 @@ mm_task_set_name(struct mm_task *task, const char *name)
 	} else if (task->name != NULL) {
 		mm_free(task->name);
 		task->name = NULL;
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Task event waiting.
+ **********************************************************************/
+
+void
+mm_task_wait_fifo(struct mm_list *queue)
+{
+	ENTER();
+
+	mm_running_task->flags |= MM_TASK_WAITING;
+	mm_list_append(queue, &mm_running_task->queue);
+
+	mm_sched_block();
+
+	mm_list_delete(&mm_running_task->queue);
+	mm_running_task->flags &= ~MM_TASK_WAITING;
+
+	LEAVE();
+}
+
+void
+mm_task_wait_lifo(struct mm_list *queue)
+{
+	ENTER();
+
+	mm_running_task->flags |= MM_TASK_WAITING;
+	mm_list_insert(queue, &mm_running_task->queue);
+
+	mm_sched_block();
+
+	mm_list_delete(&mm_running_task->queue);
+	mm_running_task->flags &= ~MM_TASK_WAITING;
+
+	LEAVE();
+}
+
+void
+mm_task_wakeup(struct mm_list *queue)
+{
+	ENTER();
+
+	if (!mm_list_empty(queue)) {
+		struct mm_list *link = mm_list_head(queue);
+		struct mm_task *task = containerof(link, struct mm_task, queue);
+		mm_list_delete(link);
+
+		mm_sched_run(task);
 	}
 
 	LEAVE();

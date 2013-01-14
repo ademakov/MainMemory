@@ -23,24 +23,29 @@
 
 #include "common.h"
 #include "list.h"
+#include "task.h"
+
 
 /* A batch of work. */
 struct mm_work
 {
 	/* A link in the work queue. */
 	struct mm_list queue;
-	/* The work routine. */
-	mm_routine routine;
+	/* Work items flags. */
+	mm_task_flags_t flags;
 	/* Work items count. */
 	uint32_t count;
+	/* The work routine. */
+	mm_routine routine;
 	/* Work items array. */
 	uintptr_t items[];
 };
 
+
 void mm_work_init(void);
 void mm_work_term(void);
 
-struct mm_work * mm_work_create(mm_routine routine, uint32_t count);
+struct mm_work * mm_work_create(uint32_t count);
 void mm_work_destroy(struct mm_work *work);
 
 struct mm_work * mm_work_get(void);

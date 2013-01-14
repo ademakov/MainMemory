@@ -1,7 +1,7 @@
 /*
- * sched.h - MainMemory task scheduler.
+ * core.h - MainMemory core.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2013  Aleksey Demakov
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,23 +18,38 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef SCHED_H
-#define SCHED_H
+#ifndef CORE_H
+#define CORE_H
 
 #include "common.h"
+#include "list.h"
+#include "runq.h"
 
-/* Forward declaration. */
-struct mm_task;
+struct mm_core
+{
+	/* The master task. */
+	struct mm_task *master;
 
-/* The currently running task. */
-extern __thread struct mm_task *mm_running_task;
+	/* Current and maximum number of worker tasks. */
+	uint32_t nworkers;
+	uint32_t nworkers_max;
 
-void mm_sched_run(struct mm_task *task);
+	/* The queue of ready to run tasks. */
+	struct mm_runq run_queue;
 
-void mm_sched_start(void);
+	/* The list of worker tasks that have finished. */
+	struct mm_list dead_list;
 
-void mm_sched_yield(void);
-void mm_sched_block(void);
-void mm_sched_abort(void) __attribute__((noreturn));
+	/* Stop flag. */
+	volatile bool stop;
+};
 
-#endif /* SCHED_H */
+extern __thread struct mm_core *mm_core;
+
+void mm_core_init();
+void mm_core_term();
+
+void mm_core_start(void);
+void mm_core_stop(void);
+
+#endif /* CORE_H */
