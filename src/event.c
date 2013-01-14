@@ -607,10 +607,8 @@ mm_event_dispatch(void)
 	// Send REG/UNREG messages.
 	for (int i = 0; i < nchanges; i++) {
 		int fd = mm_event_fd_changes[i].fd;
-		uint32_t data = mm_event_fd_changes[i].data;
-		mm_event_handler_t handler = mm_event_fd_changes[i].handler;
-
 		struct mm_event_fd *mm_fd = &mm_fd_table[fd];
+
 		mm_fd->changed = 0;
 
 		if (mm_fd->handler) {

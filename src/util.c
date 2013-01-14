@@ -215,7 +215,7 @@ mm_strdup(const char *s)
 char *
 mm_asprintf(const char *restrict fmt, ...)
 {
-	size_t len;
+	int len;
 	va_list va;
 	char dummy[1];
 
