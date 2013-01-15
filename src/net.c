@@ -1033,6 +1033,7 @@ retry:
 			if (errno != EINVAL && errno != EFAULT)
 				mm_net_close(sock);
 			mm_error(saved_errno, "read()");
+			errno = saved_errno;
 		}
 	} else {
 		mm_net_close(sock);
@@ -1091,6 +1092,7 @@ retry:
 			if (errno != EINVAL && errno != EFAULT)
 				mm_net_close(sock);
 			mm_error(saved_errno, "write()");
+			errno = saved_errno;
 		}
 	}
 
@@ -1152,6 +1154,7 @@ retry:
 			if (errno != EINVAL && errno != EFAULT)
 				mm_net_close(sock);
 			mm_error(saved_errno, "readv()");
+			errno = saved_errno;
 		}
 	} else {
 		mm_net_close(sock);
@@ -1214,6 +1217,7 @@ retry:
 			if (errno != EINVAL && errno != EFAULT)
 				mm_net_close(sock);
 			mm_error(saved_errno, "writev()");
+			errno = saved_errno;
 		}
 	}
 
