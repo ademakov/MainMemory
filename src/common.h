@@ -75,4 +75,10 @@
 /* Task execution routine. */
 typedef void (*mm_routine)(uintptr_t arg);
 
+/* Infinite timeout. */
+#define MM_TIMEOUT_INFINITE	((uint32_t) 0xFFFFFFFF)
+
+/* Timeout (in microseconds). */
+typedef uint32_t	mm_timeout_t;
+
 #endif /* COMMON_H */

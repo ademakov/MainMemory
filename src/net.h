@@ -35,6 +35,18 @@
 struct mm_port;
 struct mm_task;
 
+/* Server flags. */
+#define MM_NET_ACCEPT_QUEUE	1
+
+/* Socket flags. */
+#define MM_NET_CLOSED		0x0001
+#define MM_NET_NONBLOCK		0x0002
+#define MM_NET_READ_SPAWN	0x0004
+#define MM_NET_WRITE_SPAWN	0x0008
+#define MM_NET_READ_READY	0x0010
+#define MM_NET_WRITE_READY	0x0020
+#define MM_NET_READ_QUEUE	0x0040
+#define MM_NET_WRITE_QUEUE	0x0080
 
 /* Socket address. */
 struct mm_net_addr
@@ -59,9 +71,6 @@ struct mm_net_peer_addr
 	};
 };
 
-/* Server flags. */
-#define MM_NET_ACCEPT_QUEUE	1
-
 /* Network server data. */
 struct mm_net_server
 {
@@ -84,16 +93,6 @@ struct mm_net_server
 	/* Server address. */
 	struct mm_net_addr addr;
 };
-
-/* Socket flags. */
-#define MM_NET_CLOSED		0x0001
-#define MM_NET_NONBLOCK		0x0002
-#define MM_NET_READ_SPAWN	0x0004
-#define MM_NET_WRITE_SPAWN	0x0008
-#define MM_NET_READ_READY	0x0010
-#define MM_NET_WRITE_READY	0x0020
-#define MM_NET_READ_QUEUE	0x0040
-#define MM_NET_WRITE_QUEUE	0x0080
 
 /* Network client socket data. */
 struct mm_net_socket
@@ -170,6 +169,14 @@ static inline void
 mm_net_clear_nonblock(struct mm_net_socket *sock)
 {
 	sock->flags &= ~MM_NET_NONBLOCK;
+}
+
+static inline void
+mm_net_set_timeout(struct mm_net_socket *sock, uint32_t usec)
+{
+	(void) sock;
+	(void) usec;
+	// TODO
 }
 
 static inline bool
