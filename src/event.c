@@ -68,9 +68,9 @@ mm_event_init_io_handlers(void)
 	ASSERT(MM_IO_MAX < (1ul << (8 * sizeof(mm_event_handler_t))));
 
 	// Register a dummy I/O handler with zero id.
-	ASSERT(mm_io_table_size == 0);
-	(void) mm_event_add_io_handler(0, NULL);
-	ASSERT(mm_io_table_size == 1);
+	mm_io_table_size = 1;
+	mm_io_table[0].flags = 0;
+	mm_io_table[0].port = NULL;
 
 	LEAVE();
 }
