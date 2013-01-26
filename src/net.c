@@ -264,6 +264,8 @@ mm_net_alloc_server(void)
 
 	// Initialize client lists.
 	mm_list_init(&srv->clients);
+	mm_list_init(&srv->read_queue);
+	mm_list_init(&srv->write_queue);
 
 	return srv;
 }
@@ -445,24 +447,17 @@ mm_net_writer(uintptr_t arg)
 #define MM_ACCEPT_COUNT		10
 #define MM_IO_COUNT		10
 
-// I/O event handling tasks.
+/* The accept event handler task. */
 static struct mm_task *mm_net_accept_task;
-static struct mm_task *mm_net_io_task;
 
-// I/O event ports.
+/* The accept event handler port. */
 static struct mm_port *mm_net_accept_port;
-static struct mm_port *mm_net_io_port;
 
 // I/O event handler cookies.
 static mm_event_handler_t mm_net_accept_handler;
-static mm_event_handler_t mm_net_io_handler;
 
 // The list of servers ready to accept connections.
 static struct mm_list mm_accept_queue;
-// The list of read ready sockets.
-static struct mm_list mm_read_queue;
-// The list of write ready sockets.
-static struct mm_list mm_write_queue;
 
 static void
 mm_net_add_accept_ready(uint32_t index)
@@ -490,7 +485,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock)
 		mm_sched_run(sock->reader);
 	} else if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
 		if (likely((sock->flags & MM_NET_READ_QUEUE) == 0))
-			mm_list_append(&mm_read_queue, &sock->read_queue);
+			mm_list_append(&sock->srv->read_queue, &sock->read_queue);
 		sock->flags |= (MM_NET_READ_READY | MM_NET_READ_QUEUE);
 	} else {
 		sock->flags |= MM_NET_READ_READY;
@@ -521,7 +516,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock)
 		mm_sched_run(sock->writer);
 	} else if (sock->srv->proto->writer_routine != NULL) {
 		if (likely((sock->flags & MM_NET_WRITE_QUEUE) == 0))
-			mm_list_append(&mm_write_queue, &sock->write_queue);
+			mm_list_append(&sock->srv->write_queue, &sock->write_queue);
 		sock->flags |= (MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
 	} else {
 		sock->flags |= MM_NET_WRITE_READY;
@@ -601,7 +596,7 @@ retry:
 
 	// Register the socket with the event loop.
 	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
-	mm_event_register_fd(sock->fd, mm_net_io_handler, sock_index);
+	mm_event_register_fd(sock->fd, srv->io_handler, sock_index);
 
 done:
 	LEAVE();
@@ -656,33 +651,43 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 }
 
 static void
-mm_net_add_read_write_ready(uint32_t event, uint32_t index)
+mm_net_add_read_write_ready(mm_net_msg_t msg, uint32_t index)
 {
 	ENTER();
 
 	// Find the pertinent socket.
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, index);
 
-	switch (event) {
-	case MM_EVENT_IO_READ:
+	switch (msg) {
+	case MM_NET_MSG_ERROR:
+		mm_net_close(sock);
+		break;
+
+	case MM_NET_MSG_READ_READY:
 		// Mark the socket as read ready.
 		if ((sock->flags & MM_NET_CLOSED) == 0)
 			mm_net_set_read_ready(sock);
 		break;
 
-	case MM_EVENT_IO_WRITE:
+	case MM_NET_MSG_WRITE_READY:
 		// Mark the socket as write ready.
 		if ((sock->flags & MM_NET_CLOSED) == 0)
 			mm_net_set_write_ready(sock);
 		break;
 
-	case MM_EVENT_IO_REG:
+	case MM_NET_MSG_READ_SPAWN:
+		break;
+
+	case MM_NET_MSG_WRITE_SPAWN:
+		break;
+
+	case MM_NET_MSG_REGISTER:
 		// Let the protocol layer prepare the socket data.
 		if (sock->srv->proto->prepare != NULL)
 			(sock->srv->proto->prepare)(sock);
 		break;
 
-	case MM_EVENT_IO_UNREG:
+	case MM_NET_MSG_UNREGISTER:
 		ASSERT((sock->flags & MM_NET_CLOSED) != 0);
 
 		// Let the protocol layer cleanup the socket data.
@@ -698,7 +703,7 @@ mm_net_add_read_write_ready(uint32_t event, uint32_t index)
 		break;
 
 	default:
-		mm_print("%x %x", event, index);
+		mm_print("%x %x", msg, index);
 		ABORT();
 	}
 
@@ -706,9 +711,12 @@ mm_net_add_read_write_ready(uint32_t event, uint32_t index)
 }
 
 static void
-mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
+mm_net_io_loop(uintptr_t arg)
 {
 	ENTER();
+
+	/* Find the pertinent server. */
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
 
 	// Handle I/O events.
 	int io_count = 0;
@@ -716,10 +724,10 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 		bool no_events = true;
 
 		// Handle a read event.
-		if (!mm_list_empty(&mm_read_queue)) {
+		if (!mm_list_empty(&srv->read_queue)) {
 
 			// Get the pertinent socket.
-			struct mm_list *link = mm_list_head(&mm_read_queue);
+			struct mm_list *link = mm_list_head(&srv->read_queue);
 			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, read_queue);
 
 			// Remove it from the queue.
@@ -744,10 +752,10 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 		}
 
 		// Handle a write event.
-		if (!mm_list_empty(&mm_write_queue)) {
+		if (!mm_list_empty(&srv->write_queue)) {
 
 			// Get the pertinent socket.
-			struct mm_list *link = mm_list_head(&mm_write_queue);
+			struct mm_list *link = mm_list_head(&srv->write_queue);
 			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, write_queue);
 
 			// Remove it from the queue.
@@ -776,12 +784,12 @@ mm_net_io_loop(uintptr_t dummy __attribute__((unused)))
 
 			// If there are no ready sockets then block waiting
 			// for an event.
-			mm_port_receive_blocking(mm_net_io_port, msg, 2);
+			mm_port_receive_blocking(srv->io_port, msg, 2);
 			mm_net_add_read_write_ready(msg[0], msg[1]);
 			io_count = 0;
 
 			// Drain all pending read events without blocking.
-			while (mm_port_receive(mm_net_io_port, msg, 2) == 0) {
+			while (mm_port_receive(srv->io_port, msg, 2) == 0) {
 				mm_net_add_read_write_ready(msg[0], msg[1]);
 			}
 
@@ -801,28 +809,21 @@ mm_net_init_tasks(void)
 {
 	ENTER();
 
-	// Initialize I/O queues.
+	/* Initialize the accept queue. */
 	mm_list_init(&mm_accept_queue);
-	mm_list_init(&mm_read_queue);
-	mm_list_init(&mm_write_queue);
 
-	// Create I/O tasks.
+	/* Create the event handler task. */
 	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
-	mm_net_io_task = mm_task_create("net-io", 0, mm_net_io_loop, 0);
 
-	// Make I/O task priority higher.
+	/* Make the task priority higher. */
 	mm_net_accept_task->priority /= 2;
-	mm_net_io_task->priority /= 2;
 
-	// Create I/O task ports.
+	/* Create the event handler port. */
 	mm_net_accept_port = mm_port_create(mm_net_accept_task);
-	mm_net_io_port = mm_port_create(mm_net_io_task);
 
 	// Register I/O handlers.
 	mm_net_accept_handler = mm_event_add_io_handler(
-		MM_EVENT_IO_READ, mm_net_accept_port);
-	mm_net_io_handler = mm_event_add_io_handler(
-		MM_EVENT_IO_READ_WRITE, mm_net_io_port);
+		MM_EVENT_NET_READ, mm_net_accept_port);
 
 	LEAVE();
 }
@@ -950,16 +951,28 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 
 	mm_print("start server '%s'", srv->name);
 
-	// Store protocol handlers.
+	/* Store the protocol handlers. */
 	srv->proto = proto;
 
-	// Create the server socket.
+	/* Create the server socket. */
 	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
 	if (mm_event_verify_fd(srv->fd)) {
 		mm_fatal(0, "%s: server socket no is too high: %d", srv->name, srv->fd);
 	}
 
-	// Register the socket with the event loop.
+	/* Create the event handler task. */
+	srv->io_task = mm_task_create("net-io", 0, mm_net_io_loop, (intptr_t) srv);
+
+	/* Make the task priority higher. */
+	srv->io_task->priority /= 2;
+
+	/* Create the event handler port. */
+	srv->io_port = mm_port_create(srv->io_task);
+
+	/* Allocate an event handler ID for the port. */
+	srv->io_handler = mm_event_add_io_handler(MM_EVENT_NET_READ_WRITE, srv->io_port);
+
+	/* Register the server socket with the event loop. */
 	mm_event_register_fd(srv->fd, mm_net_accept_handler, (uint32_t) mm_net_server_index(srv));
 
 	LEAVE();

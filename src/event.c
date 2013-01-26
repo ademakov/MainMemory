@@ -19,6 +19,7 @@
 
 #include "event.h"
 
+#include "net.h"
 #include "port.h"
 #include "sched.h"
 #include "task.h"
@@ -274,8 +275,8 @@ mm_event_dispatch(void)
 		int a, b;
 
 		// Check if a read event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_READ);
-		b = (mm_io_table[handler].flags & MM_EVENT_IO_READ);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_READ);
+		b = (mm_io_table[handler].flags & MM_EVENT_NET_READ);
 		if (a) {
 			events |= EPOLLIN;
 		}
@@ -293,8 +294,8 @@ mm_event_dispatch(void)
 #endif
 
 		// Check if a write event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_WRITE);
-		b = (mm_io_table[handler].flags & MM_EVENT_IO_WRITE);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_WRITE);
+		b = (mm_io_table[handler].flags & MM_EVENT_NET_WRITE);
 		if (a) {
 			events |= EPOLLOUT;
 		}
@@ -331,7 +332,7 @@ mm_event_dispatch(void)
 		}
 
 		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_EVENT_IO_UNREG, mm_fd->data };
+			uint32_t msg[2] = { MM_NET_MSG_UNREGISTER, mm_fd->data };
 			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
 			mm_port_send_blocking(io->port, msg, 2);
 			sent_msgs = true;
@@ -342,7 +343,7 @@ mm_event_dispatch(void)
 		mm_fd->handler = handler;
 
 		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_EVENT_IO_REG, mm_fd->data };
+			uint32_t msg[2] = { MM_NET_MSG_REGISTER, mm_fd->data };
 			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
 			mm_port_send_blocking(io->port, msg, 2);
 			sent_msgs = true;
@@ -361,7 +362,16 @@ mm_event_dispatch(void)
 	for (int i = 0; i < nevents; i++) {
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			mm_error(0, "error event on fd %d", fd);
+			DEBUG("error event on fd %d", fd);
+
+			mm_event_handler_t io = mm_fd_table[fd].handler;
+			ASSERT(io < mm_io_table_size);
+
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+			uint32_t msg[2] = { MM_NET_MSG_ERROR, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, msg, 2);
+
+			continue;
 		}
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
@@ -371,8 +381,8 @@ mm_event_dispatch(void)
 			ASSERT(io < mm_io_table_size);
 
 			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t data[2] = { MM_EVENT_IO_READ, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, data, 2);
+			uint32_t msg[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, msg, 2);
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
@@ -382,8 +392,8 @@ mm_event_dispatch(void)
 			ASSERT(io < mm_io_table_size);
 
 			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t data[2] = { MM_EVENT_IO_WRITE, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, data, 2);
+			uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, msg, 2);
 		}
 	}
 
@@ -494,8 +504,8 @@ mm_event_dispatch(void)
 		int a, b;
 
 		// Change a read event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_READ);
-		b = (mm_io_table[handler].flags & MM_EVENT_IO_READ);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_READ);
+		b = (mm_io_table[handler].flags & MM_EVENT_NET_READ);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -512,8 +522,8 @@ mm_event_dispatch(void)
 		}
 
 		// Change a write event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_IO_WRITE);
-		b = (mm_io_table[handler].flags & MM_EVENT_IO_WRITE);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_WRITE);
+		b = (mm_io_table[handler].flags & MM_EVENT_NET_WRITE);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -549,7 +559,7 @@ mm_event_dispatch(void)
 		mm_fd->changed = 0;
 
 		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_EVENT_IO_UNREG, mm_fd->data };
+			uint32_t msg[2] = { MM_NET_MSG_UNREGISTER, mm_fd->data };
 			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
 			mm_port_send_blocking(io->port, msg, 2);
 		}
@@ -559,7 +569,7 @@ mm_event_dispatch(void)
 		mm_fd->handler = mm_event_fd_changes[i].handler;
 
 		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_EVENT_IO_REG, mm_fd->data };
+			uint32_t msg[2] = { MM_NET_MSG_REGISTER, mm_fd->data };
 			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
 			mm_port_send_blocking(io->port, msg, 2);
 		}
@@ -576,10 +586,15 @@ mm_event_dispatch(void)
 	// Process the received system events.
 	for (int i = 0; i < nkevents; i++) {
 		if ((mm_kevents[i].flags & EV_ERROR) != 0) {
-
 			int fd = mm_kevents[i].ident;
-			mm_error(mm_kevents[i].data, "error event on fd %d", fd);
+			DEBUG("error event on fd %d", fd);
 
+			mm_event_handler_t io = mm_fd_table[fd].handler;
+			ASSERT(io < mm_io_table_size);
+
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+			uint32_t data[2] = { MM_NET_MSG_ERROR, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, data, 2);
 		} else if (mm_kevents[i].filter == EVFILT_READ) {
 			int fd = mm_kevents[i].ident;
 			DEBUG("read event on fd %d", fd);
@@ -588,7 +603,7 @@ mm_event_dispatch(void)
 			ASSERT(io < mm_io_table_size);
 
 			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t data[2] = { MM_EVENT_IO_READ, mm_fd_table[fd].data };
+			uint32_t data[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, data, 2);
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
 			int fd = mm_kevents[i].ident;
@@ -598,7 +613,7 @@ mm_event_dispatch(void)
 			ASSERT(io < mm_io_table_size);
 
 			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t data[2] = { MM_EVENT_IO_WRITE, mm_fd_table[fd].data };
+			uint32_t data[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, data, 2);
 		}
 	}

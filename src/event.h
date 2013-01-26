@@ -39,17 +39,13 @@ void mm_event_start(void);
 void mm_event_stop(void);
 
 /**********************************************************************
- * I/O Event Support.
+ * Net I/O Event Support.
  **********************************************************************/
 
-/* I/O event handler codes. */
-#define MM_EVENT_IO_READ	1
-#define MM_EVENT_IO_WRITE	2
-#define MM_EVENT_IO_READ_WRITE	(MM_EVENT_IO_READ | MM_EVENT_IO_WRITE)
-#define MM_EVENT_IO_REG		(1 << 2)
-#define MM_EVENT_IO_UNREG	(2 << 2)
-#define MM_EVENT_IO_ERROR	(3 << 2)
-#define MM_EVENT_IO_EOF		(4 << 2)
+/* Net I/O events. */
+#define MM_EVENT_NET_READ	1
+#define MM_EVENT_NET_WRITE	2
+#define MM_EVENT_NET_READ_WRITE	(MM_EVENT_NET_READ | MM_EVENT_NET_WRITE)
 
 /* Return values of mm_event_verify_fd() */
 #define MM_FD_VALID	(0)

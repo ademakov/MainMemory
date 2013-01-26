@@ -41,12 +41,23 @@ struct mm_task;
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
 #define MM_NET_NONBLOCK		0x0002
-#define MM_NET_READ_SPAWN	0x0004
-#define MM_NET_WRITE_SPAWN	0x0008
-#define MM_NET_READ_READY	0x0010
-#define MM_NET_WRITE_READY	0x0020
+#define MM_NET_READ_READY	0x0004
+#define MM_NET_WRITE_READY	0x0008
+#define MM_NET_READ_SPAWN	0x0010
+#define MM_NET_WRITE_SPAWN	0x0020
 #define MM_NET_READ_QUEUE	0x0040
 #define MM_NET_WRITE_QUEUE	0x0080
+
+/* Net task communication codes. */
+typedef enum {
+	MM_NET_MSG_ERROR,
+	MM_NET_MSG_READ_READY,
+	MM_NET_MSG_WRITE_READY,
+	MM_NET_MSG_READ_SPAWN,
+	MM_NET_MSG_WRITE_SPAWN,
+	MM_NET_MSG_REGISTER,
+	MM_NET_MSG_UNREGISTER,
+} mm_net_msg_t;
 
 /* Socket address. */
 struct mm_net_addr
@@ -79,8 +90,19 @@ struct mm_net_server
 	/* Server flags. */
 	int flags;
 
-	/* A list of all clients. */
+	/* I/O event handler ID. */
+	mm_event_handler_t io_handler;
+
+	/* I/O event handler task. */
+	struct mm_task *io_task;
+	struct mm_port *io_port;
+
+	/* A list of all client sockets. */
 	struct mm_list clients;
+	/* A list of read ready client sockets. */
+	struct mm_list read_queue;
+	/* A list of write ready client sockets. */
+	struct mm_list write_queue;
 
 	/* A link in the accept ready list. */
 	struct mm_list accept_queue;
