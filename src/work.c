@@ -20,11 +20,13 @@
 #include "work.h"
 
 #include "core.h"
+#include "pool.h"
 #include "sched.h"
 #include "task.h"
 #include "util.h"
 
 
+static struct mm_pool mm_work_pool;
 static struct mm_list mm_work_queue;
 static struct mm_list mm_wait_queue;
 
@@ -33,6 +35,8 @@ void
 mm_work_init(void)
 {
 	ENTER();
+
+	mm_pool_init(&mm_work_pool, "work", sizeof(struct mm_work));
 
 	mm_list_init(&mm_work_queue);
 	mm_list_init(&mm_wait_queue);
@@ -45,23 +49,20 @@ mm_work_term(void)
 {
 	ENTER();
 
-	while (!mm_list_empty(&mm_work_queue)) {
-		struct mm_list *link = mm_list_head(&mm_work_queue);
-		struct mm_work *work = containerof(link, struct mm_work, queue);
-		mm_work_destroy(work);
-	}
+	mm_pool_discard(&mm_work_pool);
 
 	LEAVE();
 }
 
 struct mm_work *
-mm_work_create(uint32_t count)
+mm_work_create(mm_task_flags_t flags, mm_routine routine, uintptr_t item)
 {
 	ENTER();
 
-	size_t size = sizeof(struct mm_work) + count * sizeof(intptr_t);
-	struct mm_work *work = mm_alloc(size);
-	work->count = count;
+	struct mm_work *work = mm_pool_alloc(&mm_work_pool);
+	work->flags = flags;
+	work->routine = routine;
+	work->item = item;
 
 	LEAVE();
 	return work;
@@ -72,7 +73,7 @@ mm_work_destroy(struct mm_work *work)
 {
 	ENTER();
 
-	mm_free(work);
+	mm_pool_free(&mm_work_pool, work);
 
 	LEAVE();
 }
@@ -83,7 +84,7 @@ mm_work_get(void)
 	ENTER();
 
 	struct mm_work *work = NULL;
-	for (;;) {
+	while (likely(!mm_core->stop)) {
 		/* If there is a work available then take it. */
 		if (!mm_list_empty(&mm_work_queue)) {
 			struct mm_list *link = mm_list_head(&mm_work_queue);
@@ -110,6 +111,30 @@ mm_work_put(struct mm_work *work)
 
 	/* If there is a task waiting for a work then let it run now. */
 	mm_task_signal(&mm_wait_queue);
+
+	LEAVE();
+}
+
+void
+mm_work_add(mm_task_flags_t flags, mm_routine routine, uintptr_t item)
+{
+	ENTER();
+	
+	struct mm_work *work = mm_work_create(flags, routine, item);
+	mm_work_put(work);
+
+	LEAVE();
+}
+
+void
+mm_work_addv(mm_task_flags_t flags, mm_routine routine, uintptr_t *items, size_t nitems)
+{
+	ENTER();
+
+	for (size_t i = 0; i < nitems; i++) {
+		struct mm_work *work = mm_work_create(flags, routine, items[i]);
+		mm_work_put(work);
+	}
 
 	LEAVE();
 }

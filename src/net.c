@@ -740,11 +740,7 @@ mm_net_io_loop(uintptr_t arg)
 
 				// Create a new work item that will execute
 				// the protocol read routine.
-				struct mm_work *work = mm_work_create(1);
-				work->flags = MM_TASK_READING;
-				work->routine = mm_net_reader;
-				work->items[0] = (intptr_t) sock;
-				mm_work_put(work);
+				mm_work_add(MM_TASK_READING, mm_net_reader, (intptr_t) sock);
 
 				++io_count;
 				no_events = false;
@@ -768,11 +764,7 @@ mm_net_io_loop(uintptr_t arg)
 
 				// Create a new work item that will execute
 				// the protocol write routine.
-				struct mm_work *work = mm_work_create(1);
-				work->flags = MM_TASK_WRITING;
-				work->routine = mm_net_writer;
-				work->items[0] = (intptr_t) sock;
-				mm_work_put(work);
+				mm_work_add(MM_TASK_WRITING, mm_net_writer, (intptr_t) sock);
 
 				++io_count;
 				no_events = false;

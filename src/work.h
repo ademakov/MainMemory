@@ -30,24 +30,27 @@ struct mm_work
 {
 	/* A link in the work queue. */
 	struct mm_list queue;
-	/* Work items flags. */
+	/* The work task flags. */
 	mm_task_flags_t flags;
-	/* Work items count. */
-	uint32_t count;
 	/* The work routine. */
 	mm_routine routine;
-	/* Work items array. */
-	uintptr_t items[];
+	/* The work item. */
+	uintptr_t item;
 };
 
 
 void mm_work_init(void);
 void mm_work_term(void);
 
-struct mm_work * mm_work_create(uint32_t count);
+struct mm_work * mm_work_create(mm_task_flags_t flags, mm_routine routine, uintptr_t item);
 void mm_work_destroy(struct mm_work *work);
 
 struct mm_work * mm_work_get(void);
+
 void mm_work_put(struct mm_work *work);
+
+void mm_work_add(mm_task_flags_t flags, mm_routine routine, uintptr_t item);
+
+void mm_work_addv(mm_task_flags_t flags, mm_routine routine, uintptr_t *items, size_t nitems);
 
 #endif /* WORK_H */

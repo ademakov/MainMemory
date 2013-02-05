@@ -1,6 +1,5 @@
 
 ASAP:
-* pool of worker tasks serving the work queue
 * crude memcache module
 * add timers and task sleep
 * ensure correct client and server object destruction
@@ -9,15 +8,16 @@ ASAP:
 
 Essentials:
 * resolve socket close issues: time wait
+* worker threads, multi-threaded task & work schedulers
+* add task cancel
+* support signals
 * UDP servers
 * SSL servers
 * fs notifications
-* support signals
-* add task local storage (tls)
-* add task cancel and kill
-* worker threads, multithreaded task & work schedulers
 * system call threads
 * disk I/O threads
+* configuration file parsing
+* command line argument parsing
 * syslog
 * daemonize
 * statistics
@@ -26,8 +26,8 @@ Essentials:
 * HTTP module
 
 Enhancements:
-* configuration file parsing
-* command line argument parsing
+* task fork/join
+* task local storage (tls)
 * reap dead tasks pending for too long
 * memory management:
 ** use separate mspace for task local dynamic memory ?

@@ -123,13 +123,7 @@ mm_future_start(struct mm_future *future)
 
 	if (future->status == MM_FUTURE_CREATED) {
 		future->status = MM_FUTURE_STARTED;
-
-		struct mm_work *work = mm_work_create(1);
-		work->flags = future->flags;
-		work->routine = mm_future_routine;
-		work->items[0] = (uintptr_t) future;
-
-		mm_work_put(work);
+		mm_work_add(0, mm_future_routine, (uintptr_t) future);
 	}
 
 	LEAVE();

@@ -30,32 +30,65 @@
 __thread struct mm_core *mm_core;
 
 /**********************************************************************
- * Master task.
+ * Worker task.
  **********************************************************************/
 
-static struct mm_task *
-mm_core_get_worker(mm_task_flags_t flags, mm_routine routine, uintptr_t routine_arg)
+static void
+mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
-	return mm_task_create("worker", flags, routine, routine_arg);
+	mm_core->nworkers--;
+	mm_sched_run(mm_core->master);
 }
+
+static void
+mm_core_worker(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_work *work = (struct mm_work *) arg;
+	mm_routine routine = work->routine;
+	uintptr_t routine_arg = work->item;
+	mm_work_destroy(work);
+
+	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
+	routine(routine_arg);
+	mm_task_cleanup_pop(true);
+
+	LEAVE();
+}
+
+static void
+mm_core_worker_start(struct mm_work *work)
+{
+	ENTER();
+
+	struct mm_task *task = mm_task_create("worker", work->flags,
+					      mm_core_worker, (uintptr_t) work);
+	mm_core->nworkers++;
+	mm_sched_run(task);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Master task.
+ **********************************************************************/
 
 static void
 mm_core_master_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
 
-	while (!mm_core->stop) {
-		struct mm_work *work = mm_work_get();
-
-		for (uint32_t i = 0; i < work->count; i++) {
-			struct mm_task *task = mm_core_get_worker(
-				work->flags,
-				work->routine,
-				work->items[i]);
-			mm_sched_run(task);
+	while (likely(!mm_core->stop)) {
+		if (mm_core->nworkers == mm_core->nworkers_max) {
+			mm_sched_block();
+			continue;
 		}
 
-		mm_work_destroy(work);
+		struct mm_work *work = mm_work_get();
+		if (likely(work != NULL)) {
+			mm_core_worker_start(work);
+		}
 	}
 
 	LEAVE();
@@ -78,6 +111,7 @@ mm_core_stop_master(struct mm_core *core)
 	ENTER();
 
 	core->stop = true;
+	mm_sched_run(core->master);
 
 	LEAVE();
 }
