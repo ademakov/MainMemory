@@ -35,9 +35,6 @@
 struct mm_port;
 struct mm_task;
 
-/* Server flags. */
-#define MM_NET_ACCEPT_QUEUE	1
-
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
 #define MM_NET_NONBLOCK		0x0002
@@ -45,8 +42,6 @@ struct mm_task;
 #define MM_NET_WRITE_READY	0x0008
 #define MM_NET_READ_SPAWN	0x0010
 #define MM_NET_WRITE_SPAWN	0x0020
-#define MM_NET_READ_QUEUE	0x0040
-#define MM_NET_WRITE_QUEUE	0x0080
 
 /* Net task communication codes. */
 typedef enum {
@@ -99,13 +94,6 @@ struct mm_net_server
 
 	/* A list of all client sockets. */
 	struct mm_list clients;
-	/* A list of read ready client sockets. */
-	struct mm_list read_queue;
-	/* A list of write ready client sockets. */
-	struct mm_list write_queue;
-
-	/* A link in the accept ready list. */
-	struct mm_list accept_queue;
 
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
@@ -194,7 +182,7 @@ mm_net_clear_nonblock(struct mm_net_socket *sock)
 }
 
 static inline void
-mm_net_set_timeout(struct mm_net_socket *sock, uint32_t usec)
+mm_net_set_timeout(struct mm_net_socket *sock, mm_timeout_t usec)
 {
 	(void) sock;
 	(void) usec;

@@ -192,8 +192,9 @@ mm_net_remove_unix_socket(struct mm_net_addr *addr)
 
 	if (addr->addr.sa_family == AF_UNIX) {
 		mm_print("removing %s", addr->un_addr.sun_path);
-		if (unlink(addr->un_addr.sun_path) < 0)
+		if (unlink(addr->un_addr.sun_path) < 0) {
 			mm_error(errno, "unlink(\"%s\")", addr->un_addr.sun_path);
+		}
 	}
 
 	LEAVE();
@@ -264,8 +265,6 @@ mm_net_alloc_server(void)
 
 	// Initialize client lists.
 	mm_list_init(&srv->clients);
-	mm_list_init(&srv->read_queue);
-	mm_list_init(&srv->write_queue);
 
 	return srv;
 }
@@ -337,8 +336,162 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
 }
 
 /**********************************************************************
+ * Server acceptor tasks.
+ **********************************************************************/
+
+#define MM_ACCEPT_COUNT		10
+
+/* The accept event handler task. */
+static struct mm_task *mm_net_accept_task;
+
+/* The accept event handler port. */
+static struct mm_port *mm_net_accept_port;
+
+/* Accept event handler cookie. */
+static mm_event_handler_t mm_net_accept_handler;
+
+static bool
+mm_net_accept(struct mm_net_server *srv)
+{
+	ENTER();
+
+	bool rc = true;
+
+	/* Client socket. */
+	int fd;
+	socklen_t salen;
+	struct sockaddr_storage sa;
+
+retry:
+	/* Try to accept a connection. */
+	salen = sizeof sa;
+	fd = accept(srv->fd, (struct sockaddr *) &sa, &salen);
+	if (unlikely(fd < 0)) {
+		if (errno == EINTR)
+			goto retry;
+		if (errno != EAGAIN && errno != EWOULDBLOCK)
+			mm_error(errno, "%s: accept()", srv->name);
+		else
+			rc = false;
+		goto done;
+	}
+	if (unlikely(mm_event_verify_fd(fd) != MM_FD_VALID)) {
+		mm_error(0, "%s: socket no is too high: %d", srv->name, fd);
+		close(fd);
+		goto done;
+	}
+
+	/* Set the socket options. */
+	int val = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
+	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
+
+	/* Make the socket non-blocking. */
+	mm_net_set_nonblocking(fd);
+
+	/* Allocate a new socket structure. */
+	struct mm_net_socket *sock = mm_net_create_socket(fd, srv);
+	if (sock == NULL) {
+		mm_error(0, "%s: socket table overflow", srv->name);
+		close(fd);
+		goto done;
+	}
+
+	/* Initialize the socket structure. */
+	if (sa.ss_family == AF_INET)
+		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
+	else if (sa.ss_family == AF_INET6)
+		memcpy(&sock->peer.in6_addr, &sa, sizeof(sock->peer.in6_addr));
+	else
+		sock->peer.addr.sa_family = sa.ss_family;
+
+	/* Register the socket with the event loop. */
+	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	mm_event_register_fd(sock->fd, srv->io_handler, sock_index);
+
+done:
+	LEAVE();
+	return rc;
+}
+
+static void
+mm_net_acceptor(uintptr_t arg)
+{
+	ENTER();
+
+	/* Find the pertinent server. */
+	struct mm_net_server *srv = &mm_srv_table[arg];
+
+	/* Accept incoming connections. */
+	while (mm_net_accept(srv)) {
+		mm_sched_yield();
+	}
+
+	LEAVE();
+}
+
+static void
+mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
+{
+	ENTER();
+
+	int count = 0;
+	uintptr_t items[MM_ACCEPT_COUNT];
+
+	bool block = true;
+
+	/* Handle events on server sockets. */
+	for (;;) {
+		uint32_t msg[2];
+
+		if (block ? count != 0 : count == MM_ACCEPT_COUNT) {
+			mm_work_addv(0, mm_net_acceptor, items, count);
+			count = 0;
+		}
+
+		if (block) {
+			block = false;
+			mm_port_receive_blocking(mm_net_accept_port, msg, 2);
+		} else if (mm_port_receive(mm_net_accept_port, msg, 2) < 0) {
+			block = true;
+			continue;
+		}
+
+		if (msg[0] == MM_NET_MSG_READ_READY) {
+			items[count++] = msg[1];
+		}
+	}
+
+	LEAVE();
+}
+
+static void
+mm_net_init_server_task(void)
+{
+	ENTER();
+
+	/* Create the event handler task. */
+	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
+
+	/* Make the task priority higher. */
+	mm_net_accept_task->priority /= 2;
+
+	/* Create the event handler port. */
+	mm_net_accept_port = mm_port_create(mm_net_accept_task);
+
+	// Register I/O handlers.
+	mm_net_accept_handler = mm_event_add_io_handler(MM_EVENT_NET_READ, mm_net_accept_port);
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Socket I/O tasks.
  **********************************************************************/
+
+#define MM_IO_COUNT		10
 
 static void
 mm_net_attach_reader(struct mm_net_socket *sock)
@@ -368,16 +521,16 @@ mm_net_detach_writer(struct mm_net_socket *sock)
 	sock->writer = NULL;
 }
 
-static inline void
-mm_net_bind_reader(struct mm_net_socket *sock)
+static void
+mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
-	sock->flags &= ~MM_NET_READ_SPAWN;
+	sock->flags &= ~MM_NET_READ_READY;
 }
 
-static inline void
-mm_net_bind_writer(struct mm_net_socket *sock)
+static void
+mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
-	sock->flags &= ~MM_NET_WRITE_SPAWN;
+	sock->flags &= ~MM_NET_WRITE_READY;
 }
 
 void
@@ -385,12 +538,15 @@ mm_net_unbind_reader(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	// Enable creating new reader tasks on the socket if it was so far
-	// bound to this one.
+	/* Enable creating new reader tasks on the socket if it was so far
+	   bound to this one. */
 	if ((mm_running_task->flags & MM_TASK_READING) != 0) {
 		// TODO: check that the socket is bound to mm_running_task?
 		mm_running_task->flags &= ~MM_TASK_READING;
-		sock->flags |= MM_NET_READ_SPAWN;
+
+		uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+		uint32_t msg[2] = { MM_NET_MSG_READ_SPAWN, id };
+		mm_port_send_blocking(sock->srv->io_port, msg, 2);
 	}
 
 	LEAVE();
@@ -401,12 +557,15 @@ mm_net_unbind_writer(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	// Enable creating new writer tasks on the socket if it was so far
-	// bound to this one.
+	/* Enable creating new writer tasks on the socket if it was so far
+	   bound to this one. */
 	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
 		// TODO: check that the socket is bound to mm_running_task?
 		mm_running_task->flags &= ~MM_TASK_WRITING;
-		sock->flags |= MM_NET_WRITE_SPAWN;
+
+		uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+		uint32_t msg[2] = { MM_NET_MSG_WRITE_SPAWN, id };
+		mm_port_send_blocking(sock->srv->io_port, msg, 2);
 	}
 
 	LEAVE();
@@ -415,12 +574,12 @@ mm_net_unbind_writer(struct mm_net_socket *sock)
 static void
 mm_net_reader(uintptr_t arg)
 {
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	/* Make sure the socket will be unbound from the task. */
 	mm_task_cleanup_push(mm_net_unbind_reader, sock);
 
-	// Run the protocol handler routine.
+	/* Run the protocol handler routine. */
 	(sock->srv->proto->reader_routine)(sock);
 
 	mm_task_cleanup_pop(true);
@@ -429,285 +588,15 @@ mm_net_reader(uintptr_t arg)
 static void
 mm_net_writer(uintptr_t arg)
 {
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	/* Make sure the socket will be unbound from the task. */
 	mm_task_cleanup_push(mm_net_unbind_writer, sock);
 
-	// Run the protocol handler routine.
+	/* Run the protocol handler routine. */
 	(sock->srv->proto->writer_routine)(sock);
 
 	mm_task_cleanup_pop(true);
-}
-
-/**********************************************************************
- * Net I/O routines.
- **********************************************************************/
-
-#define MM_ACCEPT_COUNT		10
-#define MM_IO_COUNT		10
-
-/* The accept event handler task. */
-static struct mm_task *mm_net_accept_task;
-
-/* The accept event handler port. */
-static struct mm_port *mm_net_accept_port;
-
-// I/O event handler cookies.
-static mm_event_handler_t mm_net_accept_handler;
-
-// The list of servers ready to accept connections.
-static struct mm_list mm_accept_queue;
-
-static void
-mm_net_add_accept_ready(uint32_t index)
-{
-	ENTER();
-	ASSERT(index < mm_srv_count);
-
-	// Find the pertinent server and add it to the accept queue if needed.
-	struct mm_net_server *srv = &mm_srv_table[index];
-	if (likely((srv->flags & MM_NET_ACCEPT_QUEUE) == 0)) {
-		mm_list_append(&mm_accept_queue, &srv->accept_queue);
-		srv->flags |= MM_NET_ACCEPT_QUEUE;
-	}
-
-	LEAVE();
-}
-
-static void
-mm_net_set_read_ready(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	if (sock->reader != NULL) {
-		sock->flags |= MM_NET_READ_READY;
-		mm_sched_run(sock->reader);
-	} else if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
-		if (likely((sock->flags & MM_NET_READ_QUEUE) == 0))
-			mm_list_append(&sock->srv->read_queue, &sock->read_queue);
-		sock->flags |= (MM_NET_READ_READY | MM_NET_READ_QUEUE);
-	} else {
-		sock->flags |= MM_NET_READ_READY;
-	}
-
-	LEAVE();
-}
-
-static void
-mm_net_reset_read_ready(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	if ((sock->flags & MM_NET_READ_QUEUE) != 0)
-		mm_list_delete(&sock->read_queue);
-	sock->flags &= ~(MM_NET_READ_READY | MM_NET_READ_QUEUE);
-
-	LEAVE();
-}
-
-static void
-mm_net_set_write_ready(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	if (sock->writer != NULL) {
-		sock->flags |= MM_NET_WRITE_READY;
-		mm_sched_run(sock->writer);
-	} else if (sock->srv->proto->writer_routine != NULL) {
-		if (likely((sock->flags & MM_NET_WRITE_QUEUE) == 0))
-			mm_list_append(&sock->srv->write_queue, &sock->write_queue);
-		sock->flags |= (MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
-	} else {
-		sock->flags |= MM_NET_WRITE_READY;
-	}
-
-	LEAVE();
-}
-
-static void
-mm_net_reset_write_ready(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	if ((sock->flags & MM_NET_WRITE_QUEUE) != 0)
-		mm_list_delete(&sock->write_queue);
-	sock->flags &= ~(MM_NET_WRITE_READY | MM_NET_WRITE_QUEUE);
-
-	LEAVE();
-}
-
-static void
-mm_net_accept(struct mm_net_server *srv)
-{
-	ENTER();
-	ASSERT((srv->flags & MM_NET_ACCEPT_QUEUE) != 0);
-
-	// Client socket.
-	int fd;
-	socklen_t salen;
-	struct sockaddr_storage sa;
-
-retry:
-	// Accept a client socket.
-	salen = sizeof sa;
-	fd = accept(srv->fd, (struct sockaddr *) &sa, &salen);
-	if (unlikely(fd < 0)) {
-		if (errno == EINTR)
-			goto retry;
-
-		mm_list_delete(&srv->accept_queue);
-		srv->flags &= ~MM_NET_ACCEPT_QUEUE;
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
-			mm_error(errno, "%s: accept()", srv->name);
-		goto done;
-	}
-	if (unlikely(mm_event_verify_fd(fd) != MM_FD_VALID)) {
-		mm_error(0, "%s: socket no is too high: %d", srv->name, fd);
-		close(fd);
-		goto done;
-	}
-
-	// Set the socket options.
-	int val = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
-		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
-		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
-
-	// Make the socket non-blocking.
-	mm_net_set_nonblocking(fd);
-
-	// Allocate a new socket structure.
-	struct mm_net_socket *sock = mm_net_create_socket(fd, srv);
-	if (sock == NULL) {
-		mm_error(0, "%s: socket table overflow", srv->name);
-		close(fd);
-		goto done;
-	}
-
-	// Initialize the socket structure.
-	if (sa.ss_family == AF_INET)
-		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
-	else if (sa.ss_family == AF_INET6)
-		memcpy(&sock->peer.in6_addr, &sa, sizeof(sock->peer.in6_addr));
-	else
-		sock->peer.addr.sa_family = sa.ss_family;
-
-	// Register the socket with the event loop.
-	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
-	mm_event_register_fd(sock->fd, srv->io_handler, sock_index);
-
-done:
-	LEAVE();
-}
-
-static void
-mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
-{
-	ENTER();
-
-	// Accept incoming connections.
-	int accept_count = 0;
-	for (;;) {
-
-		// Accept a connection.
-		if (!mm_list_empty(&mm_accept_queue)) {
-
-			// Get the pertinent server.
-			struct mm_list *link = mm_list_head(&mm_accept_queue);
-			struct mm_net_server *srv = containerof(link, struct mm_net_server, accept_queue);
-
-			// Move the last server to the queue tail.
-			mm_list_delete(link);
-			mm_list_append(&mm_accept_queue, &srv->accept_queue);
-
-			// Accept a single connection on it.
-			mm_net_accept(srv);
-
-			if (++accept_count == MM_ACCEPT_COUNT) {
-				// Prevent starvation of other tasks. Give them
-				// a chance to run.
-				mm_sched_yield();
-				accept_count = 0;
-			}
-		} else {
-			uint32_t msg[2];
-
-			// If there are no ready servers yet then block
-			// waiting for an accept event.
-			mm_port_receive_blocking(mm_net_accept_port, msg, 2);
-			mm_net_add_accept_ready(msg[1]);
-			accept_count = 0;
-
-			// Drain all pending accept events without blocking.
-			while (mm_port_receive(mm_net_accept_port, msg, 2) == 0) {
-				mm_net_add_accept_ready(msg[1]);
-			}
-		}
-	}
-
-	LEAVE();
-}
-
-static void
-mm_net_add_read_write_ready(mm_net_msg_t msg, uint32_t index)
-{
-	ENTER();
-
-	// Find the pertinent socket.
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, index);
-
-	switch (msg) {
-	case MM_NET_MSG_ERROR:
-		mm_net_close(sock);
-		break;
-
-	case MM_NET_MSG_READ_READY:
-		// Mark the socket as read ready.
-		if ((sock->flags & MM_NET_CLOSED) == 0)
-			mm_net_set_read_ready(sock);
-		break;
-
-	case MM_NET_MSG_WRITE_READY:
-		// Mark the socket as write ready.
-		if ((sock->flags & MM_NET_CLOSED) == 0)
-			mm_net_set_write_ready(sock);
-		break;
-
-	case MM_NET_MSG_READ_SPAWN:
-		break;
-
-	case MM_NET_MSG_WRITE_SPAWN:
-		break;
-
-	case MM_NET_MSG_REGISTER:
-		// Let the protocol layer prepare the socket data.
-		if (sock->srv->proto->prepare != NULL)
-			(sock->srv->proto->prepare)(sock);
-		break;
-
-	case MM_NET_MSG_UNREGISTER:
-		ASSERT((sock->flags & MM_NET_CLOSED) != 0);
-
-		// Let the protocol layer cleanup the socket data.
-		if (sock->srv->proto->cleanup != NULL)
-			(sock->srv->proto->cleanup)(sock);
-
-		// Close the socket.
-		// TODO: set linger off and/or close concurrently to avoid stalls.
-		close(sock->fd);
-
-		// Remove the socket from the server lists.
-		mm_net_destroy_socket(sock);
-		break;
-
-	default:
-		mm_print("%x %x", msg, index);
-		ABORT();
-	}
-
-	LEAVE();
 }
 
 static void
@@ -718,104 +607,126 @@ mm_net_io_loop(uintptr_t arg)
 	/* Find the pertinent server. */
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
 
-	// Handle I/O events.
-	int io_count = 0;
+	int read_count = 0;
+	uintptr_t read_items[MM_IO_COUNT];
+
+	int write_count = 0;
+	uintptr_t write_items[MM_IO_COUNT];
+
+	bool block = true;
+
+	/* Handle I/O events. */
 	for (;;) {
-		bool no_events = true;
+		uint32_t msg[2];
 
-		// Handle a read event.
-		if (!mm_list_empty(&srv->read_queue)) {
-
-			// Get the pertinent socket.
-			struct mm_list *link = mm_list_head(&srv->read_queue);
-			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, read_queue);
-
-			// Remove it from the queue.
-			mm_list_delete(link);
-			sock->flags &= ~MM_NET_READ_QUEUE;
-
-			if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
-				// Disable new tasks until this one is done.
-				mm_net_bind_reader(sock);
-
-				// Create a new work item that will execute
-				// the protocol read routine.
-				mm_work_add(MM_TASK_READING, mm_net_reader, (intptr_t) sock);
-
-				++io_count;
-				no_events = false;
-			}
+		/* Submit read work. */
+		if (block ? read_count != 0 : read_count == MM_IO_COUNT) {
+			mm_work_addv(MM_TASK_READING, mm_net_reader, read_items, read_count);
+			read_count = 0;
 		}
 
-		// Handle a write event.
-		if (!mm_list_empty(&srv->write_queue)) {
-
-			// Get the pertinent socket.
-			struct mm_list *link = mm_list_head(&srv->write_queue);
-			struct mm_net_socket *sock = containerof(link, struct mm_net_socket, write_queue);
-
-			// Remove it from the queue.
-			mm_list_delete(link);
-			sock->flags &= ~MM_NET_WRITE_QUEUE;
-
-			if ((sock->flags & MM_NET_WRITE_SPAWN) != 0) {
-				// Disable new tasks until this one is done.
-				mm_net_bind_writer(sock);
-
-				// Create a new work item that will execute
-				// the protocol write routine.
-				mm_work_add(MM_TASK_WRITING, mm_net_writer, (intptr_t) sock);
-
-				++io_count;
-				no_events = false;
-			}
+		/* Submit write work. */
+		if (block ? write_count != 0 : write_count == MM_IO_COUNT) {
+			mm_work_addv(MM_TASK_WRITING, mm_net_writer, write_items, write_count);
+			write_count = 0;
 		}
 
-		if (no_events) {
-			uint32_t msg[2];
-
-			// If there are no ready sockets then block waiting
-			// for an event.
+		/* Get I/O event. */
+		if (block) {
+			block = false;
 			mm_port_receive_blocking(srv->io_port, msg, 2);
-			mm_net_add_read_write_ready(msg[0], msg[1]);
-			io_count = 0;
+		} else if (mm_port_receive(srv->io_port, msg, 2) < 0) {
+			block = true;
+			continue;
+		}
 
-			// Drain all pending read events without blocking.
-			while (mm_port_receive(srv->io_port, msg, 2) == 0) {
-				mm_net_add_read_write_ready(msg[0], msg[1]);
+		/* Find the pertinent socket. */
+		struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, msg[1]);
+
+		/* Handle the event. */
+		switch (msg[0]) {
+		case MM_NET_MSG_ERROR:
+			mm_net_close(sock);
+			break;
+
+		case MM_NET_MSG_READ_READY:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_READ_READY;
+
+			if (sock->reader != NULL) {
+				mm_sched_run(sock->reader);
+			} else if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
+				sock->flags &= ~MM_NET_READ_SPAWN;
+				read_items[read_count++] = msg[1];
 			}
+			break;
 
-		} else if (io_count >= MM_IO_COUNT) {
-			// Prevent starvation of other tasks. Give them
-			// a chance to run.
-			mm_sched_yield();
-			io_count = 0;
+		case MM_NET_MSG_WRITE_READY:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_WRITE_READY;
+
+			if (sock->writer != NULL) {
+				mm_sched_run(sock->writer);
+			} else if ((sock->flags & MM_NET_WRITE_SPAWN) != 0) {
+				sock->flags &= ~MM_NET_WRITE_SPAWN;
+				write_items[write_count++] = msg[1];
+			}
+			break;
+
+		case MM_NET_MSG_READ_SPAWN:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			if ((sock->flags & MM_NET_READ_READY) != 0) {
+				read_items[read_count++] = msg[1];
+			} else {
+				sock->flags |= MM_NET_READ_SPAWN;
+			}
+			break;
+
+		case MM_NET_MSG_WRITE_SPAWN:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			if ((sock->flags & MM_NET_WRITE_READY) != 0) {
+				write_items[write_count++] = msg[1];
+			} else {
+				sock->flags |= MM_NET_WRITE_SPAWN;
+			}
+			break;
+
+		case MM_NET_MSG_REGISTER:
+			ASSERT((sock->flags & MM_NET_CLOSED) == 0);
+
+			/* Let the protocol layer prepare the socket data. */
+			if (srv->proto->prepare != NULL)
+				(srv->proto->prepare)(sock);
+			break;
+
+		case MM_NET_MSG_UNREGISTER:
+			ASSERT((sock->flags & MM_NET_CLOSED) != 0);
+
+			/* Let the protocol layer cleanup the socket data. */
+			if (srv->proto->cleanup != NULL)
+				(srv->proto->cleanup)(sock);
+
+			/* Close the socket. */
+			// TODO: set linger off and/or close concurrently to avoid stalls.
+			close(sock->fd);
+
+			/* Remove the socket from the server lists. */
+			mm_net_destroy_socket(sock);
+			break;
+
+		default:
+			mm_print("%x %x", msg[0], msg[1]);
+			ABORT();
 		}
 	}
-
-	LEAVE();
-}
-
-static void
-mm_net_init_tasks(void)
-{
-	ENTER();
-
-	/* Initialize the accept queue. */
-	mm_list_init(&mm_accept_queue);
-
-	/* Create the event handler task. */
-	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
-
-	/* Make the task priority higher. */
-	mm_net_accept_task->priority /= 2;
-
-	/* Create the event handler port. */
-	mm_net_accept_port = mm_port_create(mm_net_accept_task);
-
-	// Register I/O handlers.
-	mm_net_accept_handler = mm_event_add_io_handler(
-		MM_EVENT_NET_READ, mm_net_accept_port);
 
 	LEAVE();
 }
@@ -854,7 +765,7 @@ mm_net_init(void)
 
 	mm_net_init_server_table();
 	mm_net_init_socket_table();
-	mm_net_init_tasks();
+	mm_net_init_server_task();
 
 	mm_net_initialized = 1;
 
@@ -948,9 +859,6 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 
 	/* Create the server socket. */
 	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
-	if (mm_event_verify_fd(srv->fd)) {
-		mm_fatal(0, "%s: server socket no is too high: %d", srv->name, srv->fd);
-	}
 
 	/* Create the event handler task. */
 	srv->io_task = mm_task_create("net-io", 0, mm_net_io_loop, (intptr_t) srv);
@@ -1242,15 +1150,13 @@ mm_net_close(struct mm_net_socket *sock)
 	if ((sock->flags & MM_NET_CLOSED) != 0)
 		goto done;
 
-	// Remove the socket from I/O queues and mark as closed.
-	if ((sock->flags & MM_NET_READ_QUEUE) != 0)
-		mm_list_delete(&sock->read_queue);
-	if ((sock->flags & MM_NET_WRITE_QUEUE) != 0)
-		mm_list_delete(&sock->write_queue);
 	sock->flags = MM_NET_CLOSED;
 
-	// Remove the socket from the event loop.
+	/* Remove the socket from the event loop. */
 	mm_event_unregister_fd(sock->fd);
+
+	/* TODO: Take care of work items and tasks that might still
+	   refer to this socket. */
 
 done:
 	LEAVE();
