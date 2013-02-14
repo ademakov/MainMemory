@@ -263,7 +263,7 @@ mm_net_alloc_server(void)
 	srv->fd = -1;
 	srv->flags = 0;
 
-	// Initialize client lists.
+	/* Initialize the client list. */
 	mm_list_init(&srv->clients);
 
 	return srv;
@@ -300,24 +300,20 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 {
 	ENTER();
 
-	// Allocate the socket.
+	/* Allocate the socket. */
 	struct mm_net_socket *sock = mm_pool_alloc(&mm_socket_pool);
 
-	// Initialize the fields.
+	/* Initialize the fields. */
 	sock->fd = fd;
 	sock->proto_data = 0;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->srv = srv;
 
-	// Set the socket flags.
+	/* Set the socket flags. */
 	sock->flags = 0;
-	if (srv->proto->reader_routine != NULL)
-		sock->flags |= MM_NET_READ_SPAWN;
-	if (srv->proto->writer_routine != NULL)
-		sock->flags |= MM_NET_WRITE_SPAWN;
 
-	// Register with the server.
+	/* Register with the server. */
 	mm_list_append(&srv->clients, &sock->clients);
 
 	LEAVE();
@@ -534,7 +530,71 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 }
 
 void
-mm_net_unbind_reader(struct mm_net_socket *sock)
+mm_net_spawn_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (mm_net_is_closed(sock))
+		goto done;
+
+	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	uint32_t msg[2] = { MM_NET_MSG_SPAWN_READER, id };
+	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+
+done:
+	LEAVE();
+}
+
+void
+mm_net_spawn_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (mm_net_is_closed(sock))
+		goto done;
+
+	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	uint32_t msg[2] = { MM_NET_MSG_SPAWN_WRITER, id };
+	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+
+done:
+	LEAVE();
+}
+
+static void
+mm_net_yield_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (mm_net_is_closed(sock))
+		goto done;
+
+	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	uint32_t msg[2] = { MM_NET_MSG_YIELD_READER, id };
+	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+
+done:
+	LEAVE();
+}
+
+static void
+mm_net_yield_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (mm_net_is_closed(sock))
+		goto done;
+
+	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	uint32_t msg[2] = { MM_NET_MSG_YIELD_WRITER, id };
+	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+
+done:
+	LEAVE();
+}
+
+void
+mm_net_reader_cleanup(struct mm_net_socket *sock)
 {
 	ENTER();
 
@@ -544,28 +604,7 @@ mm_net_unbind_reader(struct mm_net_socket *sock)
 		// TODO: check that the socket is bound to mm_running_task?
 		mm_running_task->flags &= ~MM_TASK_READING;
 
-		uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
-		uint32_t msg[2] = { MM_NET_MSG_READ_SPAWN, id };
-		mm_port_send_blocking(sock->srv->io_port, msg, 2);
-	}
-
-	LEAVE();
-}
-
-void
-mm_net_unbind_writer(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	/* Enable creating new writer tasks on the socket if it was so far
-	   bound to this one. */
-	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
-		// TODO: check that the socket is bound to mm_running_task?
-		mm_running_task->flags &= ~MM_TASK_WRITING;
-
-		uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
-		uint32_t msg[2] = { MM_NET_MSG_WRITE_SPAWN, id };
-		mm_port_send_blocking(sock->srv->io_port, msg, 2);
+		mm_net_yield_reader(sock);
 	}
 
 	LEAVE();
@@ -577,12 +616,29 @@ mm_net_reader(uintptr_t arg)
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	/* Make sure the socket will be unbound from the task. */
-	mm_task_cleanup_push(mm_net_unbind_reader, sock);
+	mm_task_cleanup_push(mm_net_reader_cleanup, sock);
 
 	/* Run the protocol handler routine. */
 	(sock->srv->proto->reader_routine)(sock);
 
 	mm_task_cleanup_pop(true);
+}
+
+void
+mm_net_writer_cleanup(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	/* Enable creating new writer tasks on the socket if it was so far
+	   bound to this one. */
+	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
+		// TODO: check that the socket is bound to mm_running_task?
+		mm_running_task->flags &= ~MM_TASK_WRITING;
+
+		mm_net_yield_writer(sock);
+	}
+
+	LEAVE();
 }
 
 static void
@@ -591,7 +647,7 @@ mm_net_writer(uintptr_t arg)
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	/* Make sure the socket will be unbound from the task. */
-	mm_task_cleanup_push(mm_net_unbind_writer, sock);
+	mm_task_cleanup_push(mm_net_writer_cleanup, sock);
 
 	/* Run the protocol handler routine. */
 	(sock->srv->proto->writer_routine)(sock);
@@ -614,6 +670,18 @@ mm_net_io_loop(uintptr_t arg)
 	uintptr_t write_items[MM_IO_COUNT];
 
 	bool block = true;
+
+	/* Check if spawn a reader as soon as the socket becomes read-ready
+	   (otherwise a mm_net_spawn_reader() call is needed). */
+	int rf = 0;
+	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
+		rf = MM_NET_READER_PENDING;
+
+	/* Check if spawn a writer as soon as the socket becomes write-ready
+	   (otherwise a mm_net_spawn_writer() call is needed). */
+	int wf = 0;
+	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
+		wf = MM_NET_WRITER_PENDING;
 
 	/* Handle I/O events. */
 	for (;;) {
@@ -649,56 +717,6 @@ mm_net_io_loop(uintptr_t arg)
 			mm_net_close(sock);
 			break;
 
-		case MM_NET_MSG_READ_READY:
-			if ((sock->flags & MM_NET_CLOSED) != 0)
-				break;
-
-			sock->flags |= MM_NET_READ_READY;
-
-			if (sock->reader != NULL) {
-				mm_sched_run(sock->reader);
-			} else if ((sock->flags & MM_NET_READ_SPAWN) != 0) {
-				sock->flags &= ~MM_NET_READ_SPAWN;
-				read_items[read_count++] = msg[1];
-			}
-			break;
-
-		case MM_NET_MSG_WRITE_READY:
-			if ((sock->flags & MM_NET_CLOSED) != 0)
-				break;
-
-			sock->flags |= MM_NET_WRITE_READY;
-
-			if (sock->writer != NULL) {
-				mm_sched_run(sock->writer);
-			} else if ((sock->flags & MM_NET_WRITE_SPAWN) != 0) {
-				sock->flags &= ~MM_NET_WRITE_SPAWN;
-				write_items[write_count++] = msg[1];
-			}
-			break;
-
-		case MM_NET_MSG_READ_SPAWN:
-			if ((sock->flags & MM_NET_CLOSED) != 0)
-				break;
-
-			if ((sock->flags & MM_NET_READ_READY) != 0) {
-				read_items[read_count++] = msg[1];
-			} else {
-				sock->flags |= MM_NET_READ_SPAWN;
-			}
-			break;
-
-		case MM_NET_MSG_WRITE_SPAWN:
-			if ((sock->flags & MM_NET_CLOSED) != 0)
-				break;
-
-			if ((sock->flags & MM_NET_WRITE_READY) != 0) {
-				write_items[write_count++] = msg[1];
-			} else {
-				sock->flags |= MM_NET_WRITE_SPAWN;
-			}
-			break;
-
 		case MM_NET_MSG_REGISTER:
 			ASSERT((sock->flags & MM_NET_CLOSED) == 0);
 
@@ -720,6 +738,94 @@ mm_net_io_loop(uintptr_t arg)
 
 			/* Remove the socket from the server lists. */
 			mm_net_destroy_socket(sock);
+			break;
+
+		case MM_NET_MSG_READ_READY:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_READ_READY;
+			if (sock->reader != NULL) {
+				mm_sched_run(sock->reader);
+				break;
+			}
+
+			int rr_mask = MM_NET_READER_SPAWNED | MM_NET_READER_PENDING;
+			if (((sock->flags | rf) & rr_mask) == MM_NET_READER_PENDING) {
+				read_items[read_count++] = msg[1];
+				sock->flags ^= rr_mask;
+			}
+			break;
+
+		case MM_NET_MSG_WRITE_READY:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_WRITE_READY;
+			if (sock->writer != NULL) {
+				mm_sched_run(sock->writer);
+				break;
+			}
+
+			int wr_mask = MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING;
+			if (((sock->flags | wf) & wr_mask) == MM_NET_WRITER_PENDING) {
+				write_items[write_count++] = msg[1];
+				sock->flags ^= wr_mask;
+			}
+			break;
+
+		case MM_NET_MSG_SPAWN_READER:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			int sr_mask = MM_NET_READ_READY | MM_NET_READER_SPAWNED;
+			if ((sock->flags & sr_mask) == MM_NET_READ_READY) {
+				read_items[read_count++] = msg[1];
+				sock->flags |= MM_NET_READER_SPAWNED;
+			} else {
+				sock->flags |= MM_NET_READER_PENDING;
+			}
+			break;
+
+		case MM_NET_MSG_SPAWN_WRITER:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			int sw_mask = MM_NET_WRITE_READY | MM_NET_WRITER_SPAWNED;
+			if ((sock->flags & sw_mask) == MM_NET_WRITE_READY) {
+				write_items[write_count++] = msg[1];
+				sock->flags |= MM_NET_WRITER_SPAWNED;
+			} else {
+				sock->flags |= MM_NET_WRITER_PENDING;
+			}
+			break;
+
+		case MM_NET_MSG_YIELD_READER:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
+  			int yr_mask = MM_NET_READ_READY | MM_NET_READER_PENDING;
+			if (((sock->flags | rf) & yr_mask) == yr_mask) {
+				read_items[read_count++] = msg[1];
+				sock->flags &= ~MM_NET_READER_PENDING;
+			} else {
+				sock->flags &= ~MM_NET_READER_SPAWNED;
+			}
+			break;
+
+		case MM_NET_MSG_YIELD_WRITER:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
+			int yw_mask = MM_NET_WRITE_READY | MM_NET_WRITER_PENDING;
+			if (((sock->flags | wf) & yw_mask) == yw_mask) {
+				write_items[write_count++] = msg[1];
+				sock->flags &= ~MM_NET_WRITER_PENDING;
+			} else {
+				sock->flags &= ~MM_NET_WRITER_SPAWNED;
+			}
 			break;
 
 		default:
@@ -911,7 +1017,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 
 retry:
 	// Check to see if the socket is closed.
-	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+	if (mm_net_is_closed(sock)) {
 		n = -1;
 		errno = EBADF;
 		goto done;
@@ -971,7 +1077,7 @@ mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 
 retry:
 	// Check to see if the socket is closed.
-	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+	if (mm_net_is_closed(sock)) {
 		n = -1;
 		errno = EBADF;
 		goto done;
@@ -1028,7 +1134,7 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 
 retry:
 	// Check to see if the socket is closed.
-	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+	if (mm_net_is_closed(sock)) {
 		n = -1;
 		errno = EBADF;
 		goto done;
@@ -1092,7 +1198,7 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 
 retry:
 	// Check to see if the socket is closed.
-	if (unlikely((sock->flags & MM_NET_CLOSED) != 0)) {
+	if (mm_net_is_closed(sock)) {
 		n = -1;
 		errno = EBADF;
 		goto done;

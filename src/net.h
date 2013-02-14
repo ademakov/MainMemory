@@ -35,24 +35,32 @@
 struct mm_port;
 struct mm_task;
 
+/* Net task communication codes. */
+typedef enum {
+	MM_NET_MSG_ERROR,
+	MM_NET_MSG_REGISTER,
+	MM_NET_MSG_UNREGISTER,
+	MM_NET_MSG_READ_READY,
+	MM_NET_MSG_WRITE_READY,
+	MM_NET_MSG_SPAWN_READER,
+	MM_NET_MSG_SPAWN_WRITER,
+	MM_NET_MSG_YIELD_READER,
+	MM_NET_MSG_YIELD_WRITER,
+} mm_net_msg_t;
+
+/* Protocol flags. */
+#define MM_NET_INBOUND		0x0001
+#define MM_NET_OUTBOUND		0x0002
+
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
 #define MM_NET_NONBLOCK		0x0002
 #define MM_NET_READ_READY	0x0004
 #define MM_NET_WRITE_READY	0x0008
-#define MM_NET_READ_SPAWN	0x0010
-#define MM_NET_WRITE_SPAWN	0x0020
-
-/* Net task communication codes. */
-typedef enum {
-	MM_NET_MSG_ERROR,
-	MM_NET_MSG_READ_READY,
-	MM_NET_MSG_WRITE_READY,
-	MM_NET_MSG_READ_SPAWN,
-	MM_NET_MSG_WRITE_SPAWN,
-	MM_NET_MSG_REGISTER,
-	MM_NET_MSG_UNREGISTER,
-} mm_net_msg_t;
+#define MM_NET_READER_SPAWNED	0x0010
+#define MM_NET_WRITER_SPAWNED	0x0020
+#define MM_NET_READER_PENDING	0x0040
+#define MM_NET_WRITER_PENDING	0x0040
 
 /* Socket address. */
 struct mm_net_addr
@@ -136,6 +144,8 @@ struct mm_net_socket
 /* Protocol handler. */
 struct mm_net_proto
 {
+	int flags;
+
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
 
@@ -164,8 +174,8 @@ ssize_t mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes);
 ssize_t mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
 ssize_t mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
 
-void mm_net_unbind_reader(struct mm_net_socket *sock);
-void mm_net_unbind_writer(struct mm_net_socket *sock);
+void mm_net_spawn_reader(struct mm_net_socket *sock);
+void mm_net_spawn_writer(struct mm_net_socket *sock);
 
 void mm_net_close(struct mm_net_socket *sock);
 

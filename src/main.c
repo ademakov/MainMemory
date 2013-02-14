@@ -100,7 +100,7 @@ mm_term(void)
 }
 
 static void
-mm_cmd_process(struct mm_net_socket *sock)
+mm_cmd_reader(struct mm_net_socket *sock)
 {
 	ENTER();
 
@@ -124,9 +124,10 @@ mm_server_open(void)
 	ENTER();
 
 	static struct mm_net_proto proto = {
+		.flags = MM_NET_INBOUND,
 		.prepare = NULL,
 		.cleanup = NULL,
-		.reader_routine = mm_cmd_process,
+		.reader_routine = mm_cmd_reader,
 		.writer_routine = NULL,
 	};
 
