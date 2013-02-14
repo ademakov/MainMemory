@@ -1,5 +1,6 @@
 
 ASAP:
+* solve pool object reallocation problem
 * crude memcache module
 * add timers and task sleep
 * ensure correct client and server object destruction
