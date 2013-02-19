@@ -1067,7 +1067,7 @@ done:
 }
 
 ssize_t
-mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes)
+mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 {
 	ENTER();
 	ssize_t n;

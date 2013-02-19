@@ -169,7 +169,7 @@ void mm_net_stop_server(struct mm_net_server *srv)
 	__attribute__((nonnull(1)));
 
 ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
-ssize_t mm_net_write(struct mm_net_socket *sock, void *buffer, size_t nbytes);
+ssize_t mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
 
 ssize_t mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
 ssize_t mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
