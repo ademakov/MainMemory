@@ -47,26 +47,26 @@ struct mm_peq_item
 
 struct mm_peq_bucket
 {
-    mm_peq_item *head;
-    mm_peq_item *tail;
+    struct mm_peq_item *head;
+    struct mm_peq_item *tail;
     int num;
 };
 
 
 struct mm_peq
 {
-    mm_peq_item *headFE;        /**< front end head */
-    mm_peq_item *tailFE;        /**< front end tail */
+    struct mm_peq_item *headFE; /**< front end head */
+    struct mm_peq_item *tailFE; /**< front end tail */
     int numFE;
 
-    struct mm_peq_bucket *t1;
+    struct mm_peq_bucket *t1;   /**< T1 structure */
     mm_timeval_t startT1;       /**< used to calculate the bucket */
     mm_timeval_t curT1;         /**< minimum timestamp threshhold of events in T1 */
     int sizeT1;                 /**< size of bucket array */
     int usedT1;                 /**< fisrt used bucket */
 
-    mm_peq_item *headT2;        /**< t2 head */
-    mm_peq_item *tailT2;        /**< t2 tail */
+    struct mm_peq_item *headT2; /**< t2 head */
+    struct mm_peq_item *tailT2; /**< t2 tail */
     mm_timeval_t maxT2;         /**< maximum timestamp of all events in T2 */
     mm_timeval_t minT2;         /**< minimum timestamp of all events in T2 */
     mm_timeval_t curT2;         /**< minimum timestamp threshhold of events in T2 */

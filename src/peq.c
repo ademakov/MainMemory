@@ -95,7 +95,6 @@ void mm_peq_destroy(struct mm_peq *peq)
     ASSERT(peq->usedT1 >= peq->sizeT1);
     ASSERT(peq->headT2 == peq->tailT2);
 
-    mm_pool_free(&mm_peq_bucket_pool, peq);
     mm_pool_free(&mm_peq_item_pool, peq->tailT2);
     mm_pool_free(&mm_peq_pool, peq);
 
@@ -339,7 +338,7 @@ restart:
             /* All buckets empty, move all items in T1 */
             int sizeT1 = (peq->maxT2 - peq->minT2) / peq->numT2;
             if (sizeT1 < 64) {
-                size = 64;
+                sizeT1 = 64;
             }
             if (peq->sizeT1 < sizeT1) {
                 sizeT1 *= 2;
