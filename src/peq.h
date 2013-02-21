@@ -49,7 +49,6 @@ struct mm_peq_bucket
 {
     struct mm_peq_item *head;
     struct mm_peq_item *tail;
-    int num;
 };
 
 

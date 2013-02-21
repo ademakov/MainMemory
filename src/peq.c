@@ -95,6 +95,7 @@ void mm_peq_destroy(struct mm_peq *peq)
     ASSERT(peq->usedT1 >= peq->sizeT1);
     ASSERT(peq->headT2 == peq->tailT2);
 
+    mm_free(peq->t1);
     mm_pool_free(&mm_peq_item_pool, peq->tailT2);
     mm_pool_free(&mm_peq_pool, peq);
 
@@ -151,7 +152,6 @@ static void mm_peq_insert_t1(struct mm_peq *peq, struct mm_peq_item *item)
         peq->t1[i].head = item;
     }
 
-    peq->t1[i].num += 1;
     item->idx = i;
 
     if (peq->usedT1 > i) {
@@ -236,7 +236,6 @@ void mm_peq_delete(struct mm_peq *peq, struct mm_peq_item *item)
             if (peq->t1[item->idx].head == item) {
                 peq->t1[item->idx].head = next;
             }
-            peq->t1[item->idx].num -= 1;
         }
 
         item->next = 0;
@@ -294,7 +293,6 @@ restart:
             /* In other case, move all items in front end structure. */
             item = peq->t1[used].head;
             peq->t1[used].head = peq->t1[used].tail;
-            peq->t1[used].num = 0;
 
             next = item->next;
             prev = item->prev;
