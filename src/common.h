@@ -67,6 +67,19 @@
  * Basic Definitions.
  **********************************************************************/
 
+/* Sentinel time values. */
+#define MM_TIMEVAL_MIN		INT64_MIN
+#define MM_TIMEVAL_MAX		INT64_MAX
+
+/* Infinite timeout. */
+#define MM_TIMEOUT_INFINITE	((mm_timeout_t) 0xFFFFFFFF)
+
+/* Time value (in microseconds). */
+typedef int64_t			mm_timeval_t;
+
+/* Timeout (in microseconds). */
+typedef uint32_t		mm_timeout_t;
+
 /* Task priorities. */
 #define MM_PRIO_LOWEST		31
 #define MM_PRIO_DEFAULT		15
@@ -74,11 +87,5 @@
 
 /* Task execution routine. */
 typedef void (*mm_routine)(uintptr_t arg);
-
-/* Infinite timeout. */
-#define MM_TIMEOUT_INFINITE	((uint32_t) 0xFFFFFFFF)
-
-/* Timeout (in microseconds). */
-typedef uint32_t	mm_timeout_t;
 
 #endif /* COMMON_H */

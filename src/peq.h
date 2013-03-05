@@ -23,13 +23,6 @@
 
 #include "common.h"
 
-
-typedef int64_t mm_timeval_t;
-
-#define MM_TIMEVAL_MIN LLONG_MIN
-#define MM_TIMEVAL_MAX LLONG_MAX
-
-
 #define MM_PEQ_IDX_NO (-1)
 #define MM_PEQ_IDX_T2 (-2)
 #define MM_PEQ_IDX_FE (-3)
