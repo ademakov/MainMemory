@@ -24,9 +24,6 @@
 #include "util.h"
 
 
-/* The memory pool for peq. */
-static struct mm_pool mm_peq_pool;
-
 /* The memory pool for peq items. */
 static struct mm_pool mm_peq_item_pool;
 
@@ -36,7 +33,6 @@ mm_peq_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_peq_pool, "peq", sizeof(struct mm_peq));
 	mm_pool_init(&mm_peq_item_pool, "peq_item", sizeof(struct mm_peq_item));
 
 	LEAVE();
@@ -48,7 +44,6 @@ mm_peq_term(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_peq_pool);
 	mm_pool_discard(&mm_peq_item_pool);
 
 	LEAVE();
@@ -60,7 +55,7 @@ mm_peq_create(void)
 {
 	ENTER();
 
-	struct mm_peq *peq = mm_pool_alloc(&mm_peq_pool);
+	struct mm_peq *peq = mm_alloc(sizeof(struct mm_peq));
 
 	peq->tailFE = mm_pool_alloc(&mm_peq_item_pool);
 	peq->tailFE->next = peq->tailFE;
@@ -98,7 +93,7 @@ mm_peq_destroy(struct mm_peq *peq)
 
 	mm_free(peq->t1);
 	mm_pool_free(&mm_peq_item_pool, peq->tailT2);
-	mm_pool_free(&mm_peq_pool, peq);
+	mm_free(peq);
 
 	LEAVE();
 }
