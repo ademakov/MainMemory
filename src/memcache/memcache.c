@@ -1049,12 +1049,13 @@ mc_process_delete(uintptr_t arg)
 	bool rc = mc_table_delete_entry(command->params.del.key.str,
 					command->params.del.key.len);
 
-	if (command->params.del.noreply)
+	if (command->params.del.noreply) {
 		mc_blank(command);
-	else if (rc)
+	} else if (rc) {
 		mc_reply(command, "DELETED\r\n");
-	else
+	} else {
 		mc_reply(command, "NOT_FOUND\r\n");
+	}
 
 	LEAVE();
 }
@@ -1142,11 +1143,9 @@ mc_process_command(struct mc_state *state)
 	ENTER();
 
 	struct mc_command *command = state->command;
-	command->end_ptr = state->start_ptr;
-
-	if (command->result_type == MC_RESULT_NONE)
+	if (command->result_type == MC_RESULT_NONE) {
 		state->command->desc->process((intptr_t) command);
-
+	}
 	mc_queue_command(state);
 
 	LEAVE();
@@ -1195,6 +1194,17 @@ mc_start_input(struct mc_parser *parser, struct mc_state *state)
 	}
 	parser->end_ptr = buffer->data + buffer->used;
 	parser->buffer = buffer;
+
+	LEAVE();
+}
+
+static void
+mc_end_input(struct mc_parser *parser)
+{
+	ENTER();
+
+	parser->command->end_ptr = parser->start_ptr;
+	parser->state->start_ptr = parser->start_ptr;
 
 	LEAVE();
 }
@@ -1341,7 +1351,6 @@ mc_parse_error(struct mc_parser *parser, const char *error_string)
 		if (p != NULL) {
 			/* Go past the newline ready for the next command. */
 			parser->start_ptr = p + 1;
-			parser->state->start_ptr = parser->start_ptr;
 			/* Report the error. */
 			mc_reply(parser->command, error_string);
 			break;
@@ -2098,7 +2107,7 @@ mc_parse(struct mc_state *state)
 	}
 
 	/* The command has been parsed, go past it. */
-	state->start_ptr = parser.start_ptr;
+	mc_end_input(&parser);
 
 done:
 	LEAVE();
