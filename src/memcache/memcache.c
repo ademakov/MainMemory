@@ -59,11 +59,77 @@ mc_hash(const void *data, size_t size)
 }
 
 /**********************************************************************
- * Memcache Table.
+ * Memcache Entry.
  **********************************************************************/
 
-#define MC_ENTRY_ADD		1
-#define MC_ENTRY_REPLACE	2
+struct mc_entry
+{
+	struct mc_entry *next;
+	uint8_t key_len;
+	uint32_t value_len;
+	char data[];
+};
+
+static inline size_t
+mc_entry_size(uint8_t key_len, size_t value_len)
+{
+	return sizeof(struct mc_entry) + key_len + value_len;
+}
+
+static inline char *
+mc_entry_key(struct mc_entry *entry)
+{
+	return entry->data;
+}
+
+static inline char *
+mc_entry_value(struct mc_entry *entry)
+{
+	return entry->data + entry->key_len;
+}
+
+static inline void
+mc_entry_set_key(struct mc_entry *entry, const char *key)
+{
+	char *entry_key = mc_entry_key(entry);
+	memcpy(entry_key, key, entry->key_len);
+}
+
+static inline void
+mc_entry_set_value(struct mc_entry *entry, const char *value)
+{
+	char *entry_value = mc_entry_value(entry);
+	memcpy(entry_value, value, entry->value_len);
+}
+
+static struct mc_entry *
+mc_entry_create(uint8_t key_len, size_t value_len)
+{
+	ENTER();
+	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
+
+	size_t size = mc_entry_size(key_len, value_len);
+	struct mc_entry *entry = mm_alloc(size);
+	entry->key_len = key_len;
+	entry->value_len = value_len;
+
+	LEAVE();
+	return entry;
+}
+
+static void
+mc_entry_destroy(struct mc_entry *entry)
+{
+	ENTER();
+
+	mm_free(entry);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Memcache Table.
+ **********************************************************************/
 
 #define MC_TABLE_STRIDE		64
 
@@ -74,14 +140,6 @@ mc_hash(const void *data, size_t size)
 #else
 # define MC_TABLE_SIZE_MAX	((size_t) 512 * 1024 * 1024)
 #endif
-
-struct mc_entry
-{
-	struct mc_entry *next;
-	uint32_t data_len;
-	uint8_t key_len;
-	char data[];
-};
 
 struct mc_table
 {
@@ -96,21 +154,17 @@ struct mc_table
 	struct mc_entry **table;
 };
 
-struct mc_table mc_table;
+static struct mc_table mc_table;
+
+static void mc_table_stride_routine(uintptr_t);
 
 static inline size_t
-mc_entry_nbytes(uint8_t key_len, size_t data_len)
-{
-	return sizeof(struct mc_entry) + key_len + data_len;
-}
-
-static inline size_t
-mc_table_nbytes(size_t nbuckets)
+mc_table_size(size_t nbuckets)
 {
 	return nbuckets * sizeof (struct mc_entry *);
 }
 
-static uint32_t
+static inline uint32_t
 mc_table_index(uint32_t h)
 {
 	uint32_t mask = mc_table.mask;
@@ -118,6 +172,12 @@ mc_table_index(uint32_t h)
 	if (index >= mc_table.used)
 		index &= mask >> 1;
 	return index;
+}
+
+static inline uint32_t
+mc_table_key_index(const char *key, uint8_t key_len)
+{
+	return mc_table_index(mc_hash(key, key_len));
 }
 
 static inline bool
@@ -137,11 +197,11 @@ mc_table_expand(size_t size)
 	/* Assert the size is a power of 2. */
 	ASSERT((size & (size - 1)) == 0);
 
-	size_t old_nbytes = mc_table_nbytes(mc_table.size);
-	size_t new_nbytes = mc_table_nbytes(size);
+	size_t old_size = mc_table_size(mc_table.size);
+	size_t new_size = mc_table_size(size);
 
-	void *address = (char *) mc_table.table + old_nbytes;
-	size_t nbytes = new_nbytes - old_nbytes;
+	void *address = (char *) mc_table.table + old_size;
+	size_t nbytes = new_size - old_size;
 
 	void *area = mmap(address, nbytes, PROT_READ | PROT_WRITE,
 			  MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
@@ -161,6 +221,8 @@ mc_table_stride(void)
 {
 	ENTER();
 	ASSERT(mc_table.used < mc_table.size);
+	ASSERT(mc_table.used >= mc_table.size / 2);
+	ASSERT((mc_table.used + MC_TABLE_STRIDE) <= mc_table.size);
 
 	uint32_t mask = mc_table.mask;
 	uint32_t target = mc_table.used;
@@ -198,12 +260,117 @@ mc_table_stride(void)
 }
 
 static void
+mc_table_start_striding(void)
+{
+	ENTER();
+
+	mm_work_add(0, mc_table_stride_routine, 0);
+
+	LEAVE();
+}
+
+static void
+mc_table_stride_routine(uintptr_t arg __attribute__((unused)))
+{
+	ENTER();
+	ASSERT(mc_table.striding);
+
+	if (unlikely(mc_table.used == mc_table.used)) {
+		mc_table_expand(mc_table.size * 2);
+	}
+
+	mc_table_stride();
+
+	if (mc_table_is_full()) {
+		mc_table_start_striding();
+	} else {
+		mc_table.striding = false;
+	}
+
+	LEAVE();
+}
+
+static struct mc_entry *
+mc_table_lookup(uint32_t index, const char *key, uint8_t key_len)
+{
+	ENTER();
+
+	struct mc_entry *entry = mc_table.table[index];
+	while (entry != NULL) {
+		char *entry_key = mc_entry_key(entry);
+		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len))
+			break;
+
+		entry = entry->next;
+	}
+
+	LEAVE();
+	return entry;
+}
+
+static struct mc_entry *
+mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
+{
+	ENTER();
+
+	struct mc_entry *entry = mc_table.table[index];
+	if (entry == NULL) {
+		goto done;
+	}
+
+	char *entry_key = mc_entry_key(entry);
+	if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+		mc_table.table[index] = entry->next;
+		--mc_table.nentries;
+		goto done;
+	}
+
+	for (;;) {
+		struct mc_entry *prev_entry = entry;
+
+		entry = entry->next;
+		if (entry == NULL) {
+			goto done;
+		}
+
+		entry_key = mc_entry_key(entry);
+		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+			prev_entry->next = entry->next;
+			--mc_table.nentries;
+			goto done;
+		}
+	}
+
+done:
+	LEAVE();
+	return entry;
+}
+
+static void
+mc_table_insert(uint32_t index, struct mc_entry *entry)
+{
+	ENTER();
+
+	entry->next = mc_table.table[index];
+	mc_table.table[index] = entry;
+
+	++mc_table.nentries;
+
+	if (!mc_table.striding && mc_table_is_full()) {
+		mc_table.striding = true;
+		mc_table_start_striding();
+	}
+
+	LEAVE();
+}
+
+static void
 mc_table_init(void)
 {
 	ENTER();
 
 	/* Compute the maximal size of the table in bytes. */
-	size_t nbytes = mc_table_nbytes(MC_TABLE_SIZE_MAX);
+	size_t nbytes = mc_table_size(MC_TABLE_SIZE_MAX);
 
 	/* Reserve the address space for the table. */
 	mm_print("Reserve %ld bytes of the address apace for the memcache table.", (unsigned long) nbytes);
@@ -240,173 +407,9 @@ mc_table_term(void)
 		}
 	}
 
-	munmap(mc_table.table, mc_table_nbytes(mc_table.size));
+	munmap(mc_table.table, mc_table_size(mc_table.size));
 
 	LEAVE();
-}
-
-static void mc_table_start_striding(void);
-
-static void
-mc_table_stride_routine(uintptr_t arg __attribute__((unused)))
-{
-	ENTER();
-	ASSERT(mc_table.striding);
-
-	if (unlikely(mc_table.used == mc_table.used))
-		mc_table_expand(mc_table.size * 2);
-
-	mc_table_stride();
-
-	if (mc_table_is_full())
-		mc_table_start_striding();
-	else
-		mc_table.striding = false;
-
-	LEAVE();
-}
-
-static void
-mc_table_start_striding(void)
-{
-	ENTER();
-
-	mm_work_add(0, mc_table_stride_routine, 0);
-
-	LEAVE();
-}
-
-static struct mc_entry *
-mc_table_create_entry(const char *key, uint8_t key_len,
-		      const char *data, size_t data_len)
-{
-	ENTER();
-
-	size_t nbytes = mc_entry_nbytes(key_len, data_len);
-	struct mc_entry *entry = mm_alloc(nbytes);
-	entry->key_len = key_len;
-	entry->data_len = data_len;
-
-	char *entry_key = entry->data;
-	memcpy(entry_key, key, key_len);
-
-	char *entry_data = entry_key + entry->key_len;
-	memcpy(entry_data, data, data_len);
-
-	++mc_table.nentries;
-	if (!mc_table.striding && mc_table_is_full()) {
-		mc_table.striding = true;
-		mc_table_start_striding();
-	}
-
-	LEAVE();
-	return entry;
-}
-
-static void
-mc_table_destroy_entry(struct mc_entry *entry)
-{
-	ENTER();
-
-	--mc_table.nentries;
-	mm_free(entry);
-
-	LEAVE();
-}
-
-static struct mc_entry *
-mc_table_lookup_entry(const char *key, uint8_t key_len)
-{
-	ENTER();
-
-	uint32_t h = mc_hash(key, key_len);
-	uint32_t index = mc_table_index(h);
-
-	struct mc_entry *entry = mc_table.table[index];
-	for (;;) {
-		if (entry == NULL)
-			break;
-		if (key_len == entry->key_len && !memcmp(key, entry->data, key_len))
-			break;
-		entry = entry->next;
-	}
-
-	LEAVE();
-	return entry;
-}
-
-static int
-mc_table_insert_entry(const char *key, uint8_t key_len,
-		      const char *data, size_t data_len,
-		      int flags)
-{
-	ENTER();
-
-	int rc = 0;
-
-	uint32_t h = mc_hash(key, key_len);
-	uint32_t index = mc_table_index(h);
-
-	struct mc_entry **entry_ref = &mc_table.table[index];
-	for (;;) {
-		struct mc_entry *entry = *entry_ref;
-		if (entry == NULL) {
-			if ((flags & MC_ENTRY_REPLACE) != 0) {
-				rc = -1;
-				break;
-			}
-
-			entry = mc_table_create_entry(key, key_len, data, data_len);
-			entry->next = NULL;
-			*entry_ref = entry;
-			break;
-		}
-		if (key_len == entry->key_len && !memcmp(key, entry->data, key_len)) {
-			if ((flags & MC_ENTRY_ADD) != 0) {
-				rc = -1;
-				break;
-			}
-
-			*entry_ref = entry->next;
-			mm_free(entry);
-
-			entry = mc_table_create_entry(key, key_len, data, data_len);
-			entry->next = *entry_ref;
-			*entry_ref = entry;
-			break;
-		}
-		entry_ref = &entry->next;
-	}
-
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_table_delete_entry(const char *key, uint8_t key_len)
-{
-	ENTER();
-
-	bool found = false;
-	uint32_t h = mc_hash(key, key_len);
-	uint32_t index = mc_table_index(h);
-
-	struct mc_entry **entry_ref = &mc_table.table[index];
-	for (;;) {
-		struct mc_entry *entry = *entry_ref;
-		if (entry == NULL)
-			break;
-		if (key_len == entry->key_len && !memcmp(key, entry->data, key_len)) {
-			*entry_ref = entry->next;
-			mc_table_destroy_entry(entry);
-			found = true;
-			break;
-		}
-		entry_ref = &entry->next;
-	}
-
-	LEAVE();
-	return found;
 }
 
 /**********************************************************************
@@ -957,7 +960,27 @@ mc_process_set(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	size_t value_len = command->params.set.bytes;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+
+	struct mc_entry *new_entry = mc_entry_create(key_len, value_len);
+	mc_entry_set_key(new_entry, key);
+	//mc_entry_set_value(new_entry, value);
+	mc_table_insert(index, new_entry);
+
+	if (command->params.del.noreply) {
+		mc_blank(command);
+	} else {
+		mc_reply(command, "STORED\r\n");
+	}
+
+	if (old_entry != NULL) {
+		mc_entry_destroy(old_entry);
+	}
 
 	LEAVE();
 }
@@ -968,7 +991,28 @@ mc_process_add(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	size_t value_len = command->params.set.bytes;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry == NULL) {
+		new_entry = mc_entry_create(key_len, value_len);
+		mc_entry_set_key(new_entry, key);
+		//mc_entry_set_value(new_entry, value);
+		mc_table_insert(index, new_entry);
+	}
+
+	if (command->params.del.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		mc_reply(command, "STORED\r\n");
+	} else {
+		mc_reply(command, "NOT_STORED\r\n");
+	}
 
 	LEAVE();
 }
@@ -979,7 +1023,32 @@ mc_process_replace(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	size_t value_len = command->params.set.bytes;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL) {
+		new_entry = mc_entry_create(key_len, value_len);
+		mc_entry_set_key(new_entry, key);
+		//mc_entry_set_value(new_entry, value);
+		mc_table_insert(index, new_entry);
+	}
+
+	if (command->params.del.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		mc_reply(command, "STORED\r\n");
+	} else {
+		mc_reply(command, "NOT_STORED\r\n");
+	}
+
+	if (old_entry != NULL) {
+		mc_entry_destroy(old_entry);
+	}
 
 	LEAVE();
 }
@@ -1045,17 +1114,21 @@ mc_process_delete(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
+	const char *key = command->params.del.key.str;
+	size_t key_len = command->params.del.key.len;
 
-	bool rc = mc_table_delete_entry(command->params.del.key.str,
-					command->params.del.key.len);
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
 	if (command->params.del.noreply) {
 		mc_blank(command);
-	} else if (rc) {
+	} else if (old_entry != NULL) {
 		mc_reply(command, "DELETED\r\n");
 	} else {
 		mc_reply(command, "NOT_FOUND\r\n");
 	}
+
+	mc_entry_destroy(old_entry);
 
 	LEAVE();
 }
