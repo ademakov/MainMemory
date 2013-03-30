@@ -484,10 +484,11 @@ struct mc_string
 	const char *str;
 };
 
-struct mc_data
+struct mc_value
 {
 	struct mc_buffer *buffer;
 	const char *start;
+	uint32_t bytes;
 };
 
 struct mc_get_params
@@ -501,8 +502,7 @@ struct mc_set_params
 	struct mc_string key;
 	uint32_t flags;
 	uint32_t exptime;
-	uint32_t bytes;
-	struct mc_data data;
+	struct mc_value value;
 	bool noreply;
 };
 
@@ -511,8 +511,7 @@ struct mc_cas_params
 	struct mc_string key;
 	uint32_t flags;
 	uint32_t exptime;
-	uint32_t bytes;
-	struct mc_data data;
+	struct mc_value value;
 	bool noreply;
 	uint64_t cas;
 };
@@ -554,6 +553,18 @@ union mc_params
 	struct mc_flush_params flush;
 };
 
+struct mc_result_entries
+{
+	struct mc_entry **entries;
+	uint32_t nentries;
+};
+
+union mc_result
+{
+	struct mc_string reply;
+	struct mc_result_entries entries;
+};
+
 struct mc_command
 {
 	struct mc_command *next;
@@ -563,8 +574,7 @@ struct mc_command
 	char *end_ptr;
 
 	mc_result_t result_type;
-	struct mc_string reply;
-	struct mc_entry *entry;
+	union mc_result result;
 
 	struct mc_future *future;
 };
@@ -915,9 +925,9 @@ mc_reply(struct mc_command *command, const char *str)
 {
 	ENTER();
 
-	command->reply.str = str;
-	command->reply.len = strlen(str);
 	command->result_type = MC_RESULT_REPLY;
+	command->result.reply.str = str;
+	command->result.reply.len = strlen(str);
 
 	LEAVE();
 }
@@ -933,12 +943,57 @@ mc_blank(struct mc_command *command)
 }
 
 static void
+mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset)
+{
+	ENTER();
+
+	const char *src = value->start;
+	uint32_t bytes = value->bytes;
+	struct mc_buffer *buffer = value->buffer;
+	ASSERT(src >= buffer->data && src <= buffer->data + buffer->used);
+
+	char *dst = mc_entry_value(entry) + offset;
+	for (;;) {
+		uint32_t n = (buffer->data + buffer->used) - src;
+		if (n >= bytes) {
+			memcpy(dst, src, bytes);
+			break;
+		}
+
+		memcpy(dst, src, n);
+		buffer = buffer->next;
+		src = buffer->data;
+		dst += n;
+		bytes -= n;
+	}
+
+	LEAVE();
+}
+
+static void
 mc_process_get(uintptr_t arg)
 {
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	struct mc_entry **entries = mm_alloc(command->params.get.nkeys * sizeof(struct mc_entry *));
+	// TODO: free it
+	uint32_t nentries = 0;
+
+	for (uint32_t i = 0; i < command->params.get.nkeys; i++) {
+		const char *key = command->params.get.keys[i].str;
+		size_t key_len = command->params.get.keys[i].len;
+
+		uint32_t index = mc_table_key_index(key, key_len);
+		struct mc_entry *entry = mc_table_lookup(index, key, key_len);
+		if (entry != NULL) {
+			entries[nentries++] = entry;
+		}
+	}
+
+	command->result_type = MC_RESULT_ENTRY;
+	command->result.entries.entries = entries;
+	command->result.entries.nentries = nentries;
 
 	LEAVE();
 }
@@ -962,14 +1017,14 @@ mc_process_set(uintptr_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	const char *key = command->params.set.key.str;
 	size_t key_len = command->params.set.key.len;
-	size_t value_len = command->params.set.bytes;
+	struct mc_value *value = &command->params.set.value;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
-	struct mc_entry *new_entry = mc_entry_create(key_len, value_len);
+	struct mc_entry *new_entry = mc_entry_create(key_len, value->bytes);
 	mc_entry_set_key(new_entry, key);
-	//mc_entry_set_value(new_entry, value);
+	mc_process_value(new_entry, value, 0);
 	mc_table_insert(index, new_entry);
 
 	if (command->params.del.noreply) {
@@ -993,16 +1048,16 @@ mc_process_add(uintptr_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	const char *key = command->params.set.key.str;
 	size_t key_len = command->params.set.key.len;
-	size_t value_len = command->params.set.bytes;
+	struct mc_value *value = &command->params.set.value;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
-		new_entry = mc_entry_create(key_len, value_len);
+		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
-		//mc_entry_set_value(new_entry, value);
+		mc_process_value(new_entry, value, 0);
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1025,16 +1080,16 @@ mc_process_replace(uintptr_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	const char *key = command->params.set.key.str;
 	size_t key_len = command->params.set.key.len;
-	size_t value_len = command->params.set.bytes;
+	struct mc_value *value = &command->params.set.value;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
-		new_entry = mc_entry_create(key_len, value_len);
+		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
-		//mc_entry_set_value(new_entry, value);
+		mc_process_value(new_entry, value, 0);
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1480,7 +1535,7 @@ done:
 }
 
 static bool
-mc_parse_param(struct mc_parser *parser, struct mc_string *value)
+mc_parse_param(struct mc_parser *parser, struct mc_string *value, bool required)
 {
 	ENTER();
 
@@ -1498,7 +1553,7 @@ retry:
 		int c = *s;
 		if (c == ' ' || (c == '\r' && mc_peek_input(parser, s, e) == '\n') || c == '\n') {
 			int count = s - parser->start_ptr;
-			if (count == 0) {
+			if (required && count == 0) {
 				mc_parse_error(parser, "CLIENT_ERROR missing parameter\r\n");
 			} else if (count > MC_KEY_LEN_MAX) {
 				mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
@@ -1532,7 +1587,7 @@ mc_parse_u32(struct mc_parser *parser, uint32_t *value)
 	ENTER();
 
 	struct mc_string param;
-	bool rc = mc_parse_param(parser, &param);
+	bool rc = mc_parse_param(parser, &param, true);
 	if (rc && !parser->error) {
 		char *endp;
 		unsigned long v = strtoul(param.str, &endp, 10);
@@ -1553,7 +1608,7 @@ mc_parse_u64(struct mc_parser *parser, uint64_t *value)
 	ENTER();
 
 	struct mc_string param;
-	bool rc = mc_parse_param(parser, &param);
+	bool rc = mc_parse_param(parser, &param, true);
 	if (rc && !parser->error) {
 		char *endp;
 		unsigned long long v = strtoull(param.str, &endp, 10);
@@ -1623,7 +1678,7 @@ done:
 }
 
 static bool
-mc_parse_data(struct mc_parser *parser, struct mc_data *data, uint32_t bytes)
+mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 {
 	ENTER();
 
@@ -1955,16 +2010,17 @@ mc_parse_get(struct mc_parser *parser)
 	nkeys = 0;
 	nkeys_max = 8;
 	keys = mm_alloc(nkeys_max * sizeof(struct mc_string));
+	// TODO: free it
 
 	for (;;) {
-		rc = mc_parse_param(parser, &keys[nkeys]);
+		rc = mc_parse_param(parser, &keys[nkeys], false);
 		if (!rc || parser->error)
 			goto done;
 
 		if (keys[nkeys].len == 0) {
 			parser->command->params.get.keys = keys;
 			parser->command->params.get.nkeys = nkeys;
-			goto done;
+			break;
 		}
 
 		if (++nkeys == nkeys_max) {
@@ -1972,6 +2028,7 @@ mc_parse_get(struct mc_parser *parser)
 			keys = mm_realloc(keys, nkeys_max * sizeof(struct mc_string));
 		}
 	}
+	rc = mc_parse_eol(parser);
 
 done:
 	LEAVE();
@@ -1983,7 +2040,7 @@ mc_parse_set(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.set.key);
+	bool rc = mc_parse_param(parser, &parser->command->params.set.key, true);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
@@ -1992,7 +2049,7 @@ mc_parse_set(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
 	if (!rc || parser->error)
 		goto done;
-	rc = mc_parse_u32(parser, &parser->command->params.set.bytes);
+	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_noreply(parser, &parser->command->params.set.noreply);
@@ -2002,8 +2059,8 @@ mc_parse_set(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_data(parser,
-		&parser->command->params.set.data,
-		parser->command->params.set.bytes);
+		&parser->command->params.set.value,
+		parser->command->params.set.value.bytes);
 
 done:
 	LEAVE();
@@ -2015,7 +2072,7 @@ mc_parse_cas(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.cas.key);
+	bool rc = mc_parse_param(parser, &parser->command->params.cas.key, true);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_u32(parser, &parser->command->params.cas.flags);
@@ -2024,7 +2081,7 @@ mc_parse_cas(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.cas.exptime);
 	if (!rc || parser->error)
 		goto done;
-	rc = mc_parse_u32(parser, &parser->command->params.cas.bytes);
+	rc = mc_parse_u32(parser, &parser->command->params.cas.value.bytes);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_u64(parser, &parser->command->params.cas.cas);
@@ -2037,8 +2094,8 @@ mc_parse_cas(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_data(parser,
-		&parser->command->params.cas.data,
-		parser->command->params.cas.bytes);
+		&parser->command->params.cas.value,
+		parser->command->params.cas.value.bytes);
 
 done:
 	LEAVE();
@@ -2050,7 +2107,7 @@ mc_parse_incr(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.inc.key);
+	bool rc = mc_parse_param(parser, &parser->command->params.inc.key, true);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_u64(parser, &parser->command->params.inc.value);
@@ -2071,7 +2128,7 @@ mc_parse_delete(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.del.key);
+	bool rc = mc_parse_param(parser, &parser->command->params.del.key, true);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_noreply(parser, &parser->command->params.del.noreply);
@@ -2089,7 +2146,7 @@ mc_parse_touch(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.touch.key);
+	bool rc = mc_parse_param(parser, &parser->command->params.touch.key, true);
 	if (!rc || parser->error)
 		goto done;
 	rc = mc_parse_u32(parser, &parser->command->params.touch.exptime);
@@ -2228,7 +2285,7 @@ mc_transmit_result(struct mm_net_socket *sock,
 		rc = false;
 		break;
 	case MC_RESULT_REPLY:
-		if (mc_write(sock, command->reply.str, command->reply.len) < 0) {
+		if (mc_write(sock, command->result.reply.str, command->result.reply.len) < 0) {
 			rc = false;
 		} else {
 			rc = true;
@@ -2236,6 +2293,25 @@ mc_transmit_result(struct mm_net_socket *sock,
 		break;
 	case MC_RESULT_ENTRY:
 		rc = true;
+		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
+			struct mc_entry *entry = command->result.entries.entries[i];
+			const char *key = mc_entry_key(entry);
+			const char *value = mc_entry_value(entry);
+			if (mc_write(sock, value, entry->value_len) < 0) {
+				rc = false;
+				break;
+			}
+			if (mc_write(sock, "\r\n", 2) < 0) {
+				rc = false;
+				break;
+			}
+		}
+		if (rc) {
+			if (mc_write(sock, "END\r\n", 5) < 0) {
+				rc = false;
+				break;
+			}
+		}
 		break;
 	case MC_RESULT_BLANK:
 		rc = true;
