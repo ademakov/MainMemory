@@ -27,6 +27,7 @@
 #include "../work.h"
 
 #include <ctype.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
 
@@ -67,6 +68,8 @@ struct mc_entry
 	struct mc_entry *next;
 	uint8_t key_len;
 	uint32_t value_len;
+	uint32_t ref_count;
+	uint32_t flags;
 	char data[];
 };
 
@@ -112,6 +115,7 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	struct mc_entry *entry = mm_alloc(size);
 	entry->key_len = key_len;
 	entry->value_len = value_len;
+	entry->ref_count = 0;
 
 	LEAVE();
 	return entry;
@@ -125,6 +129,24 @@ mc_entry_destroy(struct mc_entry *entry)
 	mm_free(entry);
 
 	LEAVE();
+}
+
+static void
+mc_entry_ref(struct mc_entry *entry)
+{
+	uint32_t ref_count = ++(entry->ref_count);
+	if (unlikely(ref_count == 0)) {
+		ABORT();
+	}
+}
+
+static void
+mc_entry_unref(struct mc_entry *entry)
+{
+	uint32_t ref_count = (entry->ref_count)--;
+	if (unlikely(ref_count == 0)) {
+		mc_entry_destroy(entry);
+	}
 }
 
 /**********************************************************************
@@ -470,13 +492,8 @@ mc_buffer_finished(struct mc_buffer *buffer, const char *ptr)
  * Command Data.
  **********************************************************************/
 
-typedef enum
-{
-	MC_RESULT_NONE,
-	MC_RESULT_REPLY,
-	MC_RESULT_ENTRY,
-	MC_RESULT_BLANK,
-} mc_result_t;
+/* Forward declaration. */
+struct mc_parser;
 
 struct mc_string
 {
@@ -553,6 +570,14 @@ union mc_params
 	struct mc_flush_params flush;
 };
 
+typedef enum
+{
+	MC_RESULT_NONE,
+	MC_RESULT_REPLY,
+	MC_RESULT_ENTRY,
+	MC_RESULT_BLANK,
+} mc_result_t;
+
 struct mc_result_entries
 {
 	struct mc_entry **entries;
@@ -579,6 +604,18 @@ struct mc_command
 	struct mc_future *future;
 };
 
+/* Command parsing routine. */
+typedef bool (*mc_parse_routine)(struct mc_parser *parser);
+typedef void (*mc_destroy_routine)(struct mc_command *command);
+
+/* Command parsing and processing info. */
+struct mc_command_desc
+{
+	const char *name;
+	mc_parse_routine parse;
+	mm_routine process;
+	mc_destroy_routine destroy;
+};
 
 static struct mm_pool mc_command_pool;
 
@@ -624,10 +661,71 @@ mc_command_destroy(struct mc_command *command)
 {
 	ENTER();
 
+	if (command->desc != NULL) {
+		command->desc->destroy(command);
+	}
 	mm_pool_free(&mc_command_pool, command);
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Command Destruction.
+ **********************************************************************/
+
+static void
+mc_destroy_dummy(struct mc_command *command __attribute__((unused)))
+{
+}
+
+static void
+mc_destroy_get(struct mc_command *command)
+{
+	ENTER();
+
+	mm_free(command->params.get.keys);
+	if (command->result_type == MC_RESULT_ENTRY) {
+		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
+			mc_entry_unref(command->result.entries.entries[i]);
+		}
+		mm_free(command->result.entries.entries);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Command Descriptors.
+ **********************************************************************/
+
+#define MC_DESC(cmd, parse_name, process_name, destroy_name)		\
+	static bool mc_parse_##parse_name(struct mc_parser *);		\
+	static void mc_process_##process_name(uintptr_t);		\
+	static struct mc_command_desc mc_desc_##cmd = {			\
+		.name = #cmd,						\
+		.parse = mc_parse_##parse_name,				\
+		.process = mc_process_##process_name,			\
+		.destroy = mc_destroy_##destroy_name,			\
+	}
+
+MC_DESC(get,		get,		get,		get);
+MC_DESC(gets,		get,		gets,		get);
+MC_DESC(set,		set,		set,		dummy);
+MC_DESC(add,		set,		add,		dummy);
+MC_DESC(replace,	set,		replace,	dummy);
+MC_DESC(append,		set,		append,		dummy);
+MC_DESC(prepend,	set,		prepend,	dummy);
+MC_DESC(cas,		cas,		cas,		dummy);
+MC_DESC(incr,		incr,		incr,		dummy);
+MC_DESC(decr,		incr,		decr,		dummy);
+MC_DESC(delete,		delete,		delete,		dummy);
+MC_DESC(touch,		touch,		touch,		dummy);
+MC_DESC(slabs,		slabs,		slabs,		dummy);
+MC_DESC(stats,		stats,		stats,		dummy);
+MC_DESC(flush_all,	flush_all,	flush_all,	dummy);
+MC_DESC(version,	eol,		version,	dummy);
+MC_DESC(verbosity,	verbosity,	verbosity,	dummy);
+MC_DESC(quit,		eol,		quit,		dummy);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -871,52 +969,6 @@ mc_write(struct mm_net_socket *sock, const char *data, size_t size)
 }
 
 /**********************************************************************
- * Command Descriptors.
- **********************************************************************/
-
-/* Forward declaration. */
-struct mc_parser;
-
-/* Command parsing routine. */
-typedef bool (*mc_parse_routine)(struct mc_parser *parser);
-
-/* Command parsing and processing info. */
-struct mc_command_desc
-{
-	const char *name;
-	mc_parse_routine parse;
-	mm_routine process;
-};
-
-#define MC_COMMAND_DESC(cmd, parse_name, process_name)		\
-	static bool mc_parse_##parse_name(struct mc_parser *);	\
-	static void mc_process_##process_name(uintptr_t);	\
-	static struct mc_command_desc mc_desc_##cmd = {		\
-		.name = #cmd,					\
-		.parse = mc_parse_##parse_name,			\
-		.process = mc_process_##process_name,		\
-	}
-
-MC_COMMAND_DESC(get, get, get);
-MC_COMMAND_DESC(gets, get, gets);
-MC_COMMAND_DESC(set, set, set);
-MC_COMMAND_DESC(add, set, add);
-MC_COMMAND_DESC(replace, set, replace);
-MC_COMMAND_DESC(append, set, append);
-MC_COMMAND_DESC(prepend, set, prepend);
-MC_COMMAND_DESC(cas, cas, cas);
-MC_COMMAND_DESC(incr, incr, incr);
-MC_COMMAND_DESC(decr, incr, decr);
-MC_COMMAND_DESC(delete, delete, delete);
-MC_COMMAND_DESC(touch, touch, touch);
-MC_COMMAND_DESC(slabs, slabs, slabs);
-MC_COMMAND_DESC(stats, stats, stats);
-MC_COMMAND_DESC(flush_all, flush_all, flush_all);
-MC_COMMAND_DESC(version, eol, version);
-MC_COMMAND_DESC(verbosity, verbosity, verbosity);
-MC_COMMAND_DESC(quit, eol, quit);
-
-/**********************************************************************
  * Command Processing.
  **********************************************************************/
 
@@ -977,7 +1029,6 @@ mc_process_get(uintptr_t arg)
 
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_entry **entries = mm_alloc(command->params.get.nkeys * sizeof(struct mc_entry *));
-	// TODO: free it
 	uint32_t nentries = 0;
 
 	for (uint32_t i = 0; i < command->params.get.nkeys; i++) {
@@ -988,6 +1039,7 @@ mc_process_get(uintptr_t arg)
 		struct mc_entry *entry = mc_table_lookup(index, key, key_len);
 		if (entry != NULL) {
 			entries[nentries++] = entry;
+			mc_entry_ref(entry);
 		}
 	}
 
@@ -1021,20 +1073,21 @@ mc_process_set(uintptr_t arg)
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	if (old_entry != NULL) {
+		mc_entry_unref(old_entry);
+	}
 
 	struct mc_entry *new_entry = mc_entry_create(key_len, value->bytes);
 	mc_entry_set_key(new_entry, key);
 	mc_process_value(new_entry, value, 0);
+	new_entry->flags = command->params.set.flags;
 	mc_table_insert(index, new_entry);
+	mc_entry_ref(new_entry);
 
-	if (command->params.del.noreply) {
+	if (command->params.set.noreply) {
 		mc_blank(command);
 	} else {
 		mc_reply(command, "STORED\r\n");
-	}
-
-	if (old_entry != NULL) {
-		mc_entry_destroy(old_entry);
 	}
 
 	LEAVE();
@@ -1058,10 +1111,12 @@ mc_process_add(uintptr_t arg)
 		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, value, 0);
+		new_entry->flags = command->params.set.flags;
 		mc_table_insert(index, new_entry);
+		mc_entry_ref(new_entry);
 	}
 
-	if (command->params.del.noreply) {
+	if (command->params.set.noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1087,22 +1142,22 @@ mc_process_replace(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
+		mc_entry_unref(old_entry);
+
 		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, value, 0);
+		new_entry->flags = command->params.set.flags;
 		mc_table_insert(index, new_entry);
+		mc_entry_ref(new_entry);
 	}
 
-	if (command->params.del.noreply) {
+	if (command->params.set.noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
 	} else {
 		mc_reply(command, "NOT_STORED\r\n");
-	}
-
-	if (old_entry != NULL) {
-		mc_entry_destroy(old_entry);
 	}
 
 	LEAVE();
@@ -1681,6 +1736,7 @@ static bool
 mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 {
 	ENTER();
+	DEBUG("bytes: %d", bytes);
 
 	bool rc = true;
 	uint32_t cr = 1;
@@ -2297,17 +2353,27 @@ mc_transmit_result(struct mm_net_socket *sock,
 			struct mc_entry *entry = command->result.entries.entries[i];
 			const char *key = mc_entry_key(entry);
 			const char *value = mc_entry_value(entry);
-			if (mc_write(sock, value, entry->value_len) < 0) {
+
+			char buf[512];
+			sprintf(buf, "VALUE %.*s %u %u\r\n",
+				entry->key_len, key,
+				entry->flags, entry->value_len);
+			size_t len = strlen(buf);
+			if (mc_write(sock, buf, len) != (int) len) {
 				rc = false;
 				break;
 			}
-			if (mc_write(sock, "\r\n", 2) < 0) {
+			if (mc_write(sock, value, entry->value_len) != entry->value_len) {
+				rc = false;
+				break;
+			}
+			if (mc_write(sock, "\r\n", 2) != 2) {
 				rc = false;
 				break;
 			}
 		}
 		if (rc) {
-			if (mc_write(sock, "END\r\n", 5) < 0) {
+			if (mc_write(sock, "END\r\n", 5) != 5) {
 				rc = false;
 				break;
 			}
