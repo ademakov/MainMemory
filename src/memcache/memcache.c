@@ -178,7 +178,7 @@ struct mc_table
 
 static struct mc_table mc_table;
 
-static void mc_table_stride_routine(uintptr_t);
+static mm_result_t mc_table_stride_routine(uintptr_t);
 
 static inline size_t
 mc_table_size(size_t nbuckets)
@@ -291,7 +291,7 @@ mc_table_start_striding(void)
 	LEAVE();
 }
 
-static void
+static mm_result_t
 mc_table_stride_routine(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
@@ -310,6 +310,7 @@ mc_table_stride_routine(uintptr_t arg __attribute__((unused)))
 	}
 
 	LEAVE();
+	return 0;
 }
 
 static struct mc_entry *
@@ -700,7 +701,7 @@ mc_destroy_get(struct mc_command *command)
 
 #define MC_DESC(cmd, parse_name, process_name, destroy_name)		\
 	static bool mc_parse_##parse_name(struct mc_parser *);		\
-	static void mc_process_##process_name(uintptr_t);		\
+	static mm_result_t mc_process_##process_name(uintptr_t);	\
 	static struct mc_command_desc mc_desc_##cmd = {			\
 		.name = #cmd,						\
 		.parse = mc_parse_##parse_name,				\
@@ -1022,7 +1023,7 @@ mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset
 	LEAVE();
 }
 
-static void
+static mm_result_t
 mc_process_get(uintptr_t arg)
 {
 	ENTER();
@@ -1048,9 +1049,10 @@ mc_process_get(uintptr_t arg)
 	command->result.entries.nentries = nentries;
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_gets(uintptr_t arg)
 {
 	ENTER();
@@ -1059,9 +1061,10 @@ mc_process_gets(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_set(uintptr_t arg)
 {
 	ENTER();
@@ -1091,9 +1094,10 @@ mc_process_set(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_add(uintptr_t arg)
 {
 	ENTER();
@@ -1125,9 +1129,10 @@ mc_process_add(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_replace(uintptr_t arg)
 {
 	ENTER();
@@ -1161,9 +1166,10 @@ mc_process_replace(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_append(uintptr_t arg)
 {
 	ENTER();
@@ -1172,9 +1178,10 @@ mc_process_append(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_prepend(uintptr_t arg)
 {
 	ENTER();
@@ -1183,9 +1190,10 @@ mc_process_prepend(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_cas(uintptr_t arg)
 {
 	ENTER();
@@ -1194,9 +1202,10 @@ mc_process_cas(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_incr(uintptr_t arg)
 {
 	ENTER();
@@ -1205,9 +1214,10 @@ mc_process_incr(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_decr(uintptr_t arg)
 {
 	ENTER();
@@ -1216,9 +1226,10 @@ mc_process_decr(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_delete(uintptr_t arg)
 {
 	ENTER();
@@ -1241,9 +1252,10 @@ mc_process_delete(uintptr_t arg)
 	mc_entry_destroy(old_entry);
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_touch(uintptr_t arg)
 {
 	ENTER();
@@ -1252,9 +1264,10 @@ mc_process_touch(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_slabs(uintptr_t arg)
 {
 	ENTER();
@@ -1263,9 +1276,10 @@ mc_process_slabs(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_stats(uintptr_t arg)
 {
 	ENTER();
@@ -1274,9 +1288,10 @@ mc_process_stats(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_flush_all(uintptr_t arg)
 {
 	ENTER();
@@ -1285,9 +1300,10 @@ mc_process_flush_all(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_version(uintptr_t arg)
 {
 	ENTER();
@@ -1296,9 +1312,10 @@ mc_process_version(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_verbosity(uintptr_t arg)
 {
 	ENTER();
@@ -1307,9 +1324,10 @@ mc_process_verbosity(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_quit(uintptr_t arg)
 {
 	ENTER();
@@ -1318,9 +1336,10 @@ mc_process_quit(uintptr_t arg)
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mc_process_command(struct mc_state *state)
 {
 	ENTER();
@@ -1332,6 +1351,7 @@ mc_process_command(struct mc_state *state)
 	mc_queue_command(state);
 
 	LEAVE();
+	return 0;
 }
 
 /**********************************************************************

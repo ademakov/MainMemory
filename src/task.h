@@ -24,6 +24,11 @@
 #include "arch.h"
 #include "list.h"
 
+/* Canceled task execution result. */
+#define MM_TASK_CANCELED	((mm_result_t) -1)
+/* Unfinished task execution result. */
+#define MM_TASK_UNRESOLVED	((mm_result_t) 0xDEADC0DE)
+
 /* Task state values. */
 typedef enum {
 	MM_TASK_PENDING,
@@ -34,19 +39,25 @@ typedef enum {
 } mm_task_state_t;
 
 /* Task flags. */
-#define MM_TASK_CANCELLABLE	0x01
-#define MM_TASK_CANCELLED	0x02
-#define MM_TASK_READING		0x10
-#define MM_TASK_WRITING		0x20
-#define MM_TASK_WAITING		0x40
+#define MM_TASK_CANCEL_ENABLE		0x00
+#define MM_TASK_CANCEL_DISABLE		0x01
+#define MM_TASK_CANCEL_DEFERRED		0x00
+#define MM_TASK_CANCEL_ASYNCHRONOUS	0x02
+#define MM_TASK_CANCEL_REQUIRED		0x04
+#define MM_TASK_CANCEL_OCCURRED		0x08
+#define MM_TASK_READING			0x10
+#define MM_TASK_WRITING			0x20
+#define MM_TASK_WAITING			0x40
 
+/* Task flags type. */
 typedef uint8_t mm_task_flags_t;
+
 
 /* A task cleanup handler record. */
 struct mm_task_cleanup_rec
 {
 	struct mm_task_cleanup_rec *next;
-	mm_routine routine;
+	void (*const routine)(uintptr_t arg);
 	uintptr_t routine_arg;
 };
 
@@ -55,7 +66,7 @@ struct mm_task_cleanup_rec
 	do {								\
 		struct mm_task_cleanup_rec __cleanup = {		\
 				.next = mm_running_task->cleanup,	\
-				.routine = (mm_routine) (rtn),		\
+				.routine = (void (*)(uintptr_t)) (rtn),	\
 				.routine_arg = (uintptr_t) (arg),	\
 			};						\
 		do {
@@ -104,6 +115,9 @@ struct mm_task
 	/* The list of task-local dynamically-allocated memory. */
 	struct mm_list chunks;
 
+	/* The task result. */
+	mm_result_t result;
+
 	/* The task name. */
 	char *name;
 
@@ -125,11 +139,24 @@ void mm_task_destroy(struct mm_task *task)
 void mm_task_recycle(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_exit(int status)
+void mm_task_exit(mm_result_t result)
 	__attribute__((noreturn));
 
 void mm_task_set_name(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
+
+void mm_task_testcancel(void);
+void mm_task_testcancel_asynchronous(void);
+
+void mm_task_setcancelstate(int new_value, int *old_value_ptr);
+void mm_task_setcanceltype(int new_value, int *old_value_ptr);
+
+int mm_task_enter_cancel_point(void);
+void mm_task_leave_cancel_point(int);
+
+
+void mm_task_cancel(struct mm_task *task)
+	__attribute__((nonnull(1)));
 
 void mm_task_wait_fifo(struct mm_list *queue);
 void mm_task_wait_lifo(struct mm_list *queue);

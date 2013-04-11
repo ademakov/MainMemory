@@ -40,7 +40,7 @@ mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 	mm_sched_run(mm_core->master);
 }
 
-static void
+static mm_result_t
 mm_core_worker(uintptr_t arg)
 {
 	ENTER();
@@ -50,11 +50,17 @@ mm_core_worker(uintptr_t arg)
 	uintptr_t routine_arg = work->item;
 	mm_work_destroy(work);
 
+	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
+
+	// Execute the work routine.
 	routine(routine_arg);
+
+	// Cleanup on return.
 	mm_task_cleanup_pop(true);
 
 	LEAVE();
+	return 0;
 }
 
 static void
@@ -74,7 +80,7 @@ mm_core_worker_start(struct mm_work *work)
  * Master task.
  **********************************************************************/
 
-static void
+static mm_result_t
 mm_core_master_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
@@ -92,6 +98,7 @@ mm_core_master_loop(uintptr_t arg __attribute__((unused)))
 	}
 
 	LEAVE();
+	return 0;
 }
 
 static void

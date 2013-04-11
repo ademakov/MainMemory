@@ -175,8 +175,10 @@ mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
 
+	int cp = mm_task_enter_cancel_point();
 	while (mm_port_send(port, start, count) < 0)
 		mm_port_block_on_send(port);
+	mm_task_leave_cancel_point(cp);
 
 	LEAVE();
 }
@@ -186,8 +188,10 @@ mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
 
+	int cp = mm_task_enter_cancel_point();
 	while (mm_port_receive(port, start, count) < 0)
 		mm_port_block_on_receive(port);
+	mm_task_leave_cancel_point(cp);
 
 	LEAVE();
 }

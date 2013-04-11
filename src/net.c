@@ -412,7 +412,7 @@ done:
 	return rc;
 }
 
-static void
+static mm_result_t
 mm_net_acceptor(uintptr_t arg)
 {
 	ENTER();
@@ -426,9 +426,10 @@ mm_net_acceptor(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
 }
 
-static void
+static mm_result_t
 mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 {
 	ENTER();
@@ -461,24 +462,36 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 	}
 
 	LEAVE();
+	return 0;
 }
 
 static void
-mm_net_init_server_task(void)
+mm_net_init_accept_task(void)
 {
 	ENTER();
 
-	/* Create the event handler task. */
+	// Create the event handler task.
 	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
 
-	/* Make the task priority higher. */
+	// Make the task priority higher.
 	mm_net_accept_task->priority /= 2;
 
-	/* Create the event handler port. */
+	// Create the event handler port.
 	mm_net_accept_port = mm_port_create(mm_net_accept_task);
 
 	// Register I/O handlers.
 	mm_net_accept_handler = mm_event_add_io_handler(MM_EVENT_NET_READ, mm_net_accept_port);
+
+	LEAVE();
+}
+
+static void
+mm_net_term_accept_task()
+{
+	ENTER();
+
+	// TODO: Destroy the event handler task.
+	//mm_task_destroy(mm_net_accept_task);
 
 	LEAVE();
 }
@@ -593,7 +606,7 @@ done:
 	LEAVE();
 }
 
-void
+static void
 mm_net_reader_cleanup(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -610,21 +623,23 @@ mm_net_reader_cleanup(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-static void
+static mm_result_t
 mm_net_reader(uintptr_t arg)
 {
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
-	/* Make sure the socket will be unbound from the task. */
+	// Ensure the task yields socket on exit.
 	mm_task_cleanup_push(mm_net_reader_cleanup, sock);
 
-	/* Run the protocol handler routine. */
+	// Run the protocol handler routine.
 	(sock->srv->proto->reader_routine)(sock);
 
+	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
+	return 0;
 }
 
-void
+static void
 mm_net_writer_cleanup(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -641,21 +656,23 @@ mm_net_writer_cleanup(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-static void
+static mm_result_t
 mm_net_writer(uintptr_t arg)
 {
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
-	/* Make sure the socket will be unbound from the task. */
+	// Ensure the task yields socket on exit.
 	mm_task_cleanup_push(mm_net_writer_cleanup, sock);
 
-	/* Run the protocol handler routine. */
+	// Run the protocol handler routine.
 	(sock->srv->proto->writer_routine)(sock);
 
+	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
+	return 0;
 }
 
-static void
+static mm_result_t
 mm_net_io_loop(uintptr_t arg)
 {
 	ENTER();
@@ -835,6 +852,7 @@ mm_net_io_loop(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
 }
 
 /**********************************************************************
@@ -871,7 +889,7 @@ mm_net_init(void)
 
 	mm_net_init_server_table();
 	mm_net_init_socket_table();
-	mm_net_init_server_task();
+	mm_net_init_accept_task();
 
 	mm_net_initialized = 1;
 
@@ -894,6 +912,7 @@ mm_net_term(void)
 		// TODO: close client sockets
 	}
 
+	mm_net_term_accept_task();
 	mm_net_free_socket_table();
 	mm_net_free_server_table();
 
@@ -995,6 +1014,9 @@ mm_net_stop_server(struct mm_net_server *srv)
 	// Unregister the socket.
 	mm_event_unregister_fd(srv->fd);
 
+	// TODO: Destroy the event handler task.
+	// mm_task_destroy(srv->io_task);
+
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->fd);
 	srv->fd = -1;
@@ -1089,6 +1111,7 @@ retry:
 			mm_sched_block();
 			goto retry;
 		}
+
 		n = -1;
 		errno = EAGAIN;
 		goto done;
@@ -1210,6 +1233,7 @@ retry:
 			mm_sched_block();
 			goto retry;
 		}
+
 		n = -1;
 		errno = EAGAIN;
 		goto done;

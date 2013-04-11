@@ -64,6 +64,7 @@ mm_sched_switch(mm_task_state_t state)
 	mm_running_task->state = MM_TASK_RUNNING;
 
 	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
+	mm_task_testcancel_asynchronous();
 
 	LEAVE();
 }

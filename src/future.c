@@ -57,6 +57,7 @@ mm_future_create(const char *name __attribute__((unused)), mm_task_flags_t flags
 
 	struct mm_future *future = mm_pool_alloc(&mm_future_pool);
 	future->status = MM_FUTURE_CREATED;
+	future->result = MM_TASK_UNRESOLVED;
 	future->flags = flags;
 	future->start = start;
 	future->start_arg = start_arg;
@@ -85,10 +86,11 @@ mm_future_cleanup(struct mm_future *future)
 	ENTER();
 
 	if (future->status == MM_FUTURE_STARTED) {
-		if ((future->task->flags & MM_TASK_CANCELLED) != 0) {
-			future->status = MM_FUTURE_CANCELLED;
+		if ((future->task->flags & MM_TASK_CANCEL_OCCURRED) != 0) {
+			future->status = MM_FUTURE_CANCELED;
 		} else {
 			future->status = MM_FUTURE_COMPLETED;
+			future->result = future->task->result;
 		}
 
 		mm_task_broadcast(&future->blocked_tasks);
@@ -98,22 +100,26 @@ mm_future_cleanup(struct mm_future *future)
 	LEAVE();
 }
 
-static void
+static mm_result_t
 mm_future_routine(uintptr_t arg)
 {
 	ENTER();
 
 	struct mm_future *future = (struct mm_future *) arg;
 	if (likely(future->status == MM_FUTURE_STARTED)) {
+		// Ensure cleanup on exit.
 		mm_task_cleanup_push(mm_future_cleanup, future);
 
+		// Execute the task bound to the future.
 		future->task = mm_running_task;
 		future->start(future->start_arg);
 
+		// Cleanup on return.
 		mm_task_cleanup_pop(true);
 	}
 
 	LEAVE();
+	return 0;
 }
 
 void
@@ -135,9 +141,12 @@ mm_future_wait(struct mm_future *future)
 	ENTER();
 
 	mm_future_start(future);
+
+	int cp = mm_task_enter_cancel_point();
 	while (future->status == MM_FUTURE_STARTED) {
 		mm_task_wait_fifo(&future->blocked_tasks);
 	}
+	mm_task_leave_cancel_point(cp);
 
 	ENTER();
 }

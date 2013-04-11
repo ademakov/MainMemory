@@ -1,5 +1,6 @@
 
 ASAP:
+* finish task cancel
 * solve pool object reallocation problem
 * crude memcache module
 * add timers and task sleep
@@ -10,7 +11,6 @@ ASAP:
 Essentials:
 * resolve socket close issues: time wait
 * worker threads, multi-threaded task & work schedulers
-* add task cancel
 * support signals
 * UDP servers
 * SSL servers

@@ -631,7 +631,7 @@ done:
 // Event loop exit flag.
 static volatile int mm_exit_loop = 0;
 
-static void
+static mm_result_t
 mm_event_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
@@ -642,6 +642,7 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 	}
 
 	LEAVE();
+	return 0;
 }
 
 void

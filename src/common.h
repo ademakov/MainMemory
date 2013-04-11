@@ -85,7 +85,10 @@ typedef uint32_t		mm_timeout_t;
 #define MM_PRIO_DEFAULT		15
 #define MM_PRIO_HIGHEST		0
 
+/* Task execution result. */
+typedef uintptr_t mm_result_t;
+
 /* Task execution routine. */
-typedef void (*mm_routine)(uintptr_t arg);
+typedef mm_result_t (*mm_routine)(uintptr_t arg);
 
 #endif /* COMMON_H */

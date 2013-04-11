@@ -68,21 +68,22 @@ mm_task_entry(void)
 {
 	TRACE("enter task %s", mm_running_task->name);
 
-	/* Execute the task using a fresh stack. */
-	(mm_running_task)->start(mm_running_task->start_arg);
+	// Execute the task routine on an empty stack.
+	mm_result_t result = mm_running_task->start(mm_running_task->start_arg);
 
-	/* Make sure that there is no return from this call as there is no
-	 * valid stack frame after it. */
-	mm_task_exit(0);
+	// Finish the task making sure there is no return from this point
+	// as there is no valid stack frame above it.
+	mm_task_exit(result);
 }
 
+/* Execute task cleanup routines. */
 static void
 mm_task_cleanup(struct mm_task *task)
 {
 	ENTER();
 
 	while (task->cleanup != NULL) {
-		mm_routine routine = task->cleanup->routine;
+		void (*routine)(uintptr_t) = task->cleanup->routine;
 		uintptr_t routine_arg = task->cleanup->routine_arg;
 		task->cleanup = task->cleanup->next;
 		routine(routine_arg);
@@ -142,6 +143,7 @@ mm_task_create(const char *name, mm_task_flags_t flags,
 	task->blocked_on = NULL;
 	task->start = start;
 	task->start_arg = start_arg;
+	task->result = MM_TASK_UNRESOLVED;
 	task->cleanup = NULL;
 #if ENABLE_TRACE
 	task->trace_level = 0;
@@ -208,25 +210,24 @@ mm_task_recycle(struct mm_task *task)
 
 /* Finish the current task. */
 void
-mm_task_exit(int status)
+mm_task_exit(mm_result_t result)
 {
 	ENTER();
-	TRACE("exiting task '%s' with status %d", mm_running_task->name, status);
+	TRACE("exiting task '%s' with status %lu",
+	      mm_running_task->name, (unsigned long) result);
+
+	// Set the task result.
+	mm_running_task->result = result;
 
 	// TODO: invalidate ports ?
 
-	if ((mm_running_task->flags & MM_TASK_WAITING) != 0) {
-		mm_list_delete(&mm_running_task->queue);
-		mm_running_task->flags &= ~MM_TASK_WAITING;
-	}
-
-	/* Call the cleanup handlers. */
+	// Call the cleanup handlers.
 	mm_task_cleanup(mm_running_task);
 
-	/* Free the dynamic memory. */
+	// Free the dynamic memory.
 	mm_task_free_chunks(mm_running_task);
 
-	/* Give the control to still running tasks. */
+	// Give the control to still running tasks.
 	mm_sched_abort();
 
 	LEAVE();
@@ -256,41 +257,191 @@ mm_task_set_name(struct mm_task *task, const char *name)
 }
 
 /**********************************************************************
+ * Task cancellation.
+ **********************************************************************/
+
+#define MM_TASK_CANCEL_TEST(task_flags)	\
+	((task_flags & (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_DISABLE)) \
+	 == MM_TASK_CANCEL_REQUIRED)
+
+#define MM_TASK_CANCEL_TEST_ASYNC(task_flags) \
+	((task_flags & (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_DISABLE | MM_TASK_CANCEL_ASYNCHRONOUS)) \
+	 == (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_ASYNCHRONOUS))
+
+void
+mm_task_testcancel(void)
+{
+	if (unlikely(MM_TASK_CANCEL_TEST(mm_running_task->flags))) {
+		TRACE("canceled!");
+
+		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+		mm_task_exit(MM_TASK_CANCELED);
+	}
+}
+
+void
+mm_task_testcancel_asynchronous(void)
+{
+	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(mm_running_task->flags))) {
+		TRACE("canceled!");
+
+		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+		mm_task_exit(MM_TASK_CANCELED);
+	}
+}
+
+void
+mm_task_setcancelstate(int new_value, int *old_value_ptr)
+{
+	ENTER();
+	ASSERT(new_value == MM_TASK_CANCEL_ENABLE
+	       || new_value == MM_TASK_CANCEL_DISABLE);
+
+	int old_value = (mm_running_task->flags & MM_TASK_CANCEL_DISABLE);
+	if (likely(old_value != new_value)) {
+		if (new_value) {
+			mm_running_task->flags |= MM_TASK_CANCEL_DISABLE;
+		} else {
+			mm_running_task->flags &= ~MM_TASK_CANCEL_DISABLE;
+			mm_task_testcancel_asynchronous();
+		}
+	}
+
+	if (old_value_ptr != NULL) {
+		*old_value_ptr = old_value;
+	}
+
+	LEAVE();
+}
+
+void
+mm_task_setcanceltype(int new_value, int *old_value_ptr)
+{
+	ENTER();
+	ASSERT(new_value == MM_TASK_CANCEL_DEFERRED
+	       || new_value == MM_TASK_CANCEL_ASYNCHRONOUS);
+
+	int old_value = (mm_running_task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
+	if (likely(old_value != new_value)) {
+		if (new_value) {
+			mm_running_task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
+			mm_task_testcancel_asynchronous();
+		} else {
+			mm_running_task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
+		}
+	}
+
+	if (old_value_ptr != NULL) {
+		*old_value_ptr = old_value;
+	}
+
+	LEAVE();
+}
+
+int
+mm_task_enter_cancel_point(void)
+{
+	ENTER();
+
+	int cp = (mm_running_task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
+	if (likely(cp == 0)) {
+		mm_running_task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
+		mm_task_testcancel_asynchronous();
+	}
+
+	LEAVE();
+	return cp;
+}
+
+void
+mm_task_leave_cancel_point(int cp)
+{
+	ENTER();
+
+	if (likely(cp == 0)) {
+		mm_running_task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
+	}
+
+	LEAVE();
+}
+
+void
+mm_task_cancel(struct mm_task *task)
+{
+	ENTER();
+
+	task->flags |= MM_TASK_CANCEL_REQUIRED;
+	if (unlikely(task->state == MM_TASK_RUNNING)) {
+		ASSERT(task == mm_running_task);
+		mm_task_testcancel_asynchronous();
+	} else {
+		mm_sched_run(task);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Task event waiting.
  **********************************************************************/
 
+/* Wait queue cleanup handler. */
+static void
+mm_task_wait_cleanup(struct mm_list *queue __attribute__((unused)))
+{
+	ASSERT((mm_running_task->flags & MM_TASK_WAITING) != 0);
+
+	mm_list_delete(&mm_running_task->queue);
+	mm_running_task->flags &= ~MM_TASK_WAITING;
+}
+
+/* Wait for a wakeup signal in the FIFO order. */
 void
 mm_task_wait_fifo(struct mm_list *queue)
 {
 	ENTER();
+	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
 
+	// Enqueue the task.
 	mm_running_task->flags |= MM_TASK_WAITING;
 	mm_list_append(queue, &mm_running_task->queue);
 
+	// Ensure dequeuing on exit.
+	mm_task_cleanup_push(mm_task_wait_cleanup, queue);
+
+	// Wait for a wakeup signal.
 	mm_sched_block();
 
-	mm_list_delete(&mm_running_task->queue);
-	mm_running_task->flags &= ~MM_TASK_WAITING;
+	// Dequeue on return.
+	mm_task_cleanup_pop(true);
 
 	LEAVE();
 }
 
+/* Wait for a wakeup signal in the LIFO order. */
 void
 mm_task_wait_lifo(struct mm_list *queue)
 {
 	ENTER();
+	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
 
+	// Enqueue the task.
 	mm_running_task->flags |= MM_TASK_WAITING;
 	mm_list_insert(queue, &mm_running_task->queue);
 
+	// Ensure dequeuing on exit.
+	mm_task_cleanup_push(mm_task_wait_cleanup, queue);
+
+	// Wait for a wakeup signal.
 	mm_sched_block();
 
-	mm_list_delete(&mm_running_task->queue);
-	mm_running_task->flags &= ~MM_TASK_WAITING;
+	// Dequeue on return.
+	mm_task_cleanup_pop(true);
 
 	LEAVE();
 }
 
+/* Wakeup a task in a wait queue. */
 void
 mm_task_signal(struct mm_list *queue)
 {
@@ -305,6 +456,7 @@ mm_task_signal(struct mm_list *queue)
 	LEAVE();
 }
 
+/* Wakeup all tasks in a wait queue. */
 void
 mm_task_broadcast(struct mm_list *queue)
 {

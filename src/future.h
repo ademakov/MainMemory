@@ -29,7 +29,7 @@
 typedef enum {
 	MM_FUTURE_CREATED,
 	MM_FUTURE_STARTED,
-	MM_FUTURE_CANCELLED,
+	MM_FUTURE_CANCELED,
 	MM_FUTURE_COMPLETED,
 } mm_future_status_t;
 
@@ -38,6 +38,8 @@ struct mm_future
 {
 	/* The future status. */
 	mm_future_status_t status;
+	/* The future result. */
+	mm_result_t result;
 	/* The future task parameters. */
 	mm_task_flags_t flags;
 	mm_routine start;
@@ -62,9 +64,9 @@ void mm_future_start(struct mm_future *future);
 void mm_future_wait(struct mm_future *future);
 
 static inline bool
-mm_future_is_cancelled(struct mm_future *future)
+mm_future_is_canceled(struct mm_future *future)
 {
-	return future->status == MM_FUTURE_CANCELLED;
+	return future->status == MM_FUTURE_CANCELED;
 }
 
 static inline bool
