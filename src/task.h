@@ -154,7 +154,6 @@ void mm_task_setcanceltype(int new_value, int *old_value_ptr);
 int mm_task_enter_cancel_point(void);
 void mm_task_leave_cancel_point(int);
 
-
 void mm_task_cancel(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
