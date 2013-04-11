@@ -191,18 +191,38 @@ mm_net_clear_nonblock(struct mm_net_socket *sock)
 	sock->flags &= ~MM_NET_NONBLOCK;
 }
 
+static inline bool
+mm_net_is_closed(struct mm_net_socket *sock)
+{
+	return (sock->flags & MM_NET_CLOSED) != 0;
+}
+
+static inline bool
+mm_net_is_readable(struct mm_net_socket *sock)
+{
+	return (sock->flags & (MM_NET_CLOSED | MM_NET_READ_READY))
+		== MM_NET_READ_READY;
+}
+
+static inline bool
+mm_net_is_writable(struct mm_net_socket *sock)
+{
+	return (sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_READY))
+		== MM_NET_WRITE_READY;
+}
+
+static inline bool
+mm_net_is_blockable(struct mm_net_socket *sock)
+{
+	return (sock->flags & (MM_NET_CLOSED | MM_NET_NONBLOCK)) == 0;
+}
+
 static inline void
 mm_net_set_timeout(struct mm_net_socket *sock, mm_timeout_t usec)
 {
 	(void) sock;
 	(void) usec;
 	// TODO
-}
-
-static inline bool
-mm_net_is_closed(struct mm_net_socket *sock)
-{
-	return (sock->flags & MM_NET_CLOSED) != 0;
 }
 
 #endif /* NET_H */

@@ -1028,33 +1028,63 @@ mm_net_stop_server(struct mm_net_server *srv)
  * Network sockets.
  **********************************************************************/
 
+static void
+mm_net_read_block(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	// Register the current task as reader.
+	mm_net_attach_reader(sock);
+
+	// Block the task waiting to become read ready.
+	mm_sched_block();
+
+	// Unregister the task as reader.
+	mm_net_detach_reader(sock);
+
+	// Check if the task is canceled.
+	mm_task_testcancel();
+
+	LEAVE();
+}
+
+static void
+mm_net_write_block(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	// Register the current task as reader.
+	mm_net_attach_writer(sock);
+
+	// Block the task waiting to become write ready.
+	mm_sched_block();
+
+	// Unregister the task as reader.
+	mm_net_detach_writer(sock);
+
+	// Check if the task is canceled.
+	mm_task_testcancel();
+
+	LEAVE();
+}
+
 ssize_t
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
 	ssize_t n;
 
-	// Register the current task as reader.
-	mm_net_attach_reader(sock);
-
 retry:
-	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
-		n = -1;
-		errno = EBADF;
-		goto done;
-	}
 	// Check to see if the socket is ready for reading.
-	if ((sock->flags & MM_NET_READ_READY) == 0) {
-		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
-			// Block waiting to become read ready.
-			mm_sched_block();
+	if (!mm_net_is_readable(sock)) {
+		if (mm_net_is_blockable(sock)) {
+			mm_net_read_block(sock);
 			goto retry;
+		} else {
+			n = -1;
+			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+			goto done;
 		}
-
-		n = -1;
-		errno = EAGAIN;
-		goto done;
 	}
 
 	// Try to read (nonblocking).
@@ -1081,9 +1111,6 @@ retry:
 	}
 
 done:
-	// Unregister the current task as reader.
-	mm_net_detach_reader(sock);
-
 	LEAVE();
 	return n;
 }
@@ -1094,27 +1121,17 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	ENTER();
 	ssize_t n;
 
-	// Register the current task as writer.
-	mm_net_attach_writer(sock);
-
 retry:
-	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
-		n = -1;
-		errno = EBADF;
-		goto done;
-	}
 	// Check to see if the socket is ready for writing.
-	if ((sock->flags & MM_NET_WRITE_READY) == 0) {
-		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
-			// Block waiting to become write ready.
-			mm_sched_block();
+	if (!mm_net_is_writable(sock)) {
+		if (mm_net_is_blockable(sock)) {
+			mm_net_write_block(sock);
 			goto retry;
+		} else {
+			n = -1;
+			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+			goto done;
 		}
-
-		n = -1;
-		errno = EAGAIN;
-		goto done;
 	}
 
 	// Try to write (nonblocking).
@@ -1139,9 +1156,6 @@ retry:
 	}
 
 done:
-	// Unregister the current task as writer.
-	mm_net_detach_writer(sock);
-
 	LEAVE();
 	return n;
 }
@@ -1152,27 +1166,17 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 	ENTER();
 	ssize_t n;
 
-	// Register the current task as reader.
-	mm_net_attach_reader(sock);
-
 retry:
-	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
-		n = -1;
-		errno = EBADF;
-		goto done;
-	}
 	// Check to see if the socket is ready for reading.
-	if ((sock->flags & MM_NET_READ_READY) == 0) {
-		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
-			// Block waiting to become read ready.
-			mm_sched_block();
+	if (!mm_net_is_readable(sock)) {
+		if (mm_net_is_blockable(sock)) {
+			mm_net_read_block(sock);
 			goto retry;
+		} else {
+			n = -1;
+			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+			goto done;
 		}
-
-		n = -1;
-		errno = EAGAIN;
-		goto done;
 	}
 
 	// Try to read (nonblocking).
@@ -1203,9 +1207,6 @@ retry:
 	}
 
 done:
-	// Unregister the current task as reader.
-	mm_net_detach_reader(sock);
-
 	LEAVE();
 	return n;
 }
@@ -1216,27 +1217,17 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 	ENTER();
 	ssize_t n;
 
-	// Register the current task as writer.
-	mm_net_attach_writer(sock);
-
 retry:
-	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
-		n = -1;
-		errno = EBADF;
-		goto done;
-	}
 	// Check to see if the socket is ready for writing.
-	if ((sock->flags & MM_NET_WRITE_READY) == 0) {
-		if ((sock->flags & MM_NET_NONBLOCK) == 0) {
-			// Block waiting to become write ready.
-			mm_sched_block();
+	if (!mm_net_is_writable(sock)) {
+		if (mm_net_is_blockable(sock)) {
+			mm_net_write_block(sock);
 			goto retry;
+		} else {
+			n = -1;
+			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+			goto done;
 		}
-
-		n = -1;
-		errno = EAGAIN;
-		goto done;
 	}
 
 	// Try to write (nonblocking).
@@ -1265,9 +1256,6 @@ retry:
 	}
 
 done:
-	// Unregister the current task as writer.
-	mm_net_detach_writer(sock);
-
 	LEAVE();
 	return n;
 }
