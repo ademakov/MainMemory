@@ -38,9 +38,6 @@ struct mm_core
 
 	/* The list of worker tasks that have finished. */
 	struct mm_list dead_list;
-
-	/* Stop flag. */
-	volatile bool stop;
 };
 
 extern __thread struct mm_core *mm_core;

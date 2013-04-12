@@ -85,7 +85,9 @@ mm_core_master_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
 
-	while (likely(!mm_core->stop)) {
+	for (;;) {
+		mm_task_testcancel();
+
 		if (mm_core->nworkers == mm_core->nworkers_max) {
 			mm_sched_block();
 			continue;
@@ -117,8 +119,7 @@ mm_core_stop_master(struct mm_core *core)
 {
 	ENTER();
 
-	core->stop = true;
-	mm_sched_run(core->master);
+	mm_task_cancel(core->master);
 
 	LEAVE();
 }
@@ -139,7 +140,6 @@ mm_core_create(uint32_t nworkers_max)
 	core->nworkers_max = nworkers_max;
 	mm_runq_init(&core->run_queue);
 	mm_list_init(&core->dead_list);
-	core->stop = false;
 
 	LEAVE();
 	return core;

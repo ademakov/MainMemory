@@ -1,12 +1,14 @@
 
 ASAP:
-* finish task cancel
 * solve pool object reallocation problem
 * crude memcache module
 * add timers and task sleep
-* ensure correct client and server object destruction
-** ensure destroyed client objects are not accessed anymore
-* resolve port destruction issues (refcount? capabilities?)
+* correct shutdown:
+** ensure worker & master & aux tasks are finished
+** ensure socket & server object destruction
+* correct destruction:
+** ensure destroyed socket & server objects are not accessed anymore
+** ensure task & port objects destruction issues (refcount? capabilities?)
 
 Essentials:
 * resolve socket close issues: time wait

@@ -83,19 +83,16 @@ mm_work_get(void)
 {
 	ENTER();
 
-	struct mm_work *work = NULL;
-	while (likely(!mm_core->stop)) {
-		/* If there is a work available then take it. */
-		if (!mm_list_empty(&mm_work_queue)) {
-			struct mm_list *link = mm_list_head(&mm_work_queue);
-			work = containerof(link, struct mm_work, queue);
-			mm_list_delete(link);
-			break;
-		}
-
-		/* Otherwise wait for a work to become available. */
+	/* Wait for a work to become available. */
+	while (mm_list_empty(&mm_work_queue)) {
 		mm_task_wait_lifo(&mm_wait_queue);
+ 		mm_task_testcancel();
 	}
+
+	/* Take the first available work. */
+	struct mm_list *link = mm_list_head(&mm_work_queue);
+	struct mm_work *work = containerof(link, struct mm_work, queue);
+	mm_list_delete(link);
 
 	LEAVE();
 	return work;

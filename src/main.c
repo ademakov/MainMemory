@@ -39,6 +39,7 @@ mm_term_handler(int signo __attribute__((unused)))
 	ENTER();
 
 	mm_event_stop();
+	mm_core_stop();
 
 	LEAVE();
 }
