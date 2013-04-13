@@ -577,6 +577,7 @@ typedef enum
 	MC_RESULT_REPLY,
 	MC_RESULT_ENTRY,
 	MC_RESULT_BLANK,
+	MC_RESULT_QUIT,
 } mc_result_t;
 
 struct mc_result_entries
@@ -724,9 +725,9 @@ MC_DESC(touch,		touch,		touch,		dummy);
 MC_DESC(slabs,		slabs,		slabs,		dummy);
 MC_DESC(stats,		stats,		stats,		dummy);
 MC_DESC(flush_all,	flush_all,	flush_all,	dummy);
-MC_DESC(version,	eol,		version,	dummy);
+MC_DESC(version,	version,	dummy,		dummy);
 MC_DESC(verbosity,	verbosity,	verbosity,	dummy);
-MC_DESC(quit,		eol,		quit,		dummy);
+MC_DESC(quit,		quit,		dummy,		dummy);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -734,26 +735,29 @@ MC_DESC(quit,		eol,		quit,		dummy);
 
 struct mc_state
 {
-	/* Current parse position. */
+	// Current parse position.
 	char *start_ptr;
 //	struct mc_buffer *start_buf;
 
-	/* Current input buffer. */
+	// Current input buffer.
 //	struct mc_buffer *read_buf;
 
-	/* Input buffer queue. */
+	// Input buffer queue.
 	struct mc_buffer *read_head;
 	struct mc_buffer *read_tail;
 
-	/* Cached command. */
+	// Cached command.
 	struct mc_command *command;
 
-	/* Command processing queue. */
+	// Command processing queue.
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
 
+	// The client socket,
 	struct mm_net_socket *sock;
-	bool quit, quit_fast;
+
+	// The quit flag.
+	bool quit;
 };
 
 
@@ -777,7 +781,6 @@ mc_create(struct mm_net_socket *sock)
 
 	state->sock = sock;
 	state->quit = false;
-	state->quit_fast = false;
 
 	LEAVE();
 	return state;
@@ -814,8 +817,11 @@ mc_quit(struct mc_state *state, bool fast)
 {
 	ENTER();
 
-	state->quit = true;
-	state->quit_fast = fast;
+	if (fast) {
+		state->quit = true;
+	} else {
+		state->command->result_type = MC_RESULT_QUIT;
+	}
 
 	LEAVE();
 }
@@ -1304,18 +1310,6 @@ mc_process_flush_all(uintptr_t arg)
 }
 
 static mm_result_t
-mc_process_version(uintptr_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
-
-	LEAVE();
-	return 0;
-}
-
-static mm_result_t
 mc_process_verbosity(uintptr_t arg)
 {
 	ENTER();
@@ -1328,12 +1322,12 @@ mc_process_verbosity(uintptr_t arg)
 }
 
 static mm_result_t
-mc_process_quit(uintptr_t arg)
+mc_process_dummy(uintptr_t arg)
 {
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	TRACE("%s", command->desc->name);
 
 	LEAVE();
 	return 0;
@@ -2290,6 +2284,38 @@ mc_parse_verbosity(struct mc_parser *parser)
 }
 
 static bool
+mc_parse_version(struct mc_parser *parser)
+{
+	ENTER();
+	
+	bool rc = mc_parse_eol(parser);
+	if (!rc || parser->error)
+		goto done;
+
+	mc_reply(parser->command, "VERSION 0.0\r\n");
+
+done:
+	LEAVE();
+	return rc;
+}
+
+static bool
+mc_parse_quit(struct mc_parser *parser)
+{
+	ENTER();
+	
+	bool rc = mc_parse_eol(parser);
+	if (!rc || parser->error)
+		goto done;
+
+	mc_quit(parser->state, false);
+
+done:
+	LEAVE();
+	return rc;
+}
+
+static bool
 mc_parse(struct mc_state *state)
 {
 	ENTER();
@@ -2402,6 +2428,10 @@ mc_transmit_result(struct mm_net_socket *sock,
 	case MC_RESULT_BLANK:
 		rc = true;
 		break;
+	case MC_RESULT_QUIT:
+		state->quit = true;
+		mm_net_close(sock);
+		break;
 	default:
 		ABORT();
 	}
@@ -2438,12 +2468,17 @@ mc_reader_routine(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	/* Get the protocol data. */
-	if (!sock->proto_data)
-		sock->proto_data = (intptr_t) mc_create(sock);
+	// Get the protocol data.
 	struct mc_state *state = (struct mc_state *) sock->proto_data;
+	if (state == NULL) {
+		state = mc_create(sock);
+		sock->proto_data = (intptr_t) state;
+	}
 
-	if (mc_receive_command(state)) {
+	bool has_command = mc_receive_command(state);
+	if (unlikely(state->quit)) {
+		mm_net_close(sock);
+	} else if (has_command) {
 		mc_process_command(state);
 		mm_net_spawn_writer(sock);
 	}
@@ -2457,9 +2492,9 @@ mc_writer_routine(struct mm_net_socket *sock)
 	ENTER();
 
 	/* Get the protocol data if any. */
-	if (!sock->proto_data)
-		goto done;
 	struct mc_state *state = (struct mc_state *) sock->proto_data;
+	if (state == NULL)
+		goto done;
 
 	/* Get the first queued command and try to transmit its result. */
 	struct mc_command *command = state->command_head;
