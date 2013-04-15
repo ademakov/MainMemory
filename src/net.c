@@ -1200,7 +1200,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 
 retry:
 	// Check to see if the socket is ready for writing.
-	while (!mm_net_is_readable(sock)) {
+	while (!mm_net_is_writable(sock)) {
 		n = mm_net_may_wblock(sock);
 		if (n <= 0) {
 			goto done;
@@ -1292,7 +1292,7 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 
 retry:
 	// Check to see if the socket is ready for writing.
-	while (!mm_net_is_readable(sock)) {
+	while (!mm_net_is_writable(sock)) {
 		n = mm_net_may_wblock(sock);
 		if (n <= 0) {
 			goto done;
