@@ -31,6 +31,9 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+// The logging verbosity level.
+static int mc_verbose = 0;
+
 /**********************************************************************
  * Hash function.
  **********************************************************************/
@@ -671,6 +674,20 @@ mc_command_destroy(struct mc_command *command)
 	LEAVE();
 }
 
+static void
+mc_reply(struct mc_command *command, const char *str)
+{
+	command->result_type = MC_RESULT_REPLY;
+	command->result.reply.str = str;
+	command->result.reply.len = strlen(str);
+}
+
+static void
+mc_blank(struct mc_command *command)
+{
+	command->result_type = MC_RESULT_BLANK;
+}
+
 /**********************************************************************
  * Command Destruction.
  **********************************************************************/
@@ -726,7 +743,7 @@ MC_DESC(slabs,		slabs,		slabs,		dummy);
 MC_DESC(stats,		stats,		stats,		dummy);
 MC_DESC(flush_all,	flush_all,	flush_all,	dummy);
 MC_DESC(version,	version,	dummy,		dummy);
-MC_DESC(verbosity,	verbosity,	verbosity,	dummy);
+MC_DESC(verbosity,	verbosity,	dummy,		dummy);
 MC_DESC(quit,		quit,		dummy,		dummy);
 
 /**********************************************************************
@@ -939,7 +956,6 @@ mc_read(struct mc_state *state, size_t required, size_t optional)
 		}
 
 		ssize_t n = mm_net_read(state->sock, buffer->data + buffer->used, size);
-		DEBUG("mc_read: n = %ld", (long) n);
 		if (n <= 0) {
 			break;
 		}
@@ -979,26 +995,10 @@ mc_write(struct mm_net_socket *sock, const char *data, size_t size)
  * Command Processing.
  **********************************************************************/
 
-static void
-mc_reply(struct mc_command *command, const char *str)
+static mm_result_t
+mc_process_dummy(uintptr_t arg __attribute__((unused)))
 {
-	ENTER();
-
-	command->result_type = MC_RESULT_REPLY;
-	command->result.reply.str = str;
-	command->result.reply.len = strlen(str);
-
-	LEAVE();
-}
-
-static void
-mc_blank(struct mc_command *command)
-{
-	ENTER();
-
-	command->result_type = MC_RESULT_BLANK;
-
-	LEAVE();
+	return 0;
 }
 
 static void
@@ -1310,38 +1310,18 @@ mc_process_flush_all(uintptr_t arg)
 }
 
 static mm_result_t
-mc_process_verbosity(uintptr_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
-
-	LEAVE();
-	return 0;
-}
-
-static mm_result_t
-mc_process_dummy(uintptr_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	TRACE("%s", command->desc->name);
-
-	LEAVE();
-	return 0;
-}
-
-static mm_result_t
 mc_process_command(struct mc_state *state)
 {
 	ENTER();
 
 	struct mc_command *command = state->command;
-	if (command->result_type == MC_RESULT_NONE) {
-		state->command->desc->process((intptr_t) command);
+	if (likely(command->desc != NULL)) {
+		DEBUG("command %s", command->desc->name);
+		if (command->result_type == MC_RESULT_NONE) {
+			state->command->desc->process((intptr_t) command);
+		}
 	}
+
 	mc_queue_command(state);
 
 	LEAVE();
@@ -1630,6 +1610,8 @@ retry:
 				value->len = count;
 				value->str = parser->start_ptr;
 				parser->start_ptr = s;
+
+				DEBUG("%.*s", (int) value->len, value->str);
 			}
 			goto done;
 		}
@@ -2276,9 +2258,29 @@ static bool
 mc_parse_verbosity(struct mc_parser *parser)
 {
 	ENTER();
-	
-	bool rc = mc_parse_error(parser, "CLIENT_ERROR not implemented\r\n");
 
+	uint32_t verbose;
+	bool noreply;
+
+	bool rc = mc_parse_u32(parser, &verbose);
+	if (!rc || parser->error)
+		goto done;
+	rc = mc_parse_noreply(parser, &noreply);
+	if (!rc || parser->error)
+		goto done;
+	rc = mc_parse_eol(parser);
+	if (!rc || parser->error)
+		goto done;
+
+	mc_verbose = (int) (verbose < 2 ? verbose : 2);
+
+	if (noreply) {
+		mc_blank(parser->command);
+	} else {
+		mc_reply(parser->command, "OK\r\n");
+	}
+
+done:
 	LEAVE();
 	return rc;
 }
@@ -2361,6 +2363,10 @@ mc_receive_command(struct mc_state *state)
 
 	mm_net_set_nonblock(state->sock);
 	ssize_t n = mc_read(state, 1, 0);
+	if (n <= 0) {
+		state->quit = true;
+		goto done;
+	}
 	mm_net_clear_nonblock(state->sock);
 
 	while (n > 0 && !(rc = mc_parse(state))) {
@@ -2369,6 +2375,7 @@ mc_receive_command(struct mc_state *state)
 		mm_net_set_timeout(state->sock, MM_TIMEOUT_INFINITE);
 	}
 
+done:
 	LEAVE();
 	return rc;
 }
@@ -2431,6 +2438,7 @@ mc_transmit_result(struct mm_net_socket *sock,
 	case MC_RESULT_QUIT:
 		state->quit = true;
 		mm_net_close(sock);
+		rc = true;
 		break;
 	default:
 		ABORT();
@@ -2475,10 +2483,10 @@ mc_reader_routine(struct mm_net_socket *sock)
 		sock->proto_data = (intptr_t) state;
 	}
 
-	bool has_command = mc_receive_command(state);
+	bool rc = mc_receive_command(state);
 	if (unlikely(state->quit)) {
 		mm_net_close(sock);
-	} else if (has_command) {
+	} else if (rc) {
 		mc_process_command(state);
 		mm_net_spawn_writer(sock);
 	}
