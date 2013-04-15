@@ -27,6 +27,11 @@ Essentials:
 * performance instrumentation
 * refined memcache module
 * HTTP module
+* Network input handling now takes the following path:
+event-loop task -> net I/O task -> master task -> worker (reader) task
+Then transmitting the response might take he following path:
+worker (reader) task -> net I/O task (mm_net_spawn_writer) -> master task -> worker (writer) task
+Test the performance of this lenghty path and optimize if needed.
 
 Enhancements:
 * task fork/join
