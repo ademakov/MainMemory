@@ -360,39 +360,45 @@ mm_event_dispatch(void)
 
 	// Process the received system events.
 	for (int i = 0; i < nevents; i++) {
-		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			int fd = mm_epoll_events[i].data.fd;
-			DEBUG("error event on fd %d", fd);
-
-			mm_event_handler_t io = mm_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t msg[2] = { MM_NET_MSG_ERROR, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, msg, 2);
-
-			continue;
-		}
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			DEBUG("read event on fd %d", fd);
-
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
-
 			struct mm_event_io_handler *handler = &mm_io_table[io];
+
+			DEBUG("read event on fd %d", fd);
 			uint32_t msg[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			DEBUG("write event on fd %d", fd);
-
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
-
 			struct mm_event_io_handler *handler = &mm_io_table[io];
+
+			DEBUG("write event on fd %d", fd);
 			uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, msg, 2);
+		}
+		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			int fd = mm_epoll_events[i].data.fd;
+			mm_event_handler_t io = mm_fd_table[fd].handler;
+			ASSERT(io < mm_io_table_size);
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+
+			DEBUG("error event on fd %d", fd);
+			uint32_t msg[2] = { MM_NET_MSG_READ_ERROR, mm_fd_table[fd].data };
+			mm_port_send_blocking( handler->port, msg, 2);
+		}
+
+		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
+			int fd = mm_epoll_events[i].data.fd;
+			mm_event_handler_t io = mm_fd_table[fd].handler;
+			ASSERT(io < mm_io_table_size);
+			struct mm_event_io_handler *handler = &mm_io_table[io];
+
+			DEBUG("error event on fd %d", fd);
+			uint32_t msg[2] = { MM_NET_MSG_WRITE_ERROR, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
 	}
