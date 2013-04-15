@@ -585,36 +585,36 @@ mm_event_dispatch(void)
 
 	// Process the received system events.
 	for (int i = 0; i < nkevents; i++) {
-		if ((mm_kevents[i].flags & EV_ERROR) != 0) {
+		if (mm_kevents[i].filter == EVFILT_READ) {
 			int fd = mm_kevents[i].ident;
-			DEBUG("error event on fd %d", fd);
-
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
-
 			struct mm_event_io_handler *handler = &mm_io_table[io];
-			uint32_t data[2] = { MM_NET_MSG_ERROR, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, data, 2);
-		} else if (mm_kevents[i].filter == EVFILT_READ) {
-			int fd = mm_kevents[i].ident;
+
 			DEBUG("read event on fd %d", fd);
-
-			mm_event_handler_t io = mm_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-
-			struct mm_event_io_handler *handler = &mm_io_table[io];
 			uint32_t data[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, data, 2);
+
+			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
+				DEBUG("error event on fd %d", fd);
+				uint32_t data[2] = { MM_NET_MSG_READ_ERROR, mm_fd_table[fd].data };
+				mm_port_send_blocking( handler->port, data, 2);
+			}
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
 			int fd = mm_kevents[i].ident;
-			DEBUG("write event on fd %d", fd);
-
 			mm_event_handler_t io = mm_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
-
 			struct mm_event_io_handler *handler = &mm_io_table[io];
+
+			DEBUG("write event on fd %d", fd);
 			uint32_t data[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, data, 2);
+
+			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
+				DEBUG("error event on fd %d", fd);
+				uint32_t data[2] = { MM_NET_MSG_WRITE_ERROR, mm_fd_table[fd].data };
+				mm_port_send_blocking( handler->port, data, 2);
+			}
 		}
 	}
 

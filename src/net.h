@@ -37,11 +37,12 @@ struct mm_task;
 
 /* Net task communication codes. */
 typedef enum {
-	MM_NET_MSG_ERROR,
 	MM_NET_MSG_REGISTER,
 	MM_NET_MSG_UNREGISTER,
 	MM_NET_MSG_READ_READY,
 	MM_NET_MSG_WRITE_READY,
+	MM_NET_MSG_READ_ERROR,
+	MM_NET_MSG_WRITE_ERROR,
 	MM_NET_MSG_SPAWN_READER,
 	MM_NET_MSG_SPAWN_WRITER,
 	MM_NET_MSG_YIELD_READER,
@@ -55,12 +56,14 @@ typedef enum {
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
 #define MM_NET_NONBLOCK		0x0002
-#define MM_NET_READ_READY	0x0004
-#define MM_NET_WRITE_READY	0x0008
-#define MM_NET_READER_SPAWNED	0x0010
-#define MM_NET_WRITER_SPAWNED	0x0020
-#define MM_NET_READER_PENDING	0x0040
-#define MM_NET_WRITER_PENDING	0x0040
+#define MM_NET_READ_READY	0x0010
+#define MM_NET_WRITE_READY	0x0020
+#define MM_NET_READ_ERROR	0x0040
+#define MM_NET_WRITE_ERROR	0x0080
+#define MM_NET_READER_SPAWNED	0x0100
+#define MM_NET_WRITER_SPAWNED	0x0200
+#define MM_NET_READER_PENDING	0x0400
+#define MM_NET_WRITER_PENDING	0x0400
 
 /* Socket address. */
 struct mm_net_addr
@@ -209,12 +212,6 @@ mm_net_is_writable(struct mm_net_socket *sock)
 {
 	return (sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_READY))
 		== MM_NET_WRITE_READY;
-}
-
-static inline bool
-mm_net_is_blockable(struct mm_net_socket *sock)
-{
-	return (sock->flags & (MM_NET_CLOSED | MM_NET_NONBLOCK)) == 0;
 }
 
 static inline void

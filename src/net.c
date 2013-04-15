@@ -700,6 +700,27 @@ mm_net_io_loop(uintptr_t arg)
 	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
 		wf = MM_NET_WRITER_PENDING;
 
+#define MM_NET_IS_READER_PENDING(sock_flags)					\
+	(((sock_flags) & (MM_NET_READER_SPAWNED | MM_NET_READER_PENDING))	\
+	 == MM_NET_READER_PENDING)
+#define MM_NET_IS_WRITER_PENDING(sock_flags)					\
+	(((sock_flags) & (MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING))	\
+	 == MM_NET_WRITER_PENDING)
+
+#define MM_NET_MAY_SPAWN_READER(sock_flags)					\
+	(((sock_flags) & (MM_NET_READ_READY | MM_NET_READ_ERROR)) != 0		\
+	 && ((sock_flags) & MM_NET_READER_SPAWNED) == 0)
+#define MM_NET_MAY_SPAWN_WRITER(sock_flags)					\
+	(((sock_flags) & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR)) != 0	\
+	 && ((sock_flags) & MM_NET_WRITER_SPAWNED) == 0)
+
+#define MM_NET_RESPAWN_READER(sock_flags)					\
+	(((sock_flags) & (MM_NET_READ_READY | MM_NET_READ_ERROR)) != 0		\
+	 && ((sock_flags) & MM_NET_READER_PENDING) != 0)
+#define MM_NET_RESPAWN_WRITER(sock_flags)					\
+	(((sock_flags) & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR)) != 0	\
+	 && ((sock_flags) & MM_NET_WRITER_PENDING) != 0)
+
 	/* Handle I/O events. */
 	for (;;) {
 		uint32_t msg[2];
@@ -730,10 +751,6 @@ mm_net_io_loop(uintptr_t arg)
 
 		/* Handle the event. */
 		switch (msg[0]) {
-		case MM_NET_MSG_ERROR:
-			mm_net_close(sock);
-			break;
-
 		case MM_NET_MSG_REGISTER:
 			ASSERT((sock->flags & MM_NET_CLOSED) == 0);
 
@@ -764,13 +781,10 @@ mm_net_io_loop(uintptr_t arg)
 			sock->flags |= MM_NET_READ_READY;
 			if (sock->reader != NULL) {
 				mm_sched_run(sock->reader);
-				break;
-			}
-
-			int rr_mask = MM_NET_READER_SPAWNED | MM_NET_READER_PENDING;
-			if (((sock->flags | rf) & rr_mask) == MM_NET_READER_PENDING) {
+			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
 				read_items[read_count++] = msg[1];
-				sock->flags ^= rr_mask;
+				sock->flags |= MM_NET_READER_SPAWNED;
+				sock->flags &= ~MM_NET_READER_PENDING;
 			}
 			break;
 
@@ -781,13 +795,38 @@ mm_net_io_loop(uintptr_t arg)
 			sock->flags |= MM_NET_WRITE_READY;
 			if (sock->writer != NULL) {
 				mm_sched_run(sock->writer);
-				break;
-			}
-
-			int wr_mask = MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING;
-			if (((sock->flags | wf) & wr_mask) == MM_NET_WRITER_PENDING) {
+			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
 				write_items[write_count++] = msg[1];
-				sock->flags ^= wr_mask;
+				sock->flags |= MM_NET_WRITER_SPAWNED;
+				sock->flags &= ~MM_NET_WRITER_PENDING;
+			}
+			break;
+
+		case MM_NET_MSG_READ_ERROR:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_READ_ERROR;
+			if (sock->reader != NULL) {
+				mm_sched_run(sock->reader);
+			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
+				read_items[read_count++] = msg[1];
+				sock->flags |= MM_NET_READER_SPAWNED;
+				sock->flags &= ~MM_NET_READER_PENDING;
+			}
+			break;
+
+		case MM_NET_MSG_WRITE_ERROR:
+			if ((sock->flags & MM_NET_CLOSED) != 0)
+				break;
+
+			sock->flags |= MM_NET_WRITE_ERROR;
+			if (sock->writer != NULL) {
+				mm_sched_run(sock->writer);
+			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
+				write_items[write_count++] = msg[1];
+				sock->flags |= MM_NET_WRITER_SPAWNED;
+				sock->flags &= ~MM_NET_WRITER_PENDING;
 			}
 			break;
 
@@ -795,8 +834,7 @@ mm_net_io_loop(uintptr_t arg)
 			if ((sock->flags & MM_NET_CLOSED) != 0)
 				break;
 
-			int sr_mask = MM_NET_READ_READY | MM_NET_READER_SPAWNED;
-			if ((sock->flags & sr_mask) == MM_NET_READ_READY) {
+			if (MM_NET_MAY_SPAWN_READER(sock->flags)) {
 				read_items[read_count++] = msg[1];
 				sock->flags |= MM_NET_READER_SPAWNED;
 			} else {
@@ -808,8 +846,7 @@ mm_net_io_loop(uintptr_t arg)
 			if ((sock->flags & MM_NET_CLOSED) != 0)
 				break;
 
-			int sw_mask = MM_NET_WRITE_READY | MM_NET_WRITER_SPAWNED;
-			if ((sock->flags & sw_mask) == MM_NET_WRITE_READY) {
+			if (MM_NET_MAY_SPAWN_WRITER(sock->flags)) {
 				write_items[write_count++] = msg[1];
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 			} else {
@@ -822,8 +859,7 @@ mm_net_io_loop(uintptr_t arg)
 				break;
 
 			ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
-  			int yr_mask = MM_NET_READ_READY | MM_NET_READER_PENDING;
-			if (((sock->flags | rf) & yr_mask) == yr_mask) {
+			if (MM_NET_RESPAWN_READER(sock->flags | rf)) {
 				read_items[read_count++] = msg[1];
 				sock->flags &= ~MM_NET_READER_PENDING;
 			} else {
@@ -836,8 +872,7 @@ mm_net_io_loop(uintptr_t arg)
 				break;
 
 			ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
-			int yw_mask = MM_NET_WRITE_READY | MM_NET_WRITER_PENDING;
-			if (((sock->flags | wf) & yw_mask) == yw_mask) {
+			if (MM_NET_RESPAWN_WRITER(sock->flags | wf)) {
 				write_items[write_count++] = msg[1];
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			} else {
@@ -1029,7 +1064,7 @@ mm_net_stop_server(struct mm_net_server *srv)
  **********************************************************************/
 
 static void
-mm_net_read_block(struct mm_net_socket *sock)
+mm_net_rblock(struct mm_net_socket *sock)
 {
 	ENTER();
 
@@ -1049,7 +1084,7 @@ mm_net_read_block(struct mm_net_socket *sock)
 }
 
 static void
-mm_net_write_block(struct mm_net_socket *sock)
+mm_net_wblock(struct mm_net_socket *sock)
 {
 	ENTER();
 
@@ -1068,6 +1103,50 @@ mm_net_write_block(struct mm_net_socket *sock)
 	LEAVE();
 }
 
+static ssize_t
+mm_net_may_rblock(struct mm_net_socket *sock)
+{
+	// Check to see if it allowed to block on reading from a socket.
+	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR | MM_NET_NONBLOCK)) == 0) {
+		// Okay to block.
+		return 1;
+	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
+		// Cannot block as the socket is in the non-block mode.
+		errno = EAGAIN;
+		return -1;
+	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
+		// Cannot block as the socket is closed.
+		errno = EBADF;
+		return -1;
+	} else {
+		// Cannot block as there was an error on the socket.
+		// FIXME: find the actual error errno?
+		return 0;
+	}
+}
+
+static ssize_t
+mm_net_may_wblock(struct mm_net_socket *sock)
+{
+	// Check to see if it allowed to block on writing to a socket.
+	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR | MM_NET_NONBLOCK)) == 0) {
+		// Okay to block.
+		return 1;
+	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
+		// Cannot block as the socket is in the non-block mode.
+		errno = EAGAIN;
+		return -1;
+	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
+		// Cannot block as the socket is closed.
+		errno = EBADF;
+		return -1;
+	} else {
+		// Cannot block as there was an error on the socket.
+		// FIXME: find the actual error errno?
+		return 0;
+	}
+}
+
 ssize_t
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
@@ -1076,15 +1155,12 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 
 retry:
 	// Check to see if the socket is ready for reading.
-	if (!mm_net_is_readable(sock)) {
-		if (mm_net_is_blockable(sock)) {
-			mm_net_read_block(sock);
-			goto retry;
-		} else {
-			n = -1;
-			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+	while (!mm_net_is_readable(sock)) {
+		n = mm_net_may_rblock(sock);
+		if (n <= 0) {
 			goto done;
 		}
+		mm_net_rblock(sock);
 	}
 
 	// Try to read (nonblocking).
@@ -1111,6 +1187,7 @@ retry:
 	}
 
 done:
+	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
 }
@@ -1123,15 +1200,12 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 
 retry:
 	// Check to see if the socket is ready for writing.
-	if (!mm_net_is_writable(sock)) {
-		if (mm_net_is_blockable(sock)) {
-			mm_net_write_block(sock);
-			goto retry;
-		} else {
-			n = -1;
-			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+	while (!mm_net_is_readable(sock)) {
+		n = mm_net_may_wblock(sock);
+		if (n <= 0) {
 			goto done;
 		}
+		mm_net_wblock(sock);
 	}
 
 	// Try to write (nonblocking).
@@ -1156,6 +1230,7 @@ retry:
 	}
 
 done:
+	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
 }
@@ -1168,15 +1243,12 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 
 retry:
 	// Check to see if the socket is ready for reading.
-	if (!mm_net_is_readable(sock)) {
-		if (mm_net_is_blockable(sock)) {
-			mm_net_read_block(sock);
-			goto retry;
-		} else {
-			n = -1;
-			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+	while (!mm_net_is_readable(sock)) {
+		n = mm_net_may_rblock(sock);
+		if (n <= 0) {
 			goto done;
 		}
+		mm_net_rblock(sock);
 	}
 
 	// Try to read (nonblocking).
@@ -1207,6 +1279,7 @@ retry:
 	}
 
 done:
+	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
 }
@@ -1219,15 +1292,12 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 
 retry:
 	// Check to see if the socket is ready for writing.
-	if (!mm_net_is_writable(sock)) {
-		if (mm_net_is_blockable(sock)) {
-			mm_net_write_block(sock);
-			goto retry;
-		} else {
-			n = -1;
-			errno = (mm_net_is_closed(sock) ? EBADF : EAGAIN);
+	while (!mm_net_is_readable(sock)) {
+		n = mm_net_may_wblock(sock);
+		if (n <= 0) {
 			goto done;
 		}
+		mm_net_wblock(sock);
 	}
 
 	// Try to write (nonblocking).
@@ -1256,6 +1326,7 @@ retry:
 	}
 
 done:
+	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
 }
@@ -1265,17 +1336,17 @@ mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if ((sock->flags & MM_NET_CLOSED) != 0)
-		goto done;
+	if ((sock->flags & MM_NET_CLOSED) == 0) {
+		DEBUG("closing");
 
-	sock->flags = MM_NET_CLOSED;
+		sock->flags = MM_NET_CLOSED;
 
-	/* Remove the socket from the event loop. */
-	mm_event_unregister_fd(sock->fd);
+		/* Remove the socket from the event loop. */
+		mm_event_unregister_fd(sock->fd);
 
-	/* TODO: Take care of work items and tasks that might still
-	   refer to this socket. */
+		/* TODO: Take care of work items and tasks that might still
+		   refer to this socket. */
+	}
 
-done:
 	LEAVE();
 }
