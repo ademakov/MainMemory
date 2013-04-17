@@ -39,8 +39,6 @@ mm_runq_init(struct mm_runq *runq)
 struct mm_task *
 mm_runq_get_task(struct mm_runq *runq)
 {
-	ENTER();
-
 	struct mm_task *task = NULL;
 	if (likely(runq->bmap)) {
 		int priority = mm_ctz(runq->bmap);
@@ -52,39 +50,32 @@ mm_runq_get_task(struct mm_runq *runq)
 		ASSERT(priority == task->priority);
 
 		mm_list_delete(link);
-		if (mm_list_empty(&runq->bins[priority]))
+		if (mm_list_empty(&runq->bins[priority])) {
 			runq->bmap &= ~(1 << priority);
+		}
 	}
 
-	LEAVE();
 	return task;
 }
 
 void
 mm_runq_put_task(struct mm_runq *runq, struct mm_task *task)
 {
-	ENTER();
-
 	int priority = task->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 
 	runq->bmap |= (1 << priority);
 	mm_list_append(&runq->bins[priority], &task->queue);
-
-	LEAVE();
 }
 
 void
 mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task)
 {
-	ENTER();
-
 	int priority = task->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 
 	mm_list_delete(&task->queue);
-	if (mm_list_empty(&runq->bins[priority]))
+	if (mm_list_empty(&runq->bins[priority])) {
 		runq->bmap &= ~(1 << priority);
-
-	LEAVE();
+	}
 }

@@ -38,7 +38,6 @@ __thread struct mm_task *mm_running_task = &mm_null_task;
 static void
 mm_sched_switch(mm_task_state_t state)
 {
-	ENTER();
 	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
 
 	struct mm_task *old_task;
@@ -65,8 +64,6 @@ mm_sched_switch(mm_task_state_t state)
 
 	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
 	mm_task_testcancel_asynchronous();
-
-	LEAVE();
 }
 
 void
