@@ -763,9 +763,6 @@ struct mc_state
 	struct mc_buffer *read_head;
 	struct mc_buffer *read_tail;
 
-	// Cached command.
-	struct mc_command *command;
-
 	// Command processing queue.
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
@@ -792,7 +789,6 @@ mc_create(struct mm_net_socket *sock)
 	state->read_head = NULL;
 	state->read_tail = NULL;
 
-	state->command = NULL;
 	state->command_head = NULL;
 	state->command_tail = NULL;
 
@@ -820,25 +816,7 @@ mc_destroy(struct mc_state *state)
 		mc_command_destroy(command);
 	}
 
-	if (state->command != NULL) {
-		mc_command_destroy(state->command);
-	}
-
 	mm_free(state);
-
-	LEAVE();
-}
-
-static void
-mc_quit(struct mc_state *state, bool fast)
-{
-	ENTER();
-
-	if (fast) {
-		state->quit = true;
-	} else {
-		state->command->result_type = MC_RESULT_QUIT;
-	}
 
 	LEAVE();
 }
@@ -860,27 +838,11 @@ mc_add_read_buffer(struct mc_state *state, size_t size)
 	return buffer;
 }
 
-static struct mc_command *
-mc_cache_command(struct mc_state *state)
-{
-	ENTER();
-
-	if (state->command == NULL) {
-		state->command = mc_command_create();
-	}
-
-	LEAVE();
-	return state->command;
-}
-
 static void
-mc_queue_command(struct mc_state *state)
+mc_queue_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = state->command;
 	ASSERT(command != NULL);
-	state->command = NULL;
 
 	if (state->command_head == NULL) {
 		state->command_head = command;
@@ -1310,19 +1272,19 @@ mc_process_flush_all(uintptr_t arg)
 }
 
 static mm_result_t
-mc_process_command(struct mc_state *state)
+mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = state->command;
 	if (likely(command->desc != NULL)) {
 		DEBUG("command %s", command->desc->name);
 		if (command->result_type == MC_RESULT_NONE) {
-			state->command->desc->process((intptr_t) command);
+			command->desc->process((intptr_t) command);
 		}
 	}
 
-	mc_queue_command(state);
+	mc_queue_command(state, command);
+	mm_net_spawn_writer(state->sock);
 
 	LEAVE();
 	return 0;
@@ -1339,12 +1301,13 @@ mc_process_command(struct mc_state *state)
 
 struct mc_parser
 {
-	struct mc_state *state;
-	struct mc_command *command;
-
-	struct mc_buffer *buffer;
 	char *start_ptr;
 	char *end_ptr;
+
+	struct mc_buffer *buffer;
+
+	struct mc_command *command;
+	struct mc_state *state;
 
 	bool error;
 };
@@ -1353,24 +1316,27 @@ struct mc_parser
  * Prepare for parsing a command.
  */
 static void
-mc_start_input(struct mc_parser *parser, struct mc_state *state)
+mc_start_input(struct mc_parser *parser,
+	       struct mc_state *state,
+	       struct mc_command *command)
 {
 	ENTER();
 
-	parser->state = state;
-	parser->command = mc_cache_command(state); 
-	parser->error = 0;
-
 	struct mc_buffer *buffer = state->read_head;
-	if (state->start_ptr != NULL) {
+	if (state->start_ptr == NULL) {
+		parser->start_ptr = buffer->data;
+	} else {
 		while (!mc_buffer_contains(buffer, state->start_ptr))
 			buffer = buffer->next;
 		parser->start_ptr = state->start_ptr;
-	} else {
-		parser->start_ptr = buffer->data;
 	}
 	parser->end_ptr = buffer->data + buffer->used;
+
 	parser->buffer = buffer;
+
+	parser->state = state;
+	parser->command = command;
+	parser->error = false;
 
 	LEAVE();
 }
@@ -1452,7 +1418,8 @@ mc_claim_input(struct mc_parser *parser, int count)
 {
 	if (count > 1024) {
 		/* The client looks insane. Quit fast. */
-		mc_quit(parser->state, true);
+		parser->command->result_type = MC_RESULT_QUIT;
+		parser->state->quit = true;
 		return false;
 	}
 	return mc_shift_input(parser);
@@ -1780,7 +1747,7 @@ mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 			ssize_t r = bytes + 1;
 			ssize_t n = mc_read(parser->state, r, cr);
 			if (n < r) {
-				mc_quit(parser->state, false);
+				parser->command->result_type = MC_RESULT_QUIT;
 				rc = false;
 				break;
 			}
@@ -2310,7 +2277,7 @@ mc_parse_quit(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto done;
 
-	mc_quit(parser->state, false);
+	parser->command->result_type = MC_RESULT_QUIT;
 
 done:
 	LEAVE();
@@ -2318,30 +2285,17 @@ done:
 }
 
 static bool
-mc_parse(struct mc_state *state)
+mc_parse(struct mc_parser *parser)
 {
 	ENTER();
 
-	/* Initialize the parser. */
-	struct mc_parser parser;
-	mc_start_input(&parser, state);
-
 	/* Parse the command name. */
-	bool rc = mc_parse_command(&parser);
-	if (!rc) {
+	bool rc = mc_parse_command(parser);
+	if (!rc || parser->error)
 		goto done;
-	}
 
 	/* Parse the rest of the command. */
-	if (!parser.error) {
-		rc = parser.command->desc->parse(&parser);
-		if (!rc) {
-			goto done;
-		}
-	}
-
-	/* The command has been parsed, go past it. */
-	mc_end_input(&parser);
+	rc = parser->command->desc->parse(parser);
 
 done:
 	LEAVE();
@@ -2355,29 +2309,22 @@ done:
 #define MC_READ_TIMEOUT		500
 
 static bool
-mc_receive_command(struct mc_state *state)
+mc_read_hangup(ssize_t n, int error)
 {
-	ENTER();
+	ASSERT(n <= 0);
 
-	bool rc = false;
-
-	mm_net_set_nonblock(state->sock);
-	ssize_t n = mc_read(state, 1, 0);
-	if (n <= 0) {
-		state->quit = true;
-		goto done;
-	}
-	mm_net_clear_nonblock(state->sock);
-
-	while (n > 0 && !(rc = mc_parse(state))) {
-		mm_net_set_timeout(state->sock, MC_READ_TIMEOUT);
-		n = mc_read(state, 1, 0);
-		mm_net_set_timeout(state->sock, MM_TIMEOUT_INFINITE);
+	if (n < 0) {
+		if (error == EAGAIN)
+			return false;
+		if (error == EWOULDBLOCK)
+			return false;
+		if (error == ETIMEDOUT)
+			return false;
+		if (error == EINTR)
+			return false;
 	}
 
-done:
-	LEAVE();
-	return rc;
+	return true;
 }
 
 static bool
@@ -2483,14 +2430,64 @@ mc_reader_routine(struct mm_net_socket *sock)
 		sock->proto_data = (intptr_t) state;
 	}
 
-	bool rc = mc_receive_command(state);
-	if (unlikely(state->quit)) {
-		mm_net_close(sock);
-	} else if (rc) {
-		mc_process_command(state);
-		mm_net_spawn_writer(sock);
+	// Try to get some input w/o blocking.
+	mm_net_set_nonblock(state->sock);
+	ssize_t n = mc_read(state, 1, 0);
+	mm_net_clear_nonblock(state->sock);
+
+	// Get out if there is no input available.
+	if (n <= 0) {
+		// If the socket is closed queue a quit command.
+		if (mc_read_hangup(n, errno)) {
+			struct mc_command *command = mc_command_create();
+			command->result_type = MC_RESULT_QUIT;
+			command->end_ptr = state->start_ptr;
+			mc_process_command(state, command);
+		}
+		goto done;
 	}
 
+	// Initialize the parser.
+	struct mc_parser parser;
+	mc_start_input(&parser, state, NULL);
+	parser.command = mc_command_create();
+	// TODO: protect the created command against cancellation.
+
+	// Try to parse the received input.
+	for (;;) {
+		bool rc = mc_parse(&parser);
+		if (rc) {
+			// Mark the parsed input as consumed.
+			mc_end_input(&parser);
+			// Process the parsed command.
+			mc_process_command(state, parser.command);
+			// TODO: check if there is more input.
+			parser.command = mc_command_create();
+			continue;
+		} else if (state->quit) {
+			mc_command_destroy(parser.command);
+			goto done;
+		}
+
+		// The input is incomplete, try to get some more.
+		mm_net_set_timeout(state->sock, MC_READ_TIMEOUT);
+		n = mc_read(state, 1, 0);
+		mm_net_set_timeout(state->sock, MM_TIMEOUT_INFINITE);
+
+		// Get out if there is no more input.
+		if (n <= 0) {
+			if (mc_read_hangup(n, errno)) {
+				parser.command->result_type = MC_RESULT_QUIT;
+				parser.command->end_ptr = parser.start_ptr;
+				mc_process_command(state, parser.command);
+			} else {
+				mc_command_destroy(parser.command);
+			}
+			goto done;
+		}
+	}
+
+done:
 	LEAVE();
 }
 
@@ -2498,6 +2495,9 @@ static void
 mc_writer_routine(struct mm_net_socket *sock)
 {
 	ENTER();
+
+	// TODO: protect against cancellation
+	// TODO: release command for sure
 
 	/* Get the protocol data if any. */
 	struct mc_state *state = (struct mc_state *) sock->proto_data;
@@ -2540,7 +2540,7 @@ done:
  * Module Entry Points.
  **********************************************************************/
 
-/* TCP memcache server. */
+// TCP memcache server.
 static struct mm_net_server *mc_tcp_server;
 
 void
