@@ -1917,6 +1917,7 @@ mc_parse_command(struct mc_parser *parser)
 				   without arguments, albeit pointless this
 				   is actually legal. */
 				parser->command->desc = &mc_desc_get;
+				parser->start_ptr = s;
 				goto done;
 			} else {
 				/* Unexpected char. */
@@ -2032,13 +2033,13 @@ mc_parse_get(struct mc_parser *parser)
 	// TODO: free it
 
 	for (;;) {
-		rc = mc_parse_param(parser, &keys[nkeys], false);
-		if (!rc || parser->error)
+		rc = mc_parse_param(parser, &keys[nkeys], nkeys == 0);
+		if (!rc || parser->error) {
+			mm_free(keys);
 			goto done;
+		}
 
 		if (keys[nkeys].len == 0) {
-			parser->command->params.get.keys = keys;
-			parser->command->params.get.nkeys = nkeys;
 			break;
 		}
 
@@ -2047,7 +2048,15 @@ mc_parse_get(struct mc_parser *parser)
 			keys = mm_realloc(keys, nkeys_max * sizeof(struct mc_string));
 		}
 	}
+
 	rc = mc_parse_eol(parser);
+	if (!rc || parser->error) {
+		mm_free(keys);
+		goto done;
+	}
+
+	parser->command->params.get.keys = keys;
+	parser->command->params.get.nkeys = nkeys;
 
 done:
 	LEAVE();
