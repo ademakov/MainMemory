@@ -2463,6 +2463,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 			mc_process_command(state, parser.command);
 			// TODO: check if there is more input.
 			parser.command = mc_command_create();
+			parser.error = false;
 			continue;
 		} else if (state->quit) {
 			mc_command_destroy(parser.command);
@@ -2485,6 +2486,8 @@ mc_reader_routine(struct mm_net_socket *sock)
 			}
 			goto done;
 		}
+
+		mc_widen_input(&parser);
 	}
 
 done:
