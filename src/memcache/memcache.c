@@ -540,8 +540,8 @@ struct mc_cas_params
 	uint32_t flags;
 	uint32_t exptime;
 	struct mc_value value;
-	bool noreply;
 	uint64_t cas;
+	bool noreply;
 };
 
 struct mc_inc_params
@@ -1155,14 +1155,13 @@ mc_process_cas(uintptr_t arg)
 	struct mc_value *value = &command->params.cas.value;
 
 	uint32_t index = mc_table_key_index(key, key_len);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
-	if (old_entry != NULL) {
-		mc_entry_unref(old_entry);
-	}
+	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && old_entry->cas == command->params.cas.cas) {
-		mc_entry_unref(old_entry);
+		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		ASSERT(old_entry == old_entry2);
+		mc_entry_unref(old_entry2);
 
 		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
@@ -1171,7 +1170,7 @@ mc_process_cas(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.set.noreply) {
+	if (command->params.cas.noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1191,7 +1190,36 @@ mc_process_append(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	struct mc_value *value = &command->params.set.value;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL) {
+		size_t value_len = old_entry->value_len + value->bytes;
+		char *old_value = mc_entry_value(old_entry);
+
+		new_entry = mc_entry_create(key_len, value_len);
+		mc_entry_set_key(new_entry, key);
+		char *new_value = mc_entry_value(new_entry);
+		memcpy(new_value, old_value, old_entry->value_len);
+		mc_process_value(new_entry, value, old_entry->value_len);
+		new_entry->flags = old_entry->flags;
+		mc_table_insert(index, new_entry);
+
+		mc_entry_unref(old_entry);
+	}
+
+	if (command->params.set.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		mc_reply(command, "STORED\r\n");
+	} else {
+		mc_reply(command, "NOT_STORED\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -1203,7 +1231,36 @@ mc_process_prepend(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	struct mc_value *value = &command->params.set.value;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL) {
+		size_t value_len = old_entry->value_len + value->bytes;
+		char *old_value = mc_entry_value(old_entry);
+
+		new_entry = mc_entry_create(key_len, value_len);
+		mc_entry_set_key(new_entry, key);
+		char *new_value = mc_entry_value(new_entry);
+		mc_process_value(new_entry, value, 0);
+		memcpy(new_value + value->bytes, old_value, old_entry->value_len);
+		new_entry->flags = old_entry->flags;
+		mc_table_insert(index, new_entry);
+
+		mc_entry_unref(old_entry);
+	}
+
+	if (command->params.set.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		mc_reply(command, "STORED\r\n");
+	} else {
+		mc_reply(command, "NOT_STORED\r\n");
+	}
 
 	LEAVE();
 	return 0;
