@@ -156,6 +156,57 @@ mc_entry_unref(struct mc_entry *entry)
 	}
 }
 
+static bool
+mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
+{
+	if (entry->value_len == 0) {
+		return false;
+	}
+
+	char *p = mc_entry_value(entry);
+	char *e = p + entry->value_len;
+
+	uint64_t v = 0;
+	while (p < e) {
+		int c = *p++;
+		if (!isdigit(c)) {
+			return false;
+		}
+
+		uint64_t vv = v * 10 + c - '0';
+		if (unlikely(vv < v)) {
+			return false;
+		}
+
+		v = vv;
+	}
+
+	*value = v;
+	return true;
+}
+
+static struct mc_entry *
+mc_entry_create_u64(uint8_t key_len, uint64_t value)
+{
+	char buffer[32];
+
+	size_t value_len = 0;
+	do {
+		int c = (int) (value % 10);
+		buffer[value_len++] = '0' + c;
+		value /= 10;
+	} while (value);
+
+	struct mc_entry *entry = mc_entry_create(key_len, value_len);
+	char *v = mc_entry_value(entry);
+	do {
+		size_t i = entry->value_len - value_len--;
+		v[i] = buffer[value_len];
+	} while (value_len);
+
+	return entry;
+}
+
 /**********************************************************************
  * Memcache Table.
  **********************************************************************/
@@ -587,6 +638,7 @@ typedef enum
 	MC_RESULT_REPLY,
 	MC_RESULT_ENTRY,
 	MC_RESULT_ENTRY_CAS,
+	MC_RESULT_VALUE,
 	MC_RESULT_BLANK,
 	MC_RESULT_QUIT,
 } mc_result_t;
@@ -601,6 +653,7 @@ union mc_result
 {
 	struct mc_string reply;
 	struct mc_result_entries entries;
+	struct mc_entry *entry;
 };
 
 struct mc_command
@@ -721,6 +774,34 @@ mc_destroy_get(struct mc_command *command)
 	LEAVE();
 }
 
+static void
+mc_destroy_gets(struct mc_command *command)
+{
+	ENTER();
+
+	mm_free(command->params.get.keys);
+	if (command->result_type == MC_RESULT_ENTRY_CAS) {
+		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
+			mc_entry_unref(command->result.entries.entries[i]);
+		}
+		mm_free(command->result.entries.entries);
+	}
+
+	LEAVE();
+}
+
+static void
+mc_destroy_incr(struct mc_command *command)
+{
+	ENTER();
+
+	if (command->result_type == MC_RESULT_VALUE) {
+		mc_entry_unref(command->result.entry);
+	}
+
+	LEAVE();
+}
+
 /**********************************************************************
  * Command Descriptors.
  **********************************************************************/
@@ -736,15 +817,15 @@ mc_destroy_get(struct mc_command *command)
 	}
 
 MC_DESC(get,		get,		get,		get);
-MC_DESC(gets,		get,		gets,		get);
+MC_DESC(gets,		get,		gets,		gets);
 MC_DESC(set,		set,		set,		dummy);
 MC_DESC(add,		set,		add,		dummy);
 MC_DESC(replace,	set,		replace,	dummy);
 MC_DESC(append,		set,		append,		dummy);
 MC_DESC(prepend,	set,		prepend,	dummy);
 MC_DESC(cas,		cas,		cas,		dummy);
-MC_DESC(incr,		incr,		incr,		dummy);
-MC_DESC(decr,		incr,		decr,		dummy);
+MC_DESC(incr,		incr,		incr,		incr);
+MC_DESC(decr,		incr,		decr,		incr);
 MC_DESC(delete,		delete,		delete,		dummy);
 MC_DESC(touch,		touch,		touch,		dummy);
 MC_DESC(slabs,		slabs,		slabs,		dummy);
@@ -1272,7 +1353,39 @@ mc_process_incr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.inc.key.str;
+	size_t key_len = command->params.inc.key.len;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
+	uint64_t value;
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
+		value += command->params.inc.value;
+
+		new_entry = mc_entry_create_u64(key_len, value);
+		mc_entry_set_key(new_entry, key);
+		new_entry->flags = old_entry->flags;
+
+		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		ASSERT(old_entry == old_entry2);
+		mc_entry_unref(old_entry2);
+
+		mc_table_insert(index, new_entry);
+	}
+
+	if (command->params.inc.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		command->result_type = MC_RESULT_VALUE;
+		command->result.entry = new_entry;
+		mc_entry_ref(new_entry);
+	} else if (old_entry != NULL) {
+		mc_reply(command, "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n");
+	} else {
+		mc_reply(command, "NOT_FOUND\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -1284,7 +1397,42 @@ mc_process_decr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	const char *key = command->params.inc.key.str;
+	size_t key_len = command->params.inc.key.len;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
+	uint64_t value;
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
+		if (value > command->params.inc.value)
+			value -= command->params.inc.value;
+		else
+			value = 0;
+
+		new_entry = mc_entry_create_u64(key_len, value);
+		mc_entry_set_key(new_entry, key);
+		new_entry->flags = old_entry->flags;
+
+		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		ASSERT(old_entry == old_entry2);
+		mc_entry_unref(old_entry2);
+
+		mc_table_insert(index, new_entry);
+	}
+
+	if (command->params.inc.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		command->result_type = MC_RESULT_VALUE;
+		command->result.entry = new_entry;
+		mc_entry_ref(new_entry);
+	} else if (old_entry != NULL) {
+		mc_reply(command, "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n");
+	} else {
+		mc_reply(command, "NOT_FOUND\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -2488,6 +2636,19 @@ mc_transmit_result(struct mm_net_socket *sock,
 				rc = false;
 				break;
 			}
+		}
+		break;
+	case MC_RESULT_VALUE:
+		rc = true;
+		const char *value = mc_entry_value(command->result.entry);
+		if (mc_write(sock, value, command->result.entry->value_len)
+			 != command->result.entry->value_len) {
+			rc = false;
+			break;
+		}
+		if (mc_write(sock, "\r\n", 2) != 2) {
+			rc = false;
+			break;
 		}
 		break;
 	case MC_RESULT_BLANK:
