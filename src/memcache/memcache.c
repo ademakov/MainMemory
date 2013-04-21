@@ -73,6 +73,7 @@ struct mc_entry
 	uint32_t value_len;
 	uint32_t ref_count;
 	uint32_t flags;
+	uint64_t cas;
 	char data[];
 };
 
@@ -118,7 +119,10 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	struct mc_entry *entry = mm_alloc(size);
 	entry->key_len = key_len;
 	entry->value_len = value_len;
-	entry->ref_count = 0;
+	entry->ref_count = 1;
+
+	static uint64_t cas = 0;
+	entry->cas = ++cas;
 
 	LEAVE();
 	return entry;
@@ -146,7 +150,7 @@ mc_entry_ref(struct mc_entry *entry)
 static void
 mc_entry_unref(struct mc_entry *entry)
 {
-	uint32_t ref_count = (entry->ref_count)--;
+	uint32_t ref_count = --(entry->ref_count);
 	if (unlikely(ref_count == 0)) {
 		mc_entry_destroy(entry);
 	}
@@ -320,6 +324,7 @@ static struct mc_entry *
 mc_table_lookup(uint32_t index, const char *key, uint8_t key_len)
 {
 	ENTER();
+	DEBUG("index: %d", index);
 
 	struct mc_entry *entry = mc_table.table[index];
 	while (entry != NULL) {
@@ -338,6 +343,7 @@ static struct mc_entry *
 mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 {
 	ENTER();
+	DEBUG("index: %d", index);
 
 	struct mc_entry *entry = mc_table.table[index];
 	if (entry == NULL) {
@@ -376,6 +382,7 @@ static void
 mc_table_insert(uint32_t index, struct mc_entry *entry)
 {
 	ENTER();
+	DEBUG("index: %d", index);
 
 	entry->next = mc_table.table[index];
 	mc_table.table[index] = entry;
@@ -579,6 +586,7 @@ typedef enum
 	MC_RESULT_NONE,
 	MC_RESULT_REPLY,
 	MC_RESULT_ENTRY,
+	MC_RESULT_ENTRY_CAS,
 	MC_RESULT_BLANK,
 	MC_RESULT_QUIT,
 } mc_result_t;
@@ -603,8 +611,8 @@ struct mc_command
 	union mc_params params;
 	char *end_ptr;
 
-	mc_result_t result_type;
 	union mc_result result;
+	mc_result_t result_type;
 
 	struct mc_future *future;
 };
@@ -992,7 +1000,7 @@ mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset
 }
 
 static mm_result_t
-mc_process_get(uintptr_t arg)
+mc_process_get2(uintptr_t arg, mc_result_t res_type)
 {
 	ENTER();
 
@@ -1012,7 +1020,7 @@ mc_process_get(uintptr_t arg)
 		}
 	}
 
-	command->result_type = MC_RESULT_ENTRY;
+	command->result_type = res_type;
 	command->result.entries.entries = entries;
 	command->result.entries.nentries = nentries;
 
@@ -1021,15 +1029,15 @@ mc_process_get(uintptr_t arg)
 }
 
 static mm_result_t
+mc_process_get(uintptr_t arg)
+{
+	return mc_process_get2(arg, MC_RESULT_ENTRY);
+}
+
+static mm_result_t
 mc_process_gets(uintptr_t arg)
 {
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
-
-	LEAVE();
-	return 0;
+	return mc_process_get2(arg, MC_RESULT_ENTRY_CAS);
 }
 
 static mm_result_t
@@ -1052,6 +1060,7 @@ mc_process_set(uintptr_t arg)
 	mc_entry_set_key(new_entry, key);
 	mc_process_value(new_entry, value, 0);
 	new_entry->flags = command->params.set.flags;
+
 	mc_table_insert(index, new_entry);
 	mc_entry_ref(new_entry);
 
@@ -1085,7 +1094,6 @@ mc_process_add(uintptr_t arg)
 		mc_process_value(new_entry, value, 0);
 		new_entry->flags = command->params.set.flags;
 		mc_table_insert(index, new_entry);
-		mc_entry_ref(new_entry);
 	}
 
 	if (command->params.set.noreply) {
@@ -1122,7 +1130,6 @@ mc_process_replace(uintptr_t arg)
 		mc_process_value(new_entry, value, 0);
 		new_entry->flags = command->params.set.flags;
 		mc_table_insert(index, new_entry);
-		mc_entry_ref(new_entry);
 	}
 
 	if (command->params.set.noreply) {
@@ -1131,6 +1138,47 @@ mc_process_replace(uintptr_t arg)
 		mc_reply(command, "STORED\r\n");
 	} else {
 		mc_reply(command, "NOT_STORED\r\n");
+	}
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mc_process_cas(uintptr_t arg)
+{
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+	const char *key = command->params.cas.key.str;
+	size_t key_len = command->params.cas.key.len;
+	struct mc_value *value = &command->params.cas.value;
+
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	if (old_entry != NULL) {
+		mc_entry_unref(old_entry);
+	}
+
+	struct mc_entry *new_entry = NULL;
+	if (old_entry != NULL && old_entry->cas == command->params.cas.cas) {
+		mc_entry_unref(old_entry);
+
+		new_entry = mc_entry_create(key_len, value->bytes);
+		mc_entry_set_key(new_entry, key);
+		mc_process_value(new_entry, value, 0);
+		new_entry->flags = command->params.cas.flags;
+		mc_table_insert(index, new_entry);
+	}
+
+	if (command->params.set.noreply) {
+		mc_blank(command);
+	} else if (new_entry != NULL) {
+		mc_reply(command, "STORED\r\n");
+	} else if (old_entry != NULL){
+		mc_reply(command, "EXISTS\r\n");
+	} else {
+		mc_reply(command, "NOT_FOUND\r\n");
 	}
 
 	LEAVE();
@@ -1151,18 +1199,6 @@ mc_process_append(uintptr_t arg)
 
 static mm_result_t
 mc_process_prepend(uintptr_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
-
-	LEAVE();
-	return 0;
-}
-
-static mm_result_t
-mc_process_cas(uintptr_t arg)
 {
 	ENTER();
 
@@ -2023,13 +2059,12 @@ mc_parse_get(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc;
-	int nkeys, nkeys_max;
-	struct mc_string *keys;
+	parser->command->params.get.keys = NULL;
+	parser->command->params.get.nkeys = 0;
 
-	nkeys = 0;
-	nkeys_max = 8;
-	keys = mm_alloc(nkeys_max * sizeof(struct mc_string));
+	bool rc;
+	int nkeys = 0, nkeys_max = 8;
+	struct mc_string *keys = mm_alloc(nkeys_max * sizeof(struct mc_string));
 	// TODO: free it
 
 	for (;;) {
@@ -2357,6 +2392,7 @@ mc_transmit_result(struct mm_net_socket *sock,
 		}
 		break;
 	case MC_RESULT_ENTRY:
+	case MC_RESULT_ENTRY_CAS:
 		rc = true;
 		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
 			struct mc_entry *entry = command->result.entries.entries[i];
@@ -2364,9 +2400,18 @@ mc_transmit_result(struct mm_net_socket *sock,
 			const char *value = mc_entry_value(entry);
 
 			char buf[512];
-			sprintf(buf, "VALUE %.*s %u %u\r\n",
-				entry->key_len, key,
-				entry->flags, entry->value_len);
+			if (command->result_type == MC_RESULT_ENTRY) {
+				sprintf(buf, "VALUE %.*s %u %u\r\n",
+					entry->key_len, key,
+					entry->flags,
+					entry->value_len);
+			} else {
+				sprintf(buf, "VALUE %.*s %u %u %llu\r\n",
+					entry->key_len, key,
+					entry->flags,
+					entry->value_len,
+					(unsigned long long) entry->cas);
+			}
 			size_t len = strlen(buf);
 			if (mc_write(sock, buf, len) != (int) len) {
 				rc = false;
