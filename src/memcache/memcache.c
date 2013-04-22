@@ -34,6 +34,9 @@
 // The logging verbosity level.
 static int mc_verbose = 0;
 
+static mm_timeval_t mc_curtime;
+static mm_timeval_t mc_exptime;
+
 /**********************************************************************
  * Hash function.
  **********************************************************************/
@@ -69,6 +72,7 @@ mc_hash(const void *data, size_t size)
 struct mc_entry
 {
 	struct mc_entry *next;
+	struct mm_list link;
 	uint8_t key_len;
 	uint32_t value_len;
 	uint32_t ref_count;
@@ -76,6 +80,7 @@ struct mc_entry
 	uint64_t cas;
 	char data[];
 };
+
 
 static inline size_t
 mc_entry_size(uint8_t key_len, size_t value_len)
@@ -235,6 +240,7 @@ struct mc_table
 };
 
 static struct mc_table mc_table;
+static struct mm_list mc_entry_list;
 
 static mm_result_t mc_table_stride_routine(uintptr_t);
 
@@ -403,6 +409,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 
 	char *entry_key = mc_entry_key(entry);
 	if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+		mm_list_delete(&entry->link);
 		mc_table.table[index] = entry->next;
 		--mc_table.nentries;
 		goto done;
@@ -418,6 +425,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 
 		entry_key = mc_entry_key(entry);
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+			mm_list_delete(&entry->link);
 			prev_entry->next = entry->next;
 			--mc_table.nentries;
 			goto done;
@@ -435,6 +443,7 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 	ENTER();
 	DEBUG("index: %d", index);
 
+	mm_list_append(&mc_entry_list, &entry->link);
 	entry->next = mc_table.table[index];
 	mc_table.table[index] = entry;
 
@@ -453,26 +462,29 @@ mc_table_init(void)
 {
 	ENTER();
 
-	/* Compute the maximal size of the table in bytes. */
+	// Compute the maximal size of the table in bytes.
 	size_t nbytes = mc_table_size(MC_TABLE_SIZE_MAX);
 
-	/* Reserve the address space for the table. */
+	// Reserve the address space for the table.
 	mm_print("Reserve %ld bytes of the address apace for the memcache table.", (unsigned long) nbytes);
 	void *area = mmap(NULL, nbytes, PROT_NONE,
 			  MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
 	if (area == MAP_FAILED)
 		mm_fatal(errno, "mmap");
 
-	/* Initialize the table. */
+	// Initialize the table.
 	mc_table.size = 0;
 	mc_table.mask = 0;
 	mc_table.striding = false;
 	mc_table.nentries = 0;
 	mc_table.table = area;
 
-	/* Allocate initial space for the table. */
+	// Allocate initial space for the table.
 	mc_table_expand(MC_TABLE_SIZE_MIN);
 	mc_table.used = MC_TABLE_SIZE_MIN;
+
+	// Initialize the entry list.
+	mm_list_init(&mc_entry_list);
 
 	LEAVE();
 }
@@ -615,12 +627,6 @@ struct mc_touch_params
 	bool noreply;
 };
 
-struct mc_flush_params
-{
-	uint32_t exptime;
-	bool noreply;
-};
-
 union mc_params
 {
 	struct mc_set_params set;
@@ -629,7 +635,6 @@ union mc_params
 	struct mc_inc_params inc;
 	struct mc_del_params del;
 	struct mc_touch_params touch;
-	struct mc_flush_params flush;
 };
 
 typedef enum
@@ -2457,13 +2462,53 @@ mc_parse_flush_all(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_u32(parser, &parser->command->params.flush.exptime);
-	if (!rc || parser->error)
-		goto done;
-	rc = mc_parse_noreply(parser, &parser->command->params.flush.noreply);
-	if (!rc || parser->error)
-		goto done;
+	uint32_t exptime = 0;
+	bool noreply = false;
+	struct mc_string param;
+
+	bool rc = mc_parse_param(parser, &param, false);
+	if (rc && !parser->error && param.len) {
+		char *endp;
+		unsigned long v = strtoul(param.str, &endp, 10);
+		if (endp < param.str + param.len) {
+			if (param.len == 7 && memcmp(param.str, "noreply", 7) == 0) {
+				noreply = true;
+			} else {
+				mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
+				goto done;
+			}
+		} else {
+			exptime = v;
+
+			rc = mc_parse_noreply(parser, &noreply);
+			if (!rc || parser->error)
+				goto done;
+		}
+	}
 	rc = mc_parse_eol(parser);
+	if (!rc || parser->error)
+		goto done;
+
+	// TODO: really use the exptime.
+	mc_exptime = mc_curtime + exptime * 1000000ull;
+
+	// TODO: do this as a background task.
+	while (!mm_list_empty(&mc_entry_list)) {
+		struct mm_list *link = mm_list_head(&mc_entry_list);
+		struct mc_entry *entry = containerof(link, struct mc_entry, link);
+
+		char *key = mc_entry_key(entry);
+		uint32_t index = mc_table_key_index(key, entry->key_len);
+		mc_table_remove(index, key, entry->key_len);
+
+		mc_entry_unref(entry);
+	}
+
+	if (noreply) {
+		mc_blank(parser->command);
+	} else {
+		mc_reply(parser->command, "OK\r\n");
+	}
 
 done:
 	LEAVE();
