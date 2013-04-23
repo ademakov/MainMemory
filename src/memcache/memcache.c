@@ -2464,8 +2464,13 @@ mc_parse_stats(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_error(parser, "CLIENT_ERROR not implemented\r\n");
+	bool rc = mc_parse_eol(parser);
+	if (!rc || parser->error)
+		goto done;
 
+	mc_reply(parser->command, "END\r\n");
+
+done:
 	LEAVE();
 	return rc;
 }
