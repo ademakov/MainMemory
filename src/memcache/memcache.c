@@ -743,6 +743,8 @@ mc_command_destroy(struct mc_command *command)
 static void
 mc_reply(struct mc_command *command, const char *str)
 {
+	DEBUG("reply '%s'", str);
+
 	command->result_type = MC_RESULT_REPLY;
 	command->result.reply.str = str;
 	command->result.reply.len = strlen(str);
@@ -751,6 +753,8 @@ mc_reply(struct mc_command *command, const char *str)
 static void
 mc_blank(struct mc_command *command)
 {
+	DEBUG("no reply");
+
 	command->result_type = MC_RESULT_BLANK;
 }
 
@@ -1639,6 +1643,8 @@ mc_widen_input(struct mc_parser *parser)
 static void
 mc_carry_param(struct mc_parser *parser, int count)
 {
+	ENTER();
+
 	struct mc_buffer *buffer = parser->buffer->next;
 	if (buffer == NULL) {
 		buffer = mc_add_read_buffer(parser->state, MC_DEFAULT_BUFFER_SIZE);
@@ -1652,8 +1658,10 @@ mc_carry_param(struct mc_parser *parser, int count)
 	buffer->used += count;
 
 	parser->buffer = buffer;
-	parser->start_ptr = buffer->data + count;
+	parser->start_ptr = buffer->data;
 	parser->end_ptr = buffer->data + buffer->used;
+
+	LEAVE();
 }
 
 /*
@@ -1829,6 +1837,10 @@ retry:
 			goto done;
 		}
 	}
+
+	DEBUG("buffer size: %d, used: %d",
+	      (int) parser->buffer->size,
+	      (int) parser->buffer->used);
 
 	int count = e - parser->start_ptr;
 	if (count > MC_KEY_LEN_MAX) {
@@ -2033,6 +2045,7 @@ mc_parse_command(struct mc_parser *parser)
 
 	/* Must have some ready input at this point. */
 	ASSERT(s < e);
+	DEBUG("'%.*s'", (int) (e - s), s);
 
 	/* Initialize the scanner state. */
 	enum scan scan = SCAN_START;
@@ -2804,7 +2817,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 			goto done;
 		}
 
-		mc_widen_input(&parser);
+		mc_start_input(&parser, state, parser.command);
 	}
 
 done:
