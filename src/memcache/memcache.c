@@ -528,7 +528,7 @@ mc_buffer_create(size_t size)
 	ENTER();
 
 	size +=  MC_DEFAULT_BUFFER_SIZE - 1;
-	size -= size % (MC_DEFAULT_BUFFER_SIZE - 1);
+	size -= size % MC_DEFAULT_BUFFER_SIZE;
 
 	size_t total_size = sizeof(struct mc_buffer) + size;
 	struct mc_buffer *buffer = mm_alloc(total_size);
