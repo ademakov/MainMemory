@@ -283,6 +283,8 @@ mc_table_expand(size_t size)
 	/* Assert the size is a power of 2. */
 	ASSERT((size & (size - 1)) == 0);
 
+	mm_print("Set the memcache table size: %ld", (unsigned long) size);
+
 	size_t old_size = mc_table_size(mc_table.size);
 	size_t new_size = mc_table_size(size);
 
@@ -361,7 +363,7 @@ mc_table_stride_routine(uintptr_t arg __attribute__((unused)))
 	ENTER();
 	ASSERT(mc_table.striding);
 
-	if (unlikely(mc_table.used == mc_table.used)) {
+	if (unlikely(mc_table.used == mc_table.size)) {
 		mc_table_expand(mc_table.size * 2);
 	}
 
