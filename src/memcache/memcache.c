@@ -272,7 +272,7 @@ mc_table_is_full(void)
 	if (unlikely(mc_table.size == MC_TABLE_SIZE_MAX)
 	    && unlikely(mc_table.used == mc_table.size))
 		return false;
-	return mc_table.nentries > (mc_table.size * 2);
+	return mc_table.nentries > (mc_table.size * 4);
 }
 
 static void
