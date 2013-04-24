@@ -1,8 +1,7 @@
 
 ASAP:
 * solve pool object reallocation problem
-* crude memcache module
-* add timers and task sleep
+* add timers and task sleep and support socket timeout
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
 ** ensure socket & server object destruction
@@ -11,6 +10,7 @@ ASAP:
 ** ensure task & port objects destruction issues (refcount? capabilities?)
 
 Essentials:
+* devise generic net buffer mechanism
 * resolve socket close issues: time wait
 * worker threads, multi-threaded task & work schedulers
 * support signals
@@ -25,13 +25,21 @@ Essentials:
 * daemonize
 * statistics
 * performance instrumentation
-* refined memcache module
+* finish memcache module:
+** eviction
+** expiration
+** statistics
+** polish
+** optimize
+** add UDP protocol support
+** add binary protocol support
+** use multi-threaded workers
 * HTTP module
-* Network input handling now takes the following path:
-event-loop task -> net I/O task -> master task -> worker (reader) task
-Then transmitting the response might take he following path:
-worker (reader) task -> net I/O task (mm_net_spawn_writer) -> master task -> worker (writer) task
-Test the performance of this lenghty path and optimize if needed.
+* network input handling now takes the following path:
+  event-loop task -> net I/O task -> master task -> worker (reader) task
+  Then transmitting the response might take he following path:
+  worker (reader) task -> net I/O task (mm_net_spawn_writer) -> master task -> worker (writer) task
+  Test the performance of this lengthy path and optimize if needed.
 
 Enhancements:
 * task fork/join
