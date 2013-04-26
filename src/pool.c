@@ -21,51 +21,42 @@
 
 #include "util.h"
 
-#define MM_POOL_FREE_NIL	0xffffffff
-#define MM_POOL_FREE_PAD	0xdeadbeaf
+#define MM_POOL_BLOCK_SIZE	0x2000
 
-struct mm_free_item
+struct mm_pool_free_item
 {
-	uint32_t pad;
-	uint32_t next;
+	struct mm_pool_free_item *next;
 };
 
-static inline size_t
-mm_pool_grow_size(uint32_t item_size, uint32_t pool_size)
-{
-	ASSERT(item_size < 0x200);
-
-	// Round the size up to a 4k multiple.
-	size_t size = (pool_size == 0 ? 0x1000 : (item_size * pool_size + 0xfff) & ~0xfff);
-
-	// Double the size and subtract the malloc overhead.
-	size *= 2;
-	size -= 16;
-
-	// Return next pool size.
-	return size / item_size;
-}
-
 void
-mm_pool_init(struct mm_pool *pool, const char *name, size_t item_size)
+mm_pool_init(struct mm_pool *pool, const char *pool_name, uint32_t item_size)
 {
 	ENTER();
+	ASSERT(item_size < 0x200);
 
-	if (item_size < sizeof(struct mm_free_item))
-		item_size = sizeof(struct mm_free_item);
+	if (item_size < sizeof(struct mm_pool_free_item))
+		item_size = sizeof(struct mm_pool_free_item);
 
-	pool->pool_name = mm_strdup(name);
+	mm_print("make the '%s' memory pool with element size %u",
+		 pool_name, item_size);
+
+	pool->item_last = 0;
 	pool->item_size = item_size;
-	pool->pool_size = mm_pool_grow_size(item_size, 0);
 
-	pool->item_count = 0;
-	pool->free_index = MM_POOL_FREE_NIL;
+	pool->block_capacity = MM_POOL_BLOCK_SIZE / item_size;
+	pool->block_array_used = 1;
+	pool->block_array_size = 4;
 
-	pool->pool_data = mm_alloc(pool->pool_size * pool->item_size);
-	mm_print("allocate the '%s' memory pool with size %u (%lu bytes)",
-		 pool->pool_name,
-		 pool->pool_size,
-		 (unsigned long) pool->item_size * pool->pool_size);
+	// Allocate the block container.
+	pool->block_array = mm_alloc(pool->block_array_size * sizeof(char *));
+
+	// Allocate the first block.
+	pool->block_array[0] = mm_alloc(MM_POOL_BLOCK_SIZE);
+	pool->block_cur_ptr = pool->block_array[0];
+	pool->block_end_ptr = pool->block_cur_ptr +  pool->block_capacity * pool->item_size;
+
+	pool->free_list = NULL;
+	pool->pool_name = mm_strdup(pool_name);
 
 	LEAVE();
 }
@@ -75,32 +66,41 @@ mm_pool_discard(struct mm_pool *pool)
 {
 	ENTER();
 
+	for (uint32_t i = 0; i < pool->block_array_used; i++)
+		mm_free(pool->block_array[i]);
+	mm_free(pool->block_array);
 	mm_free(pool->pool_name);
-	mm_free(pool->pool_data);
 
 	LEAVE();
 }
 
 void *
-mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)
+mm_pool_idx2ptr(struct mm_pool *pool, uint32_t n)
 {
-	ASSERT(index < pool->item_count);
+	if (unlikely(n >= pool->item_last))
+		return NULL;
 
-	return (char *) pool->pool_data + (size_t) index * pool->item_size;
+	uint32_t block = n / pool->block_capacity;
+	uint32_t index = n % pool->block_capacity;
+	return pool->block_array[block] + index * pool->item_size;
 }
 
 uint32_t
 mm_pool_ptr2idx(struct mm_pool *pool, void *item)
 {
-	ASSERT(item >= pool->pool_data);
-	ASSERT(item < pool->pool_data + pool->item_count * pool->item_size);
+	uint32_t block = 0;
+	while (block < pool->block_array_used
+	       && ((char *) item) < pool->block_array[block]
+	       && (char *) item >= pool->block_array[block] + MM_POOL_BLOCK_SIZE)
+		++block;
 
-	size_t offset = (char *) item - (char *) pool->pool_data;
-	ASSERT((offset % pool->item_size) == 0);
+	if (unlikely(block == pool->block_array_used))
+		return MM_POOL_INDEX_INVALID;
 
-	return (uint32_t) (offset / pool->item_size);
+	uint32_t index = ((char *) item - pool->block_array[block]) / pool->item_size;
+
+	return block * pool->block_capacity + index;
 }
-
 
 void *
 mm_pool_alloc(struct mm_pool *pool)
@@ -108,27 +108,37 @@ mm_pool_alloc(struct mm_pool *pool)
 	ENTER();
 
 	void *item;
-	if (pool->free_index != MM_POOL_FREE_NIL) {
-		item = (char *) pool->pool_data + (size_t) pool->free_index * pool->item_size;
-		pool->free_index = ((struct mm_free_item *) item)->next;
+	if (pool->free_list != NULL) {
+		item = pool->free_list;
+		pool->free_list = pool->free_list->next;
 	} else {
-		if (unlikely(pool->item_count == pool->pool_size)) {
-			/* Check for integer overflow. */
-			uint32_t size = mm_pool_grow_size(pool->item_size,
-							  pool->pool_size);
-			if (unlikely(size < pool->pool_size)) {
-				mm_error(0, "the '%s' memory pool overflow", pool->pool_name);
-				return NULL;
-			}
-			mm_print("reallocate the '%s' memory pool with size %u (%lu bytes)",
-				 pool->pool_name,
-				 pool->pool_size,
-				 (unsigned long) pool->item_size * pool->pool_size);
+		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr)) {
+			mm_print("grow the '%s' memory pool with element size %u",
+				 pool->pool_name, pool->item_size);
 
-			pool->pool_size = size;
-			pool->pool_data = mm_realloc(pool->pool_data, size * pool->item_size);
+			// Check for 32-bit integer overflow.
+			uint32_t total_capacity = pool->block_capacity * pool->block_array_used;
+			if (unlikely(total_capacity > (total_capacity + pool->block_capacity)))
+				mm_fatal(0, "the '%s' memory pool overflow", pool->pool_name);
+
+			if (pool->block_array_used == pool->block_array_size) {
+				pool->block_array_size *= 2;
+				pool->block_array = mm_realloc(
+					pool->block_array,
+					pool->block_array_size * sizeof(char *));
+			}
+
+			pool->block_array[pool->block_array_used] = mm_alloc(MM_POOL_BLOCK_SIZE);
+			pool->block_cur_ptr = pool->block_array[pool->block_array_used];
+			pool->block_end_ptr = pool->block_cur_ptr + pool->block_capacity * pool->item_size;
+
+			pool->block_array_used++;
 		}
-		item = pool->pool_data + pool->item_size * pool->item_count++;
+
+		item = pool->block_cur_ptr;
+		pool->block_cur_ptr += pool->item_size;
+
+		pool->item_last++;
 	}
 
 	LEAVE();
@@ -140,9 +150,9 @@ mm_pool_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
 
-	((struct mm_free_item *) item)->pad = MM_POOL_FREE_PAD;
-	((struct mm_free_item *) item)->next = pool->free_index;
-	pool->free_index = mm_pool_ptr2idx(pool, item);
+	struct mm_pool_free_item *free_item = item;
+	free_item->next = pool->free_list;
+	pool->free_list = free_item;
 
 	LEAVE();
 }

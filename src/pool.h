@@ -22,17 +22,27 @@
 
 #include "common.h"
 
+#define MM_POOL_INDEX_INVALID	0xffffffff
+
+
 struct mm_pool
 {
-	uint32_t item_count;
-	uint32_t free_index;
-	uint32_t pool_size;
+	struct mm_pool_free_item *free_list;
+	char *block_cur_ptr;
+	char *block_end_ptr;
+	char **block_array;
+
 	uint32_t item_size;
-	void *pool_data;
+	uint32_t item_last;
+	uint32_t block_capacity;
+	uint32_t block_array_used;
+	uint32_t block_array_size;
+
 	char *pool_name;
 };
 
-void mm_pool_init(struct mm_pool *pool, const char *name, size_t item_size)
+
+void mm_pool_init(struct mm_pool *pool, const char *name, uint32_t item_size)
 	__attribute__((nonnull(1, 2)));
 
 void mm_pool_discard(struct mm_pool *pool)

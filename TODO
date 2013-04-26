@@ -1,6 +1,5 @@
 
 ASAP:
-* solve pool object reallocation problem
 * add timers and task sleep and support socket timeout
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
