@@ -135,10 +135,6 @@ struct mm_net_socket
 
 	/* A link in the server's list of all client sockets. */
 	struct mm_list clients;
-	/* A link in the list of read ready sockets. */
-	struct mm_list read_queue;
-	/* A link in the list of write ready sockets. */
-	struct mm_list write_queue;
 
 	/* Client address. */
 	struct mm_net_peer_addr peer;
