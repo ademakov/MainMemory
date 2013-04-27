@@ -1103,48 +1103,46 @@ mm_net_wblock(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-static ssize_t
+static int
 mm_net_may_rblock(struct mm_net_socket *sock)
 {
-	// Check to see if it allowed to block on reading from a socket.
+	// Check to see if it is allowed to block on reading from a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR | MM_NET_NONBLOCK)) == 0) {
 		// Okay to block.
 		return 1;
 	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
 		// Cannot block as the socket is in the non-block mode.
 		errno = EAGAIN;
-		return -1;
 	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
 		// Cannot block as the socket is closed.
 		errno = EBADF;
-		return -1;
 	} else {
 		// Cannot block as there was an error on the socket.
 		// FIXME: find the actual error errno?
 		return 0;
 	}
+	return -1;
 }
 
-static ssize_t
+static int
 mm_net_may_wblock(struct mm_net_socket *sock)
 {
-	// Check to see if it allowed to block on writing to a socket.
+	// Check to see if it is allowed to block on writing to a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR | MM_NET_NONBLOCK)) == 0) {
 		// Okay to block.
 		return 1;
 	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
 		// Cannot block as the socket is in the non-block mode.
 		errno = EAGAIN;
-		return -1;
 	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
 		// Cannot block as the socket is closed.
 		errno = EBADF;
-		return -1;
 	} else {
 		// Cannot block as there was an error on the socket.
 		// FIXME: find the actual error errno?
 		return 0;
 	}
+	return -1;
 }
 
 ssize_t
@@ -1182,8 +1180,6 @@ retry:
 			mm_error(saved_errno, "read()");
 			errno = saved_errno;
 		}
-	} else {
-		mm_net_close(sock);
 	}
 
 done:
@@ -1274,8 +1270,6 @@ retry:
 			mm_error(saved_errno, "readv()");
 			errno = saved_errno;
 		}
-	} else {
-		mm_net_close(sock);
 	}
 
 done:

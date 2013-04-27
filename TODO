@@ -6,7 +6,7 @@ ASAP:
 ** ensure socket & server object destruction
 * correct destruction:
 ** ensure destroyed socket & server objects are not accessed anymore
-** ensure task & port objects destruction issues (refcount? capabilities?)
+** ensure safe task & port objects destruction (refcount? capabilities?)
 
 Essentials:
 * devise generic net buffer mechanism

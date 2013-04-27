@@ -546,16 +546,15 @@ mm_event_dispatch(void)
 		}
 	}
 
-	DEBUG("event change count: %d", nkevents);
-
 	// Poll the system for events.
 	struct timespec timeout;
 	timeout.tv_sec = nkevents ? 0 : 10;
 	timeout.tv_nsec = 0;
-	nkevents = kevent(mm_event_kq,
-			  mm_kevents, nkevents,
-			  mm_kevents, MM_EVENT_NKEVENTS_MAX,
-			  &timeout);
+	int n = kevent(mm_event_kq,
+		       mm_kevents, nkevents,
+		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
+		       &timeout);
+	DEBUG("kevent changed: %d, received: %d", nkevents, n);
 
 	// Send REG/UNREG messages.
 	for (int i = 0; i < nchanges; i++) {
@@ -581,16 +580,14 @@ mm_event_dispatch(void)
 		}
 	}
 
-	if (unlikely(nkevents < 0)) {
+	if (unlikely(n < 0)) {
 		if (errno != EINTR)
 			mm_error(errno, "kevent");
 		goto done;
 	}
 
-	DEBUG("event count: %d", nkevents);
-
 	// Process the received system events.
-	for (int i = 0; i < nkevents; i++) {
+	for (int i = 0; i < n; i++) {
 		if (mm_kevents[i].filter == EVFILT_READ) {
 			int fd = mm_kevents[i].ident;
 			mm_event_handler_t io = mm_fd_table[fd].handler;
