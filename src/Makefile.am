@@ -7,9 +7,9 @@ mmem_CFLAGS = -std=gnu99 -Wall -Wextra
 
 mmem_SOURCES = \
 	arch.h bits.h common.h core.c core.h event.c event.h \
-	future.c future.h list.h main.c net.c net.h peq.c peq.h pool.c pool.h \
+	future.c future.h list.h main.c net.c net.h pool.c pool.h \
 	port.c port.h runq.c runq.h sched.c sched.h stack.c stack.h \
-	task.c task.h util.c util.h work.c work.h \
+	task.c task.h timeq.c timeq.h util.c util.h work.c work.h \
 	dlmalloc/malloc.c dlmalloc/malloc.h
 
 mmem_LDADD = memcache/libmemcache.a

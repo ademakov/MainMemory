@@ -104,6 +104,18 @@ mm_list_append(struct mm_list *list, struct mm_list *item)
 }
 
 static inline void
+mm_list_insert_next(struct mm_list *item, struct mm_list *item2)
+{
+	mm_list_splice_next(item, item2, item2);
+}
+
+static inline void
+mm_list_insert_prev(struct mm_list *item, struct mm_list *item2)
+{
+	mm_list_splice_prev(item, item2, item2);
+}
+
+static inline void
 mm_list_delete(struct mm_list *item)
 {
 	mm_list_cleave(item, item);
