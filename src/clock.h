@@ -1,7 +1,7 @@
 /*
  * clock.h - MainMemory time routines.
  *
- * Copyright (C) 2013  Aleksey Demakov.
+ * Copyright (C) 2013  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@
 
 #include "common.h"
 
-void mm_clock_init();
+void mm_clock_init(void);
 
 mm_timeval_t mm_clock_realtime(void);
 mm_timeval_t mm_clock_monotonic(void);

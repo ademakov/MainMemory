@@ -50,6 +50,7 @@ AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h])
 dnl Checks for typedefs, structures, and compiler characteristics.
 
 dnl Checks for library functions.
+AC_SEARCH_LIBS(clock_gettime, rt)
 
 dnl Check command line arguments
 

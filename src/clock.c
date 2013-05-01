@@ -1,7 +1,7 @@
 /*
  * clock.c - MainMemory time routines.
  *
- * Copyright (C) 2013  Aleksey Demakov.
+ * Copyright (C) 2013  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,13 +31,45 @@
 # include <time.h>
 #endif
 
-#ifdef HAVE_MACH_MACH_TIME_H
+#if defined(CLOCK_REALTIME) && defined(CLOCK_MONOTONIC)
+
+void
+mm_clock_init(void)
+{
+	ENTER();
+
+	struct timespec ts;
+	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
+		mm_fatal(0, "clock_gettime(CLOCK_REALTIME, ...) does not seem to work");
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+		mm_fatal(0, "clock_gettime(CLOCK_MONOTONIC, ...) does not seem to work");
+
+	LEAVE();
+}
+
+mm_timeval_t
+mm_clock_realtime(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_REALTIME, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+mm_timeval_t
+mm_clock_monotonic(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+#elif defined(HAVE_MACH_MACH_TIME_H)
 
 static mm_timeval_t mm_abstime_numer;
 static mm_timeval_t mm_abstime_denom;
 
 void
-mm_clock_init()
+mm_clock_init(void)
 {
 	ENTER();
 
@@ -68,21 +100,6 @@ mm_clock_monotonic(void)
 
 #else
 
-void
-mm_clock_init()
-{
-}
-
-mm_timeval_t
-mm_clock_realtime(void)
-{
-	return 0;
-}
-
-mm_timeval_t
-mm_clock_monotonic(void)
-{
-	return 0;
-}
+#error "Unsupported platform"
 
 #endif
