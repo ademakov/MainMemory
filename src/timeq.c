@@ -21,23 +21,36 @@
 
 #include "util.h"
 
+/*
+ * The algorithm here is similar to the one described in the following paper:
+ *
+ * Rick SM Goh and I L-J Thng,
+ * “MList: An Efficient Pending Event Set Structure For Discrete Event Simulation”
+ *
+ * The first intent was to implement the Ladder Queue algorithm, but so far it
+ * seems an overkill. If the current algorithm does not work well then either
+ * the Ladder Queue or some alternative like implicit heap should be tried.
+ */
 
 struct mm_timeq
 {
-    struct mm_list fe;		/* front end list */
-    int fe_num;
+    struct mm_list fe;		/* front end entries */
+    int fe_num;			/* number of entries in the front end */
 
-    struct mm_list *t1;		/* T1 structure */
-    mm_timeval_t t1_start;	/* used to calculate the bucket */
-    mm_timeval_t t1_cur;	/* minimum timestamp threshold of events in T1 */
-    int t1_size;		/* size of bucket array */
-    int t1_used;		/* first used bucket */
+    struct mm_list *t1;		/* tier 1 entries */
+    mm_timeval_t t1_start;	/* T1 buckets base */
+    mm_timeval_t t1_width;	/* T1 bucket width */
+    int t1_count;		/* number of all T1 buckets */
+    int t1_index;		/* index of the first used T1 bucket */
 
-    struct mm_list t2;		/* t2 list */
-    mm_timeval_t t2_max;	/* maximum timestamp of all events in T2 */
+    struct mm_list t2;		/* tier 2 entries */
+    mm_timeval_t t2_start;	/* t2 buckets base */
     mm_timeval_t t2_min;	/* minimum timestamp of all events in T2 */
-    mm_timeval_t t2_cur;	/* minimum timestamp threshold of events in T2 */
-    int t2_num;			/* number of events in T2 */
+    mm_timeval_t t2_max;	/* maximum timestamp of all events in T2 */
+    int t2_num;			/* number of entries in the tier 2 */
+
+    mm_timeval_t t1_width_max;
+    int t1_count_max;
 };
 
 
@@ -51,16 +64,19 @@ mm_timeq_create(void)
 	mm_list_init(&timeq->fe);
 
 	timeq->t1 = NULL;
-	timeq->t1_start = 0;
-	timeq->t1_cur = MM_TIMEVAL_MIN;
-	timeq->t1_size = 0;
-	timeq->t1_used = 0;
+	timeq->t1_start = MM_TIMEVAL_MIN;
+	timeq->t1_width = 0;
+	timeq->t1_count = 0;
+	timeq->t1_index = 0;
 
 	mm_list_init(&timeq->t2);
-	timeq->t2_max = MM_TIMEVAL_MIN;
+	timeq->t2_start = MM_TIMEVAL_MIN;
 	timeq->t2_min = MM_TIMEVAL_MAX;
-	timeq->t2_cur = MM_TIMEVAL_MIN;
+	timeq->t2_max = MM_TIMEVAL_MIN;
 	timeq->t2_num = 0;
+
+	timeq->t1_width_max = 0;
+	timeq->t1_count_max = 0;
 
 	LEAVE();
 	return timeq;
@@ -71,7 +87,7 @@ mm_timeq_destroy(struct mm_timeq *timeq)
 {
 	ENTER();
 	ASSERT(mm_list_empty(timeq->fe));
-	ASSERT(timeq->t1_used >= timeq->t1_size);
+	ASSERT(timeq->t1_index <= timeq->t1_count);
 	ASSERT(mm_list_empty(timeq->t2));
 
 	mm_free(timeq->t1);
@@ -80,13 +96,26 @@ mm_timeq_destroy(struct mm_timeq *timeq)
 	LEAVE();
 }
 
+void
+mm_timeq_set_max_bucket_width(struct mm_timeq *timeq, mm_timeval_t n)
+{
+	timeq->t1_width_max = n;
+}
+
+void
+mm_timeq_set_max_bucket_count(struct mm_timeq *timeq, int n)
+{
+	timeq->t1_count_max = n;
+}
+
 static void
 mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	struct mm_list *fe_queue_link = &timeq->fe;
 	while (mm_list_has_prev(&timeq->fe, fe_queue_link)) {
 		struct mm_list *prev_link = fe_queue_link->prev;
-		struct mm_timeq_entry *prev_entry = containerof(prev_link, struct mm_timeq_entry, queue);
+		struct mm_timeq_entry *prev_entry
+			= containerof(prev_link, struct mm_timeq_entry, queue);
 		if (prev_entry->value <= entry->value)
 			break;
 		fe_queue_link = prev_link;
@@ -100,13 +129,9 @@ mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 static void
 mm_timeq_insert_t1(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
-	int index = (entry->value - timeq->t1_start) / timeq->t1_size;
+	int index = (entry->value - timeq->t1_start) / timeq->t1_width;
 	mm_list_append(&timeq->t1[index], &entry->queue);
 	entry->index = index;
-
-	if (timeq->t1_used > index) {
-		timeq->t1_used = index;
-	}
 }
 
 static void
@@ -130,9 +155,9 @@ mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	ENTER();
 	ASSERT(item->idx == MM_TIMEQ_INDEX_NO);
 
-	if (timeq->t2_cur <= entry->value) {
+	if (timeq->t2_start <= entry->value) {
 		mm_timeq_insert_t2(timeq, entry);
-	} else if (timeq->t1_cur <= entry->value) {
+	} else if (timeq->t1_start <= entry->value) {
 		mm_timeq_insert_t1(timeq, entry);
 	} else {
 		mm_timeq_insert_fe(timeq, entry);
@@ -151,6 +176,8 @@ mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 		timeq->fe_num--;
 	} else if (entry->index == MM_TIMEQ_INDEX_T2) {
 		timeq->t2_num--;
+		// TODO: take into account that t2_min and t2_max might be
+		// changed after this.
 	}
 
 	mm_list_delete(&entry->queue);
@@ -164,7 +191,7 @@ mm_timeq_getmin(struct mm_timeq *timeq)
 {
 	ENTER();
 
-	struct mm_timeq_entry *entry = NULL;
+	struct mm_timeq_entry *entry;
 
 restart:
 	if (!mm_list_empty(&timeq->fe)) {
@@ -173,73 +200,93 @@ restart:
 		entry = containerof(link, struct mm_timeq_entry, queue);
 
 	} else {
-		while (timeq->t1_used < timeq->t1_size
-		       && mm_list_empty(&timeq->t1[timeq->t1_used])) {
-			timeq->t1_used++;
+		while (timeq->t1_index < timeq->t1_count
+		       && mm_list_empty(&timeq->t1[timeq->t1_index])) {
+			timeq->t1_index++;
 		}
 
-		if (timeq->t1_used < timeq->t1_size) {
+		if (timeq->t1_index < timeq->t1_count) {
 
-			/* The bucket is not empty */
-			int used = timeq->t1_used++;
+			/* The bucket is not empty. */
+			struct mm_list *head = mm_list_head(&timeq->t1[timeq->t1_index]);
+			struct mm_list *tail = mm_list_tail(&timeq->t1[timeq->t1_index]);
 
 			/* If the bucket has exactly one item, return the item. */
 			/* In other case, move all items in front end structure. */
-			struct mm_list *link = mm_list_head(&timeq->t1[used]);
-			if (!mm_list_has_next(&timeq->t1[used], link)) {
-				entry = containerof(link, struct mm_timeq_entry, queue);
+			if (head == tail) {
+				entry = containerof(head, struct mm_timeq_entry, queue);
 			} else {
+				timeq->t1_index++;
+				mm_list_cleave(head, tail);
 
-				while (!mm_list_empty(&timeq->t1[used])) {
-					struct mm_list *link = mm_list_head(&timeq->t1[used]);
-					mm_list_delete(link);
+				for (;;) {
+					struct mm_list *next = head->next;
 
-					entry = containerof(link, struct mm_timeq_entry, queue);
+					entry = containerof(head, struct mm_timeq_entry, queue);
 					mm_timeq_insert_fe(timeq, entry);
-				}
 
-				entry = NULL;
-				goto restart;
+					if (head == tail)
+						goto restart;
+
+					head = next;
+				}
 			}
 
 		} else if (timeq->t2_num == 1) {
 
-			/* All buckets empty and only one item in T2 */
+			/* All buckets are empty and only one item in T2 */
 			struct mm_list *link = mm_list_head(&timeq->t2);
 			entry = containerof(link, struct mm_timeq_entry, queue);
 
 		} else if (timeq->t2_num > 1) {
 
-			/* All buckets empty, move all items in T1 */
-			int sizeT1 = (timeq->t2_max - timeq->t2_min) / timeq->t2_num;
-			if (sizeT1 < 64) {
-				sizeT1 = 16;
-			}
+			/* All buckets are empty, move all items in T1 (as much as allowed) */
+			mm_timeval_t width = (timeq->t2_max - timeq->t2_min) / timeq->t2_num;
+			if (timeq->t1_width_max && width > timeq->t1_width_max)
+				width = timeq->t1_width_max;
 
-			if (timeq->t1_size < sizeT1) {
-				sizeT1 *= 2;
-				timeq->t1 = mm_realloc(timeq->t1, sizeT1 * sizeof(struct mm_list));
-				for (int i = timeq->t1_size; i < sizeT1; ++i) {
+			int count = (timeq->t2_max - timeq->t2_min) / width;
+			if (timeq->t1_count_max && count > timeq->t1_count_max)
+				count = timeq->t1_count_max;
+
+			if (timeq->t1_count < count) {
+				timeq->t1 = mm_realloc(timeq->t1, count * sizeof(struct mm_list));
+				for (int i = timeq->t1_count; i < count; ++i)
 					mm_list_init(&timeq->t1[i]);
-				}
-				timeq->t1_size = sizeT1;
+				timeq->t1_count = count;
 			}
 
-			timeq->t1_used = sizeT1;
-			timeq->t1_start = timeq->t1_cur = timeq->t2_min;
-			timeq->t2_min = timeq->t2_cur = timeq->t2_max;
+			timeq->t1_width = width;
+			timeq->t1_start = timeq->t2_min;
+			timeq->t1_index = timeq->t1_count - count;
+
+			timeq->t2_start = timeq->t1_start + width * count;
+			timeq->t2_min = MM_TIMEVAL_MAX;
+			timeq->t2_max = MM_TIMEVAL_MIN;
 			timeq->t2_num = 0;
 
-			while (!mm_list_empty(&timeq->t2)) {
-				struct mm_list *link = mm_list_head(&timeq->t2);
-				mm_list_delete(link);
+			struct mm_list *head = mm_list_head(&timeq->t2);
+			struct mm_list *tail = mm_list_tail(&timeq->t2);
+			mm_list_cleave(head, tail);
 
-				entry = containerof(link, struct mm_timeq_entry, queue);
-				mm_timeq_insert_t1(timeq, entry);
+			for (;;) {
+				struct mm_list *next = head->next;
+
+				entry = containerof(head, struct mm_timeq_entry, queue);
+				if (timeq->t2_start <= entry->value) {
+					mm_timeq_insert_t2(timeq, entry);
+				} else {
+					mm_timeq_insert_t1(timeq, entry);
+				}
+
+				if (head == tail)
+					goto restart;
+
+				head = next;
 			}
 
+		} else {
 			entry = NULL;
-			goto restart;
 		}
 	}
 
