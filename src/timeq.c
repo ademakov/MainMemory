@@ -86,9 +86,9 @@ void
 mm_timeq_destroy(struct mm_timeq *timeq)
 {
 	ENTER();
-	ASSERT(mm_list_empty(timeq->fe));
+	ASSERT(mm_list_empty(&timeq->fe));
 	ASSERT(timeq->t1_index <= timeq->t1_count);
-	ASSERT(mm_list_empty(timeq->t2));
+	ASSERT(mm_list_empty(&timeq->t2));
 
 	mm_free(timeq->t1);
 	mm_free(timeq);
@@ -153,7 +153,7 @@ void
 mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	ENTER();
-	ASSERT(item->idx == MM_TIMEQ_INDEX_NO);
+	ASSERT(entry->index == MM_TIMEQ_INDEX_NO);
 
 	if (timeq->t2_start <= entry->value) {
 		mm_timeq_insert_t2(timeq, entry);
