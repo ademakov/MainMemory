@@ -6,7 +6,7 @@ bin_PROGRAMS = mmem
 mmem_CFLAGS = -std=gnu99 -Wall -Wextra
 
 mmem_SOURCES = \
-	arch.h bits.h common.h core.c core.h event.c event.h \
+	arch.h bits.h clock.c clock.h common.h core.c core.h event.c event.h \
 	future.c future.h list.h main.c net.c net.h pool.c pool.h \
 	port.c port.h runq.c runq.h sched.c sched.h stack.c stack.h \
 	task.c task.h timeq.c timeq.h util.c util.h work.c work.h \

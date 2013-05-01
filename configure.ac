@@ -45,6 +45,7 @@ dnl Checks for libraries.
 dnl Checks for header files.
 AC_CHECK_HEADERS([stdlib.h unistd.h ucontext.h])
 AC_CHECK_HEADERS([sys/epoll.h sys/event.h])
+AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h]) 
 
 dnl Checks for typedefs, structures, and compiler characteristics.
 
