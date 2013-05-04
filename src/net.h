@@ -120,8 +120,12 @@ struct mm_net_socket
 {
 	/* Socket file descriptor. */
 	int fd;
+
 	/* Socket flags. */
-	int flags;
+	uint32_t flags;
+
+	/* I/O timeout. */
+	mm_timeout_t timeout;
 
 	/* Tasks pending on the socket I/O. */
 	struct mm_task *reader;
@@ -211,11 +215,9 @@ mm_net_is_writable(struct mm_net_socket *sock)
 }
 
 static inline void
-mm_net_set_timeout(struct mm_net_socket *sock, mm_timeout_t usec)
+mm_net_set_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
-	(void) sock;
-	(void) usec;
-	// TODO
+	sock->timeout = timeout;
 }
 
 #endif /* NET_H */

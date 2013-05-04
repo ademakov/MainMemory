@@ -24,8 +24,10 @@
 #include "port.h"
 #include "task.h"
 #include "sched.h"
+#include "timer.h"
 #include "util.h"
 #include "work.h"
+#include "core.h"
 
 #include <fcntl.h>
 #include <string.h>
@@ -305,13 +307,12 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 
 	/* Initialize the fields. */
 	sock->fd = fd;
+	sock->flags = 0;
+	sock->timeout = 0;
 	sock->proto_data = 0;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->srv = srv;
-
-	/* Set the socket flags. */
-	sock->flags = 0;
 
 	/* Register with the server. */
 	mm_list_append(&srv->clients, &sock->clients);
@@ -1072,7 +1073,10 @@ mm_net_rblock(struct mm_net_socket *sock)
 	mm_net_attach_reader(sock);
 
 	// Block the task waiting to become read ready.
-	mm_sched_block();
+	if (sock->timeout)
+		mm_timer_block(sock->timeout);
+	else
+		mm_sched_block();
 
 	// Unregister the task as reader.
 	mm_net_detach_reader(sock);
@@ -1092,7 +1096,10 @@ mm_net_wblock(struct mm_net_socket *sock)
 	mm_net_attach_writer(sock);
 
 	// Block the task waiting to become write ready.
-	mm_sched_block();
+	if (sock->timeout)
+		mm_timer_block(sock->timeout);
+	else
+		mm_sched_block();
 
 	// Unregister the task as reader.
 	mm_net_detach_writer(sock);
@@ -1104,12 +1111,17 @@ mm_net_wblock(struct mm_net_socket *sock)
 }
 
 static int
-mm_net_may_rblock(struct mm_net_socket *sock)
+mm_net_may_rblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on reading from a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR | MM_NET_NONBLOCK)) == 0) {
-		// Okay to block.
-		return 1;
+		if (sock->timeout && (start + sock->timeout) < mm_core->time_value) {
+			// Cannot block as there is no time left.
+			errno = ETIMEDOUT;
+		} else {
+			// Okay to block.
+			return 1;
+		}
 	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
 		// Cannot block as the socket is in the non-block mode.
 		errno = EAGAIN;
@@ -1125,12 +1137,17 @@ mm_net_may_rblock(struct mm_net_socket *sock)
 }
 
 static int
-mm_net_may_wblock(struct mm_net_socket *sock)
+mm_net_may_wblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on writing to a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR | MM_NET_NONBLOCK)) == 0) {
-		// Okay to block.
-		return 1;
+		if (sock->timeout && (start + sock->timeout) < mm_core->time_value) {
+			// Cannot block as there is no time left.
+			errno = ETIMEDOUT;
+		} else {
+			// Okay to block.
+			return 1;
+		}
 	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
 		// Cannot block as the socket is in the non-block mode.
 		errno = EAGAIN;
@@ -1151,10 +1168,13 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	ENTER();
 	ssize_t n;
 
+	// Remember the start time.
+	mm_timeval_t start = mm_core->time_value;
+
 retry:
 	// Check to see if the socket is ready for reading.
 	while (!mm_net_is_readable(sock)) {
-		n = mm_net_may_rblock(sock);
+		n = mm_net_may_rblock(sock, start);
 		if (n <= 0) {
 			goto done;
 		}
@@ -1194,10 +1214,13 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	ENTER();
 	ssize_t n;
 
+	// Remember the start time.
+	mm_timeval_t start = mm_core->time_value;
+
 retry:
 	// Check to see if the socket is ready for writing.
 	while (!mm_net_is_writable(sock)) {
-		n = mm_net_may_wblock(sock);
+		n = mm_net_may_wblock(sock, start);
 		if (n <= 0) {
 			goto done;
 		}
@@ -1237,10 +1260,13 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 	ENTER();
 	ssize_t n;
 
+	// Remember the start time.
+	mm_timeval_t start = mm_core->time_value;
+
 retry:
 	// Check to see if the socket is ready for reading.
 	while (!mm_net_is_readable(sock)) {
-		n = mm_net_may_rblock(sock);
+		n = mm_net_may_rblock(sock, start);
 		if (n <= 0) {
 			goto done;
 		}
@@ -1284,10 +1310,13 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
 	ENTER();
 	ssize_t n;
 
+	// Remember the start time.
+	mm_timeval_t start = mm_core->time_value;
+
 retry:
 	// Check to see if the socket is ready for writing.
 	while (!mm_net_is_writable(sock)) {
-		n = mm_net_may_wblock(sock);
+		n = mm_net_may_wblock(sock, start);
 		if (n <= 0) {
 			goto done;
 		}
@@ -1335,7 +1364,17 @@ mm_net_close(struct mm_net_socket *sock)
 
 		sock->flags = MM_NET_CLOSED;
 
-		/* Remove the socket from the event loop. */
+		// Notify a blocked reader/writer about closing.
+		if (sock->reader != NULL && sock->reader != mm_running_task) {
+			mm_sched_run(sock->reader);
+			mm_sched_yield();
+		}
+		if (sock->writer != NULL && sock->writer != mm_running_task) {
+			mm_sched_run(sock->writer);
+			mm_sched_yield();
+		}
+
+		// Remove the socket from the event loop.
 		mm_event_unregister_fd(sock->fd);
 
 		/* TODO: Take care of work items and tasks that might still
