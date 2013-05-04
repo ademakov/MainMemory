@@ -356,7 +356,7 @@ mm_event_dispatch(void)
 
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
-	if (nkevents) {
+	if (sent_msgs) {
 		// If event system changes have been requested it is needed to
 		// notify the interested parties on their completion so do not
 		// wait for more events.
