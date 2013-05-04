@@ -26,7 +26,7 @@
 #include "timeq.h"
 
 #define MM_TIMER_ERROR	((mm_timer_t) -1)
-#define MM_TIMER_SLEEP	((mm_timer_t) -2)
+#define MM_TIMER_BLOCK	((mm_timer_t) -2)
 
 typedef mm_timeq_ident_t mm_timer_t;
 
@@ -44,6 +44,6 @@ void mm_timer_destroy(mm_timer_t timer_id);
 void mm_timer_settime(mm_timer_t timer_id, bool abstime,
 		      mm_timeval_t value, mm_timeval_t interval);
 
-void mm_timer_usleep(mm_timeout_t timeout);
+void mm_timer_block(mm_timeout_t timeout);
 
 #endif /* TIMER_H */

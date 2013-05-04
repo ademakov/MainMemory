@@ -64,7 +64,7 @@ static struct mm_pool mm_timer_pool;
 static bool
 mm_timer_is_armed(struct mm_timeq_entry *entry)
 {
-	return (entry->index == MM_TIMEQ_INDEX_NO);
+	return (entry->index != MM_TIMEQ_INDEX_NO);
 }
 
 static void
@@ -72,7 +72,7 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 {
 	ENTER();
 
-	if (entry->ident == MM_TIMER_SLEEP) {
+	if (entry->ident == MM_TIMER_BLOCK) {
 		struct mm_timer_resume *pause =
 			containerof(entry, struct mm_timer_resume, entry);
 		mm_sched_run(pause->task);
@@ -162,7 +162,7 @@ mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
 	mm_timer_t timer_id = mm_pool_ptr2idx(&mm_timer_pool, timer);
 
 	// Check for timer_id overflow over the MM_TIMER_SLEEP value.
-	if (unlikely(timer_id == MM_TIMER_SLEEP)) {
+	if (unlikely(timer_id == MM_TIMER_BLOCK)) {
 		mm_pool_free(&mm_timer_pool, timer);
 
 		timer_id = MM_TIMER_ERROR;
@@ -244,14 +244,14 @@ mm_timer_sleep_cleanup(struct mm_timer_resume *timer)
 }
 
 void
-mm_timer_usleep(mm_timeout_t timeout)
+mm_timer_block(mm_timeout_t timeout)
 {
 	ENTER();
 
 	struct mm_timer_resume timer;
 	mm_timeq_entry_init(&timer.entry,
 			    mm_core->time_value + timeout,
-			    MM_TIMER_SLEEP);
+			    MM_TIMER_BLOCK);
 	timer.task = mm_running_task;
 
 	mm_task_cleanup_push(mm_timer_sleep_cleanup, &timer);
