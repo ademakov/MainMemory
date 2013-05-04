@@ -48,7 +48,7 @@ mm_clock_init(void)
 }
 
 mm_timeval_t
-mm_clock_realtime(void)
+mm_clock_gettime_realtime(void)
 {
 	struct timespec ts;
 	(void) clock_gettime(CLOCK_REALTIME, &ts);
@@ -56,7 +56,7 @@ mm_clock_realtime(void)
 }
 
 mm_timeval_t
-mm_clock_monotonic(void)
+mm_clock_gettime_monotonic(void)
 {
 	struct timespec ts;
 	(void) clock_gettime(CLOCK_MONOTONIC, &ts);
@@ -84,7 +84,7 @@ mm_clock_init(void)
 }
 
 mm_timeval_t
-mm_clock_realtime(void)
+mm_clock_gettime_realtime(void)
 {
 	struct timeval tv;
 	(void) gettimeofday(&tv, 0);
@@ -92,7 +92,7 @@ mm_clock_realtime(void)
 }
 
 mm_timeval_t
-mm_clock_monotonic(void)
+mm_clock_gettime_monotonic(void)
 {
 	uint64_t at = mach_absolute_time();
 	return at * mm_abstime_numer / mm_abstime_denom;
@@ -103,3 +103,12 @@ mm_clock_monotonic(void)
 #error "Unsupported platform"
 
 #endif
+
+mm_timeval_t
+mm_clock_gettime(mm_clock_t clock)
+{
+	if (clock == MM_CLOCK_REALTIME)
+		return mm_clock_gettime_realtime();
+	else
+		return mm_clock_gettime_monotonic();
+}

@@ -19,13 +19,21 @@
 
 #include "core.h"
 
-#include "sched.h"
+#include "clock.h"
 #include "port.h"
+#include "sched.h"
 #include "task.h"
+#include "timeq.h"
 #include "work.h"
 #include "util.h"
 
-#define MM_DEFAULT_WORKERS 512
+#define MM_DEFAULT_WORKERS	512
+
+#define MM_PRIO_MASTER		1
+#define MM_PRIO_WORKER		MM_PRIO_DEFAULT
+
+#define MM_TIME_QUEUE_MAX_WIDTH	1000
+#define MM_TIME_QUEUE_MAX_COUNT	2000
 
 __thread struct mm_core *mm_core;
 
@@ -70,6 +78,7 @@ mm_core_worker_start(struct mm_work *work)
 
 	struct mm_task *task = mm_task_create("worker", work->flags,
 					      mm_core_worker, (uintptr_t) work);
+	task->priority = MM_PRIO_WORKER;
 	mm_core->nworkers++;
 	mm_sched_run(task);
 
@@ -109,6 +118,7 @@ mm_core_start_master(struct mm_core *core)
 	ENTER();
 
 	core->master = mm_task_create("master", 0, mm_core_master_loop, 0);
+	core->master->priority = MM_PRIO_MASTER;
 	mm_sched_run(core->master);
 
 	LEAVE();
@@ -136,10 +146,18 @@ mm_core_create(uint32_t nworkers_max)
 	struct mm_core *core = mm_alloc(sizeof(struct mm_core));
 
 	core->master = NULL;
+
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
+
 	mm_runq_init(&core->run_queue);
 	mm_list_init(&core->dead_list);
+
+	core->time_queue = mm_timeq_create();
+	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
+	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
+	core->time_value = mm_clock_gettime_monotonic();
+	core->real_time_value = mm_clock_gettime_realtime();
 
 	LEAVE();
 	return core;
@@ -150,13 +168,14 @@ mm_core_destroy(struct mm_core *core)
 {
 	ENTER();
 
+	mm_timeq_destroy(core->time_queue);
 	mm_free(core);
 
 	LEAVE();
 }
 
 void
-mm_core_init()
+mm_core_init(void)
 {
 	ENTER();
 
@@ -170,7 +189,7 @@ mm_core_init()
 }
 
 void
-mm_core_term()
+mm_core_term(void)
 {
 	ENTER();
 
@@ -202,4 +221,16 @@ mm_core_stop(void)
 	mm_core_stop_master(mm_core);
 
 	LEAVE();
+}
+
+void
+mm_core_update_time(void)
+{
+	mm_core->time_value = mm_clock_gettime_monotonic();
+}
+
+void
+mm_core_update_real_time(void)
+{
+	mm_core->real_time_value = mm_clock_gettime_realtime();
 }

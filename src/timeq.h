@@ -46,19 +46,24 @@ void mm_timeq_set_max_bucket_count(struct mm_timeq *timeq, int n);
 #define MM_TIMEQ_INDEX_FE ((mm_timeq_index_t) -3)
 
 typedef int32_t mm_timeq_index_t;
+typedef int32_t mm_timeq_ident_t;
 
 struct mm_timeq_entry
 {
-    struct mm_list queue;
-    mm_timeq_index_t index;
-    mm_timeval_t value;
+	struct mm_list queue;
+	mm_timeval_t value;
+	mm_timeq_index_t index;
+	mm_timeq_ident_t ident;
 };
 
 static inline void
-mm_timeq_entry_init(struct mm_timeq_entry *entry, mm_timeval_t value)
+mm_timeq_entry_init(struct mm_timeq_entry *entry,
+		    mm_timeval_t value,
+		    mm_timeq_ident_t ident)
 {
 	entry->value = value;
 	entry->index = MM_TIMEQ_INDEX_NO;
+	entry->ident = ident;
 }
 
 void mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry);

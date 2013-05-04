@@ -1,5 +1,5 @@
 /*
- * clock.h - MainMemory time routines.
+ * timer.h - MainMemory timers.
  *
  * Copyright (C) 2013  Aleksey Demakov
  *
@@ -17,20 +17,31 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CLOCK_H
-#define CLOCK_H
+#ifndef TIMER_H
+#define TIMER_H
 
 #include "common.h"
+#include "clock.h"
+#include "task.h"
+#include "timeq.h"
 
-#define MM_CLOCK_REALTIME	((mm_clock_t) 0)
-#define MM_CLOCK_MONOTONIC	((mm_clock_t) 1)
+#define MM_TIMER_ERROR	((mm_timer_t) -1)
+#define MM_TIMER_SLEEP	((mm_timer_t) -2)
 
-typedef int mm_clock_t;
+typedef mm_timeq_ident_t mm_timer_t;
 
-void mm_clock_init(void);
+void mm_timer_init(void);
+void mm_timer_term(void);
 
-mm_timeval_t mm_clock_gettime(mm_clock_t clock);
-mm_timeval_t mm_clock_gettime_realtime(void);
-mm_timeval_t mm_clock_gettime_monotonic(void);
+void mm_timer_tick(void);
 
-#endif /* CLOCK_H */
+mm_timer_t mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
+			   mm_routine start, uintptr_t start_arg);
+void mm_timer_destroy(mm_timer_t timer_id);
+
+void mm_timer_settime(mm_timer_t timer_id, bool abstime,
+		      mm_timeval_t value, mm_timeval_t interval);
+
+void mm_timer_sleep(mm_timeout_t timeout);
+
+#endif /* TIMER_H */

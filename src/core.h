@@ -24,6 +24,10 @@
 #include "list.h"
 #include "runq.h"
 
+/* Forward declaration. */
+struct mm_timeq;
+
+/* Virtual core state. */
 struct mm_core
 {
 	/* The master task. */
@@ -38,14 +42,24 @@ struct mm_core
 
 	/* The list of worker tasks that have finished. */
 	struct mm_list dead_list;
+
+	/* The queue of delayed tasks. */
+	struct mm_timeq *time_queue;
+
+	/* An almost current time value. */
+	mm_timeval_t time_value;
+	mm_timeval_t real_time_value;
 };
 
 extern __thread struct mm_core *mm_core;
 
-void mm_core_init();
-void mm_core_term();
+void mm_core_init(void);
+void mm_core_term(void);
 
 void mm_core_start(void);
 void mm_core_stop(void);
+
+void mm_core_update_time(void);
+void mm_core_update_real_time(void);
 
 #endif /* CORE_H */
