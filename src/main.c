@@ -18,10 +18,12 @@
  */
 
 #include "common.h"
+#include "clock.h"
 #include "core.h"
 #include "event.h"
 #include "future.h"
 #include "net.h"
+#include "timer.h"
 #include "util.h"
 
 #include "memcache/memcache.h"
@@ -78,6 +80,8 @@ mm_init(void)
 
 	/* Initialize subsystems. */
 	mm_signal_init();
+	mm_clock_init();
+	mm_timer_init();
 	mm_core_init();
 	mm_future_init();
 	mm_event_init();
@@ -96,6 +100,7 @@ mm_term(void)
 	mm_event_term();
 	mm_future_term();
 	mm_core_term();
+	mm_timer_term();
 
 	LEAVE();
 }
@@ -135,7 +140,7 @@ mm_server_open(void)
 	mm_ucmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
 	mm_icmd_server = mm_net_create_inet_server("test", "127.0.0.1", 8000);
 
-	mm_net_start_server(mm_ucmd_server, &proto);
+	//mm_net_start_server(mm_ucmd_server, &proto);
 	mm_net_start_server(mm_icmd_server, &proto);
 
 	mm_memcache_init();
@@ -150,7 +155,7 @@ mm_server_close(void)
 
 	mm_memcache_term();
 
-	mm_net_stop_server(mm_ucmd_server);
+	//mm_net_stop_server(mm_ucmd_server);
 	mm_net_stop_server(mm_icmd_server);
 
 	LEAVE();

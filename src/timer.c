@@ -49,8 +49,8 @@ struct mm_timer
 	mm_timeval_t interval;
 };
 
-/* Stripped down timer used just to resume paused task. */
-struct mm_timer_pause
+/* Stripped down timer used just to resume sleeping task. */
+struct mm_timer_resume
 {
 	struct mm_timeq_entry entry;
 
@@ -62,9 +62,9 @@ struct mm_timer_pause
 static struct mm_pool mm_timer_pool;
 
 static bool
-mm_timer_is_armed(struct mm_timer *timer)
+mm_timer_is_armed(struct mm_timeq_entry *entry)
 {
-	return (timer->entry.index == MM_TIMEQ_INDEX_NO);
+	return (entry->index == MM_TIMEQ_INDEX_NO);
 }
 
 static void
@@ -73,8 +73,8 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 	ENTER();
 
 	if (entry->ident == MM_TIMER_SLEEP) {
-		struct mm_timer_pause *pause =
-			containerof(entry, struct mm_timer_pause, entry);
+		struct mm_timer_resume *pause =
+			containerof(entry, struct mm_timer_resume, entry);
 		mm_sched_run(pause->task);
 	} else {
 		struct mm_timer *timer =
@@ -121,7 +121,7 @@ mm_timer_tick(void)
 	mm_core_update_time();
 
 	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
-	while (entry->value <= mm_core->time_value) {
+	while (entry != NULL && entry->value <= mm_core->time_value) {
 		mm_timeq_delete(mm_core->time_queue, entry);
 		mm_timer_fire(entry);
 
@@ -129,6 +129,27 @@ mm_timer_tick(void)
 	}
 
 	LEAVE();
+}
+
+mm_timeval_t
+mm_timer_next(void)
+{
+	ENTER();
+
+	mm_timeval_t value = MM_TIMEVAL_MAX;
+
+	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
+	if (entry != NULL) {
+		mm_core_update_time();
+
+		value = entry->value - mm_core->time_value;
+		if (value < 0) {
+			value = 0;
+		}
+	}
+
+	LEAVE();
+	return value;
 }
 
 mm_timer_t
@@ -170,7 +191,7 @@ mm_timer_destroy(mm_timer_t timer_id)
 	struct mm_timer *timer = mm_pool_idx2ptr(&mm_timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
-	if (mm_timer_is_armed(timer))
+	if (mm_timer_is_armed(&timer->entry))
 		mm_timeq_delete(mm_core->time_queue, &timer->entry);
 
 	mm_pool_free(&mm_timer_pool, timer);
@@ -187,7 +208,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 	struct mm_timer *timer = mm_pool_idx2ptr(&mm_timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
-	if (mm_timer_is_armed(timer))
+	if (mm_timer_is_armed(&timer->entry))
 		mm_timeq_delete(mm_core->time_queue, &timer->entry);
 
 	timer->abstime = abstime;
@@ -216,20 +237,29 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 	LEAVE();
 }
 
+static void
+mm_timer_sleep_cleanup(struct mm_timer_resume *timer)
+{
+	mm_timeq_delete(mm_core->time_queue, &timer->entry);
+}
+
 void
-mm_timer_sleep(mm_timeout_t timeout)
+mm_timer_usleep(mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_timer_pause timer;
+	struct mm_timer_resume timer;
 	mm_timeq_entry_init(&timer.entry,
 			    mm_core->time_value + timeout,
 			    MM_TIMER_SLEEP);
 	timer.task = mm_running_task;
 
-	mm_timeq_insert(mm_core->time_queue, &timer.entry);
+	mm_task_cleanup_push(mm_timer_sleep_cleanup, &timer);
 
+	mm_timeq_insert(mm_core->time_queue, &timer.entry);
 	mm_sched_block();
+
+	mm_task_cleanup_pop(mm_timer_is_armed(&timer.entry));
 
 	LEAVE();
 }

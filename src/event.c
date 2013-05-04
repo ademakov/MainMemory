@@ -23,6 +23,7 @@
 #include "port.h"
 #include "sched.h"
 #include "task.h"
+#include "timer.h"
 #include "util.h"
 
 #include <string.h>
@@ -34,6 +35,9 @@
 #endif
 #include <sys/types.h>
 #include <unistd.h>
+
+// Default event loop timeout - 10 seconds 
+#define MM_EVENT_TIMEOUT 10000000
 
 // Event loop task.
 static struct mm_task *mm_event_task;
@@ -350,9 +354,23 @@ mm_event_dispatch(void)
 		}
 	}
 
+	// Find the event wait timeout.
+	mm_timeval_t timeout; 
+	if (nkevents) {
+		// If event system changes have been requested it is needed to
+		// notify the interested parties on their completion so do not
+		// wait for more events.
+		timeout = 0;
+	} else {
+		timeout = mm_timer_next();
+		if (timeout > MM_EVENT_TIMEOUT) {
+			timeout = MM_EVENT_TIMEOUT;
+		}
+	}
+
 	// Poll the system for events.
 	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX,
-				 sent_msgs ? 0 : 10 * 1000000);
+				 timeout);
 	if (unlikely(nevents < 0)) {
 		mm_error(errno, "epoll_wait");
 		goto done;
@@ -546,14 +564,28 @@ mm_event_dispatch(void)
 		}
 	}
 
+	// Find the event wait timeout.
+	mm_timeval_t timeout; 
+	if (nkevents) {
+		// If event system changes have been requested it is needed to
+		// notify the interested parties on their completion so do not
+		// wait for more events.
+		timeout = 0;
+	} else {
+		timeout = mm_timer_next();
+		if (timeout > MM_EVENT_TIMEOUT) {
+			timeout = MM_EVENT_TIMEOUT;
+		}
+	}
+
 	// Poll the system for events.
-	struct timespec timeout;
-	timeout.tv_sec = nkevents ? 0 : 10;
-	timeout.tv_nsec = 0;
+	struct timespec ts;
+	ts.tv_sec = timeout / 1000000;
+	ts.tv_nsec = 0;
 	int n = kevent(mm_event_kq,
 		       mm_kevents, nkevents,
 		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
-		       &timeout);
+		       &ts);
 	DEBUG("kevent changed: %d, received: %d", nkevents, n);
 
 	// Send REG/UNREG messages.
@@ -641,6 +673,7 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 
 	while (!mm_exit_loop) {
 		mm_event_dispatch();
+		mm_timer_tick();
 		mm_sched_yield();
 	}
 

@@ -35,6 +35,8 @@ void mm_timer_term(void);
 
 void mm_timer_tick(void);
 
+mm_timeval_t mm_timer_next(void);
+
 mm_timer_t mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
 			   mm_routine start, uintptr_t start_arg);
 void mm_timer_destroy(mm_timer_t timer_id);
@@ -42,6 +44,6 @@ void mm_timer_destroy(mm_timer_t timer_id);
 void mm_timer_settime(mm_timer_t timer_id, bool abstime,
 		      mm_timeval_t value, mm_timeval_t interval);
 
-void mm_timer_sleep(mm_timeout_t timeout);
+void mm_timer_usleep(mm_timeout_t timeout);
 
 #endif /* TIMER_H */
