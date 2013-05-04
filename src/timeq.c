@@ -124,12 +124,16 @@ mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	mm_list_insert_prev(fe_queue_link, &entry->queue);
 	entry->index = MM_TIMEQ_INDEX_FE;
 	timeq->fe_num++;
+
+	DEBUG("fe num: %d", timeq->fe_num);
 }
 
 static void
 mm_timeq_insert_t1(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	int index = (entry->value - timeq->t1_start) / timeq->t1_width;
+	DEBUG("index: %d", index);
+
 	mm_list_append(&timeq->t1[index], &entry->queue);
 	entry->index = index;
 }
@@ -140,6 +144,8 @@ mm_timeq_insert_t2(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	mm_list_append(&timeq->t2, &entry->queue);
 	entry->index = MM_TIMEQ_INDEX_T2;
 	timeq->t2_num++;
+
+	DEBUG("t2 num: %d", timeq->t2_num);
 
 	if (timeq->t2_min > entry->value) {
 		timeq->t2_min = entry->value;
