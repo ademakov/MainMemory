@@ -1015,25 +1015,25 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 
 	mm_print("start server '%s'", srv->name);
 
-	/* Store the protocol handlers. */
+	// Store the protocol handlers.
 	srv->proto = proto;
 
-	/* Create the server socket. */
+	// Create the server socket.
 	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
 
-	/* Create the event handler task. */
+	// Create the event handler task.
 	srv->io_task = mm_task_create("net-io", 0, mm_net_io_loop, (intptr_t) srv);
 
-	/* Make the task priority higher. */
+	// Make the task priority higher.
 	srv->io_task->priority /= 2;
 
-	/* Create the event handler port. */
+	// Create the event handler port.
 	srv->io_port = mm_port_create(srv->io_task);
 
-	/* Allocate an event handler ID for the port. */
+	// Allocate an event handler ID for the port.
 	srv->io_handler = mm_event_add_io_handler(MM_EVENT_NET_READ_WRITE, srv->io_port);
 
-	/* Register the server socket with the event loop. */
+	// Register the server socket with the event loop.
 	mm_event_register_fd(srv->fd, mm_net_accept_handler, (uint32_t) mm_net_server_index(srv));
 
 	LEAVE();

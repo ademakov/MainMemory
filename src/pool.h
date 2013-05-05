@@ -22,7 +22,7 @@
 
 #include "common.h"
 
-#define MM_POOL_INDEX_INVALID	0xffffffff
+#define MM_POOL_INDEX_INVALID	((uint32_t) -1)
 
 
 struct mm_pool

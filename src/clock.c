@@ -78,7 +78,7 @@ mm_clock_init(void)
 	ASSERT(timebase_info.denom != 0);
 
 	mm_abstime_numer = timebase_info.numer;
-	mm_abstime_denom = timebase_info.denom * 1000;
+	mm_abstime_denom = timebase_info.denom * 1000LL;
 
 	LEAVE();
 }

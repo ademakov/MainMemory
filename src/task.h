@@ -129,6 +129,9 @@ struct mm_task
 void mm_task_init(void);
 void mm_task_term(void);
 
+struct mm_task * mm_task_create_boot(void);
+void mm_task_destroy_boot(struct mm_task *task);
+
 struct mm_task * mm_task_create(const char *name, mm_task_flags_t flags,
 				mm_routine start, uintptr_t start_arg)
 	__attribute__((nonnull(1, 3)));
@@ -144,6 +147,9 @@ void mm_task_exit(mm_result_t result)
 
 void mm_task_set_name(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
+
+uint32_t mm_task_id(struct mm_task *task)
+	__attribute__((nonnull(1)));
 
 void mm_task_testcancel(void);
 void mm_task_testcancel_asynchronous(void);

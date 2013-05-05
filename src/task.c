@@ -32,6 +32,8 @@
 /* The memory pool for tasks. */
 static struct mm_pool mm_task_pool;
 
+static char mm_task_boot_name[] = "boot";
+
 /**********************************************************************
  * Global task data initialization and termination.
  **********************************************************************/
@@ -107,6 +109,33 @@ mm_task_free_chunks(struct mm_task *task)
 	LEAVE();
 }
 
+/* Create a bootstrap task. */
+struct mm_task *
+mm_task_create_boot(void)
+{
+	ENTER();
+
+	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
+	memset(task, 0, sizeof(struct mm_task));
+	task->state = MM_TASK_RUNNING;
+	task->name = mm_task_boot_name;
+
+	LEAVE();
+	return task;
+}
+
+/* Destroy a bootstrap task. */
+void
+mm_task_destroy_boot(struct mm_task *task)
+{
+	ENTER();
+	ASSERT(task->name == mm_task_boot_name);
+
+	mm_pool_free(&mm_task_pool, task);
+
+	LEAVE();
+}
+
 /* Create a new task. */
 struct mm_task *
 mm_task_create(const char *name, mm_task_flags_t flags,
@@ -169,6 +198,7 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
+	ASSERT(task->name != mm_task_boot_name);
 	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
@@ -254,6 +284,12 @@ mm_task_set_name(struct mm_task *task, const char *name)
 	}
 
 	LEAVE();
+}
+
+uint32_t
+mm_task_id(struct mm_task *task)
+{
+	return mm_pool_ptr2idx(&mm_task_pool, task);
 }
 
 /**********************************************************************
