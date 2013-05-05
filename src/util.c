@@ -73,7 +73,7 @@ mm_exit(int status)
 }
 
 /**********************************************************************
- * Logging Routines.
+ * Basic Logging Routines.
  **********************************************************************/
 
 static void
@@ -103,14 +103,56 @@ mm_flush(void)
 	fflush(stderr);
 }
 
+/**********************************************************************
+ * Basic Tracing Routines.
+ **********************************************************************/
+
+#if ENABLE_TRACE
+
+static int mm_trace_level;
+
+static void
+mm_trace_level_add(int level)
+{
+	if (mm_running_task != NULL)
+		mm_running_task->trace_level += level;
+	else
+		mm_trace_level += level;
+}
+
+static void
+mm_prefix(void)
+{
+	if (likely(mm_running_task != NULL)) {
+# if HAVE_MM_TASK_ID
+		mm_printf("[%d][%s] %*s",
+			  mm_task_id(mm_running_task),
+			  mm_running_task->name,
+			  mm_running_task->trace_level * 2, "");
+# else
+		mm_printf("[%s] %*s",
+			  mm_running_task->name,
+			  mm_running_task->trace_level * 2, "");
+# endif
+	} else {
+		mm_printf("%*s", mm_trace_level * 2, "");
+	}
+}
+
+#else
+
+#define mm_prefix() ((void) 0)
+
+#endif
+
+/**********************************************************************
+ * Logging Routines.
+ **********************************************************************/
+
 void
 mm_print(const char *restrict msg, ...)
 {
-#if ENABLE_TRACE
-	mm_printf("[%s] %*s",
-		  mm_running_task->name,
-		  mm_running_task->trace_level * 2, "");
-#endif
+	mm_prefix();
 
 	va_list va;
 	va_start(va, msg);
@@ -123,6 +165,8 @@ mm_print(const char *restrict msg, ...)
 void
 mm_error(int error, const char *restrict msg, ...)
 {
+	mm_prefix();
+
 	va_list va;
 	va_start(va, msg);
 	mm_vprintf(msg, va);
@@ -138,6 +182,8 @@ mm_error(int error, const char *restrict msg, ...)
 void
 mm_fatal(int error, const char *restrict msg, ...)
 {
+	mm_prefix();
+
 	va_list va;
 	va_start(va, msg);
 	mm_vprintf(msg, va);
@@ -245,17 +291,18 @@ mm_free(void *ptr)
  * Debug & Trace Utilities.
  **********************************************************************/
 
+static void
+mm_location(const char *file, int line, const char *func)
+{
+	mm_prefix();
+	mm_printf("%s(%s:%d): ", func, file, line);
+}
+
 void
 mm_abort(const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
-#if ENABLE_TRACE
-	mm_printf("[%s] %*s%s(%s:%d): ",
-		  mm_running_task->name,
-		  mm_running_task->trace_level * 2, "", func, file, line);
-#else
-	mm_printf("%s(%s:%d): ", func, file, line);
-#endif
+	mm_location(file, line, func);
 
 	va_list va;
 	va_start(va, msg);
@@ -278,13 +325,7 @@ void
 mm_debug(const char *file, int line, const char *func,
 	 const char *restrict msg, ...)
 {
-#if ENABLE_TRACE
-	mm_printf("[%s] %*s%s(%s:%d): ",
-		  mm_running_task->name,
-		  mm_running_task->trace_level * 2, "", func, file, line);
-#else
-	mm_printf("%s(%s:%d): ", func, file, line);
-#endif
+	mm_location(file, line, func);
 
 	va_list va;
 	va_start(va, msg);
@@ -302,12 +343,11 @@ void
 mm_trace(int level, const char *file, int line, const char *func, 
 	 const char *restrict msg, ...)
 {
-	if (level < 0)
-		mm_running_task->trace_level += level;
+	if (level < 0) {
+		mm_trace_level_add(level);
+	}
 
-	mm_printf("[%s] %*s%s(%s:%d): ",
-		  mm_running_task->name,
-		  mm_running_task->trace_level * 2, "", func, file, line);
+	mm_location(file, line, func);
 
 	va_list va;
 	va_start(va, msg);
@@ -316,8 +356,9 @@ mm_trace(int level, const char *file, int line, const char *func,
 
 	mm_newline();
 
-	if (level > 0)
-		mm_running_task->trace_level += level;
+	if (level > 0) {
+		mm_trace_level_add(level);
+	}
 }
 
 #endif
