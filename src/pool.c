@@ -90,8 +90,8 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item)
 {
 	uint32_t block = 0;
 	while (block < pool->block_array_used
-	       && ((char *) item) < pool->block_array[block]
-	       && (char *) item >= pool->block_array[block] + MM_POOL_BLOCK_SIZE)
+	       && ((char *) item < pool->block_array[block]
+		   || (char *) item >= pool->block_array[block] + MM_POOL_BLOCK_SIZE))
 		++block;
 
 	if (unlikely(block == pool->block_array_used))
