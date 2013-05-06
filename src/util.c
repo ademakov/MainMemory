@@ -124,7 +124,7 @@ static void
 mm_prefix(void)
 {
 	if (likely(mm_running_task != NULL)) {
-		mm_printf("[%d][%s] %*s",
+		mm_printf("[%d %s] %*s",
 			  mm_task_id(mm_running_task),
 			  mm_running_task->name,
 			  mm_running_task->trace_level * 2, "");
