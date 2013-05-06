@@ -414,7 +414,7 @@ mm_task_cancel(struct mm_task *task)
 		ASSERT(task == mm_running_task);
 		mm_task_testcancel_asynchronous();
 	} else {
-		mm_sched_run(task);
+		mm_task_wakeup(task);
 	}
 
 	LEAVE();
@@ -424,14 +424,14 @@ mm_task_cancel(struct mm_task *task)
  * Task event waiting.
  **********************************************************************/
 
-/* Wait queue cleanup handler. */
+/* Delete a task from a wait queue. */
 static void
-mm_task_wait_cleanup(struct mm_list *queue __attribute__((unused)))
+mm_task_wait_delete(struct mm_task *task)
 {
-	ASSERT((mm_running_task->flags & MM_TASK_WAITING) != 0);
+	ASSERT((task->flags & MM_TASK_WAITING) != 0);
 
-	mm_list_delete(&mm_running_task->queue);
-	mm_running_task->flags &= ~MM_TASK_WAITING;
+	mm_list_delete(&task->queue);
+	task->flags &= ~MM_TASK_WAITING;
 }
 
 /* Wait for a wakeup signal in the FIFO order. */
@@ -445,14 +445,14 @@ mm_task_wait_fifo(struct mm_list *queue)
 	mm_running_task->flags |= MM_TASK_WAITING;
 	mm_list_append(queue, &mm_running_task->queue);
 
-	// Ensure dequeuing on exit.
-	mm_task_cleanup_push(mm_task_wait_cleanup, queue);
+	// Ensure dequeuing on exit & cancel.
+	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
 
 	// Wait for a wakeup signal.
 	mm_sched_block();
 
 	// Dequeue on return.
-	mm_task_cleanup_pop(true);
+	mm_task_cleanup_pop((mm_running_task->flags & MM_TASK_WAITING) != 0);
 
 	LEAVE();
 }
@@ -468,14 +468,14 @@ mm_task_wait_lifo(struct mm_list *queue)
 	mm_running_task->flags |= MM_TASK_WAITING;
 	mm_list_insert(queue, &mm_running_task->queue);
 
-	// Ensure dequeuing on exit.
-	mm_task_cleanup_push(mm_task_wait_cleanup, queue);
+	// Ensure dequeuing on exit & cancel.
+	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
 
 	// Wait for a wakeup signal.
 	mm_sched_block();
 
 	// Dequeue on return.
-	mm_task_cleanup_pop(true);
+	mm_task_cleanup_pop((mm_running_task->flags & MM_TASK_WAITING) != 0);
 
 	LEAVE();
 }
@@ -489,6 +489,7 @@ mm_task_signal(struct mm_list *queue)
 	if (!mm_list_empty(queue)) {
 		struct mm_list *link = mm_list_head(queue);
 		struct mm_task *task = containerof(link, struct mm_task, queue);
+		mm_task_wait_delete(task);
 		mm_sched_run(task);
 	}
 
@@ -501,12 +502,25 @@ mm_task_broadcast(struct mm_list *queue)
 {
 	ENTER();
 
-	struct mm_list *link = queue;
-	while (mm_list_has_next(queue, link)) {
-		link = link->next;
+	while (!mm_list_empty(queue)) {
+		struct mm_list *link = mm_list_head(queue);
 		struct mm_task *task = containerof(link, struct mm_task, queue);
+		mm_task_wait_delete(task);
 		mm_sched_run(task);
 	}
+
+	LEAVE();
+}
+
+void
+mm_task_wakeup(struct mm_task *task)
+{
+	ENTER();
+
+	if ((task->flags & MM_TASK_WAITING) != 0)
+		mm_task_wait_delete(task);
+
+	mm_sched_run(task);
 
 	LEAVE();
 }

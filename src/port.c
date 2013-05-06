@@ -31,9 +31,7 @@
 static void
 mm_port_block_on_send(struct mm_port *port)
 {
-	mm_running_task->blocked_on = port;
 	mm_task_wait_fifo(&port->blocked_senders);
-	mm_running_task->blocked_on = NULL;
 }
 
 static void

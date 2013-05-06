@@ -168,6 +168,9 @@ void mm_task_wait_lifo(struct mm_list *queue);
 void mm_task_signal(struct mm_list *queue);
 void mm_task_broadcast(struct mm_list *queue);
 
+void mm_task_wakeup(struct mm_task *task)
+	__attribute__((nonnull(1)));
+
 void * mm_task_alloc(size_t size)
 	__attribute__((malloc));
 

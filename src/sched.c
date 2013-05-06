@@ -73,6 +73,11 @@ mm_sched_run(struct mm_task *task)
 	TRACE("enqueue task: %s %d", task->name, task->state);
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
+	// As both the run and the wait queues use the same field for linking
+	// running a task without dequeuing it from a wait queue would result
+	// in the data corruption.
+	ASSERT((task->flags & MM_TASK_WAITING) == 0);
+
 	if (task->state != MM_TASK_PENDING) {
 		mm_runq_put_task(&mm_core->run_queue, task);
 		task->state = MM_TASK_PENDING;
