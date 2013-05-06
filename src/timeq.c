@@ -248,11 +248,15 @@ restart:
 
 			/* All buckets are empty, move all items in T1 (as much as allowed) */
 			mm_timeval_t width = (timeq->t2_max - timeq->t2_min) / timeq->t2_num;
-			if (timeq->t1_width_max && width > timeq->t1_width_max)
+			if (width == 0)
+				width = 1;
+			else if (timeq->t1_width_max && width > timeq->t1_width_max)
 				width = timeq->t1_width_max;
 
 			int count = (timeq->t2_max - timeq->t2_min) / width;
-			if (timeq->t1_count_max && count > timeq->t1_count_max)
+			if (count == 0)
+				count = 0;
+			else if (timeq->t1_count_max && count > timeq->t1_count_max)
 				count = timeq->t1_count_max;
 
 			if (timeq->t1_count < count) {
