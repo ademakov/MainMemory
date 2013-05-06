@@ -1,6 +1,6 @@
 
 ASAP:
-* add timers and task sleep and support socket timeout
+* fix current bugs
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
 ** ensure socket & server object destruction
@@ -24,7 +24,7 @@ Essentials:
 * daemonize
 * statistics
 * performance instrumentation
-* finish memcache module:
+* refine and finish memcache module:
 ** eviction
 ** expiration
 ** statistics
@@ -44,6 +44,7 @@ Enhancements:
 * task fork/join
 * task local storage (tls)
 * reap dead tasks pending for too long
+* try to detect clock adjustments and reset realtime timers accordingly
 * memory management:
 ** use separate mspace for task local dynamic memory ?
 ** slab allocator (to base object pools on)
