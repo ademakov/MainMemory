@@ -49,7 +49,7 @@ struct mm_timer
 	mm_timeval_t interval;
 };
 
-/* Stripped down timer used just to resume sleeping task. */
+/* Stripped down timer used just to resume a sleeping task. */
 struct mm_timer_resume
 {
 	struct mm_timeq_entry entry;
@@ -73,9 +73,9 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 	ENTER();
 
 	if (entry->ident == MM_TIMER_BLOCK) {
-		struct mm_timer_resume *pause =
+		struct mm_timer_resume *resume =
 			containerof(entry, struct mm_timer_resume, entry);
-		mm_sched_run(pause->task);
+		mm_sched_run(resume->task);
 	} else {
 		struct mm_timer *timer =
 			containerof(entry, struct mm_timer, entry);
