@@ -18,12 +18,10 @@
  */
 
 #include "common.h"
-#include "clock.h"
 #include "core.h"
 #include "event.h"
 #include "future.h"
 #include "net.h"
-#include "timer.h"
 #include "util.h"
 
 #include "memcache/memcache.h"
@@ -80,8 +78,6 @@ mm_init(void)
 
 	/* Initialize subsystems. */
 	mm_signal_init();
-	mm_clock_init();
-	mm_timer_init();
 	mm_core_init();
 	mm_future_init();
 	mm_event_init();
@@ -100,7 +96,6 @@ mm_term(void)
 	mm_event_term();
 	mm_future_term();
 	mm_core_term();
-	mm_timer_term();
 
 	LEAVE();
 }

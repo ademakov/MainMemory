@@ -37,11 +37,11 @@ struct mm_core
 	uint32_t nworkers;
 	uint32_t nworkers_max;
 
+	/* The flag indicating that a master sleeps waiting for a worker. */
+	bool master_waits_worker;
+
 	/* The queue of ready to run tasks. */
 	struct mm_runq run_queue;
-
-	/* The list of worker tasks that have finished. */
-	struct mm_list dead_list;
 
 	/* The queue of delayed tasks. */
 	struct mm_timeq *time_queue;
@@ -49,6 +49,12 @@ struct mm_core
 	/* An almost current time value. */
 	mm_timeval_t time_value;
 	mm_timeval_t real_time_value;
+
+	/* The bootstrap task. */
+	struct mm_task *boot;
+
+	/* The list of worker tasks that have finished. */
+	struct mm_list dead_list;
 };
 
 extern __thread struct mm_core *mm_core;

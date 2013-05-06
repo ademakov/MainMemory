@@ -24,6 +24,7 @@
 #include "sched.h"
 #include "task.h"
 #include "timeq.h"
+#include "timer.h"
 #include "work.h"
 #include "util.h"
 
@@ -45,7 +46,10 @@ static void
 mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
 	mm_core->nworkers--;
-	mm_sched_run(mm_core->master);
+
+	if (mm_core->master_waits_worker) {
+		mm_sched_run(mm_core->master);
+	}
 }
 
 static mm_result_t
@@ -90,21 +94,24 @@ mm_core_worker_start(struct mm_work *work)
  **********************************************************************/
 
 static mm_result_t
-mm_core_master_loop(uintptr_t arg __attribute__((unused)))
+mm_core_master_loop(uintptr_t arg)
 {
 	ENTER();
+
+	struct mm_core *core = (struct mm_core *) arg;
 
 	for (;;) {
 		mm_task_testcancel();
 
-		if (mm_core->nworkers == mm_core->nworkers_max) {
+		if (core->nworkers == core->nworkers_max) {
+			core->master_waits_worker = true;
 			mm_sched_block();
-			continue;
-		}
-
-		struct mm_work *work = mm_work_get();
-		if (likely(work != NULL)) {
-			mm_core_worker_start(work);
+			core->master_waits_worker = false;
+		} else {
+			struct mm_work *work = mm_work_get();
+			if (likely(work != NULL)) {
+				mm_core_worker_start(work);
+			}
 		}
 	}
 
@@ -117,7 +124,7 @@ mm_core_start_master(struct mm_core *core)
 {
 	ENTER();
 
-	core->master = mm_task_create("master", 0, mm_core_master_loop, 0);
+	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
 	mm_sched_run(core->master);
 
@@ -149,15 +156,19 @@ mm_core_create(uint32_t nworkers_max)
 
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
+	core->master_waits_worker = false;
 
 	mm_runq_init(&core->run_queue);
-	mm_list_init(&core->dead_list);
 
 	core->time_queue = mm_timeq_create();
 	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 	core->time_value = mm_clock_gettime_monotonic();
 	core->real_time_value = mm_clock_gettime_realtime();
+
+	core->boot = mm_task_create_boot();
+
+	mm_list_init(&core->dead_list);
 
 	LEAVE();
 	return core;
@@ -168,6 +179,7 @@ mm_core_destroy(struct mm_core *core)
 {
 	ENTER();
 
+	mm_task_destroy_boot(core->boot);
 	mm_timeq_destroy(core->time_queue);
 	mm_free(core);
 
@@ -179,11 +191,14 @@ mm_core_init(void)
 {
 	ENTER();
 
-	mm_core = mm_core_create(MM_DEFAULT_WORKERS);
+	mm_clock_init();
+	mm_timer_init();
 
 	mm_work_init();
 	mm_task_init();
 	mm_port_init();
+
+	mm_core = mm_core_create(MM_DEFAULT_WORKERS);
 
 	LEAVE();
 }
@@ -193,11 +208,13 @@ mm_core_term(void)
 {
 	ENTER();
 
+	mm_core_destroy(mm_core);
+
 	mm_task_term();
 	mm_work_term();
 	mm_port_term();
 	
-	mm_core_destroy(mm_core);
+	mm_timer_term();
 
 	LEAVE();
 }
@@ -227,10 +244,12 @@ void
 mm_core_update_time(void)
 {
 	mm_core->time_value = mm_clock_gettime_monotonic();
+	DEBUG("%lld", (long long) mm_core->time_value);
 }
 
 void
 mm_core_update_real_time(void)
 {
 	mm_core->real_time_value = mm_clock_gettime_realtime();
+	DEBUG("%lld", (long long) mm_core->real_time_value);
 }
