@@ -995,10 +995,31 @@ mc_release_buffers(struct mc_state *state, const char *ptr)
  * I/O Routines.
  **********************************************************************/
 
+static bool
+mc_read_hangup(ssize_t n, int error)
+{
+	ASSERT(n <= 0);
+
+	if (n < 0) {
+		if (error == EAGAIN)
+			return false;
+		if (error == EWOULDBLOCK)
+			return false;
+		if (error == ETIMEDOUT)
+			return false;
+		if (error == EINTR)
+			return false;
+	}
+
+	return true;
+}
+
 static ssize_t
-mc_read(struct mc_state *state, size_t required, size_t optional)
+mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
 {
 	ENTER();
+
+	*hangup = false;
 
 	size_t total = required + optional;
 	size_t count = total;
@@ -1019,6 +1040,7 @@ mc_read(struct mc_state *state, size_t required, size_t optional)
 
 		ssize_t n = mm_net_read(state->sock, buffer->data + buffer->used, size);
 		if (n <= 0) {
+			*hangup = mc_read_hangup(n, errno);
 			break;
 		}
 
@@ -2004,8 +2026,9 @@ mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 		}
 
 		if (!mc_shift_input(parser)) {
+			bool hangup;
 			ssize_t r = bytes + 1;
-			ssize_t n = mc_read(parser->state, r, cr);
+			ssize_t n = mc_read(parser->state, r, cr, &hangup);
 			if (n < r) {
 				parser->command->result_type = MC_RESULT_QUIT;
 				rc = false;
@@ -2620,26 +2643,7 @@ done:
  * Protocol Handlers.
  **********************************************************************/
 
-#define MC_READ_TIMEOUT		500
-
-static bool
-mc_read_hangup(ssize_t n, int error)
-{
-	ASSERT(n <= 0);
-
-	if (n < 0) {
-		if (error == EAGAIN)
-			return false;
-		if (error == EWOULDBLOCK)
-			return false;
-		if (error == ETIMEDOUT)
-			return false;
-		if (error == EINTR)
-			return false;
-	}
-
-	return true;
-}
+#define MC_READ_TIMEOUT		10000
 
 static bool
 mc_transmit_result(struct mm_net_socket *sock,
@@ -2768,14 +2772,15 @@ mc_reader_routine(struct mm_net_socket *sock)
 	}
 
 	// Try to get some input w/o blocking.
+	bool hangup;
 	mm_net_set_nonblock(state->sock);
-	ssize_t n = mc_read(state, 1, 0);
+	ssize_t n = mc_read(state, 1, 0, &hangup);
 	mm_net_clear_nonblock(state->sock);
 
 	// Get out if there is no input available.
 	if (n <= 0) {
 		// If the socket is closed queue a quit command.
-		if (mc_read_hangup(n, errno)) {
+		if (hangup) {
 			struct mc_command *command = mc_command_create();
 			command->result_type = MC_RESULT_QUIT;
 			command->end_ptr = state->start_ptr;
@@ -2809,12 +2814,13 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 		// The input is incomplete, try to get some more.
 		mm_net_set_timeout(state->sock, MC_READ_TIMEOUT);
-		n = mc_read(state, 1, 0);
-		mm_net_set_timeout(state->sock, MM_TIMEOUT_INFINITE);
+		n = mc_read(state, 1, 0, &hangup);
+		mm_net_set_timeout(state->sock, 0);
 
 		// Get out if there is no more input.
 		if (n <= 0) {
-			if (mc_read_hangup(n, errno)) {
+ 			if (hangup) {
+				DEBUG("n: %d, errno: %d %s", (int) n, errno, strerror(errno));
 				parser.command->result_type = MC_RESULT_QUIT;
 				parser.command->end_ptr = parser.start_ptr;
 				mc_process_command(state, parser.command);
