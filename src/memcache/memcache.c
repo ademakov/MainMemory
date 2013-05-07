@@ -1848,9 +1848,9 @@ retry:
 		if (c == ' ' || (c == '\r' && mc_peek_input(parser, s, e) == '\n') || c == '\n') {
 			int count = s - parser->start_ptr;
 			if (required && count == 0) {
-				mc_parse_error(parser, "CLIENT_ERROR missing parameter\r\n");
+				rc = mc_parse_error(parser, "CLIENT_ERROR missing parameter\r\n");
 			} else if (count > MC_KEY_LEN_MAX) {
-				mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
+				rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
 			} else {
 				value->len = count;
 				value->str = parser->start_ptr;
@@ -1868,7 +1868,7 @@ retry:
 
 	int count = e - parser->start_ptr;
 	if (count > MC_KEY_LEN_MAX) {
-		mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
+		rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
 	} else if (parser->buffer->used < parser->buffer->size) {
 		rc = false;
 	} else {
@@ -1892,7 +1892,7 @@ mc_parse_u32(struct mc_parser *parser, uint32_t *value)
 		char *endp;
 		unsigned long v = strtoul(param.str, &endp, 10);
 		if (endp < param.str + param.len) {
-			mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
+			rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
 		} else {
 			*value = v;
 		}
@@ -1913,7 +1913,7 @@ mc_parse_u64(struct mc_parser *parser, uint64_t *value)
 		char *endp;
 		unsigned long long v = strtoull(param.str, &endp, 10);
 		if (endp < param.str + param.len) {
-			mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
+			rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
 		} else {
 			*value = v;
 		}
@@ -2092,7 +2092,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else {
 				/* Unexpected line end. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2170,7 +2170,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			default:
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 #undef C
@@ -2181,7 +2181,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else {
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2205,7 +2205,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto done;
 			} else {
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2222,7 +2222,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else {
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2232,7 +2232,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else {
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2249,7 +2249,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else {
 				/* Unexpected char. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 
@@ -2258,7 +2258,7 @@ mc_parse_command(struct mc_parser *parser)
 				if (unlikely(c == 0)) {
 					/* Hmm, zero byte in the input. */
 					parser->start_ptr = s;
-					mc_parse_error(parser, "ERROR\r\n");
+					rc = mc_parse_error(parser, "ERROR\r\n");
 					goto done;
 				}
 				/* So far so good. */
@@ -2266,7 +2266,7 @@ mc_parse_command(struct mc_parser *parser)
 				goto next;
 			} else if (*cmd_rest != 0) {
 				/* Unexpected char in the command name. */
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			} else if (c == ' ') {
 				/* Success. */
@@ -2279,7 +2279,7 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected char after the command name. */
 				parser->start_ptr = s;
-				mc_parse_error(parser, "ERROR\r\n");
+				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto done;
 			}
 		}
@@ -2517,7 +2517,7 @@ mc_parse_flush_all(struct mc_parser *parser)
 			if (param.len == 7 && memcmp(param.str, "noreply", 7) == 0) {
 				noreply = true;
 			} else {
-				mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
+				rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
 				goto done;
 			}
 		} else {
