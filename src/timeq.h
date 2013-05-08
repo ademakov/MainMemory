@@ -34,7 +34,9 @@ struct mm_timeq * mm_timeq_create(void);
 
 void mm_timeq_destroy(struct mm_timeq *timeq);
 
+void mm_timeq_set_min_bucket_width(struct mm_timeq *timeq, mm_timeval_t n);
 void mm_timeq_set_max_bucket_width(struct mm_timeq *timeq, mm_timeval_t n);
+void mm_timeq_set_min_bucket_count(struct mm_timeq *timeq, int n);
 void mm_timeq_set_max_bucket_count(struct mm_timeq *timeq, int n);
 
 /**********************************************************************
