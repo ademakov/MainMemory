@@ -33,7 +33,7 @@
 #define MM_PRIO_MASTER		1
 #define MM_PRIO_WORKER		MM_PRIO_DEFAULT
 
-#define MM_TIME_QUEUE_MAX_WIDTH	1000
+#define MM_TIME_QUEUE_MAX_WIDTH	500
 #define MM_TIME_QUEUE_MAX_COUNT	2000
 
 __thread struct mm_core *mm_core;

@@ -22,7 +22,7 @@
 #include "util.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1
-#define MM_TIMEQ_T1_COUNT_MIN	32
+#define MM_TIMEQ_T1_COUNT_MIN	4
 
 /*
  * The algorithm here is similar to the one described in the following paper:
@@ -144,17 +144,19 @@ mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	entry->index = MM_TIMEQ_INDEX_FE;
 	timeq->fe_num++;
 
-	DEBUG("fe num: %d", timeq->fe_num);
+	DEBUG("entry: %p, fe num: %d", entry, timeq->fe_num);
 }
 
 static void
 mm_timeq_insert_t1(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
-	int index = (entry->value - timeq->t1_start) / timeq->t1_width;
-	DEBUG("index: %d", index);
+	int index = timeq->t1_index + (entry->value - timeq->t1_start) / timeq->t1_width;
+	ASSERT(index < timeq->t1_count);
 
 	mm_list_append(&timeq->t1[index], &entry->queue);
 	entry->index = index;
+
+	DEBUG("entry: %p, t1 index: %d", entry, index);
 }
 
 static void
@@ -164,14 +166,14 @@ mm_timeq_insert_t2(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	entry->index = MM_TIMEQ_INDEX_T2;
 	timeq->t2_num++;
 
-	DEBUG("t2 num: %d", timeq->t2_num);
-
 	if (timeq->t2_min > entry->value) {
 		timeq->t2_min = entry->value;
 	}
 	if (timeq->t2_max < entry->value) {
 		timeq->t2_max = entry->value;
 	}
+
+	DEBUG("entry: %p, t2 num: %d", entry, timeq->t2_num);
 }
 
 void
@@ -179,7 +181,6 @@ mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	ENTER();
 	ASSERT(entry->index == MM_TIMEQ_INDEX_NO);
-	DEBUG("timeq: %p", entry);
 
 	if (timeq->t2_start <= entry->value) {
 		mm_timeq_insert_t2(timeq, entry);
@@ -196,6 +197,7 @@ void
 mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	ENTER();
+	DEBUG("entry: %p", entry);
 	ASSERT(entry->index != MM_TIMEQ_INDEX_NO);
 
 	if (entry->index == MM_TIMEQ_INDEX_FE) {
@@ -230,6 +232,7 @@ restart:
 		while (timeq->t1_index < timeq->t1_count
 		       && mm_list_empty(&timeq->t1[timeq->t1_index])) {
 			timeq->t1_index++;
+			timeq->t1_start += timeq->t1_width;
 		}
 
 		if (timeq->t1_index < timeq->t1_count) {
@@ -241,12 +244,17 @@ restart:
 			/* If the bucket has exactly one item, return the item. */
 			/* In other case, move all items in front end structure. */
 			if (head == tail) {
+
 				entry = containerof(head, struct mm_timeq_entry, queue);
-				DEBUG("t1 entry: %p, index: %d", entry, timeq->t1_index);
+				DEBUG("entry: %p, t1 index: %d", entry, timeq->t1_index);
+
 			} else {
+				DEBUG("cleave t1 index: %d", timeq->t1_index);
+
 				timeq->t1_index++;
+				timeq->t1_start += timeq->t1_width;
+
 				mm_list_cleave(head, tail);
-				DEBUG("t1 cleave");
 
 				for (;;) {
 					struct mm_list *next = head->next;

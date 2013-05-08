@@ -1,6 +1,12 @@
 
 ASAP:
-* fix current bugs
+* devise generic net buffer mechanism
+* worker threads, multi-threaded task & work schedulers
+* network input handling now takes the following path:
+  event-loop task -> net I/O task -> master task -> worker (reader) task
+  Then transmitting the response might take he following path:
+  worker (reader) task -> net I/O task (mm_net_spawn_writer) -> master task -> worker (writer) task
+  Test the performance of this lengthy path and optimize if needed.
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
 ** ensure socket & server object destruction
@@ -9,9 +15,7 @@ ASAP:
 ** ensure safe task & port objects destruction (refcount? capabilities?)
 
 Essentials:
-* devise generic net buffer mechanism
 * resolve socket close issues: time wait
-* worker threads, multi-threaded task & work schedulers
 * support signals
 * UDP servers
 * SSL servers
@@ -34,11 +38,6 @@ Essentials:
 ** add binary protocol support
 ** use multi-threaded workers
 * HTTP module
-* network input handling now takes the following path:
-  event-loop task -> net I/O task -> master task -> worker (reader) task
-  Then transmitting the response might take he following path:
-  worker (reader) task -> net I/O task (mm_net_spawn_writer) -> master task -> worker (writer) task
-  Test the performance of this lengthy path and optimize if needed.
 
 Enhancements:
 * task fork/join
