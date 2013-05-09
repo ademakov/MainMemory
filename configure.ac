@@ -54,6 +54,13 @@ AC_SEARCH_LIBS(clock_gettime, rt)
 
 dnl Check command line arguments
 
+AC_ARG_ENABLE([smp],
+	[AS_HELP_STRING([--enable-smp], [enable SMP (default=no)])],
+	[smp="$enableval"], [smp=no])
+if test "x$smp" = "xyes"; then
+	AC_DEFINE([ENABLE_SMP], 1, [Define to 1 to enable SMP.])
+fi
+
 AC_ARG_ENABLE([debug],
 	[AS_HELP_STRING([--enable-debug], [enable debug run-time checks (default=no)])],
 	[debug="$enableval"], [debug=no])
