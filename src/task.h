@@ -24,6 +24,9 @@
 #include "arch.h"
 #include "list.h"
 
+/* Maximal task name length (including terminating zero). */
+#define MM_TASK_NAME_SIZE	40
+
 /* Canceled task execution result. */
 #define MM_TASK_CANCELED	((mm_result_t) -1)
 /* Unfinished task execution result. */
@@ -119,7 +122,7 @@ struct mm_task
 	mm_result_t result;
 
 	/* The task name. */
-	char *name;
+	char name[MM_TASK_NAME_SIZE];
 
 #if ENABLE_TRACE
 	int trace_level;

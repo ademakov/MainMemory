@@ -29,10 +29,12 @@
 
 #define MM_TASK_STACK_SIZE (28 * 1024)
 
-/* The memory pool for tasks. */
+// The memory pool for tasks.
 static struct mm_pool mm_task_pool;
 
+// Special task mames.
 static char mm_task_boot_name[] = "boot";
+static char mm_task_dead_name[] = "dead";
 
 /**********************************************************************
  * Global task data initialization and termination.
@@ -118,7 +120,9 @@ mm_task_create_boot(void)
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
 	memset(task, 0, sizeof(struct mm_task));
 	task->state = MM_TASK_RUNNING;
-	task->name = mm_task_boot_name;
+
+	ASSERT(sizeof task->name > sizeof mm_task_boot_name);
+	strcpy(task->name, mm_task_boot_name);
 
 	LEAVE();
 	return task;
@@ -129,7 +133,6 @@ void
 mm_task_destroy_boot(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->name == mm_task_boot_name);
 
 	mm_pool_free(&mm_task_pool, task);
 
@@ -148,9 +151,6 @@ mm_task_create(const char *name, mm_task_flags_t flags,
 	if (mm_list_empty(&mm_core->dead_list)) {
 		/* Allocate a new task. */
 		task = mm_pool_alloc(&mm_task_pool);
-
-		/* Initialize the task name. */
-		task->name = NULL;
 
 		/* Allocate the task stack. */
 		task->stack_size = MM_TASK_STACK_SIZE;
@@ -198,7 +198,6 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->name != mm_task_boot_name);
 	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
@@ -212,7 +211,6 @@ mm_task_destroy(struct mm_task *task)
 
 	/* Free the dynamic memory. */
 	mm_task_free_chunks(task);
-	mm_free(task->name);
 
 	/* Free the stack. */
 	mm_stack_destroy(task->stack_base, MM_TASK_STACK_SIZE);
@@ -232,6 +230,9 @@ mm_task_recycle(struct mm_task *task)
 	ENTER();
 	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
+
+	ASSERT(sizeof task->name > sizeof mm_task_dead_name);
+	strcpy(task->name, mm_task_dead_name);
 
 	mm_list_append(&mm_core->dead_list, &task->queue);
 
@@ -270,17 +271,13 @@ mm_task_set_name(struct mm_task *task, const char *name)
 	ENTER();
 
 	if (likely(name != NULL)) {
-		if (task->name != NULL) {
-			if (strcmp(task->name, name) != 0) {
-				mm_free(task->name);
-				task->name = mm_strdup(name);
-			}
-		} else {
-			task->name = mm_strdup(name);
-		}
-	} else if (task->name != NULL) {
-		mm_free(task->name);
-		task->name = NULL;
+		size_t len = strlen(name);
+		if (len >= sizeof task->name)
+			len = sizeof task->name - 1;
+		memcpy(task->name, name, len);
+		task->name[len] = 0;
+	} else {
+		task->name[0] = 0;
 	}
 
 	LEAVE();
