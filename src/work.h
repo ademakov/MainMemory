@@ -33,7 +33,7 @@ struct mm_work
 	/* The work task flags. */
 	mm_task_flags_t flags;
 	/* The work routine. */
-	mm_routine routine;
+	mm_routine_t routine;
 	/* The work item. */
 	uintptr_t item;
 };
@@ -42,15 +42,15 @@ struct mm_work
 void mm_work_init(void);
 void mm_work_term(void);
 
-struct mm_work * mm_work_create(mm_task_flags_t flags, mm_routine routine, uintptr_t item);
+struct mm_work * mm_work_create(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item);
 void mm_work_destroy(struct mm_work *work);
 
 struct mm_work * mm_work_get(void);
 
 void mm_work_put(struct mm_work *work);
 
-void mm_work_add(mm_task_flags_t flags, mm_routine routine, uintptr_t item);
+void mm_work_add(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item);
 
-void mm_work_addv(mm_task_flags_t flags, mm_routine routine, uintptr_t *items, size_t nitems);
+void mm_work_addv(mm_task_flags_t flags, mm_routine_t routine, uintptr_t *items, size_t nitems);
 
 #endif /* WORK_H */

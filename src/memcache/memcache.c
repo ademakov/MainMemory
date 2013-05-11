@@ -686,7 +686,7 @@ struct mc_command_desc
 {
 	const char *name;
 	mc_parse_routine parse;
-	mm_routine process;
+	mm_routine_t process;
 	mc_destroy_routine destroy;
 };
 

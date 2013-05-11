@@ -42,7 +42,7 @@ struct mm_future
 	mm_result_t result;
 	/* The future task parameters. */
 	mm_task_flags_t flags;
-	mm_routine start;
+	mm_routine_t start;
 	intptr_t start_arg;
 	/* The task if started. */
 	struct mm_task *task;
@@ -55,7 +55,7 @@ void mm_future_init(void);
 void mm_future_term(void);
 
 struct mm_future * mm_future_create(const char *name, mm_task_flags_t flags,
-				    mm_routine start, uintptr_t start_arg);
+				    mm_routine_t start, uintptr_t start_arg);
 
 void mm_future_destroy(struct mm_future *future);
 

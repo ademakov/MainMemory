@@ -38,7 +38,7 @@ void mm_timer_tick(void);
 mm_timeval_t mm_timer_next(void);
 
 mm_timer_t mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
-			   mm_routine start, uintptr_t start_arg);
+			   mm_routine_t start, uintptr_t start_arg);
 void mm_timer_destroy(mm_timer_t timer_id);
 
 void mm_timer_settime(mm_timer_t timer_id, bool abstime,

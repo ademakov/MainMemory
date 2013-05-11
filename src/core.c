@@ -58,7 +58,7 @@ mm_core_worker(uintptr_t arg)
 	ENTER();
 
 	struct mm_work *work = (struct mm_work *) arg;
-	mm_routine routine = work->routine;
+	mm_routine_t routine = work->routine;
 	uintptr_t routine_arg = work->item;
 	mm_work_destroy(work);
 

@@ -55,7 +55,7 @@ mm_work_term(void)
 }
 
 struct mm_work *
-mm_work_create(mm_task_flags_t flags, mm_routine routine, uintptr_t item)
+mm_work_create(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item)
 {
 	ENTER();
 
@@ -113,7 +113,7 @@ mm_work_put(struct mm_work *work)
 }
 
 void
-mm_work_add(mm_task_flags_t flags, mm_routine routine, uintptr_t item)
+mm_work_add(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item)
 {
 	ENTER();
 	
@@ -124,7 +124,7 @@ mm_work_add(mm_task_flags_t flags, mm_routine routine, uintptr_t item)
 }
 
 void
-mm_work_addv(mm_task_flags_t flags, mm_routine routine, uintptr_t *items, size_t nitems)
+mm_work_addv(mm_task_flags_t flags, mm_routine_t routine, uintptr_t *items, size_t nitems)
 {
 	ENTER();
 

@@ -106,7 +106,7 @@ struct mm_task
 	struct mm_port *blocked_on;
 
 	/* The task start routine and its argument. */
-	mm_routine start;
+	mm_routine_t start;
 	uintptr_t start_arg;
 
 	/* The list of task cleanup records. */
@@ -133,7 +133,7 @@ struct mm_task * mm_task_create_boot(void);
 void mm_task_destroy_boot(struct mm_task *task);
 
 struct mm_task * mm_task_create(const char *name, mm_task_flags_t flags,
-				mm_routine start, uintptr_t start_arg)
+				mm_routine_t start, uintptr_t start_arg)
 	__attribute__((nonnull(1, 3)));
 
 void mm_task_destroy(struct mm_task *task)

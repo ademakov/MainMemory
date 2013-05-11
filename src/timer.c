@@ -36,7 +36,7 @@ struct mm_timer
 
 	/* Task parameters. */
 	mm_task_flags_t flags;
-	mm_routine start;
+	mm_routine_t start;
 	uintptr_t start_arg;
 
 	/* Absolute time flag. */
@@ -154,7 +154,7 @@ mm_timer_next(void)
 
 mm_timer_t
 mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
-		mm_routine start, uintptr_t start_arg)
+		mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
 

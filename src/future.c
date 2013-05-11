@@ -51,7 +51,7 @@ mm_future_term(void)
 
 struct mm_future *
 mm_future_create(const char *name __attribute__((unused)), mm_task_flags_t flags,
-		 mm_routine start, uintptr_t start_arg)
+		 mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
 

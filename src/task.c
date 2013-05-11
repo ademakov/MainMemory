@@ -139,7 +139,7 @@ mm_task_destroy_boot(struct mm_task *task)
 /* Create a new task. */
 struct mm_task *
 mm_task_create(const char *name, mm_task_flags_t flags,
-	       mm_routine start, uintptr_t start_arg)
+	       mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
 
