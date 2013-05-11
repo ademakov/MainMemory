@@ -70,7 +70,7 @@ void
 mm_sched_run(struct mm_task *task)
 {
 	ENTER();
-	TRACE("enqueue task: %s %d", task->name, task->state);
+	TRACE("enqueue task: [%d %s] %d", mm_task_id(task), task->name, task->state);
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
 	// As both the run and the wait queues use the same field for linking
