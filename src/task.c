@@ -28,6 +28,7 @@
 #include "util.h"
 
 #define MM_TASK_STACK_SIZE (28 * 1024)
+#define MM_TASK_BOOT_STACK_SIZE PTHREAD_STACK_MIN
 
 // The memory pool for tasks.
 static struct mm_pool mm_task_pool;
@@ -111,32 +112,68 @@ mm_task_free_chunks(struct mm_task *task)
 	LEAVE();
 }
 
+/* Create a new task. */
+static struct mm_task *
+mm_task_new(uint32_t stack_size)
+{
+	// Allocate a task.
+	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
+
+	// Allocate a task stack.
+	task->stack_size = stack_size;
+	task->stack_base = mm_stack_create(task->stack_size);
+
+	// Initialize the task ports list.
+	mm_list_init(&task->ports);
+
+	// Initialize the cleanup handler list.
+	task->cleanup = NULL;
+
+	// Initialize the dynamic memory list.
+	mm_list_init(&task->chunks);
+
+	return task;
+}
+
+/* Initialize a task. */
+static void
+mm_task_set_attr(struct mm_task *task,
+		 mm_task_flags_t flags,
+		 uint8_t priority)
+{
+	task->state = MM_TASK_CREATED;
+	task->flags = flags;
+	task->priority = priority;
+
+	task->blocked_on = NULL;
+
+	task->result = MM_TASK_UNRESOLVED;
+
+#if ENABLE_TRACE
+	task->trace_level = 0;
+#endif
+}
+
 /* Create a bootstrap task. */
 struct mm_task *
 mm_task_create_boot(void)
 {
 	ENTER();
 
-	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
-	memset(task, 0, sizeof(struct mm_task));
-	task->state = MM_TASK_RUNNING;
+	// Create a new task object.
+	struct mm_task *task = mm_task_new(MM_TASK_BOOT_STACK_SIZE);
 
+	// Set the task name.
 	ASSERT(sizeof task->name > sizeof mm_task_boot_name);
 	strcpy(task->name, mm_task_boot_name);
 
+	// Initialize the task info.
+	mm_task_set_attr(task, 0, MM_PRIO_DEFAULT);
+	task->start = NULL;
+	task->start_arg = 0;
+
 	LEAVE();
 	return task;
-}
-
-/* Destroy a bootstrap task. */
-void
-mm_task_destroy_boot(struct mm_task *task)
-{
-	ENTER();
-
-	mm_pool_free(&mm_task_pool, task);
-
-	LEAVE();
 }
 
 /* Create a new task. */
@@ -149,44 +186,26 @@ mm_task_create(const char *name, mm_task_flags_t flags,
 	struct mm_task *task;
 
 	if (mm_list_empty(&mm_core->dead_list)) {
-		/* Allocate a new task. */
-		task = mm_pool_alloc(&mm_task_pool);
-
-		/* Allocate the task stack. */
-		task->stack_size = MM_TASK_STACK_SIZE;
-		task->stack_base = mm_stack_create(task->stack_size);
+		// Allocate a new task.
+		task = mm_task_new(MM_TASK_STACK_SIZE);
 	} else {
-		/* Reuse a dead task. */
+		// Resurrect a dead task.
 		struct mm_list *link = mm_list_head(&mm_core->dead_list);
 		task = containerof(link, struct mm_task, queue);
 		mm_list_delete(link);
 	}
 
-	/* Set the task name. */
-	mm_task_set_name(task, name);
-
-	/* Initialize the task info. */
-	task->state = MM_TASK_CREATED;
-	task->flags = flags;
-	task->priority = MM_PRIO_DEFAULT;
-	task->blocked_on = NULL;
-	task->start = start;
-	task->start_arg = start_arg;
-	task->result = MM_TASK_UNRESOLVED;
-	task->cleanup = NULL;
-#if ENABLE_TRACE
-	task->trace_level = 0;
-#endif
-
-	/* Initialize the task ports list. */
-	mm_list_init(&task->ports);
-
-	/* Initialize the dynamic memory list. */
-	mm_list_init(&task->chunks);
-
-	/* Initialize the task stack. */
+	// Initialize the task stack.
 	mm_stack_init(&task->stack_ctx, mm_task_entry,
 		      task->stack_base, task->stack_size);
+
+	// Set the task name.
+	mm_task_set_name(task, name);
+
+	// Initialize the task info.
+	mm_task_set_attr(task, flags, MM_PRIO_DEFAULT);
+	task->start = start;
+	task->start_arg = start_arg;
 
 	LEAVE();
 	return task;
@@ -201,7 +220,7 @@ mm_task_destroy(struct mm_task *task)
 	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
-	/* Destroy the ports. */
+	// Destroy the ports.
 	while (!mm_list_empty(&task->ports)) {
 		// TODO: ensure that ports are not referenced from elsewhere.
 		struct mm_list *link = mm_list_head(&task->ports);
@@ -209,13 +228,13 @@ mm_task_destroy(struct mm_task *task)
 		mm_port_destroy(port);
 	}
 
-	/* Free the dynamic memory. */
+	// Free the dynamic memory.
 	mm_task_free_chunks(task);
 
-	/* Free the stack. */
-	mm_stack_destroy(task->stack_base, MM_TASK_STACK_SIZE);
+	// Free the stack.
+	mm_stack_destroy(task->stack_base, task->stack_size);
 
-	/* At last free the task struct. */
+	// At last free the task struct.
 	mm_pool_free(&mm_task_pool, task);
 
 	LEAVE();
