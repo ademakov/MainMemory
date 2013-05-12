@@ -2813,9 +2813,9 @@ mc_reader_routine(struct mm_net_socket *sock)
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_net_set_timeout(state->sock, MC_READ_TIMEOUT);
+		mm_net_set_read_timeout(state->sock, MC_READ_TIMEOUT);
 		n = mc_read(state, 1, 0, &hangup);
-		mm_net_set_timeout(state->sock, 0);
+		mm_net_set_read_timeout(state->sock, MM_TIMEOUT_INFINITE);
 
 		// Get out if there is no more input.
 		if (n <= 0) {

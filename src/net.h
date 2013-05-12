@@ -124,8 +124,9 @@ struct mm_net_socket
 	/* Socket flags. */
 	uint32_t flags;
 
-	/* I/O timeout. */
-	mm_timeout_t timeout;
+	/* I/O timeouts. */
+	mm_timeout_t read_timeout;
+	mm_timeout_t write_timeout;
 
 	/* Tasks pending on the socket I/O. */
 	struct mm_task *reader;
@@ -215,9 +216,15 @@ mm_net_is_writable(struct mm_net_socket *sock)
 }
 
 static inline void
-mm_net_set_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
+mm_net_set_read_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
-	sock->timeout = timeout;
+	sock->read_timeout = timeout;
+}
+
+static inline void
+mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
+{
+	sock->write_timeout = timeout;
 }
 
 #endif /* NET_H */

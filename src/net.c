@@ -308,7 +308,8 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	/* Initialize the fields. */
 	sock->fd = fd;
 	sock->flags = 0;
-	sock->timeout = 0;
+	sock->read_timeout = MM_TIMEOUT_INFINITE;
+	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->proto_data = 0;
 	sock->reader = NULL;
 	sock->writer = NULL;
@@ -1073,8 +1074,8 @@ mm_net_rblock(struct mm_net_socket *sock)
 	mm_net_attach_reader(sock);
 
 	// Block the task waiting to become read ready.
-	if (sock->timeout)
-		mm_timer_block(sock->timeout);
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
+		mm_timer_block(sock->read_timeout);
 	else
 		mm_sched_block();
 
@@ -1096,8 +1097,8 @@ mm_net_wblock(struct mm_net_socket *sock)
 	mm_net_attach_writer(sock);
 
 	// Block the task waiting to become write ready.
-	if (sock->timeout)
-		mm_timer_block(sock->timeout);
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
+		mm_timer_block(sock->write_timeout);
 	else
 		mm_sched_block();
 
@@ -1115,7 +1116,8 @@ mm_net_may_rblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on reading from a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR | MM_NET_NONBLOCK)) == 0) {
-		if (sock->timeout && (start + sock->timeout) < mm_core->time_value) {
+		if (sock->read_timeout != MM_TIMEOUT_INFINITE
+		    && (start + sock->read_timeout) < mm_core->time_value) {
 			// Cannot block as there is no time left.
 			errno = ETIMEDOUT;
 		} else {
@@ -1141,7 +1143,8 @@ mm_net_may_wblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on writing to a socket.
 	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR | MM_NET_NONBLOCK)) == 0) {
-		if (sock->timeout && (start + sock->timeout) < mm_core->time_value) {
+		if (sock->write_timeout != MM_TIMEOUT_INFINITE
+		    && (start + sock->write_timeout) < mm_core->time_value) {
 			// Cannot block as there is no time left.
 			errno = ETIMEDOUT;
 		} else {
