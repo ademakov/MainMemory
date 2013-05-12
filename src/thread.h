@@ -43,22 +43,51 @@ struct mm_thread_attr
 
 extern __thread struct mm_thread *mm_thread;
 
+/**********************************************************************
+ * Thread subsystem initialization and termination.
+ **********************************************************************/
+
 void mm_thread_init();
 void mm_thread_term();
 
-void mm_thread_attr_init(struct mm_thread_attr *attr);
-void mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
+/**********************************************************************
+ * Thread creation routines.
+ **********************************************************************/
+
+void mm_thread_attr_init(struct mm_thread_attr *attr)
+	__attribute__((nonnull(1)));
+
+void mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
+	__attribute__((nonnull(1)));
+
 void mm_thread_attr_setstack(struct mm_thread_attr *attr,
-			     void *stack_base, uint32_t stack_size);
-void mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name);
+			     void *stack_base, uint32_t stack_size)
+	__attribute__((nonnull(1)));
+
+void mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
+	__attribute__((nonnull(1)));
 
 struct mm_thread * mm_thread_create(struct mm_thread_attr *attr,
-				    mm_routine_t start, uintptr_t start_arg);
+				    mm_routine_t start, uintptr_t start_arg)
+	__attribute__((nonnull(2)));
 
-void mm_thread_destroy(struct mm_thread *thread);
+/**********************************************************************
+ * Thread control routines.
+ **********************************************************************/
 
-void mm_thread_cancel(struct mm_thread *thread);
+void mm_thread_destroy(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
 
-void mm_thread_join(struct mm_thread *thread);
+void mm_thread_cancel(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
+
+void mm_thread_join(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Thread information.
+ **********************************************************************/
+
+const char * mm_thread_name(void);
 
 #endif /* THREAD_H */

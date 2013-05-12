@@ -45,6 +45,7 @@ __thread struct mm_thread *mm_thread = NULL;
 void
 mm_thread_init()
 {
+	// TODO: have a global thread list used for debugging/statistics.
 }
 
 void
@@ -95,17 +96,24 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 }
 
 /**********************************************************************
- * Thread routines.
+ * Thread creation routines.
  **********************************************************************/
 
 static void *
 mm_thread_entry(void *arg)
 {
-	struct mm_thread *thread = arg;
+	ENTER();
 
+	struct mm_thread *thread = arg;
+	mm_print("start thread: %s", thread->name);
+
+	// Set the thread-local pointer to the thread object.
 	mm_thread = thread;
+
+	// Run the required routine.
 	thread->start(thread->start_arg);
 
+	LEAVE();
 	return NULL;
 }
 
@@ -166,6 +174,12 @@ mm_thread_create(struct mm_thread_attr *attr,
 	return thread;
 }
 
+/**********************************************************************
+ * Thread control routines.
+ **********************************************************************/
+
+/* Destroy a thread object. It is only safe to call this function upon
+   the thread join. */
 void
 mm_thread_destroy(struct mm_thread *thread)
 {
@@ -176,6 +190,7 @@ mm_thread_destroy(struct mm_thread *thread)
 	LEAVE();
 }
 
+/* Cancel a running thread. */
 void
 mm_thread_cancel(struct mm_thread *thread)
 {
@@ -189,6 +204,7 @@ mm_thread_cancel(struct mm_thread *thread)
 	LEAVE();
 }
 
+/* Wait for a thread exit. */
 void
 mm_thread_join(struct mm_thread *thread)
 {
@@ -200,4 +216,14 @@ mm_thread_join(struct mm_thread *thread)
 	}
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Thread information.
+ **********************************************************************/
+
+const char *
+mm_thread_name(void)
+{
+	return mm_thread == NULL ? "default" : mm_thread->name;
 }
