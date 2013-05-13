@@ -3,7 +3,7 @@ SUBDIRS = memcache
 
 bin_PROGRAMS = mmem
 
-mmem_CFLAGS = -std=gnu99 -Wall -Wextra
+mmem_CFLAGS = -Wall -Wextra
 
 mmem_SOURCES = \
 	arch.h bits.h clock.c clock.h common.h core.c core.h event.c event.h \
