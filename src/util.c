@@ -19,6 +19,7 @@
 
 #include "util.h"
 
+#include "hook.h"
 #include "sched.h"
 #include "task.h"
 
@@ -35,34 +36,18 @@
  * Exit Handling.
  **********************************************************************/
 
-struct mm_exit_rec
-{
-	struct mm_exit_rec *next;
-	void (*func)(void);
-};
-
-static struct mm_exit_rec *mm_exit_list;
+static struct mm_hook mm_exit_hook;
 
 void
 mm_atexit(void (*func)(void))
 {
-	ASSERT(func != NULL);
-
-	struct mm_exit_rec *rec = mm_alloc(sizeof(struct mm_exit_rec));
-	rec->func = func;
-	rec->next = mm_exit_list;
-	mm_exit_list = rec;
+	mm_hook_head_proc(&mm_exit_hook, func);
 }
 
 static void
 mm_do_atexit(void)
 {
-	while (mm_exit_list != NULL) {
-		struct mm_exit_rec *rec = mm_exit_list;
-		mm_exit_list = mm_exit_list->next;
-		(rec->func)();
-		mm_free(rec);
-	}
+	mm_hook_call_proc(&mm_exit_hook, true);
 }
 
 void
