@@ -30,8 +30,6 @@ extern __thread struct mm_task *mm_running_task;
 
 void mm_sched_run(struct mm_task *task);
 
-void mm_sched_start(void);
-
 void mm_sched_yield(void);
 void mm_sched_block(void);
 void mm_sched_abort(void) __attribute__((noreturn));

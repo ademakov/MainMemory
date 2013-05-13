@@ -20,7 +20,6 @@
 #include "common.h"
 #include "core.h"
 #include "event.h"
-#include "future.h"
 #include "net.h"
 #include "util.h"
 
@@ -76,10 +75,11 @@ mm_init(void)
 {
 	ENTER();
 
-	/* Initialize subsystems. */
+	// Set signal handlers.
 	mm_signal_init();
+
+	// Initialize subsystems.
 	mm_core_init();
-	mm_future_init();
 	mm_event_init();
 	mm_net_init();
 
@@ -91,10 +91,9 @@ mm_term(void)
 {
 	ENTER();
 
-	/* Terminate subsystems. */
+	// Terminate subsystems.
 	mm_net_term();
 	mm_event_term();
-	mm_future_term();
 	mm_core_term();
 
 	LEAVE();
@@ -168,7 +167,6 @@ main(/*int ac, char *av[]*/)
 	mm_server_open();
 
 	/* Execute main loop. */
-	mm_event_start();
 	mm_core_start();
 
 	/* Shutdown server. */

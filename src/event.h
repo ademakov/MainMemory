@@ -35,7 +35,6 @@ typedef uint8_t mm_event_handler_t;
 void mm_event_init(void);
 void mm_event_term(void);
 
-void mm_event_start(void);
 void mm_event_stop(void);
 
 /**********************************************************************

@@ -19,6 +19,7 @@
 
 #include "event.h"
 
+#include "core.h"
 #include "net.h"
 #include "port.h"
 #include "sched.h"
@@ -681,6 +682,24 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 	return 0;
 }
 
+static void
+mm_event_start(void)
+{
+	ENTER();
+
+	// Create the event loop task and port.
+	mm_event_task = mm_task_create("event", 0, mm_event_loop, 0);
+	mm_event_port = mm_port_create(mm_event_task);
+
+	// Set the lowest priority for event loop.
+	mm_event_task->priority = MM_PRIO_LOWEST;
+
+	// Schedule the task.
+	mm_sched_run(mm_event_task);
+
+	LEAVE();
+}
+
 void
 mm_event_init(void)
 {
@@ -694,12 +713,8 @@ mm_event_init(void)
 	mm_event_init_handlers();
 	mm_event_init_fd_table();
 
-	// Create the event loop task and port.
-	mm_event_task = mm_task_create("event-loop", 0, mm_event_loop, 0);
-	mm_event_port = mm_port_create(mm_event_task);
-
-	// Set the lowest priority for event loop.
-	mm_event_task->priority = MM_PRIO_LOWEST;
+	// Delayed event loop task start.
+	mm_core_hook_start(mm_event_start);
 
 	LEAVE();
 }
@@ -717,16 +732,6 @@ mm_event_term(void)
 
 	// Release system specific resources.
 	mm_event_free_sys();
-
-	LEAVE();
-}
-
-void
-mm_event_start(void)
-{
-	ENTER();
-
-	mm_sched_run(mm_event_task);
 
 	LEAVE();
 }

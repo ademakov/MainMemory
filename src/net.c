@@ -19,6 +19,7 @@
 
 #include "net.h"
 
+#include "core.h"
 #include "event.h"
 #include "pool.h"
 #include "port.h"
@@ -27,7 +28,6 @@
 #include "timer.h"
 #include "util.h"
 #include "work.h"
-#include "core.h"
 
 #include <fcntl.h>
 #include <string.h>
@@ -926,7 +926,8 @@ mm_net_init(void)
 
 	mm_net_init_server_table();
 	mm_net_init_socket_table();
-	mm_net_init_accept_task();
+
+	mm_core_hook_start(mm_net_init_accept_task);
 
 	mm_net_initialized = 1;
 
@@ -1008,19 +1009,12 @@ mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
 	return srv;
 }
 
-void
-mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+static void
+mm_net_start_server_task(void *arg)
 {
 	ENTER();
-	ASSERT(srv->fd == -1);
 
-	mm_print("start server '%s'", srv->name);
-
-	// Store the protocol handlers.
-	srv->proto = proto;
-
-	// Create the server socket.
-	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
+	struct mm_net_server *srv = arg;
 
 	// Create the event handler task.
 	srv->io_task = mm_task_create("net-io", 0, mm_net_io_loop, (intptr_t) srv);
@@ -1036,6 +1030,26 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 
 	// Register the server socket with the event loop.
 	mm_event_register_fd(srv->fd, mm_net_accept_handler, (uint32_t) mm_net_server_index(srv));
+
+	LEAVE();
+}
+
+void
+mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+{
+	ENTER();
+	ASSERT(srv->fd == -1);
+
+	mm_print("start server '%s'", srv->name);
+
+	// Store the protocol handlers.
+	srv->proto = proto;
+
+	// Create the server socket.
+	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
+
+	// Delayed server task start.
+	mm_core_hook_param_start(mm_net_start_server_task, srv);
 
 	LEAVE();
 }

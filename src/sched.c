@@ -25,14 +25,8 @@
 #include "task.h"
 #include "util.h"
 
-/* A pseudo-task that represents the initial process. */
-static struct mm_task mm_null_task = {
-	.state = MM_TASK_RUNNING,
-	.name = "null-task",
-};
-
 /* The currently running task. */
-__thread struct mm_task *mm_running_task = &mm_null_task;
+__thread struct mm_task *mm_running_task = NULL;
 
 /* Switch to the next task in the run queue. */
 static void
@@ -52,7 +46,7 @@ mm_sched_switch(mm_task_state_t state)
 	} else {
 		new_task = mm_runq_get_task(&mm_core->run_queue);
 		if (unlikely(new_task == NULL)) {
-			new_task = &mm_null_task;
+			new_task = mm_core->boot;
 		}
 		if (state == MM_TASK_INVALID) {
 			mm_task_recycle(old_task);
@@ -87,21 +81,9 @@ mm_sched_run(struct mm_task *task)
 }
 
 void
-mm_sched_start(void)
-{
-	ENTER();
-	ASSERT(mm_running_task == &mm_null_task);
-
-	mm_sched_switch(MM_TASK_BLOCKED);
-
-	LEAVE();
-}
-
-void
 mm_sched_yield(void)
 {
 	ENTER();
-	ASSERT(mm_running_task != &mm_null_task);
 
 	mm_sched_switch(MM_TASK_PENDING);
 
@@ -112,7 +94,6 @@ void
 mm_sched_block(void)
 {
 	ENTER();
-	ASSERT(mm_running_task != &mm_null_task);
 
 	mm_sched_switch(MM_TASK_BLOCKED);
 
@@ -123,11 +104,11 @@ void
 mm_sched_abort(void)
 {
 	ENTER();
-	ASSERT(mm_running_task != &mm_null_task);
 
 	mm_sched_switch(MM_TASK_INVALID);
 
 	/* Must never get here after the switch above. */
 	ABORT();
+
 	LEAVE();
 }

@@ -53,14 +53,22 @@ struct mm_core
 	/* The bootstrap task. */
 	struct mm_task *boot;
 
+	/* The underlying thread. */
+	struct mm_thread *thread;
+
 	/* The list of worker tasks that have finished. */
 	struct mm_list dead_list;
-};
+
+} __cache_aligned;
 
 extern __thread struct mm_core *mm_core;
 
 void mm_core_init(void);
 void mm_core_term(void);
+
+void mm_core_hook_start(void (*proc)(void));
+void mm_core_hook_param_start(void (*proc)(void *), void *data);
+void mm_core_hook_stop(void (*proc)(void));
 
 void mm_core_start(void);
 void mm_core_stop(void);

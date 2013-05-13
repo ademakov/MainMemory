@@ -20,14 +20,20 @@
 #include "core.h"
 
 #include "clock.h"
+#include "future.h"
+#include "hook.h"
 #include "port.h"
 #include "sched.h"
 #include "task.h"
+#include "thread.h"
 #include "timeq.h"
 #include "timer.h"
 #include "work.h"
 #include "util.h"
 
+#include <stdio.h>
+
+#define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	512
 
 #define MM_PRIO_MASTER		1
@@ -36,6 +42,11 @@
 #define MM_TIME_QUEUE_MAX_WIDTH	500
 #define MM_TIME_QUEUE_MAX_COUNT	2000
 
+// The core set.
+static int mm_core_num;
+static struct mm_core *mm_core_set;
+
+// A core associated with the running thread.
 __thread struct mm_core *mm_core;
 
 /**********************************************************************
@@ -119,24 +130,51 @@ mm_core_master_loop(uintptr_t arg)
 	return 0;
 }
 
+/**********************************************************************
+ * Core start and stop hooks.
+ **********************************************************************/
+
+static struct mm_hook mm_core_start_hook;
+static struct mm_hook mm_core_param_start_hook;
+static struct mm_hook mm_core_stop_hook;
+
 static void
-mm_core_start_master(struct mm_core *core)
+mm_core_free_hooks(void)
 {
 	ENTER();
 
-	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
-	core->master->priority = MM_PRIO_MASTER;
-	mm_sched_run(core->master);
+	mm_hook_free(&mm_core_start_hook);
+	mm_hook_free(&mm_core_stop_hook);
 
 	LEAVE();
 }
 
-static void
-mm_core_stop_master(struct mm_core *core)
+void
+mm_core_hook_start(void (*proc)(void))
 {
 	ENTER();
 
-	mm_task_cancel(core->master);
+	mm_hook_tail_proc(&mm_core_start_hook, proc);
+
+	LEAVE();
+}
+
+void
+mm_core_hook_param_start(void (*proc)(void *), void *data)
+{
+	ENTER();
+
+	mm_hook_tail_data_proc(&mm_core_param_start_hook, proc, data);
+
+	LEAVE();
+}
+
+void
+mm_core_hook_stop(void (*proc)(void))
+{
+	ENTER();
+
+	mm_hook_tail_proc(&mm_core_stop_hook, proc);
 
 	LEAVE();
 }
@@ -145,13 +183,60 @@ mm_core_stop_master(struct mm_core *core)
  * Core initialization and termination.
  **********************************************************************/
 
-static struct mm_core *
-mm_core_create(uint32_t nworkers_max)
+/* A per-core thread entry point. */
+static mm_result_t
+mm_core_boot(uintptr_t arg)
 {
 	ENTER();
 
-	struct mm_core *core = mm_alloc(sizeof(struct mm_core));
+	struct mm_core *core = (struct mm_core *) arg;
+	bool is_primary_core = (core == mm_core_set);
 
+	// Set the thread-local pointer to the core object.
+	mm_core = core;
+	mm_core->thread = mm_thread;
+
+	// Set the thread-local pointer to the running task.
+	mm_running_task = mm_core->boot;
+	mm_running_task->state = MM_TASK_RUNNING;
+
+	// Update the time.
+	mm_core_update_time();
+	mm_core_update_real_time();
+
+	// Create the master task for this core and schedule it for execution.
+	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
+	core->master->priority = MM_PRIO_MASTER;
+	mm_sched_run(core->master);
+
+	// Call the start hooks on the first core.
+	if (is_primary_core) {
+		mm_hook_call_proc(&mm_core_start_hook, false);
+		mm_hook_call_data_proc(&mm_core_param_start_hook, false);
+	}
+
+	// Run the other tasks while there are any.
+	mm_sched_block();
+
+	// Call the stop hooks on the first core.
+	if (is_primary_core)
+		mm_hook_call_proc(&mm_core_stop_hook, false);
+
+	// Invalidate the boot task.
+	mm_running_task->state = MM_TASK_INVALID;
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
+{
+	ENTER();
+
+	core->boot = mm_task_create_boot();
+
+	core->thread = NULL;
 	core->master = NULL;
 
 	core->nworkers = 0;
@@ -159,29 +244,62 @@ mm_core_create(uint32_t nworkers_max)
 	core->master_waits_worker = false;
 
 	mm_runq_init(&core->run_queue);
+	mm_list_init(&core->dead_list);
+
+	core->time_value = 0;
+	core->real_time_value = 0;
 
 	core->time_queue = mm_timeq_create();
 	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
-	core->time_value = mm_clock_gettime_monotonic();
-	core->real_time_value = mm_clock_gettime_realtime();
-
-	core->boot = mm_task_create_boot();
-
-	mm_list_init(&core->dead_list);
 
 	LEAVE();
-	return core;
 }
 
 static void
-mm_core_destroy(struct mm_core *core)
+mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
-	mm_task_destroy_boot(core->boot);
+	mm_thread_destroy(core->thread);
+	mm_task_destroy(core->boot);
+
 	mm_timeq_destroy(core->time_queue);
-	mm_free(core);
+
+	LEAVE();
+}
+
+static void
+mm_core_start_single(struct mm_core *core, int core_tag)
+{
+	ENTER();
+
+	// Concoct a thread name.
+	char name[MM_THREAD_NAME_SIZE];
+	sprintf(name, "core %d", core_tag);
+
+	// Set thread attributes.
+	struct mm_thread_attr attr;
+	mm_thread_attr_init(&attr);
+	mm_thread_attr_setname(&attr, name);
+	mm_thread_attr_setstack(&attr,
+				core->boot->stack_base,
+				core->boot->stack_size);
+	mm_thread_attr_setcputag(&attr, core_tag);
+
+	// Create a core thread.
+	core->thread = mm_thread_create(&attr, &mm_core_boot, (uintptr_t) core);
+
+	LEAVE();
+}
+
+static void
+mm_core_stop_single(struct mm_core *core)
+{
+	ENTER();
+
+	// TODO: this is not thread safe.
+	mm_task_cancel(core->master);
 
 	LEAVE();
 }
@@ -190,15 +308,23 @@ void
 mm_core_init(void)
 {
 	ENTER();
+	ASSERT(mm_core_num == 0);
 
 	mm_clock_init();
 	mm_timer_init();
+	mm_future_init();
+	mm_thread_init();
 
 	mm_work_init();
 	mm_task_init();
 	mm_port_init();
 
-	mm_core = mm_core_create(MM_DEFAULT_WORKERS);
+	// TODO: get the number of available CPU cores on the system.
+	mm_core_num = MM_DEFAULT_CORES;
+
+	mm_core_set = mm_alloc(mm_core_num * sizeof(struct mm_core));
+	for (int i = 0; i < mm_core_num; i++)
+		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
 
 	LEAVE();
 }
@@ -207,13 +333,20 @@ void
 mm_core_term(void)
 {
 	ENTER();
+	ASSERT(mm_core_num > 0);
 
-	mm_core_destroy(mm_core);
+	for (int i = 0; i < mm_core_num; i++)
+		mm_core_term_single(&mm_core_set[i]);
+	mm_free(mm_core_set);
+
+	mm_core_free_hooks();
 
 	mm_task_term();
 	mm_work_term();
 	mm_port_term();
 	
+	mm_thread_init();
+	mm_future_term();
 	mm_timer_term();
 
 	LEAVE();
@@ -223,22 +356,31 @@ void
 mm_core_start(void)
 {
 	ENTER();
+	ASSERT(mm_core_num > 0);
 
-	mm_core_start_master(mm_core);
-	mm_sched_start();
+	for (int i = 0; i < mm_core_num; i++)
+		mm_core_start_single(&mm_core_set[i], i);
+	for (int i = 0; i < mm_core_num; i++)
+		mm_thread_join(mm_core_set[i].thread);
 
-	LEAVE();
+ 	LEAVE();
 }
 
 void
 mm_core_stop(void)
 {
 	ENTER();
+	ASSERT(mm_core_num > 0);
 
-	mm_core_stop_master(mm_core);
+	for (int i = 0; i < mm_core_num; i++)
+		mm_core_stop_single(&mm_core_set[i]);
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Core utilities.
+ **********************************************************************/
 
 void
 mm_core_update_time(void)
