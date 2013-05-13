@@ -16,10 +16,10 @@ mmem_SOURCES = \
 mmem_LDADD = memcache/libmemcache.a
 
 if ARCH_X86
-mmem_SOURCES += arch/x86/stack-init.c arch/x86/stack-switch.S
+mmem_SOURCES += arch/x86/asm.h arch/x86/stack-init.c arch/x86/stack-switch.S
 endif
 if ARCH_X86_64
-mmem_SOURCES += arch/x86-64/stack-init.c arch/x86-64/stack-switch.S
+mmem_SOURCES += arch/x86-64/asm.h arch/x86-64/stack-init.c arch/x86-64/stack-switch.S
 endif
 if ARCH_GENERIC
 mmem_SOURCES += arch/generic/stack.c
