@@ -17,7 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "arch.h"
+#include "arch/stack.h"
+
+#include <stdint.h>
 
 void
 mm_stack_init(mm_stack_ctx_t *ctx,

@@ -19,7 +19,6 @@
 
 #include "sched.h"
 
-#include "arch.h"
 #include "core.h"
 #include "runq.h"
 #include "task.h"

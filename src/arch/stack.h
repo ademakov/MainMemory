@@ -1,5 +1,5 @@
 /*
- * arch.h - MainMemory architecture-specific layer.
+ * arch.h - MainMemory arch-specific stack support.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -20,7 +20,9 @@
 #ifndef ARCH_H
 #define ARCH_H
 
-#include "common.h"
+#include "config.h"
+
+#include <stddef.h>
 
 #if ARCH_GENERIC
 # if HAVE_UCONTEXT_H

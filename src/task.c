@@ -19,7 +19,6 @@
 
 #include "task.h"
 
-#include "arch.h"
 #include "core.h"
 #include "pool.h"
 #include "port.h"
