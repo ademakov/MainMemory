@@ -1,7 +1,7 @@
 /*
- * arch.h - MainMemory arch-specific stack support.
+ * arch/stack.h - MainMemory arch-specific stack support.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2013  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARCH_H
-#define ARCH_H
+#ifndef ARCH_STACK_H
+#define ARCH_STACK_H
 
 #include "config.h"
 
@@ -47,4 +47,4 @@ void mm_stack_switch(mm_stack_ctx_t *old_ctx,
 		     mm_stack_ctx_t *new_ctx)
 	__attribute__((nonnull(1, 2)));
 
-#endif /* ARCH_H */
+#endif /* ARCH_STACK_H */
