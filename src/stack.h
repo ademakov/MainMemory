@@ -18,7 +18,7 @@
  */
 
 #ifndef STACK_H
-#define STASK_H
+#define STACK_H
 
 #include "common.h"
 
