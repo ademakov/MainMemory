@@ -30,6 +30,9 @@ struct mm_timeq;
 /* Virtual core state. */
 struct mm_core
 {
+	/* Stop flag. */
+	uint32_t stop;
+
 	/* The master task. */
 	struct mm_task *master;
 
@@ -59,7 +62,7 @@ struct mm_core
 	/* The list of worker tasks that have finished. */
 	struct mm_list dead_list;
 
-} __cache_aligned;
+} __align(MM_CACHELINE);
 
 extern __thread struct mm_core *mm_core;
 

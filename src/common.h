@@ -38,11 +38,23 @@
 #include <string.h>
 
 /**********************************************************************
- * Compiler Helpers.
+ * Compiler Shortcuts.
  **********************************************************************/
 
 #define likely(x)	__builtin_expect(!!(x), 1)
 #define unlikely(x)	__builtin_expect(!!(x), 0)
+
+#define __align(x)	__attribute__((aligned (x)))
+
+/**********************************************************************
+ * Compiler Ordering.
+ **********************************************************************/
+
+#define mm_compiler_barrier()	asm volatile("" : : : "memory")
+
+#define mm_volatile_load(x)	(* (volatile typeof(x) *) &(x))
+
+#define mm_volatile_store(x, v)	((* (volatile typeof(x) *) &(x)) = (v))
 
 /**********************************************************************
  * Common Macros.
@@ -64,16 +76,12 @@
 	((type *) ((char *)(field_ptr) - offsetof(type, field)))
 
 /**********************************************************************
- * Data Alignment.
- **********************************************************************/
-
-#define CACHELINE		64
-
-#define __cache_aligned		__attribute__((aligned (CACHELINE)))
-
-/**********************************************************************
  * Basic Definitions.
  **********************************************************************/
+
+/* Architecture-dependent cache line size. */
+/* TODO: set according to the target arch.  */
+#define MM_CACHELINE		(64)
 
 /* Sentinel time values. */
 #define MM_TIMEVAL_MIN		INT64_MIN

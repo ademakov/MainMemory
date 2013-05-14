@@ -111,8 +111,7 @@ mm_core_master_loop(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	for (;;) {
-		mm_task_testcancel();
+	while (!mm_volatile_load(core->stop)) {
 
 		if (core->nworkers == core->nworkers_max) {
 			core->master_waits_worker = true;
@@ -234,6 +233,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
+	core->stop = 0;
 	core->boot = mm_task_create_boot();
 
 	core->thread = NULL;
@@ -298,8 +298,7 @@ mm_core_stop_single(struct mm_core *core)
 {
 	ENTER();
 
-	// TODO: this is not thread safe.
-	mm_task_cancel(core->master);
+	mm_volatile_store(core->stop, 1);
 
 	LEAVE();
 }
