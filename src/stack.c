@@ -19,23 +19,18 @@
 
 #include "stack.h"
 
+#include "arch.h"
 #include "util.h"
 
 #include <sys/mman.h>
-#include <unistd.h>
-
+#
 void *
 mm_stack_create(uint32_t size)
 {
 	ENTER();
 
-	int pagesize = getpagesize();
-
-	ASSERT(pagesize > 0);
-	ASSERT((size % pagesize) == 0);
-
 	// Full size includes an additional red-zone page.
-	uint32_t fullsize = size + pagesize;
+	uint32_t fullsize = size + MM_PAGE_SIZE;
 
 	// Allocate the stack along with its red-zone.
 	char *p = mmap(NULL, fullsize, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
@@ -43,7 +38,7 @@ mm_stack_create(uint32_t size)
 		mm_fatal(errno, "failed to allocate a stack (size = %d)", fullsize);
 
 	// Allow access to the stack memory past the red-zone.
-	char *stack = p + pagesize;
+	char *stack = p + MM_PAGE_SIZE;
 	if (unlikely(mprotect(stack, size, PROT_READ | PROT_WRITE) < 0))
 		mm_fatal(errno, "failed to setup memory access for a stack");
 
@@ -56,15 +51,10 @@ mm_stack_destroy(void *stack, uint32_t size)
 {
 	ENTER();
 
-	int pagesize = getpagesize();
-
-	ASSERT(pagesize > 0);
-	ASSERT((size % pagesize) == 0);
-
 	// Full size includes an additional red-zone page.
-	uint32_t fullsize = size + pagesize;
+	uint32_t fullsize = size + MM_PAGE_SIZE;
 
-	char *p = stack - pagesize;
+	char *p = stack - MM_PAGE_SIZE;
 	if (unlikely(munmap(p, fullsize) < 0))
 		mm_error(errno, "failed to release a stack");
 

@@ -672,7 +672,7 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
 
-	while (!mm_exit_loop) {
+	while (!mm_memory_load(mm_exit_loop)) {
 		mm_event_dispatch();
 		mm_timer_tick();
 		mm_sched_yield();
@@ -741,7 +741,7 @@ mm_event_stop(void)
 {
 	ENTER();
 
-	mm_exit_loop = 1;
+	mm_memory_store(mm_exit_loop, 1);
 
 	LEAVE();
 }

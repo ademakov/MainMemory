@@ -47,7 +47,7 @@
 #define __align(x)	__attribute__((aligned (x)))
 
 /**********************************************************************
- * Compiler Ordering.
+ * Compiler Memory Ordering.
  **********************************************************************/
 
 #define mm_compiler_barrier()	asm volatile("" : : : "memory")
@@ -78,10 +78,6 @@
 /**********************************************************************
  * Basic Definitions.
  **********************************************************************/
-
-/* Architecture-dependent cache line size. */
-/* TODO: set according to the target arch.  */
-#define MM_CACHELINE		(64)
 
 /* Sentinel time values. */
 #define MM_TIMEVAL_MIN		INT64_MIN

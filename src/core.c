@@ -111,7 +111,7 @@ mm_core_master_loop(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	while (!mm_volatile_load(core->stop)) {
+	while (!mm_memory_load(core->stop)) {
 
 		if (core->nworkers == core->nworkers_max) {
 			core->master_waits_worker = true;
@@ -298,7 +298,7 @@ mm_core_stop_single(struct mm_core *core)
 {
 	ENTER();
 
-	mm_volatile_store(core->stop, 1);
+	mm_memory_store(core->stop, 1);
 
 	LEAVE();
 }
