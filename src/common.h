@@ -50,7 +50,7 @@
  * Compiler Memory Ordering.
  **********************************************************************/
 
-#define mm_compiler_barrier()	asm volatile("" : : : "memory")
+#define mm_compiler_barrier()	asm volatile("" ::: "memory")
 
 #define mm_volatile_load(x)	(* (volatile typeof(x) *) &(x))
 
