@@ -23,23 +23,12 @@
 #include "config.h"
 
 /**********************************************************************
- * Basic Properties.
- **********************************************************************/
-
-/* Virtual memory page size. */
-#define MM_PAGE_SIZE		(4096)
-
-/* Cache line size. */
-#define MM_CACHELINE		(64)
-
-/**********************************************************************
  * Hardware Memory Ordering.
  **********************************************************************/
 
 #if ARCH_X86
 # include "arch/x86/fence.h"
-#endif
-#if ARCH_X86_64
+#elif ARCH_X86_64
 # include "arch/x86-64/fence.h"
 #endif
 
