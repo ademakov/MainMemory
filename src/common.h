@@ -24,11 +24,11 @@
 # error "Only GCC is currently supported."
 #endif
 
-/**********************************************************************
- * Common Headers.
- **********************************************************************/
-
 #include "config.h"
+
+/**********************************************************************
+ * Common Standard Headers.
+ **********************************************************************/
 
 #include <errno.h>
 #include <limits.h>
@@ -36,6 +36,25 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/**********************************************************************
+ * Common Macros.
+ **********************************************************************/
+
+#define min(a, b) ({			\
+		typeof(a) _a = (a);	\
+		typeof(b) _b = (b);	\
+		_a < _b ? _a : _b;	\
+	})
+
+#define max(a, b) ({			\
+		typeof(a) _a = (a);	\
+		typeof(b) _b = (b);	\
+		_a > _b ? _a : _b;	\
+	})
+
+#define containerof(field_ptr, type, field) \
+	((type *) ((char *)(field_ptr) - offsetof(type, field)))
 
 /**********************************************************************
  * Compiler Shortcuts.
@@ -57,23 +76,13 @@
 #define mm_volatile_store(x, v)	((* (volatile typeof(x) *) &(x)) = (v))
 
 /**********************************************************************
- * Common Macros.
+ * Architecture Specific Definitions.
  **********************************************************************/
 
-#define min(a, b) ({			\
-		typeof(a) _a = (a);	\
-		typeof(b) _b = (b);	\
-		_a < _b ? _a : _b;	\
-	})
-
-#define max(a, b) ({			\
-		typeof(a) _a = (a);	\
-		typeof(b) _b = (b);	\
-		_a > _b ? _a : _b;	\
-	})
-
-#define containerof(field_ptr, type, field) \
-	((type *) ((char *)(field_ptr) - offsetof(type, field)))
+#include "arch/common.h"
+#include "arch/memory.h"
+#include "arch/atomic.h"
+#include "arch/stack.h"
 
 /**********************************************************************
  * Basic Definitions.

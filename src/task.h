@@ -21,7 +21,6 @@
 #define TASK_H
 
 #include "common.h"
-#include "arch.h"
 #include "list.h"
 
 /* Maximal task name length (including terminating zero). */

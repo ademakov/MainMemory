@@ -21,7 +21,6 @@
 #define CORE_H
 
 #include "common.h"
-#include "arch.h"
 #include "list.h"
 #include "runq.h"
 

@@ -19,11 +19,10 @@
 
 #include "stack.h"
 
-#include "arch.h"
 #include "util.h"
 
 #include <sys/mman.h>
-#
+
 void *
 mm_stack_create(uint32_t size)
 {
