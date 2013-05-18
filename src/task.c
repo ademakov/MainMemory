@@ -19,6 +19,7 @@
 
 #include "task.h"
 
+#include "alloc.h"
 #include "core.h"
 #include "pool.h"
 #include "port.h"

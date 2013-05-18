@@ -23,8 +23,6 @@
 #include "sched.h"
 #include "task.h"
 
-#include "dlmalloc/malloc.h"
-
 #include <errno.h>
 #include <stdio.h>
 #include <stdarg.h>
@@ -185,49 +183,7 @@ mm_fatal(int error, const char *restrict msg, ...)
  * Memory Allocation Routines.
  **********************************************************************/
 
-void *
-mm_alloc(size_t size)
-{
-	void *ptr = dlmalloc(size);
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
-	return ptr;
-}
-
-void *
-mm_realloc(void *ptr, size_t size)
-{
-	ptr = dlrealloc(ptr, size);
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
-	return ptr;
-}
-
-void *
-mm_calloc(size_t count, size_t size)
-{
-	void *ptr = dlcalloc(count, size);
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	}
-	return ptr;
-}
-
-void *
-mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
-{
-	ASSERT(old_count < new_count);
-	size_t old_amount = old_count * size;
-	size_t new_amount = new_count * size;
-	ptr = dlrealloc(ptr, new_amount);
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", new_amount);
-	}
-	memset(ptr + old_amount, 0, new_amount - old_amount);
-	return ptr;
-}
+#include "alloc.h"
 
 char *
 mm_strdup(const char *s)
@@ -258,12 +214,6 @@ mm_asprintf(const char *restrict fmt, ...)
 	va_end(va);
 
 	return ptr;
-}
-
-void
-mm_free(void *ptr)
-{
-	dlfree(ptr);
 }
 
 /**********************************************************************

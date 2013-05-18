@@ -18,6 +18,8 @@
  */
 
 #include "hook.h"
+
+#include "alloc.h"
 #include "util.h"
 
 struct mm_hook_link

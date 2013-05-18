@@ -23,6 +23,7 @@
 #include "common.h"
 #include "sched.h"
 #include "thread.h"
+#include "util.h"
 
 /**********************************************************************
  * Synchronization between core threads.

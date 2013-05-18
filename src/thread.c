@@ -19,6 +19,7 @@
 
 #include "thread.h"
 
+#include "alloc.h"
 #include "util.h"
 
 #include <pthread.h>

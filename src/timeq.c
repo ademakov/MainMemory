@@ -19,6 +19,7 @@
 
 #include "timeq.h"
 
+#include "alloc.h"
 #include "util.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1

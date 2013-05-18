@@ -19,6 +19,7 @@
 
 #include "core.h"
 
+#include "alloc.h"
 #include "clock.h"
 #include "future.h"
 #include "hook.h"

@@ -19,6 +19,7 @@
 
 #include "event.h"
 
+#include "alloc.h"
 #include "core.h"
 #include "net.h"
 #include "port.h"

@@ -19,6 +19,7 @@
 
 #include "net.h"
 
+#include "alloc.h"
 #include "core.h"
 #include "event.h"
 #include "pool.h"

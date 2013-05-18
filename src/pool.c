@@ -19,6 +19,7 @@
 
 #include "pool.h"
 
+#include "alloc.h"
 #include "util.h"
 
 #define MM_POOL_BLOCK_SIZE	0x2000

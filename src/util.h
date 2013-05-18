@@ -54,23 +54,11 @@ void mm_fatal(int error, const char *restrict msg, ...)
  * Memory Allocation Routines.
  **********************************************************************/
 
-void * mm_alloc(size_t size)
-	__attribute__((malloc));
-
-void * mm_calloc(size_t count, size_t size)
-	__attribute__((malloc));
-
-void * mm_realloc(void *ptr, size_t size);
-
-void * mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size);
-
 char * mm_strdup(const char *s);
 
 char * mm_asprintf(const char *restrict fmt, ...)
 	__attribute__((format(printf, 1, 2)))
 	__attribute__((nonnull(1)));
-
-void mm_free(void *ptr);
 
 /**********************************************************************
  * Debug & Trace Utilities.

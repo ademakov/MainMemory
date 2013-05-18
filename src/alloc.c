@@ -1,0 +1,97 @@
+/*
+ * alloc.c - MainMemory memory allocation.
+ *
+ * Copyright (C) 2012-2013  Aleksey Demakov
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#include "alloc.h"
+
+#include "lock.h"
+#include "util.h"
+
+#include "dlmalloc/malloc.h"
+
+/**********************************************************************
+ * Memory Allocation Routines.
+ **********************************************************************/
+
+static mm_global_lock_t mm_alloc_lock = MM_ATOMIC_LOCK_INIT;
+
+void *
+mm_alloc(size_t size)
+{
+	mm_global_lock(&mm_alloc_lock);
+	void *ptr = dlmalloc(size);
+	mm_global_unlock(&mm_alloc_lock);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	}
+	return ptr;
+}
+
+void *
+mm_realloc(void *ptr, size_t size)
+{
+	mm_global_lock(&mm_alloc_lock);
+	ptr = dlrealloc(ptr, size);
+	mm_global_unlock(&mm_alloc_lock);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	}
+	return ptr;
+}
+
+void *
+mm_calloc(size_t count, size_t size)
+{
+	mm_global_lock(&mm_alloc_lock);
+	void *ptr = dlcalloc(count, size);
+	mm_global_unlock(&mm_alloc_lock);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	}
+	return ptr;
+}
+
+void *
+mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
+{
+	ASSERT(old_count < new_count);
+	size_t old_amount = old_count * size;
+	size_t new_amount = new_count * size;
+
+	mm_global_lock(&mm_alloc_lock);
+	ptr = dlrealloc(ptr, new_amount);
+	mm_global_unlock(&mm_alloc_lock);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", new_amount);
+	}
+	memset(ptr + old_amount, 0, new_amount - old_amount);
+	return ptr;
+}
+
+void
+mm_free(void *ptr)
+{
+	mm_global_lock(&mm_alloc_lock);
+	dlfree(ptr);
+	mm_global_unlock(&mm_alloc_lock);
+}
+

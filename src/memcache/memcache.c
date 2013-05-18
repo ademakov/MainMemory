@@ -19,6 +19,7 @@
 
 #include "memcache.h"
 
+#include "../alloc.h"
 #include "../future.h"
 #include "../list.h"
 #include "../net.h"
