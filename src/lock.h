@@ -22,9 +22,7 @@
 
 #include "common.h"
 #include "sched.h"
-
-/* TODO: resolve <sched.h> vs "sched.h" conflict. */
-int sched_yield();
+#include "thread.h"
 
 /**********************************************************************
  * Synchronization between core threads.
@@ -43,7 +41,7 @@ mm_core_lock(mm_core_lock_t *lock)
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
 				if ((count & 0x3f) == 0x3f) {
-					sched_yield();
+					mm_thread_yield();
 				} else {
 					mm_sched_yield();
 				}
@@ -83,7 +81,7 @@ mm_global_lock(mm_core_lock_t *lock)
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
 				if ((count & 0x3f) == 0x3f) {
-					sched_yield();
+					mm_thread_yield();
 				} else if (mm_running_task != NULL) {
 					mm_sched_yield();
 				}

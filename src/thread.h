@@ -84,6 +84,8 @@ void mm_thread_cancel(struct mm_thread *thread)
 void mm_thread_join(struct mm_thread *thread)
 	__attribute__((nonnull(1)));
 
+void mm_thread_yield(void);
+
 /**********************************************************************
  * Thread information.
  **********************************************************************/

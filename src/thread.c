@@ -218,6 +218,19 @@ mm_thread_join(struct mm_thread *thread)
 	LEAVE();
 }
 
+void
+mm_thread_yield(void)
+{
+	/* TODO: resolve <sched.h> vs "sched.h" conflict. */
+	int sched_yield();
+
+	ENTER();
+
+	sched_yield();
+
+	LEAVE();
+}
+
 /**********************************************************************
  * Thread information.
  **********************************************************************/
