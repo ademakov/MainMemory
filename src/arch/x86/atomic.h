@@ -42,7 +42,7 @@
  * loops to make hyper-threading CPUs happy.
  */
 
-#define MM_ATOMIC_LOCK_INIT	(0)
+#define MM_ATOMIC_LOCK_INIT	{0}
 
 typedef struct { char locked; } mm_atomic_lock_t;
 
