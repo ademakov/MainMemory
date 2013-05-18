@@ -33,7 +33,12 @@
 
 #include <stdio.h>
 
-#define MM_DEFAULT_CORES	1
+#if ENABLE_SMP
+# define MM_DEFAULT_CORES	2
+#else
+# define MM_DEFAULT_CORES	1
+#endif
+
 #define MM_DEFAULT_WORKERS	512
 
 #define MM_PRIO_MASTER		1

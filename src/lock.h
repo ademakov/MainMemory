@@ -78,6 +78,7 @@ mm_global_lock(mm_core_lock_t *lock)
 {
 	register int count = 0;
 	while (mm_atomic_lock_acquire(lock)) {
+#if ENABLE_SMP
 		do {
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
@@ -89,6 +90,9 @@ mm_global_lock(mm_core_lock_t *lock)
 			}
 			count++;
 		} while (lock->locked);
+#else
+		sched_yield();
+#endif
 	}
 }
 
