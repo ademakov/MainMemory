@@ -8,7 +8,7 @@ mmem_CFLAGS = -Wall -Wextra
 mmem_SOURCES = \
 	arch/atomic.h arch/common.h arch/memory.h arch/stack.h \
 	bits.h clock.c clock.h common.h core.c core.h event.c event.h \
-	future.c future.h hook.c hook.h list.h main.c net.c net.h \
+	future.c future.h hook.c hook.h list.h lock.h main.c net.c net.h \
 	pool.c pool.h port.c port.h runq.c runq.h sched.c sched.h \
 	stack.c stack.h task.c task.h thread.c thread.h timeq.c timeq.h \
 	timer.c timer.h util.c util.h work.c work.h \
