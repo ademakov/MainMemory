@@ -83,29 +83,52 @@ mm_pool_discard(struct mm_pool *pool)
 }
 
 void *
-mm_pool_idx2ptr(struct mm_pool *pool, uint32_t n)
+mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 {
-	if (unlikely(n >= pool->item_last))
-		return NULL;
+	uint32_t block = item_idx / pool->block_capacity;
+	uint32_t index = item_idx % pool->block_capacity;
 
-	uint32_t block = n / pool->block_capacity;
-	uint32_t index = n % pool->block_capacity;
-	return pool->block_array[block] + index * pool->item_size;
+	if (pool->global)
+		mm_global_lock(&pool->grow_lock);
+
+	void *item_ptr;
+	if (unlikely(item_idx >= pool->item_last))
+		item_ptr = NULL;
+	else
+		item_ptr = pool->block_array[block] + index * pool->item_size;
+
+	if (pool->global)
+		mm_global_unlock(&pool->grow_lock);
+
+	return item_ptr;
 }
 
 uint32_t
-mm_pool_ptr2idx(struct mm_pool *pool, void *item)
+mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 {
+	char *start = NULL;
 	uint32_t block = 0;
-	while (block < pool->block_array_used
-	       && ((char *) item < pool->block_array[block]
-		   || (char *) item >= pool->block_array[block] + MM_POOL_BLOCK_SIZE))
-		++block;
 
-	if (unlikely(block == pool->block_array_used))
+	if (pool->global)
+		mm_global_lock(&pool->grow_lock);
+
+	while (block < pool->block_array_used) {
+		char *s_ptr = pool->block_array[block];
+		char *e_ptr = s_ptr + MM_POOL_BLOCK_SIZE;
+		if((char *) item_ptr >= s_ptr && (char *) item_ptr < e_ptr) {
+			start = s_ptr;
+			break;
+		}
+		++block;
+	}
+
+	if (pool->global)
+		mm_global_unlock(&pool->grow_lock);
+
+	if (unlikely(start == NULL))
 		return MM_POOL_INDEX_INVALID;
 
-	uint32_t index = ((char *) item - pool->block_array[block]) / pool->item_size;
+	uint32_t index = ((char *) item_ptr - start) / pool->item_size;
 
 	return block * pool->block_capacity + index;
 }
@@ -160,7 +183,6 @@ mm_pool_alloc(struct mm_pool *pool)
 
 		item = pool->block_cur_ptr;
 		pool->block_cur_ptr += pool->item_size;
-
 		pool->item_last++;
 
 		if (pool->global)
