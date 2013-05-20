@@ -25,6 +25,18 @@
 
 #include "dlmalloc/malloc.h"
 
+const struct mm_allocator mm_alloc_core = {
+	mm_core_alloc,
+	mm_core_realloc,
+	mm_core_free
+};
+
+const struct mm_allocator mm_alloc_global = {
+	mm_alloc,
+	mm_realloc,
+	mm_free
+};
+
 /**********************************************************************
  * Stubs for LIBC Memory Allocation Routines.
  **********************************************************************/

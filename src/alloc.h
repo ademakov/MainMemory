@@ -22,6 +22,16 @@
 
 #include "common.h"
 
+struct mm_allocator
+{
+	void * (*alloc)(size_t size);
+	void * (*realloc)(void *ptr, size_t size);
+	void (*free)(void *ptr);
+};
+
+extern const struct mm_allocator mm_alloc_core;
+extern const struct mm_allocator mm_alloc_global;
+
 /**********************************************************************
  * Memory Allocation for Core Threads.
  **********************************************************************/
