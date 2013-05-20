@@ -24,6 +24,8 @@
 
 #define MM_POOL_INDEX_INVALID	((uint32_t) -1)
 
+// Forward declaration.
+struct mm_allocator;
 
 struct mm_pool
 {
@@ -38,12 +40,14 @@ struct mm_pool
 	uint32_t block_array_used;
 	uint32_t block_array_size;
 
+	const struct mm_allocator *alloc;
+
 	char *pool_name;
 };
 
-
-void mm_pool_init(struct mm_pool *pool, const char *name, uint32_t item_size)
-	__attribute__((nonnull(1, 2)));
+void mm_pool_init(struct mm_pool *pool, const char *name,
+		  const struct mm_allocator *alloc, uint32_t item_size)
+	__attribute__((nonnull(1, 2, 3)));
 
 void mm_pool_discard(struct mm_pool *pool)
 	__attribute__((nonnull(1)));

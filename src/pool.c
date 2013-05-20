@@ -30,7 +30,8 @@ struct mm_pool_free_item
 };
 
 void
-mm_pool_init(struct mm_pool *pool, const char *pool_name, uint32_t item_size)
+mm_pool_init(struct mm_pool *pool, const char *pool_name,
+	     const struct mm_allocator *alloc, uint32_t item_size)
 {
 	ENTER();
 	ASSERT(item_size < 0x200);
@@ -49,10 +50,11 @@ mm_pool_init(struct mm_pool *pool, const char *pool_name, uint32_t item_size)
 	pool->block_array_size = 4;
 
 	// Allocate the block container.
-	pool->block_array = mm_alloc(pool->block_array_size * sizeof(char *));
+	pool->alloc = alloc;
+	pool->block_array = pool->alloc->alloc(pool->block_array_size * sizeof(char *));
 
 	// Allocate the first block.
-	pool->block_array[0] = mm_alloc(MM_POOL_BLOCK_SIZE);
+	pool->block_array[0] = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
 	pool->block_cur_ptr = pool->block_array[0];
 	pool->block_end_ptr = pool->block_cur_ptr +  pool->block_capacity * pool->item_size;
 
@@ -68,8 +70,9 @@ mm_pool_discard(struct mm_pool *pool)
 	ENTER();
 
 	for (uint32_t i = 0; i < pool->block_array_used; i++)
-		mm_free(pool->block_array[i]);
-	mm_free(pool->block_array);
+		pool->alloc->free(pool->block_array[i]);
+	pool->alloc->free(pool->block_array);
+
 	mm_free(pool->pool_name);
 
 	LEAVE();
@@ -124,12 +127,12 @@ mm_pool_alloc(struct mm_pool *pool)
 
 			if (pool->block_array_used == pool->block_array_size) {
 				pool->block_array_size *= 2;
-				pool->block_array = mm_realloc(
+				pool->block_array = pool->alloc->realloc(
 					pool->block_array,
 					pool->block_array_size * sizeof(char *));
 			}
 
-			pool->block_array[pool->block_array_used] = mm_alloc(MM_POOL_BLOCK_SIZE);
+			pool->block_array[pool->block_array_used] = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
 			pool->block_cur_ptr = pool->block_array[pool->block_array_used];
 			pool->block_end_ptr = pool->block_cur_ptr + pool->block_capacity * pool->item_size;
 

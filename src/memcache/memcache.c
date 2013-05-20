@@ -699,7 +699,8 @@ mc_command_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mc_command_pool, "memcache command", sizeof(struct mc_command));
+	mm_pool_init(&mc_command_pool, "memcache command",
+		     &mm_alloc_global, sizeof(struct mc_command));
 
 	LEAVE();
 }

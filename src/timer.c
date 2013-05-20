@@ -19,6 +19,7 @@
 
 #include "timer.h"
 
+#include "alloc.h"
 #include "core.h"
 #include "pool.h"
 #include "sched.h"
@@ -98,7 +99,8 @@ mm_timer_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_timer_pool, "timer", sizeof (struct mm_timer));
+	mm_pool_init(&mm_timer_pool, "timer",
+	             &mm_alloc_global, sizeof (struct mm_timer));
 
 	LEAVE();
 }

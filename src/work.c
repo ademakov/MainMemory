@@ -19,6 +19,7 @@
 
 #include "work.h"
 
+#include "alloc.h"
 #include "core.h"
 #include "pool.h"
 #include "sched.h"
@@ -36,7 +37,8 @@ mm_work_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_work_pool, "work", sizeof(struct mm_work));
+	mm_pool_init(&mm_work_pool, "work",
+		     &mm_alloc_global, sizeof(struct mm_work));
 
 	mm_list_init(&mm_work_queue);
 	mm_list_init(&mm_wait_queue);

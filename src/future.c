@@ -19,6 +19,7 @@
 
 #include "future.h"
 
+#include "alloc.h"
 #include "pool.h"
 #include "sched.h"
 #include "util.h"
@@ -34,7 +35,8 @@ mm_future_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_future_pool, "future", sizeof(struct mm_future));
+	mm_pool_init(&mm_future_pool, "future",
+		     &mm_alloc_global, sizeof(struct mm_future));
 
 	LEAVE();
 }
