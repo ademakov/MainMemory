@@ -211,6 +211,11 @@ mm_core_boot(uintptr_t arg)
 	mm_core_update_time();
 	mm_core_update_real_time();
 
+	// Create the time queue.
+	core->time_queue = mm_timeq_create();
+	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
+	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
+
 	// Create the master task for this core and schedule it for execution.
 	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
@@ -228,6 +233,9 @@ mm_core_boot(uintptr_t arg)
 	// Call the stop hooks on the first core.
 	if (is_primary_core)
 		mm_hook_call_proc(&mm_core_stop_hook, false);
+
+	// Destroy the time queue.
+	mm_timeq_destroy(core->time_queue);
 
 	// Invalidate the boot task.
 	mm_running_task->state = MM_TASK_INVALID;
@@ -259,10 +267,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->time_value = 0;
 	core->real_time_value = 0;
-
-	core->time_queue = mm_timeq_create();
-	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
-	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
+	core->time_queue = NULL;
 
 	LEAVE();
 }
@@ -274,8 +279,6 @@ mm_core_term_single(struct mm_core *core)
 
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
-
-	mm_timeq_destroy(core->time_queue);
 
 	destroy_mspace(core->arena);
 
