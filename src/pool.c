@@ -49,6 +49,10 @@ mm_pool_init(struct mm_pool *pool, const char *pool_name,
 	pool->block_array_used = 1;
 	pool->block_array_size = 4;
 
+	pool->global = (alloc == &mm_alloc_global);
+	pool->free_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
+	pool->grow_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
+
 	// Allocate the block container.
 	pool->alloc = alloc;
 	pool->block_array = pool->alloc->alloc(pool->block_array_size * sizeof(char *));
@@ -111,11 +115,23 @@ mm_pool_alloc(struct mm_pool *pool)
 {
 	ENTER();
 
+	if (pool->global)
+		mm_global_lock(&pool->free_lock);
+
 	void *item;
 	if (pool->free_list != NULL) {
 		item = pool->free_list;
 		pool->free_list = pool->free_list->next;
+
+		if (pool->global)
+			mm_global_unlock(&pool->free_lock);
+
 	} else {
+		if (pool->global) {
+			mm_global_lock(&pool->grow_lock);
+			mm_global_unlock(&pool->free_lock);
+		}
+
 		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr)) {
 			mm_print("grow the '%s' memory pool with element size %u",
 				 pool->pool_name, pool->item_size);
@@ -132,9 +148,12 @@ mm_pool_alloc(struct mm_pool *pool)
 					pool->block_array_size * sizeof(char *));
 			}
 
-			pool->block_array[pool->block_array_used] = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
-			pool->block_cur_ptr = pool->block_array[pool->block_array_used];
-			pool->block_end_ptr = pool->block_cur_ptr + pool->block_capacity * pool->item_size;
+			pool->block_array[pool->block_array_used]
+				= pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
+			pool->block_cur_ptr
+				= pool->block_array[pool->block_array_used];
+			pool->block_end_ptr
+				= pool->block_cur_ptr + pool->block_capacity * pool->item_size;
 
 			pool->block_array_used++;
 		}
@@ -143,6 +162,9 @@ mm_pool_alloc(struct mm_pool *pool)
 		pool->block_cur_ptr += pool->item_size;
 
 		pool->item_last++;
+
+		if (pool->global)
+			mm_global_unlock(&pool->grow_lock);
 	}
 
 	LEAVE();
@@ -154,9 +176,15 @@ mm_pool_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
 
+	if (pool->global)
+		mm_global_lock(&pool->free_lock);
+
 	struct mm_pool_free_item *free_item = item;
 	free_item->next = pool->free_list;
 	pool->free_list = free_item;
+
+	if (pool->global)
+		mm_global_unlock(&pool->free_lock);
 
 	LEAVE();
 }

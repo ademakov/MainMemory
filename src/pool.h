@@ -21,6 +21,7 @@
 #define POOL_H
 
 #include "common.h"
+#include "lock.h"
 
 #define MM_POOL_INDEX_INVALID	((uint32_t) -1)
 
@@ -39,6 +40,10 @@ struct mm_pool
 	uint32_t block_capacity;
 	uint32_t block_array_used;
 	uint32_t block_array_size;
+
+	bool global;
+	mm_global_lock_t free_lock;
+	mm_global_lock_t grow_lock;
 
 	const struct mm_allocator *alloc;
 
