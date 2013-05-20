@@ -117,24 +117,6 @@ mm_calloc(size_t count, size_t size)
 	return ptr;
 }
 
-void *
-mm_crealloc(void *ptr, size_t old_count, size_t new_count, size_t size)
-{
-	ASSERT(old_count < new_count);
-	size_t old_amount = old_count * size;
-	size_t new_amount = new_count * size;
-
-	mm_global_lock(&mm_alloc_lock);
-	ptr = dlrealloc(ptr, new_amount);
-	mm_global_unlock(&mm_alloc_lock);
-
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", new_amount);
-	}
-	memset(ptr + old_amount, 0, new_amount - old_amount);
-	return ptr;
-}
-
 void
 mm_free(void *ptr)
 {
