@@ -35,13 +35,13 @@ struct mm_timer
 	/* Clock type. */
 	mm_clock_t clock;
 
+	/* Absolute time flag. */
+	bool abstime;
+
 	/* Task parameters. */
 	mm_task_flags_t flags;
 	mm_routine_t start;
 	uintptr_t start_arg;
-
-	/* Absolute time flag. */
-	bool abstime;
 
 	/* Expiration time. */
 	mm_timeval_t value;
@@ -59,8 +59,6 @@ struct mm_timer_resume
 	struct mm_task *task;
 };
 
-/* The memory pool for timers. */
-static struct mm_pool mm_timer_pool;
 
 static bool
 mm_timer_is_armed(struct mm_timeq_entry *entry)
@@ -99,8 +97,8 @@ mm_timer_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_timer_pool, "timer",
-	             &mm_alloc_global, sizeof (struct mm_timer));
+	mm_pool_init(&mm_core->timer_pool, "timer",
+	             &mm_alloc_core, sizeof (struct mm_timer));
 
 	LEAVE();
 }
@@ -110,7 +108,7 @@ mm_timer_term(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_timer_pool);
+	mm_pool_discard(&mm_core->timer_pool);
 
 	LEAVE();
 }
@@ -160,12 +158,12 @@ mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_alloc(&mm_timer_pool);
-	mm_timer_t timer_id = mm_pool_ptr2idx(&mm_timer_pool, timer);
+	struct mm_timer *timer = mm_pool_alloc(&mm_core->timer_pool);
+	mm_timer_t timer_id = mm_pool_ptr2idx(&mm_core->timer_pool, timer);
 
 	// Check for timer_id overflow over the MM_TIMER_SLEEP value.
 	if (unlikely(timer_id == MM_TIMER_BLOCK)) {
-		mm_pool_free(&mm_timer_pool, timer);
+		mm_pool_free(&mm_core->timer_pool, timer);
 
 		timer_id = MM_TIMER_ERROR;
 		errno = EAGAIN;
@@ -190,13 +188,13 @@ mm_timer_destroy(mm_timer_t timer_id)
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_idx2ptr(&mm_timer_pool, timer_id);
+	struct mm_timer *timer = mm_pool_idx2ptr(&mm_core->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
 	if (mm_timer_is_armed(&timer->entry))
 		mm_timeq_delete(mm_core->time_queue, &timer->entry);
 
-	mm_pool_free(&mm_timer_pool, timer);
+	mm_pool_free(&mm_core->timer_pool, timer);
 
 	LEAVE();
 }
@@ -207,7 +205,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_idx2ptr(&mm_timer_pool, timer_id);
+	struct mm_timer *timer = mm_pool_idx2ptr(&mm_core->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
 	if (mm_timer_is_armed(&timer->entry))

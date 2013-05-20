@@ -20,14 +20,11 @@
 #include "future.h"
 
 #include "alloc.h"
+#include "core.h"
 #include "pool.h"
 #include "sched.h"
 #include "util.h"
 #include "work.h"
-
-
-/* The memory pool for futures. */
-static struct mm_pool mm_future_pool;
 
 
 void
@@ -35,8 +32,8 @@ mm_future_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_future_pool, "future",
-		     &mm_alloc_global, sizeof(struct mm_future));
+	mm_pool_init(&mm_core->future_pool, "future",
+		     &mm_alloc_core, sizeof(struct mm_future));
 
 	LEAVE();
 }
@@ -46,7 +43,7 @@ mm_future_term(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_future_pool);
+	mm_pool_discard(&mm_core->future_pool);
 
 	LEAVE();
 }
@@ -57,7 +54,7 @@ mm_future_create(const char *name __attribute__((unused)), mm_task_flags_t flags
 {
 	ENTER();
 
-	struct mm_future *future = mm_pool_alloc(&mm_future_pool);
+	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
 	future->status = MM_FUTURE_CREATED;
 	future->result = MM_TASK_UNRESOLVED;
 	future->flags = flags;
@@ -77,7 +74,7 @@ mm_future_destroy(struct mm_future *future)
 	ASSERT(future->status != MM_FUTURE_STARTED);
 	ASSERT(mm_list_empty(&future->blocked_tasks));
 
-	mm_pool_free(&mm_future_pool, future);
+	mm_pool_free(&mm_core->future_pool, future);
 
 	LEAVE();
 }

@@ -190,6 +190,36 @@ mm_core_hook_stop(void (*proc)(void))
  * Core initialization and termination.
  **********************************************************************/
 
+static void
+mm_core_boot_init(struct mm_core *core)
+{
+	mm_timer_init();
+	mm_future_init();
+
+	// Update the time.
+	mm_core_update_time();
+	mm_core_update_real_time();
+
+	// Create the time queue.
+	core->time_queue = mm_timeq_create();
+	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
+	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
+
+	// Create the master task for this core and schedule it for execution.
+	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
+	core->master->priority = MM_PRIO_MASTER;
+	mm_sched_run(core->master);
+}
+
+static void
+mm_core_boot_term(struct mm_core *core)
+{
+	mm_timeq_destroy(core->time_queue);
+
+	mm_future_term();
+	mm_timer_term();
+}
+
 /* A per-core thread entry point. */
 static mm_result_t
 mm_core_boot(uintptr_t arg)
@@ -207,19 +237,8 @@ mm_core_boot(uintptr_t arg)
 	mm_running_task = mm_core->boot;
 	mm_running_task->state = MM_TASK_RUNNING;
 
-	// Update the time.
-	mm_core_update_time();
-	mm_core_update_real_time();
-
-	// Create the time queue.
-	core->time_queue = mm_timeq_create();
-	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
-	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
-
-	// Create the master task for this core and schedule it for execution.
-	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
-	core->master->priority = MM_PRIO_MASTER;
-	mm_sched_run(core->master);
+	// Initialize per-core resources.
+	mm_core_boot_init(core);
 
 	// Call the start hooks on the first core.
 	if (is_primary_core) {
@@ -234,8 +253,8 @@ mm_core_boot(uintptr_t arg)
 	if (is_primary_core)
 		mm_hook_call_proc(&mm_core_stop_hook, false);
 
-	// Destroy the time queue.
-	mm_timeq_destroy(core->time_queue);
+	// Destroy per-core resources.
+	mm_core_boot_term(core);
 
 	// Invalidate the boot task.
 	mm_running_task->state = MM_TASK_INVALID;
@@ -326,8 +345,6 @@ mm_core_init(void)
 	ASSERT(mm_core_num == 0);
 
 	mm_clock_init();
-	mm_timer_init();
-	mm_future_init();
 	mm_thread_init();
 
 	mm_work_init();
@@ -361,8 +378,6 @@ mm_core_term(void)
 	mm_port_term();
 
 	mm_thread_term();
-	mm_future_term();
-	mm_timer_term();
 
 	LEAVE();
 }

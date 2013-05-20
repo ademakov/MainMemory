@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "list.h"
+#include "pool.h"
 #include "runq.h"
 
 /* Forward declaration. */
@@ -31,7 +32,9 @@ struct mm_timeq;
 struct mm_core
 {
 	/* Stop flag. */
-	uint32_t stop;
+	bool stop;
+	/* The flag indicating that a master sleeps waiting for a worker. */
+	bool master_waits_worker;
 
 	/* The memory arena for core-local allocation. */
 	void *arena;
@@ -43,11 +46,11 @@ struct mm_core
 	uint32_t nworkers;
 	uint32_t nworkers_max;
 
-	/* The flag indicating that a master sleeps waiting for a worker. */
-	bool master_waits_worker;
-
 	/* The queue of ready to run tasks. */
 	struct mm_runq run_queue;
+
+	/* The list of worker tasks that have finished. */
+	struct mm_list dead_list;
 
 	/* The queue of delayed tasks. */
 	struct mm_timeq *time_queue;
@@ -62,8 +65,10 @@ struct mm_core
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
-	/* The list of worker tasks that have finished. */
-	struct mm_list dead_list;
+	/* Memory pool for timers. */
+	struct mm_pool timer_pool;
+	/* Memory pool for futures. */
+	struct mm_pool future_pool;
 
 } __align(MM_CACHELINE);
 
