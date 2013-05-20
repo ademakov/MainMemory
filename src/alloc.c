@@ -41,34 +41,44 @@ const struct mm_allocator mm_alloc_global = {
  * Stubs for LIBC Memory Allocation Routines.
  **********************************************************************/
 
+static void
+mm_libc_call(const char *name)
+{
+	static __thread int recurrent = 0;
+	if (!recurrent) {
+		++recurrent;
+		mm_print("attempt to call libc function '%s'", name);
+		--recurrent;
+	}
+}
+
 void *
 malloc(size_t size)
 {
-	mm_print("who still needs malloc?");
+	mm_libc_call("malloc");
 	return mm_alloc(size);
 }
 
 void *
 calloc(size_t count, size_t size)
 {
-	mm_print("who still needs calloc?");
+	mm_libc_call("calloc");
 	return mm_calloc(count, size);
 }
 
 void *
 realloc(void *ptr, size_t size)
 {
-	mm_print("who still needs realloc?");
+	mm_libc_call("realloc");
 	return mm_realloc(ptr, size);
 }
 
 void
 free(void *ptr)
 {
-	mm_print("who still needs free?");
+	mm_libc_call("free");
 	mm_free(ptr);
 }
-
 
 /**********************************************************************
  * Memory Allocation for Core Threads.
