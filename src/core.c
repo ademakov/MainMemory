@@ -359,8 +359,8 @@ mm_core_term(void)
 	mm_task_term();
 	mm_work_term();
 	mm_port_term();
-	
-	mm_thread_init();
+
+	mm_thread_term();
 	mm_future_term();
 	mm_timer_term();
 
