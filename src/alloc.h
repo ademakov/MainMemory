@@ -43,6 +43,9 @@ void mm_core_free(void *ptr);
 void * mm_alloc(size_t size)
 	__attribute__((malloc));
 
+void * mm_alloc_aligned(size_t align, size_t size)
+	__attribute__((malloc));
+
 void * mm_calloc(size_t count, size_t size)
 	__attribute__((malloc));
 

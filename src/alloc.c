@@ -121,6 +121,17 @@ mm_alloc(size_t size)
 }
 
 void *
+mm_alloc_aligned(size_t align, size_t size)
+{
+	void *ptr = dlmemalign(align, size);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	}
+	return ptr;
+}
+
+void *
 mm_calloc(size_t count, size_t size)
 {
 	mm_global_lock(&mm_alloc_lock);

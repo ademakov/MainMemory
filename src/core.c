@@ -334,7 +334,7 @@ mm_core_init(void)
 	// TODO: get the number of available CPU cores on the system.
 	mm_core_num = MM_DEFAULT_CORES;
 
-	mm_core_set = mm_alloc(mm_core_num * sizeof(struct mm_core));
+	mm_core_set = mm_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (int i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
 
