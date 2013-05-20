@@ -43,6 +43,13 @@ calloc(size_t count, size_t size)
 	return mm_calloc(count, size);
 }
 
+void *
+realloc(void *ptr, size_t size)
+{
+	mm_print("who still needs realloc?");
+	return mm_realloc(ptr, size);
+}
+
 void
 free(void *ptr)
 {
@@ -66,6 +73,28 @@ mm_core_alloc(size_t size)
 	return ptr;
 }
 
+void *
+mm_core_calloc(size_t count, size_t size)
+{
+	void *ptr = mspace_calloc(mm_core->arena, count, size);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	}
+	return ptr;
+}
+
+void *
+mm_core_realloc(void *ptr, size_t size)
+{
+	ptr = mspace_realloc(mm_core->arena, ptr, size);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	}
+	return ptr;
+}
+
 void
 mm_core_free(void *ptr)
 {
@@ -73,7 +102,7 @@ mm_core_free(void *ptr)
 }
 
 /**********************************************************************
- * Memory Allocation Routines.
+ * Global Memory Allocation Routines.
  **********************************************************************/
 
 static mm_global_lock_t mm_alloc_lock = MM_ATOMIC_LOCK_INIT;
@@ -92,19 +121,6 @@ mm_alloc(size_t size)
 }
 
 void *
-mm_realloc(void *ptr, size_t size)
-{
-	mm_global_lock(&mm_alloc_lock);
-	ptr = dlrealloc(ptr, size);
-	mm_global_unlock(&mm_alloc_lock);
-
-	if (unlikely(ptr == NULL)) {
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
-	return ptr;
-}
-
-void *
 mm_calloc(size_t count, size_t size)
 {
 	mm_global_lock(&mm_alloc_lock);
@@ -113,6 +129,19 @@ mm_calloc(size_t count, size_t size)
 
 	if (unlikely(ptr == NULL)) {
 		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	}
+	return ptr;
+}
+
+void *
+mm_realloc(void *ptr, size_t size)
+{
+	mm_global_lock(&mm_alloc_lock);
+	ptr = dlrealloc(ptr, size);
+	mm_global_unlock(&mm_alloc_lock);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	}
 	return ptr;
 }

@@ -26,7 +26,13 @@
  * Memory Allocation for Core Threads.
  **********************************************************************/
 
-void * mm_core_alloc(size_t size);
+void * mm_core_alloc(size_t size)
+	__attribute__((malloc));
+
+void * mm_core_calloc(size_t count, size_t size)
+	__attribute__((malloc));
+
+void * mm_core_realloc(void *ptr, size_t size);
 
 void mm_core_free(void *ptr);
 
