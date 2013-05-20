@@ -19,6 +19,7 @@
 
 #include "alloc.h"
 
+#include "core.h"
 #include "lock.h"
 #include "util.h"
 
@@ -47,6 +48,28 @@ free(void *ptr)
 {
 	mm_print("who still needs free?");
 	mm_free(ptr);
+}
+
+
+/**********************************************************************
+ * Memory Allocation for Core Threads.
+ **********************************************************************/
+
+void *
+mm_core_alloc(size_t size)
+{
+	void *ptr = mspace_malloc(mm_core->arena, size);
+
+	if (unlikely(ptr == NULL)) {
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	}
+	return ptr;
+}
+
+void
+mm_core_free(void *ptr)
+{
+	mspace_free(mm_core->arena, ptr);
 }
 
 /**********************************************************************

@@ -23,7 +23,15 @@
 #include "common.h"
 
 /**********************************************************************
- * Memory Allocation Routines.
+ * Memory Allocation for Core Threads.
+ **********************************************************************/
+
+void * mm_core_alloc(size_t size);
+
+void mm_core_free(void *ptr);
+
+/**********************************************************************
+ * Global Memory Allocation Routines.
  **********************************************************************/
 
 void * mm_alloc(size_t size)

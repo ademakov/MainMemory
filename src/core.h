@@ -33,6 +33,9 @@ struct mm_core
 	/* Stop flag. */
 	uint32_t stop;
 
+	/* The memory arena for core-local allocation. */
+	void *arena;
+
 	/* The master task. */
 	struct mm_task *master;
 

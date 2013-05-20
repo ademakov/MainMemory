@@ -32,6 +32,8 @@
 #include "work.h"
 #include "util.h"
 
+#include "dlmalloc/malloc.h"
+
 #include <stdio.h>
 
 #if ENABLE_SMP
@@ -240,6 +242,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	ENTER();
 
 	core->stop = 0;
+
+	core->arena = create_mspace(0, 0);
+
 	core->boot = mm_task_create_boot();
 
 	core->thread = NULL;
@@ -271,6 +276,8 @@ mm_core_term_single(struct mm_core *core)
 	mm_task_destroy(core->boot);
 
 	mm_timeq_destroy(core->time_queue);
+
+	destroy_mspace(core->arena);
 
 	LEAVE();
 }
