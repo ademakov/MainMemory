@@ -75,9 +75,9 @@ typedef mm_atomic_lock_t mm_global_lock_t;
 static inline void
 mm_global_lock(mm_core_lock_t *lock)
 {
+#if ENABLE_SMP
 	register int count = 0;
 	while (mm_atomic_lock_acquire(lock)) {
-#if ENABLE_SMP
 		do {
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
@@ -89,10 +89,11 @@ mm_global_lock(mm_core_lock_t *lock)
 			}
 			count++;
 		} while (lock->locked);
-#else
-		sched_yield();
-#endif
 	}
+#else
+	while (mm_atomic_lock_acquire(lock))
+		mm_thread_yield();
+#endif
 }
 
 static inline void
