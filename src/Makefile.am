@@ -3,7 +3,7 @@ SUBDIRS = memcache
 
 bin_PROGRAMS = mmem
 
-mmem_CFLAGS = -Wall -Wextra
+mmem_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 
 mmem_SOURCES = \
 	arch/atomic.h arch/common.h arch/memory.h arch/stack.h \

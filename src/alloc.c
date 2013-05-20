@@ -25,6 +25,31 @@
 #include "dlmalloc/malloc.h"
 
 /**********************************************************************
+ * Stubs for LIBC Memory Allocation Routines.
+ **********************************************************************/
+
+void *
+malloc(size_t size)
+{
+	mm_print("who still needs malloc?");
+	return mm_alloc(size);
+}
+
+void *
+calloc(size_t count, size_t size)
+{
+	mm_print("who still needs calloc?");
+	return mm_calloc(count, size);
+}
+
+void
+free(void *ptr)
+{
+	mm_print("who still needs free?");
+	mm_free(ptr);
+}
+
+/**********************************************************************
  * Memory Allocation Routines.
  **********************************************************************/
 
