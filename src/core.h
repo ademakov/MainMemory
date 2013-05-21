@@ -39,6 +39,10 @@ struct mm_core
 	/* The memory arena for core-local allocation. */
 	void *arena;
 
+	/* The memory chunks freed by other threads. */
+	mm_global_lock_t chunks_lock;
+	struct mm_list chunks;
+
 	/* The master task. */
 	struct mm_task *master;
 

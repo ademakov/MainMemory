@@ -20,6 +20,7 @@
 #include "core.h"
 
 #include "alloc.h"
+#include "chunk.h"
 #include "clock.h"
 #include "future.h"
 #include "hook.h"
@@ -112,6 +113,21 @@ mm_core_worker_start(struct mm_work *work)
  * Master task.
  **********************************************************************/
 
+static void
+mm_core_destroy_chunks(struct mm_core *core)
+{
+	mm_global_lock(&core->chunks_lock);
+	if (mm_list_empty(&core->chunks)) {
+		mm_global_unlock(&core->chunks_lock);
+	} else {
+		struct mm_list *head = mm_list_head(&core->chunks);
+		struct mm_list *tail = mm_list_tail(&core->chunks);
+		mm_list_cleave(head, tail);
+		mm_global_unlock(&core->chunks_lock);
+		mm_chunk_destroy_chain(head, tail);
+	}
+}
+
 static mm_result_t
 mm_core_master_loop(uintptr_t arg)
 {
@@ -131,6 +147,8 @@ mm_core_master_loop(uintptr_t arg)
 				mm_core_worker_start(work);
 			}
 		}
+
+		mm_core_destroy_chunks(core);
 	}
 
 	LEAVE();
@@ -271,6 +289,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->stop = 0;
 
 	core->arena = create_mspace(0, 0);
+	core->chunks_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
+	mm_list_init(&core->chunks);
 
 	core->boot = mm_task_create_boot();
 
