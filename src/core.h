@@ -43,6 +43,9 @@ struct mm_core
 	mm_global_lock_t chunks_lock;
 	struct mm_list chunks;
 
+	/* The memory chunks with log messages. */
+	struct mm_list log_chunks;
+
 	/* The master task. */
 	struct mm_task *master;
 

@@ -291,6 +291,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->arena = create_mspace(0, 0);
 	core->chunks_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
 	mm_list_init(&core->chunks);
+	mm_list_init(&core->log_chunks);
 
 	core->boot = mm_task_create_boot();
 
