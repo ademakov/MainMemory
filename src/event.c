@@ -21,6 +21,7 @@
 
 #include "alloc.h"
 #include "core.h"
+#include "log.h"
 #include "net.h"
 #include "port.h"
 #include "sched.h"
@@ -356,6 +357,9 @@ mm_event_dispatch(void)
 		}
 	}
 
+	// Flush the log before possible sleep.
+	mm_log_flush();
+
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
 	if (sent_msgs) {
@@ -565,6 +569,9 @@ mm_event_dispatch(void)
 			EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
 		}
 	}
+
+	// Flush the log before possible sleep.
+	mm_log_flush();
 
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
