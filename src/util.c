@@ -20,6 +20,7 @@
 #include "util.h"
 
 #include "hook.h"
+#include "log.h"
 #include "sched.h"
 #include "task.h"
 
@@ -54,37 +55,6 @@ mm_exit(int status)
 }
 
 /**********************************************************************
- * Basic Logging Routines.
- **********************************************************************/
-
-static void
-mm_vprintf(const char *restrict msg, va_list va)
-{
-	vfprintf(stderr, msg, va);
-}
-
-static void
-mm_printf(const char *restrict msg, ...)
-{
-	va_list va;
-	va_start(va, msg);
-	vfprintf(stderr, msg, va);
-	va_end(va);
-}
-
-static void
-mm_newline(void)
-{
-	fprintf(stderr, "\n");
-}
-
-void
-mm_flush(void)
-{
-	fflush(stderr);
-}
-
-/**********************************************************************
  * Basic Tracing Routines.
  **********************************************************************/
 
@@ -105,12 +75,12 @@ static void
 mm_prefix(void)
 {
 	if (likely(mm_running_task != NULL)) {
-		mm_printf("[%d %s] %*s",
-			  mm_task_id(mm_running_task),
-			  mm_running_task->name,
-			  mm_running_task->trace_level * 2, "");
+		mm_log_fmt("[%d %s] %*s",
+			   mm_task_id(mm_running_task),
+			   mm_running_task->name,
+			   mm_running_task->trace_level * 2, "");
 	} else {
-		mm_printf("%*s", mm_trace_level * 2, "");
+		mm_log_fmt("%*s", mm_trace_level * 2, "");
 	}
 }
 
@@ -131,10 +101,10 @@ mm_print(const char *restrict msg, ...)
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
-	mm_newline();
+	mm_log_str("\n");
 }
 
 void
@@ -144,14 +114,14 @@ mm_error(int error, const char *restrict msg, ...)
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
 	if (error) {
-		mm_printf(": %s", strerror(error));
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
 	}
-
-	mm_newline();
 }
 
 void
@@ -161,18 +131,17 @@ mm_fatal(int error, const char *restrict msg, ...)
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
 	if (error) {
-		mm_print(": %s", strerror(error));
+		mm_print(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
 	}
 
-	mm_newline();
-
-	mm_printf("exiting...");
-	mm_newline();
-	mm_flush();
+	mm_log_str("exiting...\n");
+	mm_log_flush();
 
 	mm_exit(EXIT_FAILURE);
 }
@@ -222,7 +191,7 @@ static void
 mm_location(const char *file, int line, const char *func)
 {
 	mm_prefix();
-	mm_printf("%s(%s:%d): ", func, file, line);
+	mm_log_fmt("%s(%s:%d): ", func, file, line);
 }
 
 void
@@ -233,14 +202,11 @@ mm_abort(const char *file, int line, const char *func,
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
-	mm_newline();
-
-	mm_printf("aborting...");
-	mm_newline();
-	mm_flush();
+	mm_log_str("\naborting...\n");
+	mm_log_flush();
 
 	mm_do_atexit();
 	abort();
@@ -256,10 +222,10 @@ mm_debug(const char *file, int line, const char *func,
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
-	mm_newline();
+	mm_log_str("\n");
 }
 
 #endif
@@ -278,10 +244,10 @@ mm_trace(int level, const char *file, int line, const char *func,
 
 	va_list va;
 	va_start(va, msg);
-	mm_vprintf(msg, va);
+	mm_log_vfmt(msg, va);
 	va_end(va);
 
-	mm_newline();
+	mm_log_str("\n");
 
 	if (level > 0) {
 		mm_trace_level_add(level);

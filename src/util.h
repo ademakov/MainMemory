@@ -35,8 +35,6 @@ void mm_exit(int status)
  * Logging Routines.
  **********************************************************************/
 
-void mm_flush(void);
-
 void mm_print(const char *restrict msg, ...)
 	__attribute__((format(printf, 1, 2)))
 	__attribute__((nonnull(1)));
