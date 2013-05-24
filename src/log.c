@@ -115,7 +115,7 @@ mm_log_str(const char *str)
 	size_t len = strlen(str);
 
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL || !mm_list_empty(&mm_core->log_chunks)) {
+	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
 		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
 		chunk = containerof(tail, struct mm_chunk, link);
 
@@ -128,6 +128,7 @@ mm_log_str(const char *str)
 			chunk = NULL;
 		}
 	}
+
 	if (chunk == NULL) {
 		chunk = mm_log_create_chunk(len);
 	}
@@ -137,6 +138,9 @@ mm_log_str(const char *str)
 
 	if (mm_core == NULL) {
 		mm_log_add_chunk(chunk);
+		if (len == 1 && str[0] == '\n') {
+			mm_log_write();
+		}
 	}
 }
 
@@ -144,14 +148,14 @@ void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL || !mm_list_empty(&mm_core->log_chunks)) {
+	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
 		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
 		chunk = containerof(tail, struct mm_chunk, link);
 	}
 
-	size_t avail = 0;
-	char *space;
 	char dummy[1];
+	char *space;
+	size_t avail = 0;
 	if (chunk == NULL) {
 		space = dummy;
 		avail = sizeof dummy;
@@ -160,10 +164,14 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 		avail = chunk->size - chunk->used;
 	}
 
-	size_t len = vsnprintf(space, avail, fmt, va);
-	if (chunk == NULL || len > avail) {
+	va_list va2;
+	va_copy(va2, va);
+	size_t len = vsnprintf(space, avail, fmt, va2);
+	va_end(va2);
+
+	if (chunk == NULL || len >= avail) {
 		chunk = mm_log_create_chunk(len + 1);
-		(void) vsnprintf(space, avail, fmt, va);
+		(void) vsnprintf(chunk->data, len + 1, fmt, va);
 	}
 	chunk->used += len;
 
@@ -184,7 +192,7 @@ mm_log_fmt(const char *restrict fmt, ...)
 void
 mm_log_flush(void)
 {
-	if (mm_core != NULL || !mm_list_empty(&mm_core->log_chunks)) {
+	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
 		struct mm_list *head = mm_list_head(&mm_core->log_chunks);
 		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
 		mm_list_cleave(head, tail);
