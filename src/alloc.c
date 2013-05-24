@@ -76,7 +76,7 @@ realloc(void *ptr, size_t size)
 void
 free(void *ptr)
 {
-	mm_libc_call("free");
+	/*mm_libc_call("free");*/
 	mm_free(ptr);
 }
 
