@@ -26,27 +26,20 @@
 struct mm_chunk *
 mm_chunk_create(size_t size)
 {
-	ENTER();
-
 	size_t total_size = sizeof(struct mm_chunk) + size;
 	struct mm_chunk *chunk = mm_core_alloc(total_size);
 	chunk->size = size;
 	chunk->used = 0;
 	chunk->core = mm_core;
-
-	LEAVE();
 	return chunk;
 }
 
 void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
-	ENTER();
 	ASSERT(chunk->core == mm_core);
 
 	mm_core_free(chunk);
-
-	LEAVE();
 }
 
 void
