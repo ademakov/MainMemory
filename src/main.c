@@ -149,9 +149,6 @@ mm_server_close(void)
 
 	mm_memcache_term();
 
-	//mm_net_stop_server(mm_ucmd_server);
-	mm_net_stop_server(mm_icmd_server);
-
 	LEAVE();
 }
 

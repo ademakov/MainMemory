@@ -1012,7 +1012,7 @@ mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
 }
 
 static void
-mm_net_start_server_task(void *arg)
+mm_net_start_server_hook(void *arg)
 {
 	ENTER();
 
@@ -1036,6 +1036,30 @@ mm_net_start_server_task(void *arg)
 	LEAVE();
 }
 
+static void
+mm_net_stop_server_hook(void *arg)
+{
+	ENTER();
+
+	struct mm_net_server *srv = arg;
+	ASSERT(srv->fd != -1);
+
+	mm_print("stop server: %s", srv->name);
+
+	// Unregister the socket.
+	mm_event_unregister_fd(srv->fd);
+
+	// TODO: Destroy the event handler task.
+	// mm_task_destroy(srv->io_task);
+
+	// Close the socket.
+	mm_net_close_server_socket(&srv->addr, srv->fd);
+	srv->fd = -1;
+
+	LEAVE();
+
+}
+
 void
 mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 {
@@ -1050,29 +1074,11 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	// Create the server socket.
 	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
 
-	// Delayed server task start.
-	mm_core_hook_param_start(mm_net_start_server_task, srv);
+	// Register the server start hook.
+	mm_core_hook_param_start(mm_net_start_server_hook, srv);
 
-	LEAVE();
-}
-
-void
-mm_net_stop_server(struct mm_net_server *srv)
-{
-	ENTER();
-	ASSERT(srv->fd != -1);
-
-	mm_print("stop server: %s", srv->name);
-
-	// Unregister the socket.
-	mm_event_unregister_fd(srv->fd);
-
-	// TODO: Destroy the event handler task.
-	// mm_task_destroy(srv->io_task);
-
-	// Close the socket.
-	mm_net_close_server_socket(&srv->addr, srv->fd);
-	srv->fd = -1;
+	// Register the server stop hook.
+	mm_core_hook_param_stop(mm_net_stop_server_hook, srv);
 
 	LEAVE();
 }

@@ -169,8 +169,6 @@ struct mm_net_server *mm_net_create_inet6_server(const char *name, const char *a
 
 void mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	__attribute__((nonnull(1, 2)));
-void mm_net_stop_server(struct mm_net_server *srv)
-	__attribute__((nonnull(1)));
 
 ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
 ssize_t mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);

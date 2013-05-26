@@ -2918,8 +2918,6 @@ mm_memcache_term(void)
 {
 	ENTER();
 
-	mm_net_stop_server(mc_tcp_server);
-
 	mc_command_term();
 	mc_table_term();
 

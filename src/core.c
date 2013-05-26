@@ -161,7 +161,9 @@ mm_core_master_loop(uintptr_t arg)
 
 static struct mm_hook mm_core_start_hook;
 static struct mm_hook mm_core_param_start_hook;
+
 static struct mm_hook mm_core_stop_hook;
+static struct mm_hook mm_core_param_stop_hook;
 
 static void
 mm_core_free_hooks(void)
@@ -169,7 +171,9 @@ mm_core_free_hooks(void)
 	ENTER();
 
 	mm_hook_free(&mm_core_start_hook);
+	mm_hook_free(&mm_core_param_start_hook);
 	mm_hook_free(&mm_core_stop_hook);
+	mm_hook_free(&mm_core_param_stop_hook);
 
 	LEAVE();
 }
@@ -200,6 +204,16 @@ mm_core_hook_stop(void (*proc)(void))
 	ENTER();
 
 	mm_hook_tail_proc(&mm_core_stop_hook, proc);
+
+	LEAVE();
+}
+
+void
+mm_core_hook_param_stop(void (*proc)(void *), void *data)
+{
+	ENTER();
+
+	mm_hook_tail_data_proc(&mm_core_param_stop_hook, proc, data);
 
 	LEAVE();
 }
@@ -268,8 +282,10 @@ mm_core_boot(uintptr_t arg)
 	mm_sched_block();
 
 	// Call the stop hooks on the first core.
-	if (is_primary_core)
+	if (is_primary_core) {
+		mm_hook_call_data_proc(&mm_core_param_stop_hook, false);
 		mm_hook_call_proc(&mm_core_stop_hook, false);
+	}
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);
