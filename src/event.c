@@ -372,6 +372,7 @@ mm_event_dispatch(void)
 		if (timeout > MM_EVENT_TIMEOUT) {
 			timeout = MM_EVENT_TIMEOUT;
 		}
+		timeout /= 1000;
 	}
 
 	// Poll the system for events.
