@@ -22,8 +22,8 @@
 
 #include "common.h"
 
-void * mm_stack_create(uint32_t size);
+void * mm_stack_create(uint32_t stack_size, uint32_t guard_size);
 
-void mm_stack_destroy(void *stack, uint32_t size);
+void mm_stack_destroy(void *stack, uint32_t stack_size);
 
 #endif /* STACK_H */

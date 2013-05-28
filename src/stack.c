@@ -25,38 +25,39 @@
 #include <sys/mman.h>
 
 void *
-mm_stack_create(uint32_t size)
+mm_stack_create(uint32_t stack_size, uint32_t guard_size)
 {
 	ENTER();
+	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
+	ASSERT((guard_size % MM_PAGE_SIZE) == 0);
+	ASSERT(guard_size < stack_size);
 
-	// Full size includes an additional red-zone page.
-	uint32_t fullsize = size + MM_PAGE_SIZE;
+	// Allocate a stack area along with the red-zone.
+	char *stack = mmap(NULL, stack_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, -1, 0);
+	if (unlikely(stack == MAP_FAILED)) {
+		mm_fatal(errno, "failed to allocate a stack (size = %d)", stack_size);
+	}
 
-	// Allocate the stack along with its red-zone.
-	char *p = mmap(NULL, fullsize, PROT_NONE, MAP_PRIVATE | MAP_ANON, -1, 0);
-	if (unlikely(p == MAP_FAILED))
-		mm_fatal(errno, "failed to allocate a stack (size = %d)", fullsize);
-
-	// Allow access to the stack memory past the red-zone.
-	char *stack = p + MM_PAGE_SIZE;
-	if (unlikely(mprotect(stack, size, PROT_READ | PROT_WRITE) < 0))
-		mm_fatal(errno, "failed to setup memory access for a stack");
+	// Disable access to the red-zone.
+	if (likely(guard_size)) {
+		if (unlikely(mprotect(stack, guard_size, PROT_NONE) < 0)) {
+			mm_fatal(errno, "failed to setup stack red-zone");
+		}
+	}
 
 	LEAVE();
 	return stack;
 }
 
 void
-mm_stack_destroy(void *stack, uint32_t size)
+mm_stack_destroy(void *stack, uint32_t stack_size)
 {
 	ENTER();
+	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
 
-	// Full size includes an additional red-zone page.
-	uint32_t fullsize = size + MM_PAGE_SIZE;
-
-	char *p = stack - MM_PAGE_SIZE;
-	if (unlikely(munmap(p, fullsize) < 0))
+	if (unlikely(munmap(stack, stack_size) < 0)) {
 		mm_error(errno, "failed to release a stack");
+	}
 
 	LEAVE();
 }

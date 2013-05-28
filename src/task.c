@@ -27,8 +27,18 @@
 #include "stack.h"
 #include "trace.h"
 
-#define MM_TASK_STACK_SIZE (28 * 1024)
-#define MM_TASK_BOOT_STACK_SIZE PTHREAD_STACK_MIN
+/* Regular task stack size. */
+#define MM_TASK_STACK_SIZE		(32 * 1024)
+
+/* Minimal task stack size. */
+#define MM_TASK_STACK_SIZE_MIN		(12 * 1024)
+
+/* Bootstrap task stack size. */
+#if !defined(PTHREAD_STACK_MIN) || (PTHREAD_STACK_MIN < MM_TASK_STACK_SIZE_MIN)
+# define MM_TASK_BOOT_STACK_SIZE	MM_TASK_STACK_SIZE_MIN
+#else
+# define MM_TASK_BOOT_STACK_SIZE	PTHREAD_STACK_MIN
+#endif
 
 // The memory pool for tasks.
 static struct mm_pool mm_task_pool;
@@ -122,7 +132,7 @@ mm_task_new(uint32_t stack_size)
 
 	// Allocate a task stack.
 	task->stack_size = stack_size;
-	task->stack_base = mm_stack_create(task->stack_size);
+	task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
 
 	// Initialize the task ports list.
 	mm_list_init(&task->ports);
