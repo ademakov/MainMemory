@@ -29,52 +29,15 @@
 #include <sys/uio.h>
 #include <unistd.h>
 
+/**********************************************************************
+ * Low-Level Logging Routines.
+ **********************************************************************/
+
 #define MM_LOG_CHUNK_SIZE	(2000)
 
 static struct mm_list mm_log_data = { &mm_log_data, &mm_log_data };
 static mm_global_lock_t mm_log_lock = MM_ATOMIC_LOCK_INIT;
 static bool mm_log_busy = false;
-
-static void
-mm_log_write(void)
-{
-	mm_global_lock(&mm_log_lock);
-
-	if (mm_log_busy || mm_list_empty(&mm_log_data)) {
-		mm_global_unlock(&mm_log_lock);
-		// TODO: wait for write completion.
-		return;
-	}
-
-	struct mm_list *head = mm_list_head(&mm_log_data);
-	struct mm_list *tail = mm_list_tail(&mm_log_data);
-	mm_list_cleave(head, tail);
-	mm_log_busy = true;
-
-	mm_global_unlock(&mm_log_lock);
-
-	for (;;) {
-		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
-		if (write(2, chunk->data, chunk->used) != chunk->used) {
-			ABORT();
-		}
-
-		struct mm_list *next = head->next;
-		if (chunk->core == NULL) {
-			mm_free(chunk);
-		} else {
-			mm_chunk_destroy_global(chunk);
-		}
-
-		if (head == tail)
-			break;
-
-		head = next;
-	}
-
-	// TODO: signal the write completion to waiting threads.
-	mm_memory_store(mm_log_busy, false);
-}
 
 static void
 mm_log_add_chain(struct mm_list *head, struct mm_list *tail)
@@ -189,14 +152,165 @@ mm_log_fmt(const char *restrict fmt, ...)
 	va_end(va);
 }
 
+size_t
+mm_log_write(void)
+{
+	mm_global_lock(&mm_log_lock);
+
+	if (mm_log_busy || mm_list_empty(&mm_log_data)) {
+		mm_global_unlock(&mm_log_lock);
+		// TODO: wait for write completion.
+		return 0;
+	}
+
+	struct mm_list *head = mm_list_head(&mm_log_data);
+	struct mm_list *tail = mm_list_tail(&mm_log_data);
+	mm_list_cleave(head, tail);
+	mm_log_busy = true;
+
+	mm_global_unlock(&mm_log_lock);
+
+	// The number of written bytes.
+	size_t written = 0;
+
+	for (;;) {
+		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
+		if (write(2, chunk->data, chunk->used) != chunk->used) {
+			ABORT();
+		}
+
+		written += chunk->used;
+
+		struct mm_list *next = head->next;
+		if (chunk->core == NULL) {
+			mm_free(chunk);
+		} else {
+			mm_chunk_destroy_global(chunk);
+		}
+
+		if (head == tail)
+			break;
+
+		head = next;
+	}
+
+	// TODO: signal the write completion to waiting threads.
+	mm_memory_store(mm_log_busy, false);
+
+	return written;
+}
+
+/**********************************************************************
+ * High-Level Logging Routines.
+ **********************************************************************/
+
+static bool mm_verbose_enabled = false;
+static bool mm_warning_enabled = false;
+
 void
-mm_log_flush(void)
+mm_enable_verbose(bool value)
+{
+	mm_verbose_enabled = value;
+}
+
+void
+mm_enable_warning(bool value)
+{
+	mm_warning_enabled = value;
+}
+
+void
+mm_brief(const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+}
+
+void
+mm_verbose(const char *restrict msg, ...)
+{
+	if (!mm_verbose_enabled)
+		return;
+
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+}
+
+void
+mm_warning(int error, const char *restrict msg, ...)
+{
+	if (!mm_warning_enabled)
+		return;
+
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+}
+
+void
+mm_error(int error, const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+}
+
+void
+mm_fatal(int error, const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_brief(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+
+	mm_exit(EXIT_FAILURE);
+}
+
+void
+mm_flush(void)
 {
 	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
 		struct mm_list *head = mm_list_head(&mm_core->log_chunks);
 		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
 		mm_list_cleave(head, tail);
 		mm_log_add_chain(head, tail);
-		mm_log_write();
 	}
 }

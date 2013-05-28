@@ -25,7 +25,7 @@
 #include "port.h"
 #include "sched.h"
 #include "stack.h"
-#include "util.h"
+#include "trace.h"
 
 #define MM_TASK_STACK_SIZE (28 * 1024)
 #define MM_TASK_BOOT_STACK_SIZE PTHREAD_STACK_MIN

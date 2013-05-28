@@ -20,7 +20,7 @@
 #include "timeq.h"
 
 #include "alloc.h"
-#include "util.h"
+#include "trace.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1
 #define MM_TIMEQ_T1_COUNT_MIN	4

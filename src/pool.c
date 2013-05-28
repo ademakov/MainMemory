@@ -20,6 +20,8 @@
 #include "pool.h"
 
 #include "alloc.h"
+#include "log.h"
+#include "trace.h"
 #include "util.h"
 
 #define MM_POOL_BLOCK_SIZE	0x2000
@@ -39,7 +41,7 @@ mm_pool_init(struct mm_pool *pool, const char *pool_name,
 	if (item_size < sizeof(struct mm_pool_free_item))
 		item_size = sizeof(struct mm_pool_free_item);
 
-	mm_print("make the '%s' memory pool with element size %u",
+	mm_brief("make the '%s' memory pool with element size %u",
 		 pool_name, item_size);
 
 	pool->item_last = 0;
@@ -156,7 +158,7 @@ mm_pool_alloc(struct mm_pool *pool)
 		}
 
 		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr)) {
-			mm_print("grow the '%s' memory pool with element size %u",
+			mm_brief("grow the '%s' memory pool with element size %u",
 				 pool->pool_name, pool->item_size);
 
 			// Check for 32-bit integer overflow.

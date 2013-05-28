@@ -24,6 +24,7 @@
 #include "clock.h"
 #include "future.h"
 #include "hook.h"
+#include "log.h"
 #include "port.h"
 #include "sched.h"
 #include "task.h"
@@ -31,11 +32,12 @@
 #include "timeq.h"
 #include "timer.h"
 #include "work.h"
-#include "util.h"
+#include "trace.h"
 
 #include "dlmalloc/malloc.h"
 
 #include <stdio.h>
+#include <unistd.h>
 
 #if ENABLE_SMP
 # define MM_DEFAULT_CORES	2
@@ -292,6 +294,11 @@ mm_core_boot(uintptr_t arg)
 
 	// Invalidate the boot task.
 	mm_running_task->state = MM_TASK_INVALID;
+	mm_running_task = NULL;
+
+	// Abandon the core.
+	mm_flush();
+	mm_core = NULL;
 
 	LEAVE();
 	return 0;
@@ -365,16 +372,6 @@ mm_core_start_single(struct mm_core *core, int core_tag)
 	LEAVE();
 }
 
-static void
-mm_core_stop_single(struct mm_core *core)
-{
-	ENTER();
-
-	mm_memory_store(core->stop, 1);
-
-	LEAVE();
-}
-
 void
 mm_core_init(void)
 {
@@ -425,8 +422,18 @@ mm_core_start(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
+	// Start core threads.
 	for (int i = 0; i < mm_core_num; i++)
 		mm_core_start_single(&mm_core_set[i], i);
+
+	// Loop until stopped.
+	while (!mm_exit_test()) {
+		size_t logged = mm_log_write();
+		usleep(logged ? 10000 : 1000000);
+		DEBUG("cycle");
+	}
+
+	// Wait for core threads completion.
 	for (int i = 0; i < mm_core_num; i++)
 		mm_thread_join(mm_core_set[i].thread);
 
@@ -439,8 +446,9 @@ mm_core_stop(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
+	// Set stop flag for core threads.
 	for (int i = 0; i < mm_core_num; i++)
-		mm_core_stop_single(&mm_core_set[i]);
+		mm_memory_store(mm_core_set[i].stop, 1);
 
 	LEAVE();
 }

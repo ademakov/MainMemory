@@ -20,8 +20,9 @@
 #include "common.h"
 #include "core.h"
 #include "event.h"
+#include "log.h"
 #include "net.h"
-#include "util.h"
+#include "trace.h"
 
 #include "memcache/memcache.h"
 
@@ -37,8 +38,8 @@ mm_term_handler(int signo __attribute__((unused)))
 {
 	ENTER();
 
-	mm_event_stop();
 	mm_core_stop();
+	mm_exit_set();
 
 	LEAVE();
 }

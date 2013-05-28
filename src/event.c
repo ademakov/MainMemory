@@ -21,13 +21,14 @@
 
 #include "alloc.h"
 #include "core.h"
+#include "exit.h"
 #include "log.h"
 #include "net.h"
 #include "port.h"
 #include "sched.h"
 #include "task.h"
 #include "timer.h"
-#include "util.h"
+#include "trace.h"
 
 #include <string.h>
 #if HAVE_SYS_EPOLL_H
@@ -189,10 +190,10 @@ mm_event_init_fd_table(void)
 		mm_fd_table_size = max_fd;
 	}
 	if (mm_fd_table_size > MM_EVENT_FD_MAX) {
-		mm_print("truncating too high fd limit: %d", mm_fd_table_size);
+		mm_brief("truncating too high fd limit: %d", mm_fd_table_size);
 		mm_fd_table_size = MM_EVENT_FD_MAX;
 	}
-	mm_print("fd table size: %d", mm_fd_table_size);
+	mm_brief("fd table size: %d", mm_fd_table_size);
 
 	// Allocate the table.
 	mm_fd_table = mm_calloc(mm_fd_table_size, sizeof(struct mm_event_fd));
@@ -358,7 +359,7 @@ mm_event_dispatch(void)
 	}
 
 	// Flush the log before possible sleep.
-	mm_log_flush();
+	mm_flush();
 
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
@@ -572,7 +573,7 @@ mm_event_dispatch(void)
 	}
 
 	// Flush the log before possible sleep.
-	mm_log_flush();
+	mm_flush();
 
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
@@ -673,15 +674,12 @@ done:
  * Event loop control.
  **********************************************************************/
 
-// Event loop exit flag.
-static volatile int mm_exit_loop = 0;
-
 static mm_result_t
 mm_event_loop(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
 
-	while (!mm_memory_load(mm_exit_loop)) {
+	while (!mm_exit_test()) {
 		mm_event_dispatch();
 		mm_timer_tick();
 		mm_sched_yield();
@@ -741,16 +739,6 @@ mm_event_term(void)
 
 	// Release system specific resources.
 	mm_event_free_sys();
-
-	LEAVE();
-}
-
-void
-mm_event_stop(void)
-{
-	ENTER();
-
-	mm_memory_store(mm_exit_loop, 1);
 
 	LEAVE();
 }

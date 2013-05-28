@@ -23,6 +23,10 @@
 #include "common.h"
 #include <stdarg.h>
 
+/**********************************************************************
+ * Low-Level Logging Routines.
+ **********************************************************************/
+
 void mm_log_str(const char *str)
 	__attribute__((nonnull(1)));
 
@@ -33,6 +37,36 @@ void mm_log_fmt(const char *restrict fmt, ...)
 void mm_log_vfmt(const char *restrict fmt, va_list va)
 	__attribute__((nonnull(1)));
 
-void mm_log_flush(void);
+size_t mm_log_write(void);
+
+/**********************************************************************
+ * High-Level Logging Routines.
+ **********************************************************************/
+
+void mm_enable_verbose(bool value);
+void mm_enable_warning(bool value);
+
+void mm_brief(const char *restrict msg, ...)
+	__attribute__((format(printf, 1, 2)))
+	__attribute__((nonnull(1)));
+
+void mm_verbose(const char *restrict msg, ...)
+	__attribute__((format(printf, 1, 2)))
+	__attribute__((nonnull(1)));
+
+void mm_warning(int error, const char *restrict msg, ...)
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(2)));
+
+void mm_error(int error, const char *restrict msg, ...)
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(2)));
+
+void mm_fatal(int error, const char *restrict msg, ...)
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(2)))
+	__attribute__((noreturn));
+
+void mm_flush(void);
 
 #endif /* LOG_H */

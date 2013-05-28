@@ -24,7 +24,7 @@
 #include "pool.h"
 #include "sched.h"
 #include "timeq.h"
-#include "util.h"
+#include "trace.h"
 #include "work.h"
 
 /* Generic timer. */

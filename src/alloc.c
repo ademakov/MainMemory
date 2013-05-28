@@ -21,7 +21,7 @@
 
 #include "core.h"
 #include "lock.h"
-#include "util.h"
+#include "log.h"
 
 #include "dlmalloc/malloc.h"
 
@@ -47,7 +47,7 @@ mm_libc_call(const char *name)
 	static __thread int recurrent = 0;
 	if (!recurrent) {
 		++recurrent;
-		mm_print("attempt to call libc function '%s'", name);
+		mm_brief("attempt to call libc function '%s'", name);
 		--recurrent;
 	}
 }

@@ -19,7 +19,7 @@
 
 #include "clock.h"
 
-#include "util.h"
+#include "trace.h"
 
 #ifdef HAVE_MACH_MACH_TIME_H
 # include <mach/mach_time.h>

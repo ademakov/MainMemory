@@ -24,7 +24,7 @@
 #include "pool.h"
 #include "sched.h"
 #include "task.h"
-#include "util.h"
+#include "trace.h"
 
 
 static struct mm_pool mm_work_pool;

@@ -23,7 +23,7 @@
 #include "core.h"
 #include "pool.h"
 #include "sched.h"
-#include "util.h"
+#include "trace.h"
 #include "work.h"
 
 

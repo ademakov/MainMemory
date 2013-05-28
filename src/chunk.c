@@ -21,7 +21,7 @@
 
 #include "alloc.h"
 #include "core.h"
-#include "util.h"
+#include "trace.h"
 
 struct mm_chunk *
 mm_chunk_create(size_t size)

@@ -22,11 +22,14 @@
 #include "alloc.h"
 #include "core.h"
 #include "event.h"
+#include "exit.h"
+#include "log.h"
 #include "pool.h"
 #include "port.h"
 #include "task.h"
 #include "sched.h"
 #include "timer.h"
+#include "trace.h"
 #include "util.h"
 #include "work.h"
 
@@ -194,7 +197,7 @@ mm_net_remove_unix_socket(struct mm_net_addr *addr)
 	ENTER();
 
 	if (addr->addr.sa_family == AF_UNIX) {
-		mm_print("removing %s", addr->un_addr.sun_path);
+		mm_brief("removing %s", addr->un_addr.sun_path);
 		if (unlink(addr->un_addr.sun_path) < 0) {
 			mm_error(errno, "unlink(\"%s\")", addr->un_addr.sun_path);
 		}
@@ -885,7 +888,7 @@ mm_net_io_loop(uintptr_t arg)
 			break;
 
 		default:
-			mm_print("%x %x", msg[0], msg[1]);
+			mm_brief("%x %x", msg[0], msg[1]);
 			ABORT();
 		}
 	}
@@ -1044,7 +1047,7 @@ mm_net_stop_server_hook(void *arg)
 	struct mm_net_server *srv = arg;
 	ASSERT(srv->fd != -1);
 
-	mm_print("stop server: %s", srv->name);
+	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
 	mm_event_unregister_fd(srv->fd);
@@ -1066,7 +1069,7 @@ mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 	ENTER();
 	ASSERT(srv->fd == -1);
 
-	mm_print("start server '%s'", srv->name);
+	mm_brief("start server '%s'", srv->name);
 
 	// Store the protocol handlers.
 	srv->proto = proto;

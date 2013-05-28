@@ -22,7 +22,7 @@
 #include "core.h"
 #include "runq.h"
 #include "task.h"
-#include "util.h"
+#include "trace.h"
 
 /* The currently running task. */
 __thread struct mm_task *mm_running_task = NULL;

@@ -19,8 +19,8 @@
 
 #include "runq.h"
 #include "bits.h"
-#include "util.h"
 #include "task.h"
+#include "trace.h"
 
 void
 mm_runq_init(struct mm_runq *runq)

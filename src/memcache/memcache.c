@@ -22,9 +22,10 @@
 #include "../alloc.h"
 #include "../future.h"
 #include "../list.h"
+#include "../log.h"
 #include "../net.h"
 #include "../pool.h"
-#include "../util.h"
+#include "../trace.h"
 #include "../work.h"
 
 #include <ctype.h>
@@ -284,7 +285,7 @@ mc_table_expand(size_t size)
 	/* Assert the size is a power of 2. */
 	ASSERT((size & (size - 1)) == 0);
 
-	mm_print("Set the memcache table size: %ld", (unsigned long) size);
+	mm_brief("Set the memcache table size: %ld", (unsigned long) size);
 
 	size_t old_size = mc_table_size(mc_table.size);
 	size_t new_size = mc_table_size(size);
@@ -469,7 +470,7 @@ mc_table_init(void)
 	size_t nbytes = mc_table_size(MC_TABLE_SIZE_MAX);
 
 	// Reserve the address space for the table.
-	mm_print("Reserve %ld bytes of the address apace for the memcache table.", (unsigned long) nbytes);
+	mm_brief("Reserve %ld bytes of the address apace for the memcache table.", (unsigned long) nbytes);
 	void *area = mmap(NULL, nbytes, PROT_NONE,
 			  MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
 	if (area == MAP_FAILED)

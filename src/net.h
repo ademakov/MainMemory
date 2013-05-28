@@ -23,7 +23,6 @@
 #include "common.h"
 #include "event.h"
 #include "list.h"
-#include "util.h"
 
 #include <netinet/in.h>
 #include <sys/socket.h>

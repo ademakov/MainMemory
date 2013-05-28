@@ -23,7 +23,6 @@
 #include "common.h"
 #include "list.h"
 #include "task.h"
-#include "util.h"
 
 
 typedef enum {

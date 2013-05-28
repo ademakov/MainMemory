@@ -23,7 +23,7 @@
 #include "pool.h"
 #include "sched.h"
 #include "task.h"
-#include "util.h"
+#include "trace.h"
 
 /**********************************************************************
  * Internal Port Functions.

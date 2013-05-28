@@ -20,7 +20,8 @@
 #include "thread.h"
 
 #include "alloc.h"
-#include "util.h"
+#include "log.h"
+#include "trace.h"
 
 #include <pthread.h>
 
@@ -106,7 +107,7 @@ mm_thread_entry(void *arg)
 	ENTER();
 
 	struct mm_thread *thread = arg;
-	mm_print("start thread: %s", thread->name);
+	mm_brief("start thread: %s", thread->name);
 
 	// Set the thread-local pointer to the thread object.
 	mm_thread = thread;

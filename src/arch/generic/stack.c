@@ -19,7 +19,7 @@
 
 #include "arch/stack.h"
 
-#include "util.h"
+#include "log.h"
 
 void
 mm_stack_init(mm_stack_ctx_t *ctx,

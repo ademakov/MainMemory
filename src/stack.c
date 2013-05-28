@@ -19,7 +19,8 @@
 
 #include "stack.h"
 
-#include "util.h"
+#include "log.h"
+#include "trace.h"
 
 #include <sys/mman.h>
 
