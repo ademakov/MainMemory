@@ -22,6 +22,7 @@
 #include "log.h"
 #include "sched.h"
 #include "task.h"
+#include "thread.h"
 
 #include <stdarg.h>
 
@@ -46,12 +47,15 @@ void
 mm_trace_prefix(void)
 {
 	if (likely(mm_running_task != NULL)) {
-		mm_log_fmt("[%d %s] %*s",
+		mm_log_fmt("[%s][%d %s] %*s",
+			   mm_thread_name(),
 			   mm_task_id(mm_running_task),
 			   mm_running_task->name,
 			   mm_running_task->trace_level * 2, "");
 	} else {
-		mm_log_fmt("%*s", mm_trace_level * 2, "");
+		mm_log_fmt("[%s]%*s",
+			   mm_thread_name(),
+			   mm_trace_level * 2, "");
 	}
 }
 

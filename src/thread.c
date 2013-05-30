@@ -115,6 +115,8 @@ mm_thread_entry(void *arg)
 	// Run the required routine.
 	thread->start(thread->start_arg);
 
+	mm_thread = NULL;
+
 	LEAVE();
 	return NULL;
 }
@@ -166,19 +168,17 @@ mm_thread_create(struct mm_thread_attr *attr,
 		// TODO: handle CPU tag.
 	}
 
+	// Start the thread.
 	int rc = pthread_create(&thread->system_thread, &pthr_attr,
 				mm_thread_entry, thread);
 	if (rc) {
 		mm_fatal(rc, "pthread_create");
 	}
+	pthread_attr_destroy(&pthr_attr);
 
 	LEAVE();
 	return thread;
 }
-
-/**********************************************************************
- * Thread control routines.
- **********************************************************************/
 
 /* Destroy a thread object. It is only safe to call this function upon
    the thread join. */
@@ -191,6 +191,10 @@ mm_thread_destroy(struct mm_thread *thread)
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Thread control routines.
+ **********************************************************************/
 
 /* Cancel a running thread. */
 void
@@ -240,5 +244,5 @@ mm_thread_yield(void)
 const char *
 mm_thread_name(void)
 {
-	return mm_thread == NULL ? "default" : mm_thread->name;
+	return mm_thread == NULL ? "main" : mm_thread->name;
 }

@@ -297,7 +297,7 @@ mm_fatal(int error, const char *restrict msg, ...)
 	va_end(va);
 
 	if (error) {
-		mm_brief(": %s\n", strerror(error));
+		mm_log_fmt(": %s\n", strerror(error));
 	} else {
 		mm_log_str("\n");
 	}
