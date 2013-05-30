@@ -21,11 +21,36 @@
 #define ARCH_X86_64_ATOMIC_H
 
 /**********************************************************************
- * Atomic type definition helper.
+ * Atomic types.
  **********************************************************************/
 
 #define mm_atomic_type(base_type) \
 	struct { base_type value __align(sizeof(base_type)); }
+
+typedef mm_atomic_type(uint8_t) mm_atomic_8_t;
+typedef mm_atomic_type(uint16_t) mm_atomic_16_t;
+typedef mm_atomic_type(uint32_t) mm_atomic_32_t;
+
+/**********************************************************************
+ * Atomic arithmetics.
+ **********************************************************************/
+
+#define mm_atomic_unary(bits, name, mnemonic)			\
+	static inline void					\
+	mm_atomic_##bits##_##name(mm_atomic_##bits##_t *p)	\
+	{							\
+		asm volatile("lock; " mnemonic " %0"		\
+			     : "+m"(p->value)			\
+			     : 					\
+			     : "memory", "cc");			\
+	}
+
+mm_atomic_unary(8, inc, "incb")
+mm_atomic_unary(16, inc, "incw")
+mm_atomic_unary(32, inc, "incl")
+mm_atomic_unary(8, dec, "decb")
+mm_atomic_unary(16, dec, "decw")
+mm_atomic_unary(32, dec, "decl")
 
 /**********************************************************************
  * Atomic operations for spin-locks.
@@ -50,7 +75,10 @@ static inline int
 mm_atomic_lock_acquire(mm_atomic_lock_t *lock)
 {
 	char locked;
-	asm volatile("xchgb %0, %1" : "=q"(locked), "+m"(lock->locked) : "0"(1) : "memory");
+	asm volatile("xchgb %0, %1"
+		     : "=q"(locked), "+m"(lock->locked)
+		     : "0"(1)
+		     : "memory");
 	return locked;
 }
 

@@ -21,6 +21,35 @@
 #define ARCH_GENERIC_ATOMIC_H
 
 /**********************************************************************
+ * Atomic types.
+ **********************************************************************/
+
+#define mm_atomic_type(base_type) \
+	struct { base_type value __align(sizeof(base_type)); }
+
+typedef mm_atomic_type(uint8_t) mm_atomic_8_t;
+typedef mm_atomic_type(uint16_t) mm_atomic_16_t;
+typedef mm_atomic_type(uint32_t) mm_atomic_32_t;
+
+/**********************************************************************
+ * Atomic arithmetics.
+ **********************************************************************/
+
+#define mm_atomic_unary(bits, name, func)			\
+	static inline void					\
+	mm_atomic_##bits##_##name(mm_atomic_##bits##_t *p)	\
+	{							\
+		func(&p->value, 1);				\
+	}
+
+mm_atomic_unary(8, inc, __sync_fetch_and_add)
+mm_atomic_unary(16, inc, __sync_fetch_and_add)
+mm_atomic_unary(32, inc, __sync_fetch_and_add)
+mm_atomic_unary(8, dec, __sync_fetch_and_sub)
+mm_atomic_unary(16, dec, __sync_fetch_and_sub)
+mm_atomic_unary(32, dec, __sync_fetch_and_sub)
+
+/**********************************************************************
  * Atomic operations for spin-locks.
  **********************************************************************/
 
