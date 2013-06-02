@@ -21,8 +21,22 @@
 
 #include "log.h"
 
+#include <fcntl.h>
 #include <stdio.h>
 #include <stdarg.h>
+
+void
+mm_set_nonblocking(int fd)
+{
+	int flags = fcntl(fd, F_GETFL, 0);
+	if (flags < 0)
+		mm_fatal(errno, "fcntl(..., F_GETFL, ...)");
+
+	flags |= O_NONBLOCK;
+
+	if (fcntl(fd, F_SETFL, flags) < 0)
+		mm_fatal(errno, "fcntl(..., F_SETFL, ...)");
+}
 
 /**********************************************************************
  * Memory Allocation Routines.

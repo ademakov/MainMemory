@@ -33,7 +33,6 @@
 #include "util.h"
 #include "work.h"
 
-#include <fcntl.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <netinet/tcp.h>
@@ -142,18 +141,6 @@ done:
  * Socket helper routines.
  **********************************************************************/
 
-static void
-mm_net_set_nonblocking(int fd)
-{
-	int flags = fcntl(fd, F_GETFL, 0);
-	if (flags < 0)
-		mm_fatal(errno, "fcntl(..., F_GETFL, ...)");
-
-	flags |= O_NONBLOCK;
-	if (fcntl(fd, F_SETFL, flags) < 0)
-		mm_fatal(errno, "fcntl(..., F_SETFL, ...)");
-}
-
 static int __attribute__((nonnull(1)))
 mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 {
@@ -184,7 +171,7 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 		mm_fatal(errno, "listen()");
 
 	/* Make the socket non-blocking. */
-	mm_net_set_nonblocking(sock);
+	mm_set_nonblocking(sock);
 
 	TRACE("sock: %d", sock);
 	LEAVE();
@@ -392,7 +379,7 @@ retry:
 		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
 
 	/* Make the socket non-blocking. */
-	mm_net_set_nonblocking(fd);
+	mm_set_nonblocking(fd);
 
 	/* Allocate a new socket structure. */
 	struct mm_net_socket *sock = mm_net_create_socket(fd, srv);

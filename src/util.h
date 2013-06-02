@@ -20,6 +20,8 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+void mm_set_nonblocking(int fd);
+
 char * mm_strdup(const char *s);
 
 char * mm_asprintf(const char *restrict fmt, ...)
