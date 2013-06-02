@@ -24,30 +24,54 @@
  * Atomic types.
  **********************************************************************/
 
-#define mm_atomic_type(base_type) \
-	struct { base_type value __align(sizeof(base_type)); }
+#define mm_atomic_type(base) \
+	struct { base value __align(sizeof(base)); }
 
-typedef mm_atomic_type(uint8_t) mm_atomic_8_t;
-typedef mm_atomic_type(uint16_t) mm_atomic_16_t;
-typedef mm_atomic_type(uint32_t) mm_atomic_32_t;
+typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
+typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
+typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 
 /**********************************************************************
  * Atomic arithmetics.
  **********************************************************************/
 
-#define mm_atomic_unary(bits, name, func)			\
-	static inline void					\
-	mm_atomic_##bits##_##name(mm_atomic_##bits##_t *p)	\
-	{							\
-		func(&p->value, 1);				\
+#define mm_atomic_fetch(base, name, func)			\
+	static inline base##_t						\
+	mm_atomic_##base##_fetch_and_##name(mm_atomic_##base##_t *p,	\
+					    base##_t v)			\
+	{								\
+		return func(&p->value, v);				\
 	}
 
-mm_atomic_unary(8, inc, __sync_fetch_and_add)
-mm_atomic_unary(16, inc, __sync_fetch_and_add)
-mm_atomic_unary(32, inc, __sync_fetch_and_add)
-mm_atomic_unary(8, dec, __sync_fetch_and_sub)
-mm_atomic_unary(16, dec, __sync_fetch_and_sub)
-mm_atomic_unary(32, dec, __sync_fetch_and_sub)
+#define mm_atomic_unary(base, name, func)				\
+	static inline void						\
+	mm_atomic_##base##_##name(mm_atomic_##base##_t *p)		\
+	{								\
+		func(&p->value, 1);					\
+	}
+
+/* Define atomic fetch-and-set ops. */
+mm_atomic_fetch(uint8, set, __sync_lock_test_and_set)
+mm_atomic_fetch(uint16, set, __sync_lock_test_and_set)
+mm_atomic_fetch(uint32, set, __sync_lock_test_and_set)
+
+/* Define atomic fetch-and-add ops. */
+mm_atomic_fetch(uint8, add, __sync_fetch_and_add)
+mm_atomic_fetch(uint16, add, __sync_fetch_and_add)
+mm_atomic_fetch(uint32, add, __sync_fetch_and_add)
+
+/* Define atomic increment ops. */
+mm_atomic_unary(uint8, inc, __sync_fetch_and_add)
+mm_atomic_unary(uint16, inc, __sync_fetch_and_add)
+mm_atomic_unary(uint32, inc, __sync_fetch_and_add)
+
+/* Define atomic decrement ops. */
+mm_atomic_unary(uint8, dec, __sync_fetch_and_sub)
+mm_atomic_unary(uint16, dec, __sync_fetch_and_sub)
+mm_atomic_unary(uint32, dec, __sync_fetch_and_sub)
+
+#undef mm_atomic_fetch
+#undef mm_atomic_unary
 
 /**********************************************************************
  * Atomic operations for spin-locks.

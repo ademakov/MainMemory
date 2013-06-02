@@ -24,33 +24,68 @@
  * Atomic types.
  **********************************************************************/
 
-#define mm_atomic_type(base_type) \
-	struct { base_type value __align(sizeof(base_type)); }
+#define mm_atomic_type(base) \
+	struct { base value __align(sizeof(base)); }
 
-typedef mm_atomic_type(uint8_t) mm_atomic_8_t;
-typedef mm_atomic_type(uint16_t) mm_atomic_16_t;
-typedef mm_atomic_type(uint32_t) mm_atomic_32_t;
+typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
+typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
+typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 
 /**********************************************************************
  * Atomic arithmetics.
  **********************************************************************/
 
-#define mm_atomic_unary(bits, name, mnemonic)			\
-	static inline void					\
-	mm_atomic_##bits##_##name(mm_atomic_##bits##_t *p)	\
-	{							\
-		asm volatile("lock; " mnemonic " %0"		\
-			     : "+m"(p->value)			\
-			     : 					\
-			     : "memory", "cc");			\
+#if ENABLE_SMP
+# define MM_LOCK_PREFIX "lock;"
+#else
+# define MM_LOCK_PREFIX
+#endif
+
+#define mm_atomic_fetch(base, name, lock, mnemonic, operand)		\
+	static inline base##_t						\
+	mm_atomic_##base##_fetch_and_##name(mm_atomic_##base##_t *p,	\
+					    base##_t v)			\
+	{								\
+		base##_t r;						\
+		asm volatile(lock mnemonic " %0,%1"			\
+			     : operand(r), "+m"(p->value)		\
+			     : "0"(v)					\
+			     : "memory");				\
+		return r;						\
 	}
 
-mm_atomic_unary(8, inc, "incb")
-mm_atomic_unary(16, inc, "incw")
-mm_atomic_unary(32, inc, "incl")
-mm_atomic_unary(8, dec, "decb")
-mm_atomic_unary(16, dec, "decw")
-mm_atomic_unary(32, dec, "decl")
+#define mm_atomic_unary(base, name, mnemonic)				\
+	static inline void						\
+	mm_atomic_##base##_##name(mm_atomic_##base##_t *p)		\
+	{								\
+		asm volatile(MM_LOCK_PREFIX mnemonic " %0"		\
+			     : "+m"(p->value)				\
+			     :						\
+			     : "memory", "cc");				\
+	}
+
+/* Define atomic fetch-and-set ops. */
+mm_atomic_fetch(uint8, set, "", "xchgb", "=q")
+mm_atomic_fetch(uint16, set, "", "xchgw", "=r")
+mm_atomic_fetch(uint32, set, "", "xchgl", "=r")
+
+/* Define atomic fetch-and-add ops. */
+mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "=q")
+mm_atomic_fetch(uint16, add, MM_LOCK_PREFIX, "xaddw", "=r")
+mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "=r")
+
+/* Define atomic increment ops. */
+mm_atomic_unary(uint8, inc, "incb")
+mm_atomic_unary(uint16, inc, "incw")
+mm_atomic_unary(uint32, inc, "incl")
+
+/* Define atomic decrement ops. */
+mm_atomic_unary(uint8, dec, "decb")
+mm_atomic_unary(uint16, dec, "decw")
+mm_atomic_unary(uint32, dec, "decl")
+
+#undef mm_atomic_fetch
+#undef mm_atomic_unary
 
 /**********************************************************************
  * Atomic operations for spin-locks.
@@ -75,7 +110,10 @@ static inline int
 mm_atomic_lock_acquire(mm_atomic_lock_t *lock)
 {
 	char locked;
-	asm volatile("xchgb %0, %1" : "=q"(locked), "+m"(lock->locked) : "0"(1) : "memory");
+	asm volatile("xchgb %0,%1"
+		     : "=q"(locked), "+m"(lock->locked)
+		     : "0"(1)
+		     : "memory");
 	return locked;
 }
 
