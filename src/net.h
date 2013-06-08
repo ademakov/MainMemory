@@ -95,8 +95,10 @@ struct mm_net_server
 	/* Server flags. */
 	int flags;
 
-	/* I/O event handler ID. */
-	mm_event_handler_t io_handler;
+	/* I/O event handler IDs. */
+	mm_event_hid_t input_handler;
+	mm_event_hid_t output_handler;
+	mm_event_hid_t control_handler;
 
 	/* I/O event handler task. */
 	struct mm_task *io_task;

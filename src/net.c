@@ -150,7 +150,7 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	int sock = socket(addr->addr.sa_family, SOCK_STREAM, 0);
 	if (sock < 0)
 		mm_fatal(errno, "socket()");
-	if (mm_event_verify_fd(sock) != MM_FD_VALID)
+	if (mm_event_verify_fd(sock) != MM_EVENT_FD_VALID)
 		mm_fatal(0, "server socket no is too high: %d", sock);
 
 	/* Set socket options. */
@@ -326,6 +326,55 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
 }
 
 /**********************************************************************
+ * Network I/O event handling.
+ **********************************************************************/
+
+static void
+mm_net_input_handler(mm_event_t event __attribute__((unused)),
+		     uintptr_t handler_data, uint32_t data)
+{
+	struct mm_port *port = (struct mm_port *) handler_data;
+	uint32_t msg[2] = { MM_NET_MSG_READ_READY, data };
+	mm_port_send_blocking(port, msg, 2);
+}
+
+static void
+mm_net_output_handler(mm_event_t event __attribute__((unused)),
+		      uintptr_t handler_data, uint32_t data)
+{
+	struct mm_port *port = (struct mm_port *) handler_data;
+	uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, data };
+	mm_port_send_blocking(port, msg, 2);
+}
+
+static void
+mm_net_control_handler(mm_event_t event, uintptr_t handler_data, uint32_t data)
+{
+	struct mm_port *port = (struct mm_port *) handler_data;
+
+	uint32_t net_msg;
+	switch (event) {
+	case MM_EVENT_REGISTER:
+		net_msg = MM_NET_MSG_REGISTER;
+		break;
+	case MM_EVENT_UNREGISTER:
+		net_msg = MM_NET_MSG_UNREGISTER;
+		break;
+	case MM_EVENT_INPUT_ERROR:
+		net_msg = MM_NET_MSG_READ_ERROR;
+		break;
+	case MM_EVENT_OUTPUT_ERROR:
+		net_msg = MM_NET_MSG_WRITE_ERROR;
+		break;
+	default:
+		ABORT();
+	}
+
+	uint32_t msg[2] = { net_msg, data };
+	mm_port_send_blocking(port, msg, 2);
+}
+
+/**********************************************************************
  * Server acceptor tasks.
  **********************************************************************/
 
@@ -338,7 +387,7 @@ static struct mm_task *mm_net_accept_task;
 static struct mm_port *mm_net_accept_port;
 
 /* Accept event handler cookie. */
-static mm_event_handler_t mm_net_accept_handler;
+static mm_event_hid_t mm_net_accept_handler;
 
 static bool
 mm_net_accept(struct mm_net_server *srv)
@@ -363,12 +412,12 @@ retry:
 			mm_error(errno, "%s: accept()", srv->name);
 		else
 			rc = false;
-		goto done;
+		goto leave;
 	}
-	if (unlikely(mm_event_verify_fd(fd) != MM_FD_VALID)) {
+	if (unlikely(mm_event_verify_fd(fd) != MM_EVENT_FD_VALID)) {
 		mm_error(0, "%s: socket no is too high: %d", srv->name, fd);
 		close(fd);
-		goto done;
+		goto leave;
 	}
 
 	/* Set the socket options. */
@@ -386,7 +435,7 @@ retry:
 	if (sock == NULL) {
 		mm_error(0, "%s: socket table overflow", srv->name);
 		close(fd);
-		goto done;
+		goto leave;
 	}
 
 	/* Initialize the socket structure. */
@@ -399,9 +448,13 @@ retry:
 
 	/* Register the socket with the event loop. */
 	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
-	mm_event_register_fd(sock->fd, srv->io_handler, sock_index);
+	mm_event_register_fd(sock->fd,
+			     sock_index,
+			     srv->input_handler,
+			     srv->output_handler,
+			     srv->control_handler);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -474,7 +527,8 @@ mm_net_init_accept_task(void)
 	mm_net_accept_port = mm_port_create(mm_net_accept_task);
 
 	// Register I/O handlers.
-	mm_net_accept_handler = mm_event_add_io_handler(MM_EVENT_NET_READ, mm_net_accept_port);
+	mm_net_accept_handler = mm_event_register_handler(
+		mm_net_input_handler, (uintptr_t) mm_net_accept_port);
 
 	LEAVE();
 }
@@ -1018,10 +1072,17 @@ mm_net_start_server_hook(void *arg)
 	srv->io_port = mm_port_create(srv->io_task);
 
 	// Allocate an event handler ID for the port.
-	srv->io_handler = mm_event_add_io_handler(MM_EVENT_NET_READ_WRITE, srv->io_port);
+	srv->input_handler = mm_event_register_handler(
+		mm_net_input_handler, (uintptr_t) srv->io_port);
+	srv->output_handler = mm_event_register_handler(
+		mm_net_output_handler, (uintptr_t) srv->io_port);
+	srv->control_handler = mm_event_register_handler(
+		mm_net_control_handler, (uintptr_t) srv->io_port);
 
 	// Register the server socket with the event loop.
-	mm_event_register_fd(srv->fd, mm_net_accept_handler, (uint32_t) mm_net_server_index(srv));
+	mm_event_register_fd(srv->fd,
+			     (uint32_t) mm_net_server_index(srv),
+			     mm_net_accept_handler, 0, 0);
 
 	LEAVE();
 }

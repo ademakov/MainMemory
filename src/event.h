@@ -25,8 +25,28 @@
 /* Forward declaration. */
 struct mm_port;
 
+/* Event types. */
+typedef enum {
+	MM_EVENT_INPUT,
+	MM_EVENT_OUTPUT,
+	MM_EVENT_REGISTER,
+	MM_EVENT_UNREGISTER,
+	MM_EVENT_INPUT_ERROR,
+	MM_EVENT_OUTPUT_ERROR,
+} mm_event_t;
+
+/* Return values of mm_event_verify_fd() */
+typedef enum {
+	MM_EVENT_FD_VALID = 0,
+	MM_EVENT_FD_INVALID = -1,
+	MM_EVENT_FD_TOO_BIG = -2,
+} mm_event_verify_t;
+
 /* Event handler identifier. */
-typedef uint8_t mm_event_handler_t;
+typedef uint8_t mm_event_hid_t;
+
+/* Event handler routine. */
+typedef void (*mm_event_handler_t)(mm_event_t event, uintptr_t handler_data, uint32_t data);
 
 /**********************************************************************
  * Common event routines.
@@ -35,40 +55,23 @@ typedef uint8_t mm_event_handler_t;
 void mm_event_init(void);
 void mm_event_term(void);
 
+void mm_event_notify(void);
+
+mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data);
+
 /**********************************************************************
- * Net I/O Event Support.
+ * I/O Events Support.
  **********************************************************************/
 
-/* Net I/O events. */
-#define MM_EVENT_NET_READ	1
-#define MM_EVENT_NET_WRITE	2
-#define MM_EVENT_NET_READ_WRITE	(MM_EVENT_NET_READ | MM_EVENT_NET_WRITE)
+mm_event_verify_t mm_event_verify_fd(int fd);
 
-/* Return values of mm_event_verify_fd() */
-#define MM_FD_VALID	(0)
-#define MM_FD_INVALID	(-1)
-#define MM_FD_TOO_BIG	(-2)
-
-mm_event_handler_t mm_event_add_io_handler(int flags, struct mm_port *port)
-	__attribute__((nonnull(2)));
-
-int mm_event_verify_fd(int fd);
-
-void mm_event_register_fd(int fd, mm_event_handler_t handler, uint32_t data);
+void mm_event_register_fd(int fd,
+			  uint32_t data,
+			  mm_event_hid_t input_handler,
+			  mm_event_hid_t output_handler,
+			  mm_event_hid_t control_handler);
 
 void mm_event_unregister_fd(int fd);
-
-/**********************************************************************
- * Other Event Support.
- **********************************************************************/
-
-/* Event handler identifier. */
-typedef uint8_t mm_handler_id;
-
-/* Event handler routine (callback). */
-typedef void (*mm_handler)(uintptr_t ident, uint32_t data);
-
-mm_handler_id mm_event_install_handler(mm_handler cb);
 
 #endif /* EVENT_H */
 

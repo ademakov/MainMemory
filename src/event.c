@@ -25,6 +25,7 @@
 #include "log.h"
 #include "net.h"
 #include "port.h"
+#include "selfpipe.h"
 #include "sched.h"
 #include "task.h"
 #include "timer.h"
@@ -41,7 +42,7 @@
 #include <unistd.h>
 
 // Default event loop timeout - 10 seconds 
-#define MM_EVENT_TIMEOUT 10000000
+#define MM_EVENT_TIMEOUT ((mm_timeout_t) 10000000)
 
 // Event loop task.
 static struct mm_task *mm_event_task;
@@ -50,105 +51,61 @@ static struct mm_task *mm_event_task;
 static struct mm_port *mm_event_port;
 
 /**********************************************************************
- * I/O handler table.
+ * Event Handler Table.
  **********************************************************************/
 
-// I/0 handler table size.
-#define MM_IO_MAX 32
+// Event handler table size.
+#define MM_EVENT_HANDLER_MAX	(255)
 
-// I/O handler descriptor.
-struct mm_event_io_handler
+// Event handler descriptor.
+struct mm_event_hd
 {
-	int flags;
-	struct mm_port *port;
+	mm_event_handler_t handler;
+	uintptr_t handler_data;
 };
 
-// I/O handler table.
-static struct mm_event_io_handler mm_io_table[MM_IO_MAX];
+// Event handler table.
+static struct mm_event_hd mm_event_hd_table[MM_EVENT_HANDLER_MAX];
 
-// The number of registered I/O handlers.
-static int mm_io_table_size;
+// The number of registered event handlers.
+static int mm_event_handler_table_size;
 
-// Initialize the event handler table.
+// A dummy event handler.
 static void
-mm_event_init_io_handlers(void)
-{
-	ENTER();
-	ASSERT(MM_IO_MAX < (1ul << (8 * sizeof(mm_event_handler_t))));
-
-	// Register a dummy I/O handler with zero id.
-	mm_io_table_size = 1;
-	mm_io_table[0].flags = 0;
-	mm_io_table[0].port = NULL;
-
-	LEAVE();
-}
-
-// Register an I/O handler in the table.
-mm_event_handler_t
-mm_event_add_io_handler(int flags, struct mm_port *port)
-{
-	ENTER();
-
-	ASSERT(mm_io_table_size < MM_IO_MAX);
-
-	mm_event_handler_t id = mm_io_table_size++;
-	mm_io_table[id].flags = flags;
-	mm_io_table[id].port = port;
-
-	DEBUG("registered I/O handler %d", id);
-
-	LEAVE();
-	return id;
-}
-
-/**********************************************************************
- * Event handler table.
- **********************************************************************/
-
-/* Event handler table size. */
-#define MM_CB_MAX 64
-
-/* Event handler table. */
-static mm_handler mm_cb_table[MM_CB_MAX];
-
-/* The number of registered event handlers. */
-static int mm_cb_table_size;
-
-/* A dummy event handler. */
-static void
-mm_event_dummy(uintptr_t ident __attribute__((unused)),
+mm_event_dummy(mm_event_t event __attribute__((unused)),
+	       uintptr_t handler_data __attribute__((unused)),
 	       uint32_t data __attribute__((unused)))
 {
 	DEBUG("hmm, dummy event handler invoked.");
 }
 
-/* Initialize the event handler table. */
+// Initialize the event handler table.
 static void
 mm_event_init_handlers(void)
 {
 	ENTER();
-	ASSERT(MM_CB_MAX < 256);
+	ASSERT(MM_EVENT_HANDLER_MAX < 256);
 
-	/* Register dummy handler with zero id. */
-	ASSERT(mm_cb_table_size == 0);
-	(void) mm_event_install_handler(mm_event_dummy);
-	ASSERT(mm_cb_table_size == 1);
+	// Register dummy handler with zero id.
+	ASSERT(mm_event_handler_table_size == 0);
+	(void) mm_event_register_handler(mm_event_dummy, 0);
+	ASSERT(mm_event_handler_table_size == 1);
 
 	LEAVE();
 }
 
 /* Register an event handler in the table. */
-mm_handler_id
-mm_event_install_handler(mm_handler cb)
+mm_event_hid_t
+mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data)
 {
 	ENTER();
 
-	ASSERT(cb != NULL);
-	ASSERT(mm_cb_table_size < MM_CB_MAX);
+	ASSERT(handler != NULL);
+	ASSERT(mm_event_handler_table_size < MM_EVENT_HANDLER_MAX);
 
-	mm_handler_id id = mm_cb_table_size++;
-	mm_cb_table[id] = cb;
+	mm_event_hid_t id = mm_event_handler_table_size++;
+	mm_event_hd_table[id].handler = handler;
+	mm_event_hd_table[id].handler_data = handler_data;
 
 	DEBUG("registered event handler %d", id);
 
@@ -157,7 +114,7 @@ mm_event_install_handler(mm_handler cb)
 }
 
 /**********************************************************************
- * File descriptor table.
+ * File Descriptor Table.
  **********************************************************************/
 
 // The maximum allowed number of open file descriptors.
@@ -166,17 +123,23 @@ mm_event_install_handler(mm_handler cb)
 // File descriptor table entry.
 struct mm_event_fd
 {
-	uint32_t data;			// handler data
-	mm_event_handler_t handler;	// handler id
-	uint8_t changed;		// change flag
-	uint16_t reserved;
+	// client data
+	uint32_t data;
+
+	// event handers
+	mm_event_hid_t input_handler;
+	mm_event_hid_t output_handler;
+	mm_event_hid_t control_handler;
+
+	// change flag
+	uint8_t changed;
 };
 
 // File descriptor table.
-static struct mm_event_fd *mm_fd_table;
+static struct mm_event_fd *mm_event_fd_table;
 
 // File descriptor table size.
-static int mm_fd_table_size = _POSIX_OPEN_MAX;
+static int mm_event_fd_table_size = _POSIX_OPEN_MAX;
 
 // Initialize the file descriptor table.
 static void
@@ -186,17 +149,17 @@ mm_event_init_fd_table(void)
 
 	// Determine the table size.
 	int max_fd = sysconf(_SC_OPEN_MAX);
-	if (max_fd > mm_fd_table_size) {
-		mm_fd_table_size = max_fd;
+	if (max_fd > mm_event_fd_table_size) {
+		mm_event_fd_table_size = max_fd;
 	}
-	if (mm_fd_table_size > MM_EVENT_FD_MAX) {
-		mm_brief("truncating too high fd limit: %d", mm_fd_table_size);
-		mm_fd_table_size = MM_EVENT_FD_MAX;
+	if (mm_event_fd_table_size > MM_EVENT_FD_MAX) {
+		mm_brief("truncating too high fd limit: %d", mm_event_fd_table_size);
+		mm_event_fd_table_size = MM_EVENT_FD_MAX;
 	}
-	mm_brief("fd table size: %d", mm_fd_table_size);
+	mm_brief("fd table size: %d", mm_event_fd_table_size);
 
 	// Allocate the table.
-	mm_fd_table = mm_calloc(mm_fd_table_size, sizeof(struct mm_event_fd));
+	mm_event_fd_table = mm_calloc(mm_event_fd_table_size, sizeof(struct mm_event_fd));
 
 	LEAVE();
 }
@@ -207,7 +170,7 @@ mm_event_free_fd_table(void)
 {
 	ENTER();
 
-	mm_free(mm_fd_table);
+	mm_free(mm_event_fd_table);
 
 	LEAVE();
 }
@@ -218,14 +181,106 @@ mm_event_verify_fd(int fd)
 {
 	if (unlikely(fd < 0)) {
 		/* The fd is invalid. */
-		return MM_FD_INVALID;
-	} else if (likely(fd < mm_fd_table_size)) {
+		return MM_EVENT_FD_INVALID;
+	} else if (likely(fd < mm_event_fd_table_size)) {
 		/* The fd is okay. */
-		return MM_FD_VALID;
+		return MM_EVENT_FD_VALID;
 	} else {
 		/* The fd exceeds the table capacity. */
-		return MM_FD_TOO_BIG;
+		return MM_EVENT_FD_TOO_BIG;
 	}
+}
+
+void
+mm_event_input(struct mm_event_fd *fd)
+{
+	mm_event_hid_t id = fd->input_handler;
+	ASSERT(id < mm_io_table_size);
+
+	struct mm_event_hd *hd = &mm_event_hd_table[id];
+	hd->handler(MM_EVENT_INPUT, hd->handler_data, fd->data);
+}
+
+void
+mm_event_output(struct mm_event_fd *fd)
+{
+	mm_event_hid_t id = fd->output_handler;
+	ASSERT(id < mm_io_table_size);
+
+	struct mm_event_hd *hd = &mm_event_hd_table[id];
+	hd->handler(MM_EVENT_OUTPUT, hd->handler_data, fd->data);
+}
+
+void
+mm_event_control(struct mm_event_fd *fd, mm_event_t event)
+{
+	mm_event_hid_t id = fd->control_handler;
+	ASSERT(id < mm_io_table_size);
+
+	struct mm_event_hd *hd = &mm_event_hd_table[id];
+	hd->handler(event, hd->handler_data, fd->data);
+}
+
+/**********************************************************************
+ * Self-pipe support.
+ **********************************************************************/
+
+// Self pipe for event loop wakeup.
+static struct mm_selfpipe mm_event_selfpipe;
+static mm_event_hid_t mm_event_selfpipe_handler;
+
+static void
+mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)),
+			uintptr_t handler_data __attribute__((unused)),
+			uint32_t data __attribute__((unused)))
+{
+	mm_selfpipe_set_ready(&mm_event_selfpipe);
+}
+
+static void
+mm_event_init_selfpipe(void)
+{
+	ENTER();
+
+	// Open the event-loop self-pipe.
+	mm_selfpipe_prepare(&mm_event_selfpipe);
+
+	// Register the self-pipe event handler.
+	mm_event_selfpipe_handler = mm_event_register_handler(mm_event_selfpipe_ready, 0);
+
+	LEAVE();
+}
+
+static void
+mm_event_start_selfpipe(void)
+{
+	ENTER();
+
+	// Register the self-pipe read end in the event loop.
+	mm_event_register_fd(mm_event_selfpipe.read_fd, 0, mm_event_selfpipe_handler, 0, 0);
+
+	LEAVE();
+}
+
+static void
+mm_event_term_selfpipe(void)
+{
+	ENTER();
+
+	// Close the event-loop self-pipe.
+	mm_selfpipe_cleanup(&mm_event_selfpipe);
+
+	LEAVE();
+}
+
+void
+mm_event_notify(void)
+{
+	ENTER();
+
+	mm_selfpipe_notify(&mm_event_selfpipe);
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -276,15 +331,15 @@ mm_event_dispatch(void)
 	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
 		int fd = msg[0];
 		uint32_t data = msg[2];
-		mm_event_handler_t handler = msg[1];
+		mm_event_hid_t handler = msg[1];
 
-		struct mm_event_fd *mm_fd = &mm_fd_table[fd];
+		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
 		uint32_t events = 0, new_events = 0;
 		int a, b;
 
 		// Check if a read event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_READ);
-		b = (mm_io_table[handler].flags & MM_EVENT_NET_READ);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_READ);
+		b = (mm_io_table[handler].flags & MM_EVENT_READ);
 		if (a) {
 			events |= EPOLLIN;
 		}
@@ -302,8 +357,8 @@ mm_event_dispatch(void)
 #endif
 
 		// Check if a write event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_WRITE);
-		b = (mm_io_table[handler].flags & MM_EVENT_NET_WRITE);
+		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_WRITE);
+		b = (mm_io_table[handler].flags & MM_EVENT_WRITE);
 		if (a) {
 			events |= EPOLLOUT;
 		}
@@ -363,7 +418,7 @@ mm_event_dispatch(void)
 
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
-	if (sent_msgs) {
+	if (mm_selfpipe_listen(&mm_event_selfpipe) || sent_msgs) {
 		// If event system changes have been requested it is needed to
 		// notify the interested parties on their completion so do not
 		// wait for more events.
@@ -379,6 +434,9 @@ mm_event_dispatch(void)
 	// Poll the system for events.
 	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX,
 				 timeout);
+
+	mm_selfpipe_divert(&mm_event_selfpipe);
+
 	if (unlikely(nevents < 0)) {
 		mm_error(errno, "epoll_wait");
 		goto done;
@@ -388,43 +446,43 @@ mm_event_dispatch(void)
 	for (int i = 0; i < nevents; i++) {
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
+			mm_event_hid_t io = mm_event_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 			struct mm_event_io_handler *handler = &mm_io_table[io];
 
 			DEBUG("read event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
+			uint32_t msg[2] = { MM_NET_MSG_READ_READY, mm_event_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
+			mm_event_hid_t io = mm_event_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 			struct mm_event_io_handler *handler = &mm_io_table[io];
 
 			DEBUG("write event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
+			uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, mm_event_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
+
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
+			mm_event_hid_t io = mm_event_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 			struct mm_event_io_handler *handler = &mm_io_table[io];
 
 			DEBUG("error event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_READ_ERROR, mm_fd_table[fd].data };
+			uint32_t msg[2] = { MM_NET_MSG_READ_ERROR, mm_event_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
-
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
 			int fd = mm_epoll_events[i].data.fd;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
+			mm_event_hid_t io = mm_event_fd_table[fd].handler;
 			ASSERT(io < mm_io_table_size);
 			struct mm_event_io_handler *handler = &mm_io_table[io];
 
 			DEBUG("error event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_WRITE_ERROR, mm_fd_table[fd].data };
+			uint32_t msg[2] = { MM_NET_MSG_WRITE_ERROR, mm_event_fd_table[fd].data };
 			mm_port_send_blocking( handler->port, msg, 2);
 		}
 	}
@@ -449,7 +507,9 @@ struct mm_event_fd_change_rec
 {
 	int fd;
 	uint32_t data;
-	mm_event_handler_t handler;
+	mm_event_hid_t input_handler;
+	mm_event_hid_t output_handler;
+	mm_event_hid_t control_handler;
 };
 
 // The kqueue descriptor.
@@ -509,35 +569,40 @@ mm_event_dispatch(void)
 
 	// Fill the change list.
 	uint32_t msg[3];
-	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
-		int fd = msg[0];
-		uint32_t data = msg[2];
-		mm_event_handler_t handler = msg[1];
+	while (likely(nchanges < MM_EVENT_NCHANGES_MAX) 
+	       && mm_port_receive(mm_event_port, msg, 3) == 0) {
 
-		struct mm_event_fd *mm_fd = &mm_fd_table[fd];
+		int fd = msg[0];
+		uint32_t data = msg[1];
+		mm_event_hid_t input_handler = (msg[2] >> 16) & 0xff;
+		mm_event_hid_t output_handler = (msg[2] >> 8) & 0xff;
+		mm_event_hid_t control_handler = msg[2] & 0xff;
+
+		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
 		if (unlikely(mm_fd->changed)) {
 			mm_event_fd_delayed.fd = fd;
 			mm_event_fd_delayed.data = data;
-			mm_event_fd_delayed.handler = handler;
+			mm_event_fd_delayed.input_handler = input_handler;
+			mm_event_fd_delayed.output_handler = output_handler;
+			mm_event_fd_delayed.control_handler = control_handler;
 			mm_event_fd_delayed_is_set = true;
 			break;
 		}
+
 		mm_fd->changed = 1;
 
 		mm_event_fd_changes[nchanges].fd = fd;
 		mm_event_fd_changes[nchanges].data = data;
-		mm_event_fd_changes[nchanges].handler = handler;
+		mm_event_fd_changes[nchanges].input_handler = input_handler;
+		mm_event_fd_changes[nchanges].output_handler = output_handler;
+		mm_event_fd_changes[nchanges].control_handler = control_handler;
 		++nchanges;
-
-		if (unlikely(nchanges == MM_EVENT_NCHANGES_MAX)) {
-			break;
-		}
 
 		int a, b;
 
 		// Change a read event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_READ);
-		b = (mm_io_table[handler].flags & MM_EVENT_NET_READ);
+		a = (mm_fd->input_handler != 0);
+		b = (input_handler != 0);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -554,8 +619,8 @@ mm_event_dispatch(void)
 		}
 
 		// Change a write event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_NET_WRITE);
-		b = (mm_io_table[handler].flags & MM_EVENT_NET_WRITE);
+		a = (mm_fd->output_handler != 0);
+		b = (output_handler != 0);
 		if (likely(a != b)) {
 			int flags;
 			if (b) {
@@ -576,95 +641,84 @@ mm_event_dispatch(void)
 	mm_flush();
 
 	// Find the event wait timeout.
-	mm_timeval_t timeout; 
-	if (nkevents) {
+	struct timespec ts;
+	if (mm_selfpipe_listen(&mm_event_selfpipe) || nkevents) {
 		// If event system changes have been requested it is needed to
 		// notify the interested parties on their completion so do not
 		// wait for more events.
-		timeout = 0;
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
 	} else {
-		timeout = mm_timer_next();
+		mm_timeval_t timeout = mm_timer_next();
 		if (timeout > MM_EVENT_TIMEOUT) {
 			timeout = MM_EVENT_TIMEOUT;
 		}
+
+		ts.tv_sec = timeout / 1000000;
+		ts.tv_nsec = (timeout % 1000000) * 1000;
 	}
 
 	// Poll the system for events.
-	struct timespec ts;
-	ts.tv_sec = timeout / 1000000;
-	ts.tv_nsec = 0;
 	int n = kevent(mm_event_kq,
 		       mm_kevents, nkevents,
 		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
 		       &ts);
+
+	mm_selfpipe_divert(&mm_event_selfpipe);
+
 	DEBUG("kevent changed: %d, received: %d", nkevents, n);
 
 	// Send REG/UNREG messages.
 	for (int i = 0; i < nchanges; i++) {
 		int fd = mm_event_fd_changes[i].fd;
-		struct mm_event_fd *mm_fd = &mm_fd_table[fd];
-
+		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
 		mm_fd->changed = 0;
 
-		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_NET_MSG_UNREGISTER, mm_fd->data };
-			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
-			mm_port_send_blocking(io->port, msg, 2);
-		}
+		// Invoke the old handler if any.
+		mm_event_control(mm_fd, MM_EVENT_UNREGISTER);
 
 		// Store the requested I/O handler.
 		mm_fd->data = mm_event_fd_changes[i].data;
-		mm_fd->handler = mm_event_fd_changes[i].handler;
+		mm_fd->input_handler = mm_event_fd_changes[i].input_handler;
+		mm_fd->output_handler = mm_event_fd_changes[i].output_handler;
+		mm_fd->control_handler = mm_event_fd_changes[i].control_handler;
 
-		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_NET_MSG_REGISTER, mm_fd->data };
-			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
-			mm_port_send_blocking(io->port, msg, 2);
-		}
+		// Invoke the new handler if any.
+		mm_event_control(mm_fd, MM_EVENT_REGISTER);
 	}
 
 	if (unlikely(n < 0)) {
 		if (errno != EINTR)
 			mm_error(errno, "kevent");
-		goto done;
+		goto leave;
 	}
 
 	// Process the received system events.
 	for (int i = 0; i < n; i++) {
 		if (mm_kevents[i].filter == EVFILT_READ) {
 			int fd = mm_kevents[i].ident;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("read event on fd %d", fd);
-			uint32_t data[2] = { MM_NET_MSG_READ_READY, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, data, 2);
+			DEBUG("input event on fd %d", fd);
+			mm_event_input(&mm_event_fd_table[fd]);
 
 			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
-				DEBUG("error event on fd %d", fd);
-				uint32_t data[2] = { MM_NET_MSG_READ_ERROR, mm_fd_table[fd].data };
-				mm_port_send_blocking( handler->port, data, 2);
+				DEBUG("input error event on fd %d", fd);
+				mm_event_control(&mm_event_fd_table[fd],
+						 MM_EVENT_INPUT_ERROR);
 			}
 		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
 			int fd = mm_kevents[i].ident;
-			mm_event_handler_t io = mm_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("write event on fd %d", fd);
-			uint32_t data[2] = { MM_NET_MSG_WRITE_READY, mm_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, data, 2);
+			DEBUG("output event on fd %d", fd);
+			mm_event_output(&mm_event_fd_table[fd]);
 
 			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
-				DEBUG("error event on fd %d", fd);
-				uint32_t data[2] = { MM_NET_MSG_WRITE_ERROR, mm_fd_table[fd].data };
-				mm_port_send_blocking( handler->port, data, 2);
+				DEBUG("output error event on fd %d", fd);
+				mm_event_control(&mm_event_fd_table[fd],
+						 MM_EVENT_OUTPUT_ERROR);
 			}
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -704,6 +758,9 @@ mm_event_start(void)
 	// Schedule the task.
 	mm_sched_run(mm_event_task);
 
+	// Start serving the event loop self-pipe.
+	mm_event_start_selfpipe();
+
 	LEAVE();
 }
 
@@ -716,9 +773,9 @@ mm_event_init(void)
 	mm_event_init_sys();
 
 	// Initialize generic data.
-	mm_event_init_io_handlers();
 	mm_event_init_handlers();
 	mm_event_init_fd_table();
+	mm_event_init_selfpipe();
 
 	// Delayed event loop task start.
 	mm_core_hook_start(mm_event_start);
@@ -735,6 +792,7 @@ mm_event_term(void)
 	mm_task_destroy(mm_event_task);
 
 	// Release generic data.
+	mm_event_term_selfpipe();
 	mm_event_free_fd_table();
 
 	// Release system specific resources.
@@ -744,20 +802,24 @@ mm_event_term(void)
 }
 
 void
-mm_event_register_fd(int fd, mm_event_handler_t handler, uint32_t data)
+mm_event_register_fd(int fd,
+		     uint32_t data,
+		     mm_event_hid_t input_handler,
+		     mm_event_hid_t output_handler,
+		     mm_event_hid_t control_handler)
 {
 	ENTER();
 	TRACE("fd: %d", fd);
 
 	ASSERT(fd >= 0);
-	ASSERT(fd < mm_fd_table_size);
+	ASSERT(fd < mm_event_fd_table_size);
 	ASSERT(handler != 0);
 	ASSERT(handler < mm_io_table_size);
 
 	uint32_t msg[3];
 	msg[0] = (uint32_t) fd;
-	msg[1] = handler;
-	msg[2] = data;
+	msg[1] = data;
+	msg[2] = (input_handler << 16) | (output_handler << 8) | control_handler;
 
 	mm_port_send_blocking(mm_event_port, msg, 3);
 
@@ -771,7 +833,7 @@ mm_event_unregister_fd(int fd)
 	TRACE("fd: %d", fd);
 
 	ASSERT(fd >= 0);
-	ASSERT(fd < mm_fd_table_size);
+	ASSERT(fd < mm_event_fd_table_size);
 
 	uint32_t msg[3];
 	msg[0] = (uint32_t) fd;
