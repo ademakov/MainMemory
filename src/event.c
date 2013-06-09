@@ -68,7 +68,7 @@ struct mm_event_hd
 static struct mm_event_hd mm_event_hd_table[MM_EVENT_HANDLER_MAX];
 
 // The number of registered event handlers.
-static int mm_event_handler_table_size;
+static int mm_event_hd_table_size;
 
 // A dummy event handler.
 static void
@@ -87,9 +87,9 @@ mm_event_init_handlers(void)
 	ASSERT(MM_EVENT_HANDLER_MAX < 256);
 
 	// Register dummy handler with zero id.
-	ASSERT(mm_event_handler_table_size == 0);
+	ASSERT(mm_event_hd_table_size == 0);
 	(void) mm_event_register_handler(mm_event_dummy, 0);
-	ASSERT(mm_event_handler_table_size == 1);
+	ASSERT(mm_event_hd_table_size == 1);
 
 	LEAVE();
 }
@@ -101,9 +101,9 @@ mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data)
 	ENTER();
 
 	ASSERT(handler != NULL);
-	ASSERT(mm_event_handler_table_size < MM_EVENT_HANDLER_MAX);
+	ASSERT(mm_event_hd_table_size < MM_EVENT_HANDLER_MAX);
 
-	mm_event_hid_t id = mm_event_handler_table_size++;
+	mm_event_hid_t id = mm_event_hd_table_size++;
 	mm_event_hd_table[id].handler = handler;
 	mm_event_hd_table[id].handler_data = handler_data;
 
@@ -195,7 +195,7 @@ void
 mm_event_input(struct mm_event_fd *fd)
 {
 	mm_event_hid_t id = fd->input_handler;
-	ASSERT(id < mm_io_table_size);
+	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
 	hd->handler(MM_EVENT_INPUT, hd->handler_data, fd->data);
@@ -205,7 +205,7 @@ void
 mm_event_output(struct mm_event_fd *fd)
 {
 	mm_event_hid_t id = fd->output_handler;
-	ASSERT(id < mm_io_table_size);
+	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
 	hd->handler(MM_EVENT_OUTPUT, hd->handler_data, fd->data);
@@ -215,7 +215,7 @@ void
 mm_event_control(struct mm_event_fd *fd, mm_event_t event)
 {
 	mm_event_hid_t id = fd->control_handler;
-	ASSERT(id < mm_io_table_size);
+	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
 	hd->handler(event, hd->handler_data, fd->data);
@@ -813,8 +813,9 @@ mm_event_register_fd(int fd,
 
 	ASSERT(fd >= 0);
 	ASSERT(fd < mm_event_fd_table_size);
-	ASSERT(handler != 0);
-	ASSERT(handler < mm_io_table_size);
+	ASSERT(input_handler < mm_event_hd_table_size);
+	ASSERT(output_handler < mm_event_hd_table_size);
+	ASSERT(control_handler < mm_event_hd_table_size);
 
 	uint32_t msg[3];
 	msg[0] = (uint32_t) fd;
