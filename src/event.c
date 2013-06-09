@@ -330,16 +330,18 @@ mm_event_dispatch(void)
 	uint32_t msg[3];
 	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
 		int fd = msg[0];
-		uint32_t data = msg[2];
-		mm_event_hid_t handler = msg[1];
+		uint32_t data = msg[1];
+		mm_event_hid_t input_handler = (msg[2] >> 16) & 0xff;
+		mm_event_hid_t output_handler = (msg[2] >> 8) & 0xff;
+		mm_event_hid_t control_handler = msg[2] & 0xff;
 
 		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
 		uint32_t events = 0, new_events = 0;
 		int a, b;
 
 		// Check if a read event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_READ);
-		b = (mm_io_table[handler].flags & MM_EVENT_READ);
+		a = (mm_fd->input_handler != 0);
+		b = (input_handler != 0);
 		if (a) {
 			events |= EPOLLIN;
 		}
@@ -357,8 +359,8 @@ mm_event_dispatch(void)
 #endif
 
 		// Check if a write event registration if needed.
-		a = (mm_io_table[mm_fd->handler].flags & MM_EVENT_WRITE);
-		b = (mm_io_table[handler].flags & MM_EVENT_WRITE);
+		a = (mm_fd->output_handler != 0);
+		b = (output_handler != 0);
 		if (a) {
 			events |= EPOLLOUT;
 		}
@@ -394,21 +396,21 @@ mm_event_dispatch(void)
 			}
 		}
 
-		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_NET_MSG_UNREGISTER, mm_fd->data };
-			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
-			mm_port_send_blocking(io->port, msg, 2);
+		// Invoke the old handler if any.
+		if (mm_fd->control_handler) {
+			mm_event_control(mm_fd, MM_EVENT_UNREGISTER);
 			sent_msgs = true;
 		}
 
 		// Store the requested I/O handler.
 		mm_fd->data = data;
-		mm_fd->handler = handler;
+		mm_fd->input_handler = input_handler;
+		mm_fd->output_handler = output_handler;
+		mm_fd->control_handler = control_handler;
 
-		if (mm_fd->handler) {
-			uint32_t msg[2] = { MM_NET_MSG_REGISTER, mm_fd->data };
-			struct mm_event_io_handler *io = &mm_io_table[mm_fd->handler];
-			mm_port_send_blocking(io->port, msg, 2);
+		// Invoke the new handler if any.
+		if (mm_fd->control_handler) {
+			mm_event_control(mm_fd, MM_EVENT_REGISTER);
 			sent_msgs = true;
 		}
 	}
@@ -444,46 +446,23 @@ mm_event_dispatch(void)
 
 	// Process the received system events.
 	for (int i = 0; i < nevents; i++) {
+		int fd = mm_epoll_events[i].data.fd;
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
-			int fd = mm_epoll_events[i].data.fd;
-			mm_event_hid_t io = mm_event_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("read event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_READ_READY, mm_event_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, msg, 2);
+			DEBUG("input event on fd %d", fd);
+			mm_event_input(&mm_event_fd_table[fd]);
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
-			int fd = mm_epoll_events[i].data.fd;
-			mm_event_hid_t io = mm_event_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("write event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_WRITE_READY, mm_event_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, msg, 2);
+			DEBUG("output event on fd %d", fd);
+			mm_event_input(&mm_event_fd_table[fd]);
 		}
 
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			int fd = mm_epoll_events[i].data.fd;
-			mm_event_hid_t io = mm_event_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("error event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_READ_ERROR, mm_event_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, msg, 2);
+			DEBUG("input error event on fd %d", fd);
+			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_INPUT_ERROR);
 		}
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
-			int fd = mm_epoll_events[i].data.fd;
-			mm_event_hid_t io = mm_event_fd_table[fd].handler;
-			ASSERT(io < mm_io_table_size);
-			struct mm_event_io_handler *handler = &mm_io_table[io];
-
-			DEBUG("error event on fd %d", fd);
-			uint32_t msg[2] = { MM_NET_MSG_WRITE_ERROR, mm_event_fd_table[fd].data };
-			mm_port_send_blocking( handler->port, msg, 2);
+			DEBUG("output error event on fd %d", fd);
+			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_OUTPUT_ERROR);
 		}
 	}
 
