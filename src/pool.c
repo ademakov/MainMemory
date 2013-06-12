@@ -24,7 +24,7 @@
 #include "trace.h"
 #include "util.h"
 
-#define MM_POOL_BLOCK_SIZE	0x2000
+#define MM_POOL_BLOCK_SIZE	(0x2000)
 
 struct mm_pool_free_item
 {
@@ -32,8 +32,10 @@ struct mm_pool_free_item
 };
 
 void
-mm_pool_init(struct mm_pool *pool, const char *pool_name,
-	     const struct mm_allocator *alloc, uint32_t item_size)
+mm_pool_prepare(struct mm_pool *pool,
+		const char *pool_name,
+		const struct mm_allocator *alloc,
+		uint32_t item_size)
 {
 	ENTER();
 	ASSERT(item_size < 0x200);
@@ -48,21 +50,17 @@ mm_pool_init(struct mm_pool *pool, const char *pool_name,
 	pool->item_size = item_size;
 
 	pool->block_capacity = MM_POOL_BLOCK_SIZE / item_size;
-	pool->block_array_used = 1;
-	pool->block_array_size = 4;
+	pool->block_array_used = 0;
+	pool->block_array_size = 0;
 
 	pool->global = (alloc == &mm_alloc_global);
 	pool->free_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
 	pool->grow_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
 
-	// Allocate the block container.
 	pool->alloc = alloc;
-	pool->block_array = pool->alloc->alloc(pool->block_array_size * sizeof(char *));
-
-	// Allocate the first block.
-	pool->block_array[0] = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
-	pool->block_cur_ptr = pool->block_array[0];
-	pool->block_end_ptr = pool->block_cur_ptr +  pool->block_capacity * pool->item_size;
+	pool->block_array = NULL;
+	pool->block_cur_ptr = NULL;
+	pool->block_end_ptr = NULL;
 
 	pool->free_list = NULL;
 	pool->pool_name = mm_strdup(pool_name);
@@ -71,7 +69,7 @@ mm_pool_init(struct mm_pool *pool, const char *pool_name,
 }
 
 void
-mm_pool_discard(struct mm_pool *pool)
+mm_pool_cleanup(struct mm_pool *pool)
 {
 	ENTER();
 
@@ -135,6 +133,44 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 	return block * pool->block_capacity + index;
 }
 
+static void
+mm_pool_grow(struct mm_pool *pool)
+{
+	ENTER();
+
+	// Check for 32-bit integer overflow.
+	uint32_t total_capacity = pool->block_capacity * pool->block_array_used;
+	if (unlikely(total_capacity > (total_capacity + pool->block_capacity)))
+		mm_fatal(0, "the '%s' memory pool overflow", pool->pool_name);
+
+	// If needed grow the block container array.
+	if (pool->block_array_used == pool->block_array_size) {
+		if (pool->block_array_size)
+			pool->block_array_size *= 2;
+		else
+			pool->block_array_size = 4;
+
+		pool->block_array = pool->alloc->realloc(
+			pool->block_array,
+			pool->block_array_size * sizeof(char *));
+	}
+
+	// Allocate a new memory block.
+	char *block = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
+	pool->block_array[pool->block_array_used] = block;
+	pool->block_array_used++;
+
+	pool->block_cur_ptr = block;
+	pool->block_end_ptr = block + pool->block_capacity * pool->item_size;
+
+	mm_brief("grow the '%s' memory pool to %u elements, occupy %lu bytes",
+		 pool->pool_name,
+		 pool->block_capacity * pool->block_array_used,
+		 (unsigned long) MM_POOL_BLOCK_SIZE * pool->block_array_used);
+
+	LEAVE();
+}
+
 void *
 mm_pool_alloc(struct mm_pool *pool)
 {
@@ -157,31 +193,8 @@ mm_pool_alloc(struct mm_pool *pool)
 			mm_global_unlock(&pool->free_lock);
 		}
 
-		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr)) {
-			mm_brief("grow the '%s' memory pool with element size %u",
-				 pool->pool_name, pool->item_size);
-
-			// Check for 32-bit integer overflow.
-			uint32_t total_capacity = pool->block_capacity * pool->block_array_used;
-			if (unlikely(total_capacity > (total_capacity + pool->block_capacity)))
-				mm_fatal(0, "the '%s' memory pool overflow", pool->pool_name);
-
-			if (pool->block_array_used == pool->block_array_size) {
-				pool->block_array_size *= 2;
-				pool->block_array = pool->alloc->realloc(
-					pool->block_array,
-					pool->block_array_size * sizeof(char *));
-			}
-
-			pool->block_array[pool->block_array_used]
-				= pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
-			pool->block_cur_ptr
-				= pool->block_array[pool->block_array_used];
-			pool->block_end_ptr
-				= pool->block_cur_ptr + pool->block_capacity * pool->item_size;
-
-			pool->block_array_used++;
-		}
+		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr))
+			mm_pool_grow(pool);
 
 		item = pool->block_cur_ptr;
 		pool->block_cur_ptr += pool->item_size;

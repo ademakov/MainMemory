@@ -37,8 +37,8 @@ mm_work_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_work_pool, "work",
-		     &mm_alloc_global, sizeof(struct mm_work));
+	mm_pool_prepare(&mm_work_pool, "work",
+			&mm_alloc_global, sizeof(struct mm_work));
 
 	mm_list_init(&mm_work_queue);
 	mm_list_init(&mm_wait_queue);
@@ -51,7 +51,7 @@ mm_work_term(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_work_pool);
+	mm_pool_cleanup(&mm_work_pool);
 
 	LEAVE();
 }

@@ -97,8 +97,8 @@ mm_timer_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_core->timer_pool, "timer",
-	             &mm_alloc_core, sizeof (struct mm_timer));
+	mm_pool_prepare(&mm_core->timer_pool, "timer",
+			&mm_alloc_core, sizeof (struct mm_timer));
 
 	LEAVE();
 }
@@ -108,7 +108,7 @@ mm_timer_term(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_core->timer_pool);
+	mm_pool_cleanup(&mm_core->timer_pool);
 
 	LEAVE();
 }

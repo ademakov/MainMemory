@@ -50,11 +50,13 @@ struct mm_pool
 	char *pool_name;
 };
 
-void mm_pool_init(struct mm_pool *pool, const char *name,
-		  const struct mm_allocator *alloc, uint32_t item_size)
+void mm_pool_prepare(struct mm_pool *pool,
+		     const char *pool_name,
+		     const struct mm_allocator *alloc,
+		     uint32_t item_size)
 	__attribute__((nonnull(1, 2, 3)));
 
-void mm_pool_discard(struct mm_pool *pool)
+void mm_pool_cleanup(struct mm_pool *pool)
 	__attribute__((nonnull(1)));
 
 void * mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)

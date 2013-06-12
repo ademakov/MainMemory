@@ -15,6 +15,7 @@ ASAP:
 ** ensure safe task & port objects destruction (refcount? capabilities?)
 
 Essentials:
+* use non-blocking data structures instead of locks where possible
 * resolve socket close issues: time wait
 * support signals
 * UDP servers
@@ -40,7 +41,6 @@ Essentials:
 * HTTP module
 
 Enhancements:
-* task fork/join
 * task local storage (tls)
 * reap dead tasks pending for too long
 * try to detect clock adjustments and reset realtime timers accordingly

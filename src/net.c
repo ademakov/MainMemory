@@ -273,8 +273,8 @@ mm_net_init_socket_table(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_socket_pool, "net-socket",
-		     &mm_alloc_global, sizeof (struct mm_net_socket));
+	mm_pool_prepare(&mm_socket_pool, "net-socket",
+			&mm_alloc_global, sizeof (struct mm_net_socket));
 
 	LEAVE();
 }
@@ -284,7 +284,7 @@ mm_net_free_socket_table(void)
 {
 	ENTER();
 
-	mm_pool_discard(&mm_socket_pool);
+	mm_pool_cleanup(&mm_socket_pool);
 
 	LEAVE();
 }

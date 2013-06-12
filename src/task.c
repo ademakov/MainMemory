@@ -56,8 +56,8 @@ mm_task_init(void)
 {
 	ENTER();
 
-	mm_pool_init(&mm_task_pool, "task",
-		     &mm_alloc_global, sizeof (struct mm_task));
+	mm_pool_prepare(&mm_task_pool, "task",
+			&mm_alloc_global, sizeof (struct mm_task));
 
 	LEAVE();
 }
@@ -69,7 +69,7 @@ mm_task_term(void)
 
 	// TODO: stop and destroy all tasks.
 
-	mm_pool_discard(&mm_task_pool);
+	mm_pool_cleanup(&mm_task_pool);
 
 	LEAVE();
 }
