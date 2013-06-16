@@ -39,12 +39,14 @@ struct mm_future
 	mm_future_status_t status;
 	/* The future result. */
 	mm_result_t result;
+
 	/* The future task parameters. */
-	mm_task_flags_t flags;
 	mm_routine_t start;
 	intptr_t start_arg;
+
 	/* The task if started. */
 	struct mm_task *task;
+
 	/* The tasks blocked waiting for the future. */
 	struct mm_list blocked_tasks;
 };
@@ -53,8 +55,10 @@ struct mm_future
 void mm_future_init(void);
 void mm_future_term(void);
 
-struct mm_future * mm_future_create(const char *name, mm_task_flags_t flags,
-				    mm_routine_t start, uintptr_t start_arg);
+struct mm_future * mm_future_create(const char *name,
+				    mm_routine_t start,
+				    uintptr_t start_arg)
+	__attribute__((nonnull(2)));
 
 void mm_future_destroy(struct mm_future *future);
 

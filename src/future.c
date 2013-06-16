@@ -49,7 +49,7 @@ mm_future_term(void)
 }
 
 struct mm_future *
-mm_future_create(const char *name __attribute__((unused)), mm_task_flags_t flags,
+mm_future_create(const char *name __attribute__((unused)),
 		 mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
@@ -57,7 +57,6 @@ mm_future_create(const char *name __attribute__((unused)), mm_task_flags_t flags
 	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
 	future->status = MM_FUTURE_CREATED;
 	future->result = MM_TASK_UNRESOLVED;
-	future->flags = flags;
 	future->start = start;
 	future->start_arg = start_arg;
 
@@ -128,7 +127,7 @@ mm_future_start(struct mm_future *future)
 
 	if (future->status == MM_FUTURE_CREATED) {
 		future->status = MM_FUTURE_STARTED;
-		mm_work_add(0, mm_future_routine, (uintptr_t) future);
+		mm_work_add(mm_future_routine, (uintptr_t) future, false);
 	}
 
 	LEAVE();

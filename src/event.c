@@ -441,7 +441,7 @@ mm_event_dispatch(void)
 
 	if (unlikely(nevents < 0)) {
 		mm_error(errno, "epoll_wait");
-		goto done;
+		goto leave;
 	}
 
 	// Process the received system events.
@@ -466,7 +466,7 @@ mm_event_dispatch(void)
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -728,7 +728,7 @@ mm_event_start(void)
 	ENTER();
 
 	// Create the event loop task and port.
-	mm_event_task = mm_task_create("event", 0, mm_event_loop, 0);
+	mm_event_task = mm_task_create("event", mm_event_loop, 0);
 	mm_event_port = mm_port_create(mm_event_task);
 
 	// Set the lowest priority for event loop.

@@ -117,7 +117,7 @@ mm_task_free_chunks(struct mm_task *task)
 	while (!mm_list_empty(&task->chunks)) {
 		struct mm_list *link = mm_list_head(&task->chunks);
 		mm_list_delete(link);
-		mm_free(link);
+		mm_core_free(link);
 	}
 
 	LEAVE();
@@ -189,8 +189,7 @@ mm_task_create_boot(void)
 
 /* Create a new task. */
 struct mm_task *
-mm_task_create(const char *name, mm_task_flags_t flags,
-	       mm_routine_t start, uintptr_t start_arg)
+mm_task_create(const char *name, mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
 
@@ -214,7 +213,7 @@ mm_task_create(const char *name, mm_task_flags_t flags,
 	mm_task_set_name(task, name);
 
 	// Initialize the task info.
-	mm_task_set_attr(task, flags, MM_PRIO_DEFAULT);
+	mm_task_set_attr(task, 0, MM_PRIO_DEFAULT);
 	task->start = start;
 	task->start_arg = start_arg;
 

@@ -22,35 +22,47 @@
 
 #include "common.h"
 #include "list.h"
-#include "task.h"
 
+/* Forward declaration. */
+struct mm_core;
 
-/* A batch of work. */
+/* A work item. */
 struct mm_work
 {
 	/* A link in the work queue. */
 	struct mm_list queue;
-	/* The work task flags. */
-	mm_task_flags_t flags;
+
+	/* The work is pinned to a specific core. */
+	bool pinned;
+
 	/* The work routine. */
 	mm_routine_t routine;
-	/* The work item. */
-	uintptr_t item;
+	/* The work routine argument. */
+	uintptr_t routine_arg;
 };
 
+struct mm_work *mm_work_create(mm_routine_t routine,
+			       uintptr_t routine_arg,
+			       bool pinned)
+	__attribute__((nonnull(1)));
 
-void mm_work_init(void);
-void mm_work_term(void);
+void mm_work_destroy(struct mm_work *work)
+	__attribute__((nonnull(1)));
 
-struct mm_work * mm_work_create(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item);
-void mm_work_destroy(struct mm_work *work);
+void mm_work_recycle(struct mm_work *work)
+	__attribute__((nonnull(1)));
+
+void mm_work_put(struct mm_work *work)
+	__attribute__((nonnull(1)));
 
 struct mm_work * mm_work_get(void);
 
-void mm_work_put(struct mm_work *work);
-
-void mm_work_add(mm_task_flags_t flags, mm_routine_t routine, uintptr_t item);
-
-void mm_work_addv(mm_task_flags_t flags, mm_routine_t routine, uintptr_t *items, size_t nitems);
+static inline void
+mm_work_add(mm_routine_t routine,
+	    uintptr_t routine_arg,
+	    bool pinned)
+{
+	mm_work_put(mm_work_create(routine, routine_arg, pinned));
+}
 
 #endif /* WORK_H */

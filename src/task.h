@@ -133,9 +133,10 @@ void mm_task_term(void);
 
 struct mm_task * mm_task_create_boot(void);
 
-struct mm_task * mm_task_create(const char *name, mm_task_flags_t flags,
-				mm_routine_t start, uintptr_t start_arg)
-	__attribute__((nonnull(1, 3)));
+struct mm_task * mm_task_create(const char *name,
+				mm_routine_t start,
+				uintptr_t start_arg)
+	__attribute__((nonnull(1, 2)));
 
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));

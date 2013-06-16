@@ -24,6 +24,7 @@
 #include "list.h"
 #include "pool.h"
 #include "runq.h"
+#include "task.h"
 
 /* Forward declaration. */
 struct mm_timeq;
@@ -31,40 +32,38 @@ struct mm_timeq;
 /* Virtual core state. */
 struct mm_core
 {
-	/* Stop flag. */
-	bool stop;
-	/* The flag indicating that a master sleeps waiting for a worker. */
-	bool master_waits_worker;
+	/* Queue of ready to run tasks. */
+	struct mm_runq run_queue;
 
-	/* The memory arena for core-local allocation. */
+	/* Queue of work items. */
+	struct mm_list work_queue;
+	/* Cache of free work items. */
+	struct mm_list work_cache;
+
+	/* Private memory arena. */
 	void *arena;
 
-	/* The memory chunks freed by other threads. */
-	mm_global_lock_t chunks_lock;
-	struct mm_list chunks;
+	/* Queue of delayed tasks. */
+	struct mm_timeq *time_queue;
 
-	/* The memory chunks with log messages. */
-	struct mm_list log_chunks;
-
-	/* The master task. */
-	struct mm_task *master;
+	/* A current (almost) time. */
+	mm_timeval_t time_value;
+	mm_timeval_t real_time_value;
 
 	/* Current and maximum number of worker tasks. */
 	uint32_t nworkers;
 	uint32_t nworkers_max;
 
-	/* The queue of ready to run tasks. */
-	struct mm_runq run_queue;
-
 	/* The list of worker tasks that have finished. */
 	struct mm_list dead_list;
 
-	/* The queue of delayed tasks. */
-	struct mm_timeq *time_queue;
+	/* Stop flag. */
+	bool master_stop;
+	/* The flag indicating that a master sleeps waiting for a work item. */
+	bool master_waits_work;
 
-	/* An almost current time value. */
-	mm_timeval_t time_value;
-	mm_timeval_t real_time_value;
+	/* The master task. */
+	struct mm_task *master;
 
 	/* The bootstrap task. */
 	struct mm_task *boot;
@@ -72,10 +71,25 @@ struct mm_core
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
+	/* The log message memory. */
+	struct mm_list log_chunks;
+
 	/* Memory pool for timers. */
 	struct mm_pool timer_pool;
 	/* Memory pool for futures. */
 	struct mm_pool future_pool;
+
+	/*
+	 * The fields below engage in cross-core communication.
+	 */
+
+	/* Submitted work items. */
+	struct mm_list inbox __align(MM_CACHELINE);
+	mm_core_lock_t inbox_lock;
+
+	/* The memory chunks freed by other threads. */
+	struct mm_list chunks __align(MM_CACHELINE);
+	mm_global_lock_t chunks_lock;
 
 } __align(MM_CACHELINE);
 

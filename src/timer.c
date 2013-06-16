@@ -39,7 +39,6 @@ struct mm_timer
 	bool abstime;
 
 	/* Task parameters. */
-	mm_task_flags_t flags;
 	mm_routine_t start;
 	uintptr_t start_arg;
 
@@ -80,7 +79,7 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 			containerof(entry, struct mm_timer, entry);
 
 		if (likely(timer->start)) {
-			mm_work_add(timer->flags, timer->start, timer->start_arg);
+			mm_work_add(timer->start, timer->start_arg, true);
 		}
 
 		if (timer->interval) {
@@ -153,8 +152,7 @@ mm_timer_next(void)
 }
 
 mm_timer_t
-mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
-		mm_routine_t start, uintptr_t start_arg)
+mm_timer_create(mm_clock_t clock, mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
 
@@ -167,18 +165,17 @@ mm_timer_create(mm_clock_t clock, mm_task_flags_t flags,
 
 		timer_id = MM_TIMER_ERROR;
 		errno = EAGAIN;
-		goto done;
+		goto leave;
 	}
 
 	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
 	timer->clock = clock;
-	timer->flags = flags;
 	timer->start = start;
 	timer->start_arg = start_arg;
 	timer->value = MM_TIMEVAL_MAX;
 	timer->interval = 0;
 
-done:
+leave:
 	LEAVE();
 	return timer_id;
 }

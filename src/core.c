@@ -45,7 +45,7 @@
 # define MM_DEFAULT_CORES	1
 #endif
 
-#define MM_DEFAULT_WORKERS	512
+#define MM_DEFAULT_WORKERS	256
 
 #define MM_PRIO_MASTER		1
 #define MM_PRIO_WORKER		MM_PRIO_DEFAULT
@@ -68,10 +68,7 @@ static void
 mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
 	mm_core->nworkers--;
-
-	if (mm_core->master_waits_worker) {
-		mm_sched_run(mm_core->master);
-	}
+	mm_sched_run(mm_core->master);
 }
 
 static mm_result_t
@@ -81,8 +78,8 @@ mm_core_worker(uintptr_t arg)
 
 	struct mm_work *work = (struct mm_work *) arg;
 	mm_routine_t routine = work->routine;
-	uintptr_t routine_arg = work->item;
-	mm_work_destroy(work);
+	uintptr_t routine_arg = work->routine_arg;
+	mm_work_recycle(work);
 
 	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
@@ -102,8 +99,10 @@ mm_core_worker_start(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_task *task = mm_task_create("worker", work->flags,
-					      mm_core_worker, (uintptr_t) work);
+	struct mm_task *task = mm_task_create("worker",
+					      mm_core_worker,
+					      (uintptr_t) work);
+
 	task->priority = MM_PRIO_WORKER;
 	mm_core->nworkers++;
 	mm_sched_run(task);
@@ -114,6 +113,27 @@ mm_core_worker_start(struct mm_work *work)
 /**********************************************************************
  * Master task.
  **********************************************************************/
+
+static void
+mm_core_receive_work(struct mm_core *core)
+{
+	mm_core_lock(&core->inbox_lock);
+	if (mm_list_empty(&core->inbox)) {
+		mm_core_unlock(&core->inbox_lock);
+
+		// TODO: allow for cross-core wakeup
+		core->master_waits_work = true;
+		mm_sched_block();
+		core->master_waits_work = false;
+	} else {
+		struct mm_list *head = mm_list_head(&core->inbox);
+		struct mm_list *tail = mm_list_tail(&core->inbox);
+		mm_list_cleave(head, tail);
+		mm_core_unlock(&core->inbox_lock);
+
+		mm_list_splice_next(&core->work_queue, head, tail);
+	}
+}
 
 static void
 mm_core_destroy_chunks(struct mm_core *core)
@@ -137,20 +157,18 @@ mm_core_master_loop(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	while (!mm_memory_load(core->stop)) {
-
-		if (core->nworkers == core->nworkers_max) {
-			core->master_waits_worker = true;
-			mm_sched_block();
-			core->master_waits_worker = false;
-		} else {
-			struct mm_work *work = mm_work_get();
-			if (likely(work != NULL)) {
-				mm_core_worker_start(work);
-			}
-		}
+	while (!mm_memory_load(core->master_stop)) {
 
 		mm_core_destroy_chunks(core);
+
+		if (core->nworkers < core->nworkers_max) {
+			struct mm_work *work = mm_work_get();
+			if (work == NULL) {
+				mm_core_receive_work(mm_core);
+				continue;
+			}
+			mm_core_worker_start(work);
+		}
 	}
 
 	LEAVE();
@@ -240,7 +258,7 @@ mm_core_boot_init(struct mm_core *core)
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 
 	// Create the master task for this core and schedule it for execution.
-	core->master = mm_task_create("master", 0, mm_core_master_loop, (uintptr_t) core);
+	core->master = mm_task_create("master", mm_core_master_loop, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
 	mm_sched_run(core->master);
 }
@@ -309,28 +327,33 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	core->stop = 0;
+	mm_runq_init(&core->run_queue);
+	mm_list_init(&core->work_queue);
+	mm_list_init(&core->work_cache);
 
 	core->arena = create_mspace(0, 0);
-	core->chunks_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
-	mm_list_init(&core->chunks);
-	mm_list_init(&core->log_chunks);
 
-	core->boot = mm_task_create_boot();
-
-	core->thread = NULL;
-	core->master = NULL;
+	core->time_queue = NULL;
+	core->time_value = 0;
+	core->real_time_value = 0;
 
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
-	core->master_waits_worker = false;
-
-	mm_runq_init(&core->run_queue);
 	mm_list_init(&core->dead_list);
 
-	core->time_value = 0;
-	core->real_time_value = 0;
-	core->time_queue = NULL;
+	core->master_stop = false;
+	core->master_waits_work = false;
+	core->master = NULL;
+	core->boot = mm_task_create_boot();
+	core->thread = NULL;
+
+	mm_list_init(&core->log_chunks);
+
+	core->inbox_lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
+	mm_list_init(&core->inbox);
+
+	core->chunks_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
+	mm_list_init(&core->chunks);
 
 	LEAVE();
 }
@@ -381,7 +404,6 @@ mm_core_init(void)
 	mm_clock_init();
 	mm_thread_init();
 
-	mm_work_init();
 	mm_task_init();
 	mm_port_init();
 
@@ -408,7 +430,6 @@ mm_core_term(void)
 	mm_core_free_hooks();
 
 	mm_task_term();
-	mm_work_term();
 	mm_port_term();
 
 	mm_thread_term();
@@ -448,13 +469,13 @@ mm_core_stop(void)
 
 	// Set stop flag for core threads.
 	for (int i = 0; i < mm_core_num; i++)
-		mm_memory_store(mm_core_set[i].stop, 1);
+		mm_memory_store(mm_core_set[i].master_stop, true);
 
 	LEAVE();
 }
 
 /**********************************************************************
- * Core utilities.
+ * Core time utilities.
  **********************************************************************/
 
 void

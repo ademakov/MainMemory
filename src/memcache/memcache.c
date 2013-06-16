@@ -20,6 +20,7 @@
 #include "memcache.h"
 
 #include "../alloc.h"
+#include "../core.h"
 #include "../future.h"
 #include "../list.h"
 #include "../log.h"
@@ -354,7 +355,7 @@ mc_table_start_striding(void)
 {
 	ENTER();
 
-	mm_work_add(0, mc_table_stride_routine, 0);
+	mm_work_add(mc_table_stride_routine, 0, false);
 
 	LEAVE();
 }

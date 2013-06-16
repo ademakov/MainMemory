@@ -93,7 +93,7 @@ mm_net_set_in_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 
 			mm_error(0, "IP address parsing failure");
 			rc = -1;
-			goto done;
+			goto leave;
 		}
 	} else {
 		addr->in_addr.sin_addr = (struct in_addr) { INADDR_ANY };
@@ -102,7 +102,7 @@ mm_net_set_in_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 	addr->in_addr.sin_port = htons(port);
 	memset(addr->in_addr.sin_zero, 0, sizeof addr->in_addr.sin_zero);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -122,7 +122,7 @@ mm_net_set_in6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port
 
 			mm_error(0, "IPv6 address parsing failure");
 			rc = -1;
-			goto done;
+			goto leave;
 		}
 	} else {
 		addr->in6_addr.sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
@@ -132,7 +132,7 @@ mm_net_set_in6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port
 	addr->in6_addr.sin6_flowinfo = 0;
 	addr->in6_addr.sin6_scope_id = 0;
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -481,30 +481,12 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 {
 	ENTER();
 
-	int count = 0;
-	uintptr_t items[MM_ACCEPT_COUNT];
-
-	bool block = true;
-
 	/* Handle events on server sockets. */
 	for (;;) {
 		uint32_t msg[2];
-
-		if (block ? count != 0 : count == MM_ACCEPT_COUNT) {
-			mm_work_addv(0, mm_net_acceptor, items, count);
-			count = 0;
-		}
-
-		if (block) {
-			block = false;
-			mm_port_receive_blocking(mm_net_accept_port, msg, 2);
-		} else if (mm_port_receive(mm_net_accept_port, msg, 2) < 0) {
-			block = true;
-			continue;
-		}
-
+		mm_port_receive_blocking(mm_net_accept_port, msg, 2);
 		if (msg[0] == MM_NET_MSG_READ_READY) {
-			items[count++] = msg[1];
+			mm_work_add(mm_net_acceptor, msg[1], true);
 		}
 	}
 
@@ -518,7 +500,7 @@ mm_net_init_accept_task(void)
 	ENTER();
 
 	// Create the event handler task.
-	mm_net_accept_task = mm_task_create("net-accept", 0, mm_net_accept_loop, 0);
+	mm_net_accept_task = mm_task_create("net-accept", mm_net_accept_loop, 0);
 
 	// Make the task priority higher.
 	mm_net_accept_task->priority /= 2;
@@ -596,13 +578,13 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 	ENTER();
 
 	if (mm_net_is_closed(sock))
-		goto done;
+		goto leave;
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_SPAWN_READER, id };
 	mm_port_send_blocking(sock->srv->io_port, msg, 2);
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -612,13 +594,13 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 	ENTER();
 
 	if (mm_net_is_closed(sock))
-		goto done;
+		goto leave;
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_SPAWN_WRITER, id };
 	mm_port_send_blocking(sock->srv->io_port, msg, 2);
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -628,13 +610,13 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	ENTER();
 
 	if (mm_net_is_closed(sock))
-		goto done;
+		goto leave;
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_YIELD_READER, id };
 	mm_port_send_blocking(sock->srv->io_port, msg, 2);
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -644,13 +626,13 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	ENTER();
 
 	if (mm_net_is_closed(sock))
-		goto done;
+		goto leave;
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_YIELD_WRITER, id };
 	mm_port_send_blocking(sock->srv->io_port, msg, 2);
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -674,16 +656,21 @@ mm_net_reader_cleanup(struct mm_net_socket *sock)
 static mm_result_t
 mm_net_reader(uintptr_t arg)
 {
+	ENTER();
+
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	// Ensure the task yields socket on exit.
 	mm_task_cleanup_push(mm_net_reader_cleanup, sock);
+	mm_running_task->flags |= MM_TASK_READING;
 
 	// Run the protocol handler routine.
 	(sock->srv->proto->reader_routine)(sock);
 
 	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
+
+	LEAVE();
 	return 0;
 }
 
@@ -707,16 +694,21 @@ mm_net_writer_cleanup(struct mm_net_socket *sock)
 static mm_result_t
 mm_net_writer(uintptr_t arg)
 {
+	ENTER();
+
 	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, arg);
 
 	// Ensure the task yields socket on exit.
 	mm_task_cleanup_push(mm_net_writer_cleanup, sock);
+	mm_running_task->flags |= MM_TASK_WRITING;
 
 	// Run the protocol handler routine.
 	(sock->srv->proto->writer_routine)(sock);
 
 	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
+
+	LEAVE();
 	return 0;
 }
 
@@ -727,14 +719,6 @@ mm_net_io_loop(uintptr_t arg)
 
 	/* Find the pertinent server. */
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
-
-	int read_count = 0;
-	uintptr_t read_items[MM_IO_COUNT];
-
-	int write_count = 0;
-	uintptr_t write_items[MM_IO_COUNT];
-
-	bool block = true;
 
 	/* Check if spawn a reader as soon as the socket becomes read-ready
 	   (otherwise a mm_net_spawn_reader() call is needed). */
@@ -772,27 +756,7 @@ mm_net_io_loop(uintptr_t arg)
 	/* Handle I/O events. */
 	for (;;) {
 		uint32_t msg[2];
-
-		/* Submit read work. */
-		if (block ? read_count != 0 : read_count == MM_IO_COUNT) {
-			mm_work_addv(MM_TASK_READING, mm_net_reader, read_items, read_count);
-			read_count = 0;
-		}
-
-		/* Submit write work. */
-		if (block ? write_count != 0 : write_count == MM_IO_COUNT) {
-			mm_work_addv(MM_TASK_WRITING, mm_net_writer, write_items, write_count);
-			write_count = 0;
-		}
-
-		/* Get I/O event. */
-		if (block) {
-			block = false;
-			mm_port_receive_blocking(srv->io_port, msg, 2);
-		} else if (mm_port_receive(srv->io_port, msg, 2) < 0) {
-			block = true;
-			continue;
-		}
+		mm_port_receive_blocking(srv->io_port, msg, 2);
 
 		/* Find the pertinent socket. */
 		struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, msg[1]);
@@ -830,7 +794,8 @@ mm_net_io_loop(uintptr_t arg)
 			if (sock->reader != NULL) {
 				mm_sched_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
-				read_items[read_count++] = msg[1];
+				/* Submit read work. */
+				mm_work_add(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 				sock->flags &= ~MM_NET_READER_PENDING;
 			}
@@ -844,7 +809,8 @@ mm_net_io_loop(uintptr_t arg)
 			if (sock->writer != NULL) {
 				mm_sched_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
-				write_items[write_count++] = msg[1];
+				/* Submit write work. */
+				mm_work_add(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			}
@@ -858,7 +824,8 @@ mm_net_io_loop(uintptr_t arg)
 			if (sock->reader != NULL) {
 				mm_sched_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
-				read_items[read_count++] = msg[1];
+				/* Submit read work. */
+				mm_work_add(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 				sock->flags &= ~MM_NET_READER_PENDING;
 			}
@@ -872,7 +839,8 @@ mm_net_io_loop(uintptr_t arg)
 			if (sock->writer != NULL) {
 				mm_sched_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
-				write_items[write_count++] = msg[1];
+				/* Submit write work. */
+				mm_work_add(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			}
@@ -883,7 +851,8 @@ mm_net_io_loop(uintptr_t arg)
 				break;
 
 			if (MM_NET_MAY_SPAWN_READER(sock->flags)) {
-				read_items[read_count++] = msg[1];
+				/* Submit read work. */
+				mm_work_add(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 			} else {
 				sock->flags |= MM_NET_READER_PENDING;
@@ -895,7 +864,8 @@ mm_net_io_loop(uintptr_t arg)
 				break;
 
 			if (MM_NET_MAY_SPAWN_WRITER(sock->flags)) {
-				write_items[write_count++] = msg[1];
+				/* Submit write work. */
+				mm_work_add(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 			} else {
 				sock->flags |= MM_NET_WRITER_PENDING;
@@ -908,7 +878,8 @@ mm_net_io_loop(uintptr_t arg)
 
 			ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
 			if (MM_NET_RESPAWN_READER(sock->flags | rf)) {
-				read_items[read_count++] = msg[1];
+				/* Submit read work. */
+				mm_work_add(mm_net_reader, msg[1], true);
 				sock->flags &= ~MM_NET_READER_PENDING;
 			} else {
 				sock->flags &= ~MM_NET_READER_SPAWNED;
@@ -921,7 +892,8 @@ mm_net_io_loop(uintptr_t arg)
 
 			ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
 			if (MM_NET_RESPAWN_WRITER(sock->flags | wf)) {
-				write_items[write_count++] = msg[1];
+				/* Submit write work. */
+				mm_work_add(mm_net_writer, msg[1], true);
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			} else {
 				sock->flags &= ~MM_NET_WRITER_SPAWNED;
@@ -950,7 +922,7 @@ mm_net_exit_cleanup(void)
 	ENTER();
 
 	if (!mm_net_initialized)
-		goto done;
+		goto leave;
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
@@ -959,7 +931,7 @@ mm_net_exit_cleanup(void)
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -1063,7 +1035,7 @@ mm_net_start_server_hook(void *arg)
 	struct mm_net_server *srv = arg;
 
 	// Create the event handler task.
-	srv->io_task = mm_task_create("net-io", 0, mm_net_io_loop, (intptr_t) srv);
+	srv->io_task = mm_task_create("net-io", mm_net_io_loop, (intptr_t) srv);
 
 	// Make the task priority higher.
 	srv->io_task->priority /= 2;
@@ -1252,7 +1224,7 @@ retry:
 	while (!mm_net_is_readable(sock)) {
 		n = mm_net_may_rblock(sock, start);
 		if (n <= 0) {
-			goto done;
+			goto leave;
 		}
 		mm_net_rblock(sock);
 	}
@@ -1278,7 +1250,7 @@ retry:
 		}
 	}
 
-done:
+leave:
 	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
@@ -1298,7 +1270,7 @@ retry:
 	while (!mm_net_is_writable(sock)) {
 		n = mm_net_may_wblock(sock, start);
 		if (n <= 0) {
-			goto done;
+			goto leave;
 		}
 		mm_net_wblock(sock);
 	}
@@ -1324,7 +1296,7 @@ retry:
 		}
 	}
 
-done:
+leave:
 	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
@@ -1344,7 +1316,7 @@ retry:
 	while (!mm_net_is_readable(sock)) {
 		n = mm_net_may_rblock(sock, start);
 		if (n <= 0) {
-			goto done;
+			goto leave;
 		}
 		mm_net_rblock(sock);
 	}
@@ -1374,7 +1346,7 @@ retry:
 		}
 	}
 
-done:
+leave:
 	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;
@@ -1394,7 +1366,7 @@ retry:
 	while (!mm_net_is_writable(sock)) {
 		n = mm_net_may_wblock(sock, start);
 		if (n <= 0) {
-			goto done;
+			goto leave;
 		}
 		mm_net_wblock(sock);
 	}
@@ -1424,7 +1396,7 @@ retry:
 		}
 	}
 
-done:
+leave:
 	DEBUG("n: %ld", (long) n);
 	LEAVE();
 	return n;

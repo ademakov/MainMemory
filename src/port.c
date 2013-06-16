@@ -95,7 +95,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 	int rc = 0;
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
 		rc = -1;
-		goto done;
+		goto leave;
 	}
 
 	uint32_t ring_end = (port->start + port->count) % MM_PORT_SIZE;
@@ -123,7 +123,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 		mm_sched_run(port->task);
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -138,7 +138,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 	int rc = 0;
 	if (port->count < count) {
 		rc = -1;
-		goto done;
+		goto leave;
 	}
 
 	uint32_t *ring_ptr = &port->ring[port->start];
@@ -163,7 +163,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	mm_task_broadcast(&port->blocked_senders);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
