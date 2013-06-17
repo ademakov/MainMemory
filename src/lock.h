@@ -31,6 +31,18 @@
 
 typedef mm_atomic_lock_t mm_core_lock_t;
 
+static inline bool
+mm_core_trylock(mm_core_lock_t *lock)
+{
+	ASSERT(mm_running_task != NULL);
+#if ENABLE_SMP
+	return mm_atomic_lock_acquire(lock) != 0;
+#else
+	(void) lock;
+	return true;
+#endif
+}
+
 static inline void
 mm_core_lock(mm_core_lock_t *lock)
 {
@@ -72,8 +84,14 @@ mm_core_unlock(mm_core_lock_t *lock)
 
 typedef mm_atomic_lock_t mm_global_lock_t;
 
+static inline bool
+mm_global_trylock(mm_global_lock_t *lock)
+{
+	return mm_atomic_lock_acquire(lock) != 0;
+}
+
 static inline void
-mm_global_lock(mm_core_lock_t *lock)
+mm_global_lock(mm_global_lock_t *lock)
 {
 #if ENABLE_SMP
 	register int count = 0;
