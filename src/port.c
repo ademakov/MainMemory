@@ -32,7 +32,7 @@
 static void
 mm_port_block_on_send(struct mm_port *port)
 {
-	mm_task_wait_fifo(&port->blocked_senders);
+	mm_task_wait(&port->blocked_senders);
 }
 
 static void

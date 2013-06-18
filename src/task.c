@@ -440,7 +440,7 @@ mm_task_cancel(struct mm_task *task)
 		ASSERT(task == mm_running_task);
 		mm_task_testcancel_asynchronous();
 	} else {
-		mm_task_wakeup(task);
+		mm_sched_run(task);
 	}
 
 	LEAVE();
@@ -456,13 +456,59 @@ mm_task_wait_delete(struct mm_task *task)
 {
 	ASSERT((task->flags & MM_TASK_WAITING) != 0);
 
-	mm_list_delete(&task->queue);
+	mm_list_delete(&task->wait_queue);
 	task->flags &= ~MM_TASK_WAITING;
 }
 
 /* Wait for a wakeup signal in the FIFO order. */
 void
-mm_task_wait_fifo(struct mm_list *queue)
+mm_task_wait(struct mm_list *queue)
+{
+	ENTER();
+	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
+
+	// Enqueue the task.
+	mm_running_task->flags |= MM_TASK_WAITING;
+	mm_list_append(queue, &mm_running_task->wait_queue);
+
+	// Ensure dequeuing on exit & cancel.
+	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
+
+	// Wait for a wakeup signal.
+	mm_sched_block();
+
+	// Dequeue on return.
+	mm_task_cleanup_pop(true);
+
+	LEAVE();
+}
+
+/* Wait for a wakeup signal in the LIFO order. */
+void
+mm_task_waitfirst(struct mm_list *queue)
+{
+	ENTER();
+	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
+
+	// Enqueue the task.
+	mm_running_task->flags |= MM_TASK_WAITING;
+	mm_list_insert(queue, &mm_running_task->wait_queue);
+
+	// Ensure dequeuing on exit & cancel.
+	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
+
+	// Wait for a wakeup signal.
+	mm_sched_block();
+
+	// Dequeue on return.
+	mm_task_cleanup_pop(true);
+
+	LEAVE();
+}
+
+/* Wait for a wakeup signal in the FIFO order with specified timeout. */
+void
+mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
 {
 	ENTER();
 	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
@@ -475,30 +521,7 @@ mm_task_wait_fifo(struct mm_list *queue)
 	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
 
 	// Wait for a wakeup signal.
-	mm_sched_block();
-
-	// Dequeue on return.
-	mm_task_cleanup_pop((mm_running_task->flags & MM_TASK_WAITING) != 0);
-
-	LEAVE();
-}
-
-/* Wait for a wakeup signal in the LIFO order. */
-void
-mm_task_wait_lifo(struct mm_list *queue)
-{
-	ENTER();
-	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
-
-	// Enqueue the task.
-	mm_running_task->flags |= MM_TASK_WAITING;
-	mm_list_insert(queue, &mm_running_task->queue);
-
-	// Ensure dequeuing on exit & cancel.
-	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
-
-	// Wait for a wakeup signal.
-	mm_sched_block();
+	mm_timer_block(timeout);
 
 	// Dequeue on return.
 	mm_task_cleanup_pop((mm_running_task->flags & MM_TASK_WAITING) != 0);
@@ -515,7 +538,6 @@ mm_task_signal(struct mm_list *queue)
 	if (!mm_list_empty(queue)) {
 		struct mm_list *link = mm_list_head(queue);
 		struct mm_task *task = containerof(link, struct mm_task, queue);
-		mm_task_wait_delete(task);
 		mm_sched_run(task);
 	}
 
@@ -528,25 +550,12 @@ mm_task_broadcast(struct mm_list *queue)
 {
 	ENTER();
 
-	while (!mm_list_empty(queue)) {
-		struct mm_list *link = mm_list_head(queue);
+	struct mm_list *link = mm_list_head(queue);
+	while (link != queue) {
 		struct mm_task *task = containerof(link, struct mm_task, queue);
-		mm_task_wait_delete(task);
+		link = link->next;
 		mm_sched_run(task);
 	}
-
-	LEAVE();
-}
-
-void
-mm_task_wakeup(struct mm_task *task)
-{
-	ENTER();
-
-	if ((task->flags & MM_TASK_WAITING) != 0)
-		mm_task_wait_delete(task);
-
-	mm_sched_run(task);
 
 	LEAVE();
 }

@@ -86,8 +86,9 @@ struct mm_task_cleanup_rec
 /* A user-space (green) thread. */
 struct mm_task
 {
-	/* A link in a run/wait/dead queue. */
+	/* A link in a run/dead queue. */
 	struct mm_list queue;
+	struct mm_list wait_queue;
 
 	/* The task status. */
 	mm_task_state_t state;
@@ -165,12 +166,16 @@ void mm_task_leave_cancel_point(int);
 void mm_task_cancel(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_wait_fifo(struct mm_list *queue);
-void mm_task_wait_lifo(struct mm_list *queue);
-void mm_task_signal(struct mm_list *queue);
-void mm_task_broadcast(struct mm_list *queue);
+void mm_task_wait(struct mm_list *queue)
+	__attribute__((nonnull(1)));
+void mm_task_waitfirst(struct mm_list *queue)
+	__attribute__((nonnull(1)));
+void mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
+	__attribute__((nonnull(1)));
 
-void mm_task_wakeup(struct mm_task *task)
+void mm_task_signal(struct mm_list *queue)
+	__attribute__((nonnull(1)));
+void mm_task_broadcast(struct mm_list *queue)
 	__attribute__((nonnull(1)));
 
 void * mm_task_alloc(size_t size)

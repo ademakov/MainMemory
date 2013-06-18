@@ -142,7 +142,7 @@ mm_future_wait(struct mm_future *future)
 
 	int cp = mm_task_enter_cancel_point();
 	while (future->status == MM_FUTURE_STARTED) {
-		mm_task_wait_fifo(&future->blocked_tasks);
+		mm_task_wait(&future->blocked_tasks);
 	}
 	mm_task_leave_cancel_point(cp);
 
