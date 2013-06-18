@@ -235,7 +235,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 }
 
 static void
-mm_timer_sleep_cleanup(struct mm_timer_resume *timer)
+mm_timer_block_cleanup(struct mm_timer_resume *timer)
 {
 	mm_timeq_delete(mm_core->time_queue, &timer->entry);
 }
@@ -251,7 +251,7 @@ mm_timer_block(mm_timeout_t timeout)
 			    MM_TIMER_BLOCK);
 	timer.task = mm_running_task;
 
-	mm_task_cleanup_push(mm_timer_sleep_cleanup, &timer);
+	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);
 
 	mm_timeq_insert(mm_core->time_queue, &timer.entry);
 	mm_sched_block();
