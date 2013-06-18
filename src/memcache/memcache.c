@@ -409,7 +409,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 
 	struct mc_entry *entry = mc_table.table[index];
 	if (entry == NULL) {
-		goto done;
+		goto leave;
 	}
 
 	char *entry_key = mc_entry_key(entry);
@@ -417,7 +417,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 		mm_list_delete(&entry->link);
 		mc_table.table[index] = entry->next;
 		--mc_table.nentries;
-		goto done;
+		goto leave;
 	}
 
 	for (;;) {
@@ -425,7 +425,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 
 		entry = entry->next;
 		if (entry == NULL) {
-			goto done;
+			goto leave;
 		}
 
 		entry_key = mc_entry_key(entry);
@@ -433,11 +433,11 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 			mm_list_delete(&entry->link);
 			prev_entry->next = entry->next;
 			--mc_table.nentries;
-			goto done;
+			goto leave;
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 	return entry;
 }
@@ -1739,18 +1739,18 @@ mc_parse_space(struct mc_parser *parser)
 		for (; s < e; s++) {
 			if (*s != ' ') {
 				parser->start_ptr = s;
-				goto done;
+				goto leave;
 			}
 		}
 
 		count += parser->end_ptr - parser->start_ptr;
 		if (!mc_claim_input(parser, count)) {
 			rc = false;
-			goto done;
+			goto leave;
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -1803,7 +1803,7 @@ mc_parse_eol(struct mc_parser *parser)
 	/* Skip spaces. */
 	bool rc = mc_parse_space(parser);
 	if (!rc) {
-		goto done;
+		goto leave;
 	}
 
 	char *s = parser->start_ptr;
@@ -1827,7 +1827,7 @@ mc_parse_eol(struct mc_parser *parser)
 		rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -1839,7 +1839,7 @@ mc_parse_param(struct mc_parser *parser, struct mc_string *value, bool required)
 
 	bool rc = mc_parse_space(parser);
 	if (!rc) {
-		goto done;
+		goto leave;
 	}
 
 	char *s, *e;
@@ -1862,7 +1862,7 @@ retry:
 
 				DEBUG("%.*s", (int) value->len, value->str);
 			}
-			goto done;
+			goto leave;
 		}
 	}
 
@@ -1880,7 +1880,7 @@ retry:
 		goto retry;
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -1934,7 +1934,7 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 
 	bool rc = mc_parse_space(parser);
 	if (!rc) {
-		goto done;
+		goto leave;
 	}
 
 	char *s, *e;
@@ -1949,12 +1949,12 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 	} else if (n < 7) {
 		if (memcmp(s, t, n) != 0) {
 			*value = false;
-			goto done;
+			goto leave;
 		}
 
 		if (!mc_shift_input(parser)) {
 			rc = false;
-			goto done;
+			goto leave;
 		}
 		s = parser->start_ptr;
 		e = parser->end_ptr;
@@ -1964,19 +1964,19 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 
 		if ((e - s) < n) {
 			rc = false;
-			goto done;
+			goto leave;
 		}
 	}
 
 	if (memcmp(s, t, n) != 0) {
 		*value = false;
-		goto done;
+		goto leave;
 	}
 
 	*value = true;
 	parser->start_ptr += n;
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2065,7 +2065,7 @@ mc_parse_command(struct mc_parser *parser)
 	/* Initialize the result. */
 	bool rc = mc_parse_space(parser);
 	if (!rc) {
-		goto done;
+		goto leave;
 	}
 
 	/* Get current position in the input buffer. */
@@ -2097,7 +2097,7 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected line end. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD:
@@ -2175,7 +2175,7 @@ mc_parse_command(struct mc_parser *parser)
 			default:
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 #undef C
 
@@ -2186,14 +2186,14 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD_GET:
 			if (c == ' ') {
 				parser->command->desc = &mc_desc_get;
 				parser->start_ptr = s;
-				goto done;
+				goto leave;
 			} else if (c == 's') {
 				parser->command->desc = &mc_desc_gets;
 				/* Scan one char more with empty "rest" string
@@ -2206,11 +2206,11 @@ mc_parse_command(struct mc_parser *parser)
 				   is actually legal. */
 				parser->command->desc = &mc_desc_get;
 				parser->start_ptr = s;
-				goto done;
+				goto leave;
 			} else {
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD_DE:
@@ -2227,7 +2227,7 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD_VE:
@@ -2237,7 +2237,7 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD_VER:
@@ -2254,7 +2254,7 @@ mc_parse_command(struct mc_parser *parser)
 			} else {
 				/* Unexpected char. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 
 		case SCAN_CMD_REST:
@@ -2263,7 +2263,7 @@ mc_parse_command(struct mc_parser *parser)
 					/* Hmm, zero byte in the input. */
 					parser->start_ptr = s;
 					rc = mc_parse_error(parser, "ERROR\r\n");
-					goto done;
+					goto leave;
 				}
 				/* So far so good. */
 				cmd_rest++;
@@ -2271,20 +2271,20 @@ mc_parse_command(struct mc_parser *parser)
 			} else if (*cmd_rest != 0) {
 				/* Unexpected char in the command name. */
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			} else if (c == ' ') {
 				/* Success. */
 				parser->start_ptr = s;
-				goto done;
+				goto leave;
 			} else if (c == '\r' || c == '\n') {
 				/* Success. */
 				parser->start_ptr = s;
-				goto done;
+				goto leave;
 			} else {
 				/* Unexpected char after the command name. */
 				parser->start_ptr = s;
 				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto done;
+				goto leave;
 			}
 		}
 
@@ -2293,7 +2293,7 @@ mc_parse_command(struct mc_parser *parser)
 			count += parser->end_ptr - parser->start_ptr;
 			if (!mc_claim_input(parser, count)) {
 				rc = false;
-				goto done;
+				goto leave;
 			}
 
 			s = parser->start_ptr;
@@ -2301,7 +2301,7 @@ mc_parse_command(struct mc_parser *parser)
 		}
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2323,7 +2323,7 @@ mc_parse_get(struct mc_parser *parser)
 		rc = mc_parse_param(parser, &keys[nkeys], nkeys == 0);
 		if (!rc || parser->error) {
 			mm_free(keys);
-			goto done;
+			goto leave;
 		}
 
 		if (keys[nkeys].len == 0) {
@@ -2339,13 +2339,13 @@ mc_parse_get(struct mc_parser *parser)
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error) {
 		mm_free(keys);
-		goto done;
+		goto leave;
 	}
 
 	parser->command->params.get.keys = keys;
 	parser->command->params.get.nkeys = nkeys;
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2357,27 +2357,27 @@ mc_parse_set(struct mc_parser *parser)
 
 	bool rc = mc_parse_param(parser, &parser->command->params.set.key, true);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->params.set.noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_data(parser,
 		&parser->command->params.set.value,
 		parser->command->params.set.value.bytes);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2389,30 +2389,30 @@ mc_parse_cas(struct mc_parser *parser)
 
 	bool rc = mc_parse_param(parser, &parser->command->params.cas.key, true);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.cas.flags);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.cas.exptime);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.cas.value.bytes);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u64(parser, &parser->command->params.cas.cas);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->params.cas.noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_data(parser,
 		&parser->command->params.cas.value,
 		parser->command->params.cas.value.bytes);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2424,16 +2424,16 @@ mc_parse_incr(struct mc_parser *parser)
 
 	bool rc = mc_parse_param(parser, &parser->command->params.inc.key, true);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u64(parser, &parser->command->params.inc.value);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->params.inc.noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2445,13 +2445,13 @@ mc_parse_delete(struct mc_parser *parser)
 
 	bool rc = mc_parse_param(parser, &parser->command->params.del.key, true);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->params.del.noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2463,16 +2463,16 @@ mc_parse_touch(struct mc_parser *parser)
 
 	bool rc = mc_parse_param(parser, &parser->command->params.touch.key, true);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.touch.exptime);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->params.touch.noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2495,11 +2495,11 @@ mc_parse_stats(struct mc_parser *parser)
 
 	bool rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	mc_reply(parser->command, "END\r\n");
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2522,19 +2522,19 @@ mc_parse_flush_all(struct mc_parser *parser)
 				noreply = true;
 			} else {
 				rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
-				goto done;
+				goto leave;
 			}
 		} else {
 			exptime = v;
 
 			rc = mc_parse_noreply(parser, &noreply);
 			if (!rc || parser->error)
-				goto done;
+				goto leave;
 		}
 	}
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	// TODO: really use the exptime.
 	mc_exptime = mc_curtime + exptime * 1000000ull;
@@ -2557,7 +2557,7 @@ mc_parse_flush_all(struct mc_parser *parser)
 		mc_reply(parser->command, "OK\r\n");
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2572,13 +2572,13 @@ mc_parse_verbosity(struct mc_parser *parser)
 
 	bool rc = mc_parse_u32(parser, &verbose);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_noreply(parser, &noreply);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	mc_verbose = (int) (verbose < 2 ? verbose : 2);
 
@@ -2588,7 +2588,7 @@ mc_parse_verbosity(struct mc_parser *parser)
 		mc_reply(parser->command, "OK\r\n");
 	}
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2600,11 +2600,11 @@ mc_parse_version(struct mc_parser *parser)
 	
 	bool rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	mc_reply(parser->command, "VERSION 0.0\r\n");
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2616,11 +2616,11 @@ mc_parse_quit(struct mc_parser *parser)
 	
 	bool rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	parser->command->result_type = MC_RESULT_QUIT;
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2633,12 +2633,12 @@ mc_parse(struct mc_parser *parser)
 	/* Parse the command name. */
 	bool rc = mc_parse_command(parser);
 	if (!rc || parser->error)
-		goto done;
+		goto leave;
 
 	/* Parse the rest of the command. */
 	rc = parser->command->desc->parse(parser);
 
-done:
+leave:
 	LEAVE();
 	return rc;
 }
@@ -2790,7 +2790,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 			command->end_ptr = state->start_ptr;
 			mc_process_command(state, command);
 		}
-		goto done;
+		goto leave;
 	}
 
 	// Initialize the parser.
@@ -2813,7 +2813,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 			continue;
 		} else if (state->quit) {
 			mc_command_destroy(parser.command);
-			goto done;
+			goto leave;
 		}
 
 		// The input is incomplete, try to get some more.
@@ -2831,13 +2831,13 @@ mc_reader_routine(struct mm_net_socket *sock)
 			} else {
 				mc_command_destroy(parser.command);
 			}
-			goto done;
+			goto leave;
 		}
 
 		mc_start_input(&parser, state, parser.command);
 	}
 
-done:
+leave:
 	LEAVE();
 }
 
@@ -2852,14 +2852,14 @@ mc_writer_routine(struct mm_net_socket *sock)
 	/* Get the protocol data if any. */
 	struct mc_state *state = (struct mc_state *) sock->proto_data;
 	if (state == NULL)
-		goto done;
+		goto leave;
 
 	/* Get the first queued command and try to transmit its result. */
 	struct mc_command *command = state->command_head;
 	if (command == NULL)
-		goto done;
+		goto leave;
 	if (!mc_transmit_result(sock, state, command))
-		goto done;
+		goto leave;
 
 	/* Try to transmit more command results. */
 	for (;;) {
@@ -2882,7 +2882,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 	mc_release_buffers(state, command->end_ptr);
 	mc_command_destroy(command);
 
-done:
+leave:
 	LEAVE();
 }
 
