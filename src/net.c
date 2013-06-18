@@ -500,7 +500,7 @@ mm_net_init_accept_task(void)
 	ENTER();
 
 	// Create the event handler task.
-	mm_net_accept_task = mm_task_create("net-accept", mm_net_accept_loop, 0);
+	mm_net_accept_task = mm_task_create("accept", mm_net_accept_loop, 0);
 
 	// Make the task priority higher.
 	mm_net_accept_task->priority /= 2;
