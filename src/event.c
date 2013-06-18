@@ -625,6 +625,7 @@ mm_event_dispatch(void)
 		// If event system changes have been requested it is needed to
 		// notify the interested parties on their completion so do not
 		// wait for more events.
+		DEBUG("timeout: 0");
 		ts.tv_sec = 0;
 		ts.tv_nsec = 0;
 	} else {
@@ -632,7 +633,7 @@ mm_event_dispatch(void)
 		if (timeout > MM_EVENT_TIMEOUT) {
 			timeout = MM_EVENT_TIMEOUT;
 		}
-
+		DEBUG("timeout: %lld", timeout);
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
 	}
