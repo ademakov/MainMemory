@@ -30,8 +30,10 @@ mm_work_create(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
 
 	struct mm_work *work;
 	if (mm_list_empty(&mm_core->work_cache)) {
+		/* Create a new work item. */
 		work = mm_alloc(sizeof(struct mm_core));
 	} else {
+		/* Reuse a cached work item. */
 		struct mm_list *link = mm_list_head(&mm_core->work_cache);
 		work = containerof(link, struct mm_work, queue);
 		mm_list_delete(link);
@@ -72,8 +74,10 @@ mm_work_get(void)
 
 	struct mm_work *work;
 	if (mm_list_empty(&mm_core->work_queue)) {
+		/* No available work items. */
 		work = NULL;
 	} else {
+		/* Take the first available work item. */
 		struct mm_list *link = mm_list_head(&mm_core->work_queue);
 		work = containerof(link, struct mm_work, queue);
 		mm_list_delete(link);
@@ -88,10 +92,11 @@ mm_work_put(struct mm_work *work)
 {
 	ENTER();
 
+	/* Queue the work item in the LIFO order. */
 	mm_list_insert(&mm_core->work_queue, &work->queue);
-	if (mm_core->master_waits_work) {
-		mm_sched_run(mm_core->master);
-	}
+
+	/* If there is a task waiting for work then let it run now. */
+	mm_task_signal(&mm_core->wait_queue);
 
 	LEAVE();
 }

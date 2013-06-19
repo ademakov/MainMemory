@@ -39,6 +39,8 @@ struct mm_core
 	struct mm_list work_queue;
 	/* Cache of free work items. */
 	struct mm_list work_cache;
+	/* Queue of tasks waiting for work items. */
+	struct mm_list wait_queue;
 
 	/* Private memory arena. */
 	void *arena;
@@ -59,8 +61,6 @@ struct mm_core
 
 	/* Stop flag. */
 	bool master_stop;
-	/* The flag indicating that a master sleeps waiting for a work item. */
-	bool master_waits_work;
 
 	/* The master task. */
 	struct mm_task *master;

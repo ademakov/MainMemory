@@ -68,7 +68,7 @@ static void
 mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
 	mm_core->nworkers--;
-	mm_sched_run(mm_core->master);
+	//mm_sched_run(mm_core->master);
 }
 
 static mm_result_t
@@ -76,16 +76,23 @@ mm_core_worker(uintptr_t arg)
 {
 	ENTER();
 
-	struct mm_work *work = (struct mm_work *) arg;
-	mm_routine_t routine = work->routine;
-	uintptr_t routine_arg = work->routine_arg;
-	mm_work_recycle(work);
-
 	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
 
-	// Execute the work routine.
-	routine(routine_arg);
+	struct mm_work *work = (struct mm_work *) arg;
+	for (;;) {
+		mm_routine_t routine = work->routine;
+		uintptr_t routine_arg = work->routine_arg;
+		mm_work_recycle(work);
+
+		// Execute the work routine.
+		routine(routine_arg);
+
+		while ((work = mm_work_get()) == NULL) {
+			mm_task_waitfirst(&mm_core->wait_queue);
+			mm_task_testcancel();
+		}
+	}
 
 	// Cleanup on return.
 	mm_task_cleanup_pop(true);
@@ -122,15 +129,12 @@ mm_core_receive_work(struct mm_core *core)
 		mm_core_unlock(&core->inbox_lock);
 
 		// TODO: allow for cross-core wakeup
-		core->master_waits_work = true;
-		mm_sched_block();
-		core->master_waits_work = false;
+		mm_task_wait(&mm_core->wait_queue);
 	} else {
 		struct mm_list *head = mm_list_head(&core->inbox);
 		struct mm_list *tail = mm_list_tail(&core->inbox);
 		mm_list_cleave(head, tail);
 		mm_core_unlock(&core->inbox_lock);
-
 		mm_list_splice_next(&core->work_queue, head, tail);
 	}
 }
@@ -330,6 +334,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_runq_init(&core->run_queue);
 	mm_list_init(&core->work_queue);
 	mm_list_init(&core->work_cache);
+	mm_list_init(&core->wait_queue);
 
 	core->arena = create_mspace(0, 0);
 
@@ -342,7 +347,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_list_init(&core->dead_list);
 
 	core->master_stop = false;
-	core->master_waits_work = false;
 	core->master = NULL;
 	core->boot = mm_task_create_boot();
 	core->thread = NULL;

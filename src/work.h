@@ -52,10 +52,10 @@ void mm_work_destroy(struct mm_work *work)
 void mm_work_recycle(struct mm_work *work)
 	__attribute__((nonnull(1)));
 
+struct mm_work * mm_work_get(void);
+
 void mm_work_put(struct mm_work *work)
 	__attribute__((nonnull(1)));
-
-struct mm_work * mm_work_get(void);
 
 static inline void
 mm_work_add(mm_routine_t routine,
