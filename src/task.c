@@ -538,7 +538,7 @@ mm_task_signal(struct mm_list *queue)
 
 	if (!mm_list_empty(queue)) {
 		struct mm_list *link = mm_list_head(queue);
-		struct mm_task *task = containerof(link, struct mm_task, queue);
+		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
 		mm_sched_run(task);
 	}
 
@@ -553,7 +553,7 @@ mm_task_broadcast(struct mm_list *queue)
 
 	struct mm_list *link = mm_list_head(queue);
 	while (link != queue) {
-		struct mm_task *task = containerof(link, struct mm_task, queue);
+		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
 		link = link->next;
 		mm_sched_run(task);
 	}
