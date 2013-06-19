@@ -25,6 +25,7 @@
 #include "port.h"
 #include "sched.h"
 #include "stack.h"
+#include "timer.h"
 #include "trace.h"
 
 /* Regular task stack size. */
@@ -515,7 +516,7 @@ mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
 
 	// Enqueue the task.
 	mm_running_task->flags |= MM_TASK_WAITING;
-	mm_list_append(queue, &mm_running_task->queue);
+	mm_list_append(queue, &mm_running_task->wait_queue);
 
 	// Ensure dequeuing on exit & cancel.
 	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
