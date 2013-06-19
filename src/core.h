@@ -109,4 +109,6 @@ void mm_core_stop(void);
 void mm_core_update_time(void);
 void mm_core_update_real_time(void);
 
+void mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned);
+
 #endif /* CORE_H */

@@ -31,7 +31,6 @@
 #include "thread.h"
 #include "timeq.h"
 #include "timer.h"
-#include "work.h"
 #include "trace.h"
 
 #include "dlmalloc/malloc.h"
@@ -61,6 +60,101 @@ static struct mm_core *mm_core_set;
 __thread struct mm_core *mm_core;
 
 /**********************************************************************
+ * Work queue.
+ **********************************************************************/
+
+/* A work item. */
+struct mm_work
+{
+	/* A link in the work queue. */
+	struct mm_list queue;
+
+	/* The work is pinned to a specific core. */
+	bool pinned;
+
+	/* The work routine. */
+	mm_routine_t routine;
+	/* The work routine argument. */
+	uintptr_t routine_arg;
+};
+
+static struct mm_work *
+mm_core_create_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
+{
+	ENTER();
+
+	struct mm_work *work;
+	if (mm_list_empty(&mm_core->work_cache)) {
+		/* Create a new work item. */
+		work = mm_alloc(sizeof(struct mm_core));
+	} else {
+		/* Reuse a cached work item. */
+		struct mm_list *link = mm_list_head(&mm_core->work_cache);
+		work = containerof(link, struct mm_work, queue);
+		mm_list_delete(link);
+	}
+
+	work->pinned = pinned;
+	work->routine = routine;
+	work->routine_arg = routine_arg;
+
+	LEAVE();
+	return work;
+}
+
+static void
+mm_core_destroy_work(struct mm_work *work)
+{
+	mm_free(work);
+}
+
+static void
+mm_core_recycle_work(struct mm_work *work)
+{
+	mm_list_insert(&mm_core->work_cache, &work->queue);
+}
+
+static struct mm_work *
+mm_core_get_work(void)
+{
+	ENTER();
+
+	struct mm_work *work;
+	if (mm_list_empty(&mm_core->work_queue)) {
+		/* No available work items. */
+		work = NULL;
+	} else {
+		/* Take the first available work item. */
+		struct mm_list *link = mm_list_head(&mm_core->work_queue);
+		work = containerof(link, struct mm_work, queue);
+		mm_list_delete(link);
+	}
+
+	LEAVE();
+	return work;
+}
+
+static void
+mm_core_put_work(struct mm_work *work)
+{
+	ENTER();
+
+	/* Queue the work item in the LIFO order. */
+	mm_list_insert(&mm_core->work_queue, &work->queue);
+
+	/* If there is a task waiting for work then let it run now. */
+	mm_task_signal(&mm_core->wait_queue);
+
+	LEAVE();
+}
+
+void
+mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
+{
+	mm_core_put_work(mm_core_create_work(routine, routine_arg, pinned));
+}
+
+/**********************************************************************
  * Worker task.
  **********************************************************************/
 
@@ -83,12 +177,12 @@ mm_core_worker(uintptr_t arg)
 	for (;;) {
 		mm_routine_t routine = work->routine;
 		uintptr_t routine_arg = work->routine_arg;
-		mm_work_recycle(work);
+		mm_core_recycle_work(work);
 
 		// Execute the work routine.
 		routine(routine_arg);
 
-		while ((work = mm_work_get()) == NULL) {
+		while ((work = mm_core_get_work()) == NULL) {
 			mm_task_waitfirst(&mm_core->wait_queue);
 			mm_task_testcancel();
 		}
@@ -166,7 +260,7 @@ mm_core_master_loop(uintptr_t arg)
 		mm_core_destroy_chunks(core);
 
 		if (core->nworkers < core->nworkers_max) {
-			struct mm_work *work = mm_work_get();
+			struct mm_work *work = mm_core_get_work();
 			if (work == NULL) {
 				mm_core_receive_work(mm_core);
 				continue;
@@ -363,9 +457,24 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 }
 
 static void
+mm_core_term_work_queue(struct mm_list *queue)
+{
+	while (!mm_list_empty(queue)) {
+		struct mm_list *link = mm_list_head(queue);
+		struct mm_work *work = containerof(link, struct mm_work, queue);
+		mm_list_delete(link);
+		mm_core_destroy_work(work);
+	}
+}
+
+static void
 mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
+
+	mm_core_term_work_queue(&core->work_queue);
+	mm_core_term_work_queue(&core->work_cache);
+	mm_core_term_work_queue(&core->inbox);
 
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);

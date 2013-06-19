@@ -27,7 +27,6 @@
 #include "../net.h"
 #include "../pool.h"
 #include "../trace.h"
-#include "../work.h"
 
 #include <ctype.h>
 #include <stdio.h>
@@ -355,7 +354,7 @@ mc_table_start_striding(void)
 {
 	ENTER();
 
-	mm_work_add(mc_table_stride_routine, 0, false);
+	mm_core_add_work(mc_table_stride_routine, 0, false);
 
 	LEAVE();
 }

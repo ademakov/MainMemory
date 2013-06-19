@@ -24,8 +24,6 @@
 #include "pool.h"
 #include "sched.h"
 #include "trace.h"
-#include "work.h"
-
 
 void
 mm_future_init(void)
@@ -127,7 +125,7 @@ mm_future_start(struct mm_future *future)
 
 	if (future->status == MM_FUTURE_CREATED) {
 		future->status = MM_FUTURE_STARTED;
-		mm_work_add(mm_future_routine, (uintptr_t) future, false);
+		mm_core_add_work(mm_future_routine, (uintptr_t) future, false);
 	}
 
 	LEAVE();

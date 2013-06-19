@@ -25,7 +25,6 @@
 #include "sched.h"
 #include "timeq.h"
 #include "trace.h"
-#include "work.h"
 
 /* Generic timer. */
 struct mm_timer
@@ -79,7 +78,7 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 			containerof(entry, struct mm_timer, entry);
 
 		if (likely(timer->start)) {
-			mm_work_add(timer->start, timer->start_arg, true);
+			mm_core_add_work(timer->start, timer->start_arg, true);
 		}
 
 		if (timer->interval) {

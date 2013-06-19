@@ -13,7 +13,7 @@ mmem_SOURCES = \
 	pool.c pool.h port.c port.h runq.c runq.h sched.c sched.h \
 	selfpipe.c selfpipe.h stack.c stack.h task.c task.h thread.c thread.h \
 	timeq.c timeq.h timer.c timer.h trace.c trace.h util.c util.h \
-	work.c work.h dlmalloc/malloc.c dlmalloc/malloc.h
+	dlmalloc/malloc.c dlmalloc/malloc.h
 
 mmem_LDADD = memcache/libmemcache.a
 

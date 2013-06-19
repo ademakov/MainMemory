@@ -31,7 +31,6 @@
 #include "timer.h"
 #include "trace.h"
 #include "util.h"
-#include "work.h"
 
 #include <string.h>
 #include <arpa/inet.h>
@@ -486,7 +485,7 @@ mm_net_accept_loop(uintptr_t dummy __attribute__((unused)))
 		uint32_t msg[2];
 		mm_port_receive_blocking(mm_net_accept_port, msg, 2);
 		if (msg[0] == MM_NET_MSG_READ_READY) {
-			mm_work_add(mm_net_acceptor, msg[1], true);
+			mm_core_add_work(mm_net_acceptor, msg[1], true);
 		}
 	}
 
@@ -795,7 +794,7 @@ mm_net_io_loop(uintptr_t arg)
 				mm_sched_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
 				/* Submit read work. */
-				mm_work_add(mm_net_reader, msg[1], true);
+				mm_core_add_work(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 				sock->flags &= ~MM_NET_READER_PENDING;
 			}
@@ -810,7 +809,7 @@ mm_net_io_loop(uintptr_t arg)
 				mm_sched_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
 				/* Submit write work. */
-				mm_work_add(mm_net_writer, msg[1], true);
+				mm_core_add_work(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			}
@@ -825,7 +824,7 @@ mm_net_io_loop(uintptr_t arg)
 				mm_sched_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
 				/* Submit read work. */
-				mm_work_add(mm_net_reader, msg[1], true);
+				mm_core_add_work(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 				sock->flags &= ~MM_NET_READER_PENDING;
 			}
@@ -840,7 +839,7 @@ mm_net_io_loop(uintptr_t arg)
 				mm_sched_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
 				/* Submit write work. */
-				mm_work_add(mm_net_writer, msg[1], true);
+				mm_core_add_work(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			}
@@ -852,7 +851,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			if (MM_NET_MAY_SPAWN_READER(sock->flags)) {
 				/* Submit read work. */
-				mm_work_add(mm_net_reader, msg[1], true);
+				mm_core_add_work(mm_net_reader, msg[1], true);
 				sock->flags |= MM_NET_READER_SPAWNED;
 			} else {
 				sock->flags |= MM_NET_READER_PENDING;
@@ -865,7 +864,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			if (MM_NET_MAY_SPAWN_WRITER(sock->flags)) {
 				/* Submit write work. */
-				mm_work_add(mm_net_writer, msg[1], true);
+				mm_core_add_work(mm_net_writer, msg[1], true);
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 			} else {
 				sock->flags |= MM_NET_WRITER_PENDING;
@@ -879,7 +878,7 @@ mm_net_io_loop(uintptr_t arg)
 			ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
 			if (MM_NET_RESPAWN_READER(sock->flags | rf)) {
 				/* Submit read work. */
-				mm_work_add(mm_net_reader, msg[1], true);
+				mm_core_add_work(mm_net_reader, msg[1], true);
 				sock->flags &= ~MM_NET_READER_PENDING;
 			} else {
 				sock->flags &= ~MM_NET_READER_SPAWNED;
@@ -893,7 +892,7 @@ mm_net_io_loop(uintptr_t arg)
 			ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
 			if (MM_NET_RESPAWN_WRITER(sock->flags | wf)) {
 				/* Submit write work. */
-				mm_work_add(mm_net_writer, msg[1], true);
+				mm_core_add_work(mm_net_writer, msg[1], true);
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			} else {
 				sock->flags &= ~MM_NET_WRITER_SPAWNED;
