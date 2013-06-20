@@ -71,13 +71,14 @@ struct mm_task_cleanup_rec
 				.routine = (void (*)(uintptr_t)) (rtn),	\
 				.routine_arg = (uintptr_t) (arg),	\
 			};						\
+		mm_running_task->cleanup = &__cleanup;			\
 		do {
 
 /* Unregister a cleanup handler optionally executing it. */
 #define mm_task_cleanup_pop(execute)					\
 		} while (0);						\
+		mm_running_task->cleanup = __cleanup.next;		\
 		if (execute) {						\
-			mm_running_task->cleanup = __cleanup.next;	\
 			__cleanup.routine(__cleanup.routine_arg);	\
 		}							\
 	} while (0)
