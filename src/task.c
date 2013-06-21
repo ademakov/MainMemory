@@ -523,7 +523,7 @@ mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
 	mm_timer_block(timeout);
 
 	// Dequeue on return.
-	mm_task_cleanup_pop((mm_running_task->flags & MM_TASK_WAITING) != 0);
+	mm_task_cleanup_pop(true);
 
 	LEAVE();
 }
