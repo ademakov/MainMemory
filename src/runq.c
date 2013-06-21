@@ -45,11 +45,10 @@ mm_runq_get_task(struct mm_runq *runq)
 		ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 		ASSERT(!mm_list_empty(&runq->bins[priority]));
 
-		struct mm_list *link = mm_list_head(&runq->bins[priority]);
+		struct mm_list *link = mm_list_delete_head(&runq->bins[priority]);
 		task = containerof(link, struct mm_task, queue);
 		ASSERT(priority == task->priority);
 
-		mm_list_delete(link);
 		if (mm_list_empty(&runq->bins[priority])) {
 			runq->bmap &= ~(1 << priority);
 		}

@@ -121,4 +121,20 @@ mm_list_delete(struct mm_list *item)
 	mm_list_cleave(item, item);
 }
 
+static inline struct mm_list *
+mm_list_delete_head(struct mm_list *list)
+{
+	struct mm_list *head = mm_list_head(list);
+	mm_list_delete(head);
+	return head;
+}
+
+static inline struct mm_list *
+mm_list_delete_tail(struct mm_list *list)
+{
+	struct mm_list *tail = mm_list_tail(list);
+	mm_list_delete(tail);
+	return tail;
+}
+
 #endif /* LIST_H */

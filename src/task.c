@@ -116,8 +116,7 @@ mm_task_free_chunks(struct mm_task *task)
 	ENTER();
 
 	while (!mm_list_empty(&task->chunks)) {
-		struct mm_list *link = mm_list_head(&task->chunks);
-		mm_list_delete(link);
+		struct mm_list *link = mm_list_delete_head(&task->chunks);
 		mm_core_free(link);
 	}
 
@@ -201,9 +200,8 @@ mm_task_create(const char *name, mm_routine_t start, uintptr_t start_arg)
 		task = mm_task_new(MM_TASK_STACK_SIZE);
 	} else {
 		// Resurrect a dead task.
-		struct mm_list *link = mm_list_head(&mm_core->dead_list);
+		struct mm_list *link = mm_list_delete_head(&mm_core->dead_list);
 		task = containerof(link, struct mm_task, queue);
-		mm_list_delete(link);
 	}
 
 	// Initialize the task stack.
