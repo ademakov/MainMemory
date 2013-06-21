@@ -453,7 +453,7 @@ mm_event_dispatch(void)
 		}
 		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
 			DEBUG("output event on fd %d", fd);
-			mm_event_input(&mm_event_fd_table[fd]);
+			mm_event_output(&mm_event_fd_table[fd]);
 		}
 
 		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
