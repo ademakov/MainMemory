@@ -21,7 +21,6 @@
 
 #include "alloc.h"
 #include "chunk.h"
-#include "clock.h"
 #include "future.h"
 #include "hook.h"
 #include "log.h"
@@ -79,17 +78,19 @@ struct mm_work
 };
 
 static struct mm_work *
-mm_core_create_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
+mm_core_create_work(struct mm_core *core,
+		    mm_routine_t routine, uintptr_t routine_arg,
+		    bool pinned)
 {
 	ENTER();
 
 	struct mm_work *work;
-	if (mm_list_empty(&mm_core->work_cache)) {
+	if (mm_list_empty(&core->work_cache)) {
 		/* Create a new work item. */
 		work = mm_alloc(sizeof(struct mm_core));
 	} else {
 		/* Reuse a cached work item. */
-		struct mm_list *link = mm_list_delete_head(&mm_core->work_cache);
+		struct mm_list *link = mm_list_delete_head(&core->work_cache);
 		work = containerof(link, struct mm_work, queue);
 	}
 
@@ -116,7 +117,9 @@ mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
 	struct mm_core *core = mm_core;
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(routine, routine_arg, pinned);
+	struct mm_work *work = mm_core_create_work(core,
+						   routine, routine_arg,
+						   pinned);
 
 	// Queue the item in the LIFO order.
 	mm_list_insert(&core->work_queue, &work->queue);
@@ -586,22 +589,4 @@ mm_core_stop(void)
 		mm_memory_store(mm_core_set[i].master_stop, true);
 
 	LEAVE();
-}
-
-/**********************************************************************
- * Core time utilities.
- **********************************************************************/
-
-void
-mm_core_update_time(void)
-{
-	mm_core->time_value = mm_clock_gettime_monotonic();
-	DEBUG("%lld", (long long) mm_core->time_value);
-}
-
-void
-mm_core_update_real_time(void)
-{
-	mm_core->real_time_value = mm_clock_gettime_realtime();
-	DEBUG("%lld", (long long) mm_core->real_time_value);
 }

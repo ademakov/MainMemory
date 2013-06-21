@@ -21,6 +21,7 @@
 #define CORE_H
 
 #include "common.h"
+#include "clock.h"
 #include "list.h"
 #include "pool.h"
 #include "runq.h"
@@ -106,9 +107,24 @@ void mm_core_hook_param_stop(void (*proc)(void *), void *data);
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void mm_core_update_time(void);
-void mm_core_update_real_time(void);
-
 void mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned);
+
+/**********************************************************************
+ * Core time utilities.
+ **********************************************************************/
+
+static inline void
+mm_core_update_time(void)
+{
+	mm_core->time_value = mm_clock_gettime_monotonic();
+	DEBUG("%lld", (long long) mm_core->time_value);
+}
+
+static inline void
+mm_core_update_real_time(void)
+{
+	mm_core->real_time_value = mm_clock_gettime_realtime();
+	DEBUG("%lld", (long long) mm_core->real_time_value);
+}
 
 #endif /* CORE_H */
