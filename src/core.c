@@ -244,7 +244,7 @@ mm_core_destroy_chunks(struct mm_core *core)
 #endif
 
 static mm_result_t
-mm_core_master_loop(uintptr_t arg)
+mm_core_master(uintptr_t arg)
 {
 	ENTER();
 
@@ -361,7 +361,7 @@ mm_core_boot_init(struct mm_core *core)
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 
 	// Create the master task for this core and schedule it for execution.
-	core->master = mm_task_create("master", mm_core_master_loop, (uintptr_t) core);
+	core->master = mm_task_create("master", mm_core_master, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
 	mm_sched_run(core->master);
 }
