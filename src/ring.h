@@ -75,12 +75,54 @@ mm_ring_put(struct mm_ring *ring, void *new_data)
 	return false;
 }
 
+static inline bool
+mm_ring_core_trylock(struct mm_ring *ring)
+{
+	return mm_core_trylock(&ring->tail_lock.core);
+}
+
+static inline void
+mm_ring_core_lock(struct mm_ring *ring)
+{
+	mm_core_lock(&ring->tail_lock.core);
+}
+
+static inline void
+mm_ring_core_unlock(struct mm_ring *ring)
+{
+	mm_core_unlock(&ring->tail_lock.core);
+}
+
+static inline bool
+mm_ring_global_trylock(struct mm_ring *ring)
+{
+	return mm_global_trylock(&ring->tail_lock.global);
+}
+
+static inline void
+mm_ring_global_lock(struct mm_ring *ring)
+{
+	mm_global_lock(&ring->tail_lock.global);
+}
+
+static inline void
+mm_ring_global_unlock(struct mm_ring *ring)
+{
+	mm_global_unlock(&ring->tail_lock.global);
+}
+
 /* Multi-producer enqueue operation with synchronization for core threads. */
 static inline bool
 mm_ring_core_put(struct mm_ring *ring, void *new_data)
 {
-	return (mm_core_trylock(&ring->tail_lock.core)
-		&& mm_ring_put(ring, new_data));
+	if (mm_ring_core_trylock(ring)) {
+		if (mm_ring_put(ring, new_data)) {
+			mm_ring_core_unlock(ring);
+			return true;
+		}
+		mm_ring_core_unlock(ring);
+	}
+	return false;
 }
 
 /* Multi-producer enqueue operation with synchronization for core and auxiliary
@@ -88,8 +130,14 @@ mm_ring_core_put(struct mm_ring *ring, void *new_data)
 static inline bool
 mm_ring_global_put(struct mm_ring *ring, void *new_data)
 {
-	return (mm_global_trylock(&ring->tail_lock.global)
-		&& mm_ring_put(ring, new_data));
+	if (mm_ring_global_trylock(ring)) {
+		if (mm_ring_put(ring, new_data)) {
+			mm_ring_global_unlock(ring);
+			return true;
+		}
+		mm_ring_global_unlock(ring);
+	}
+	return false;
 }
 
 #endif /* RING_H */
