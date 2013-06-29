@@ -54,7 +54,7 @@ mm_ring_get(struct mm_ring *ring)
 	void *data = mm_memory_load(ring->ring[head]);
 	if (data != NULL)
 	{
-		mm_memory_store(ring->ring[head], 0);
+		mm_memory_store(ring->ring[head], NULL);
 		ring->head = ((head + 1) & ring->mask);
 	}
 	return data;

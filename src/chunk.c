@@ -50,9 +50,9 @@ mm_chunk_destroy_global(struct mm_chunk *chunk)
 	if (chunk->core == mm_core) {
 		mm_chunk_destroy(chunk);
 	} else {
-		mm_global_lock(&chunk->core->chunks_lock);
-		mm_list_insert(&chunk->core->chunks, &chunk->link);
-		mm_global_unlock(&chunk->core->chunks_lock);
+		while (!mm_ring_global_put(&chunk->core->chunk_ring, chunk)) {
+			mm_thread_yield();
+		}
 	}
 
 	LEAVE();
@@ -82,23 +82,15 @@ mm_chunk_destroy_chain_global(struct mm_list *head, struct mm_list *tail)
 {
 	ENTER();
 
-	struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
-
-#if ENABLE_DEBUG
-	struct mm_list *next = head;
-	while (next != tail) {
-		next = next->next;
-		struct mm_chunk *chunk2 = containerof(next, struct mm_chunk, link);
-		ASSERT(chunk2->core == chunk->core);
-	}
-#endif
-
-	if (chunk->core == mm_core) {
-		mm_chunk_destroy_chain(head, tail);
-	} else {
-		mm_global_lock(&chunk->core->chunks_lock);
-		mm_list_splice_next(&chunk->core->chunks, head, tail);
-		mm_global_unlock(&chunk->core->chunks_lock);
+	for (;;) {
+		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
+		if (head != tail) {
+			head = head->next;
+			mm_chunk_destroy_global(chunk);
+		} else {
+			mm_chunk_destroy_global(chunk);
+			break;
+		}
 	}
 
 	LEAVE();

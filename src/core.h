@@ -24,11 +24,15 @@
 #include "clock.h"
 #include "list.h"
 #include "pool.h"
+#include "ring.h"
 #include "runq.h"
 #include "task.h"
 
 /* Forward declaration. */
 struct mm_timeq;
+
+#define MM_CORE_INBOX_RING_SIZE		(1024)
+#define MM_CORE_CHUNK_RING_SIZE		(1024)
 
 /* Virtual core state. */
 struct mm_core
@@ -63,8 +67,11 @@ struct mm_core
 	/* Stop flag. */
 	bool master_stop;
 
-	/* The master task. */
+	/* Master task. */
 	struct mm_task *master;
+
+	/* Dealer task. */
+	struct mm_task *dealer;
 
 	/* The bootstrap task. */
 	struct mm_task *boot;
@@ -85,12 +92,12 @@ struct mm_core
 	 */
 
 	/* Submitted work items. */
-	struct mm_list inbox __align(MM_CACHELINE);
-	mm_core_lock_t inbox_lock;
+	struct mm_ring inbox;
+	void *inbox_store[MM_CORE_INBOX_RING_SIZE];
 
 	/* The memory chunks freed by other threads. */
-	struct mm_list chunks __align(MM_CACHELINE);
-	mm_global_lock_t chunks_lock;
+	struct mm_ring chunk_ring;
+	void *chunk_ring_store[MM_CORE_CHUNK_RING_SIZE];
 
 } __align(MM_CACHELINE);
 

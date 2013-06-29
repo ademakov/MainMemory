@@ -211,38 +211,6 @@ mm_core_worker_start(struct mm_work *work)
  * Master task.
  **********************************************************************/
 
-#if 0
-static void
-mm_core_receive_work(struct mm_core *core)
-{
-	mm_core_lock(&core->inbox_lock);
-	if (mm_list_empty(&core->inbox)) {
-		mm_core_unlock(&core->inbox_lock);
-	} else {
-		struct mm_list *head = mm_list_head(&core->inbox);
-		struct mm_list *tail = mm_list_tail(&core->inbox);
-		mm_list_cleave(head, tail);
-		mm_core_unlock(&core->inbox_lock);
-		mm_list_splice_next(&core->work_queue, head, tail);
-	}
-}
-
-static void
-mm_core_destroy_chunks(struct mm_core *core)
-{
-	mm_global_lock(&core->chunks_lock);
-	if (mm_list_empty(&core->chunks)) {
-		mm_global_unlock(&core->chunks_lock);
-	} else {
-		struct mm_list *head = mm_list_head(&core->chunks);
-		struct mm_list *tail = mm_list_tail(&core->chunks);
-		mm_list_cleave(head, tail);
-		mm_global_unlock(&core->chunks_lock);
-		mm_chunk_destroy_chain(head, tail);
-	}
-}
-#endif
-
 static mm_result_t
 mm_core_master(uintptr_t arg)
 {
@@ -254,7 +222,7 @@ mm_core_master(uintptr_t arg)
 
 		// Check to see if there are workers available.
 		if (core->nworkers >= core->nworkers_max) {
-			mm_timer_block(1000000);
+			mm_sched_block();
 			continue;
 		}
 
@@ -272,6 +240,65 @@ mm_core_master(uintptr_t arg)
 
 		// Pass it to a new worker.
 		mm_core_worker_start(work);
+	}
+
+	LEAVE();
+	return 0;
+}
+
+/**********************************************************************
+ * Dealer task.
+ **********************************************************************/
+
+#if ENABLE_SMP
+static bool
+mm_core_receive_work(struct mm_core *core)
+{
+	struct mm_work *work = mm_ring_get(&core->inbox);
+	if (work == NULL)
+		return false;
+
+	do {
+		mm_list_insert(&core->work_queue, &work->queue);
+		work = mm_ring_get(&core->inbox);
+	} while (work != NULL);
+
+	return true;
+}
+#endif
+
+static bool
+mm_core_destroy_chunks(struct mm_core *core)
+{
+	struct mm_chunk *chunk = mm_ring_get(&core->chunk_ring);
+	if (chunk == NULL)
+		return false;
+
+	do {
+		mm_chunk_destroy(chunk);
+		chunk = mm_ring_get(&core->chunk_ring);
+	} while (chunk != NULL);
+
+	return true;
+}
+
+static mm_result_t
+mm_core_dealer(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_core *core = (struct mm_core *) arg;
+
+	mm_timeout_t timeout = 10000;
+
+	while (!mm_memory_load(core->master_stop)) {
+		mm_timer_block(timeout);
+
+#if ENABLE_SMP
+		mm_core_receive_work(core);
+#endif
+
+		mm_core_destroy_chunks(core);
 	}
 
 	LEAVE();
@@ -364,6 +391,11 @@ mm_core_boot_init(struct mm_core *core)
 	core->master = mm_task_create("master", mm_core_master, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
 	mm_sched_run(core->master);
+
+	// Create the dealer task for this core and schedule it for execution.
+	core->dealer = mm_task_create("dealer", mm_core_dealer, (uintptr_t) core);
+	core->dealer->priority = MM_PRIO_MASTER;
+	mm_sched_run(core->dealer);
 }
 
 static void
@@ -373,6 +405,10 @@ mm_core_boot_term(struct mm_core *core)
 
 	mm_future_term();
 	mm_timer_term();
+
+	// TODO:
+	//mm_task_destroy(core->master);
+	//mm_task_destroy(core->dealer);
 }
 
 /* A per-core thread entry point. */
@@ -452,11 +488,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_list_init(&core->log_chunks);
 
-	core->inbox_lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
-	mm_list_init(&core->inbox);
-
-	core->chunks_lock = (mm_global_lock_t) MM_ATOMIC_LOCK_INIT;
-	mm_list_init(&core->chunks);
+	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
+	mm_ring_prepare(&core->chunk_ring, MM_CORE_CHUNK_RING_SIZE);
 
 	LEAVE();
 }
@@ -472,13 +505,23 @@ mm_core_term_work_queue(struct mm_list *queue)
 }
 
 static void
+mm_core_term_inbox(struct mm_core *core)
+{
+	struct mm_work *work = mm_ring_get(&core->inbox);
+	while (work != NULL) {
+		mm_core_destroy_work(work);
+		work = mm_ring_get(&core->inbox);
+	}
+}
+
+static void
 mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
 	mm_core_term_work_queue(&core->work_queue);
 	mm_core_term_work_queue(&core->work_cache);
-	mm_core_term_work_queue(&core->inbox);
+	mm_core_term_inbox(core);
 
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
