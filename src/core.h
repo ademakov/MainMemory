@@ -96,8 +96,8 @@ struct mm_core
 	void *inbox_store[MM_CORE_INBOX_RING_SIZE];
 
 	/* The memory chunks freed by other threads. */
-	struct mm_ring chunk_ring;
-	void *chunk_ring_store[MM_CORE_CHUNK_RING_SIZE];
+	struct mm_ring chunks;
+	void *chunks_store[MM_CORE_CHUNK_RING_SIZE];
 
 } __align(MM_CACHELINE);
 

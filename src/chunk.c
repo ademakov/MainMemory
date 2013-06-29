@@ -50,7 +50,7 @@ mm_chunk_destroy_global(struct mm_chunk *chunk)
 	if (chunk->core == mm_core) {
 		mm_chunk_destroy(chunk);
 	} else {
-		while (!mm_ring_global_put(&chunk->core->chunk_ring, chunk)) {
+		while (!mm_ring_global_put(&chunk->core->chunks, chunk)) {
 			mm_thread_yield();
 		}
 	}

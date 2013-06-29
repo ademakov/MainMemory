@@ -270,13 +270,13 @@ mm_core_receive_work(struct mm_core *core)
 static bool
 mm_core_destroy_chunks(struct mm_core *core)
 {
-	struct mm_chunk *chunk = mm_ring_get(&core->chunk_ring);
+	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
 	if (chunk == NULL)
 		return false;
 
 	do {
 		mm_chunk_destroy(chunk);
-		chunk = mm_ring_get(&core->chunk_ring);
+		chunk = mm_ring_get(&core->chunks);
 	} while (chunk != NULL);
 
 	return true;
@@ -489,7 +489,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_list_init(&core->log_chunks);
 
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
-	mm_ring_prepare(&core->chunk_ring, MM_CORE_CHUNK_RING_SIZE);
+	mm_ring_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE);
 
 	LEAVE();
 }
