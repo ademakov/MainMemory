@@ -488,6 +488,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_list_init(&core->log_chunks);
 
+	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
 	mm_ring_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE);
 

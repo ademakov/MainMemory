@@ -31,6 +31,7 @@
 /* Forward declaration. */
 struct mm_timeq;
 
+#define MM_CORE_SCHED_RING_SIZE		(1024)
 #define MM_CORE_INBOX_RING_SIZE		(1024)
 #define MM_CORE_CHUNK_RING_SIZE		(1024)
 
@@ -90,6 +91,10 @@ struct mm_core
 	/*
 	 * The fields below engage in cross-core communication.
 	 */
+
+	/* Tasks to be scheduled. */
+	struct mm_ring sched;
+	void *sched_store[MM_CORE_SCHED_RING_SIZE];
 
 	/* Submitted work items. */
 	struct mm_ring inbox;
