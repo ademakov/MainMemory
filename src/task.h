@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "list.h"
+#include "sched.h"
 
 /* Maximal task name length (including terminating zero). */
 #define MM_TASK_NAME_SIZE	40
@@ -155,8 +156,40 @@ void mm_task_set_name(struct mm_task *task, const char *name)
 uint32_t mm_task_id(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_testcancel(void);
-void mm_task_testcancel_asynchronous(void);
+/**********************************************************************
+ * Task cancellation.
+ **********************************************************************/
+
+#define MM_TASK_CANCEL_TEST(task_flags)			\
+	((task_flags & (MM_TASK_CANCEL_DISABLE		\
+			| MM_TASK_CANCEL_REQUIRED	\
+			| MM_TASK_CANCEL_OCCURRED))	\
+	 == MM_TASK_CANCEL_REQUIRED)
+
+#define MM_TASK_CANCEL_TEST_ASYNC(task_flags)		\
+	((task_flags & (MM_TASK_CANCEL_DISABLE		\
+			| MM_TASK_CANCEL_REQUIRED	\
+			| MM_TASK_CANCEL_OCCURRED	\
+			| MM_TASK_CANCEL_ASYNCHRONOUS)) \
+	 == (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_ASYNCHRONOUS))
+
+static inline void
+mm_task_testcancel(void)
+{
+	if (unlikely(MM_TASK_CANCEL_TEST(mm_running_task->flags))) {
+		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+		mm_task_exit(MM_TASK_CANCELED);
+	}
+}
+
+static inline void
+mm_task_testcancel_asynchronous(void)
+{
+	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(mm_running_task->flags))) {
+		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+		mm_task_exit(MM_TASK_CANCELED);
+	}
+}
 
 void mm_task_setcancelstate(int new_value, int *old_value_ptr);
 void mm_task_setcanceltype(int new_value, int *old_value_ptr);
@@ -166,6 +199,10 @@ void mm_task_leave_cancel_point(int);
 
 void mm_task_cancel(struct mm_task *task)
 	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Task event waiting.
+ **********************************************************************/
 
 void mm_task_wait(struct mm_list *queue)
 	__attribute__((nonnull(1)));
@@ -178,6 +215,10 @@ void mm_task_signal(struct mm_list *queue)
 	__attribute__((nonnull(1)));
 void mm_task_broadcast(struct mm_list *queue)
 	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Task-local dynamic memory.
+ **********************************************************************/
 
 void * mm_task_alloc(size_t size)
 	__attribute__((malloc));

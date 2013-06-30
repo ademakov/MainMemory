@@ -321,39 +321,6 @@ mm_task_id(struct mm_task *task)
  * Task cancellation.
  **********************************************************************/
 
-#define MM_TASK_CANCEL_TEST(task_flags)			\
-	((task_flags & (MM_TASK_CANCEL_DISABLE		\
-			| MM_TASK_CANCEL_REQUIRED	\
-			| MM_TASK_CANCEL_OCCURRED))	\
-	 == MM_TASK_CANCEL_REQUIRED)
-
-#define MM_TASK_CANCEL_TEST_ASYNC(task_flags)		\
-	((task_flags & (MM_TASK_CANCEL_DISABLE		\
-			| MM_TASK_CANCEL_REQUIRED	\
-			| MM_TASK_CANCEL_OCCURRED	\
-			| MM_TASK_CANCEL_ASYNCHRONOUS)) \
-	 == (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_ASYNCHRONOUS))
-
-void
-mm_task_testcancel(void)
-{
-	if (unlikely(MM_TASK_CANCEL_TEST(mm_running_task->flags))) {
-		DEBUG("task canceled!");
-		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
-		mm_task_exit(MM_TASK_CANCELED);
-	}
-}
-
-void
-mm_task_testcancel_asynchronous(void)
-{
-	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(mm_running_task->flags))) {
-		DEBUG("task canceled!");
-		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
-		mm_task_exit(MM_TASK_CANCELED);
-	}
-}
-
 void
 mm_task_setcancelstate(int new_value, int *old_value_ptr)
 {
