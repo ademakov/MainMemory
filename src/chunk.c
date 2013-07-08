@@ -31,6 +31,7 @@ mm_chunk_create(size_t size)
 	chunk->size = size;
 	chunk->used = 0;
 	chunk->core = mm_core;
+	chunk->next = NULL;
 	return chunk;
 }
 
@@ -59,38 +60,28 @@ mm_chunk_destroy_global(struct mm_chunk *chunk)
 }
 
 void
-mm_chunk_destroy_chain(struct mm_list *head, struct mm_list *tail)
+mm_chunk_destroy_chain(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	for (;;) {
-		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
-		if (head != tail) {
-			head = head->next;
-			mm_chunk_destroy(chunk);
-		} else {
-			mm_chunk_destroy(chunk);
-			break;
-		}
+	while (chunk != NULL) {
+		struct mm_chunk *next = chunk->next;
+		mm_chunk_destroy(chunk);
+		chunk = next;
 	}
 
 	LEAVE();
 }
 
 void
-mm_chunk_destroy_chain_global(struct mm_list *head, struct mm_list *tail)
+mm_chunk_destroy_chain_global(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	for (;;) {
-		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
-		if (head != tail) {
-			head = head->next;
-			mm_chunk_destroy_global(chunk);
-		} else {
-			mm_chunk_destroy_global(chunk);
-			break;
-		}
+	while (chunk != NULL) {
+		struct mm_chunk *next = chunk->next;
+		mm_chunk_destroy_global(chunk);
+		chunk = next;
 	}
 
 	LEAVE();

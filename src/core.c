@@ -289,7 +289,7 @@ mm_core_dealer(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	mm_timeout_t timeout = 10000;
+	mm_timeout_t timeout = 1000000;
 
 	while (!mm_memory_load(core->master_stop)) {
 		mm_timer_block(timeout);
@@ -486,7 +486,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->boot = mm_task_create_boot();
 	core->thread = NULL;
 
-	mm_list_init(&core->log_chunks);
+	core->log_head = NULL;
+	core->log_tail = NULL;
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
@@ -561,6 +562,8 @@ mm_core_init(void)
 {
 	ENTER();
 	ASSERT(mm_core_num == 0);
+
+	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
 
 	mm_clock_init();
 	mm_thread_init();

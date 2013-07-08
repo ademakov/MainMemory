@@ -29,7 +29,7 @@ struct mm_chunk
 {
 	uint32_t used;
 	uint32_t size;
-	struct mm_list link;
+	struct mm_chunk *next;
 	struct mm_core *core;
 	char data[];
 };
@@ -39,7 +39,7 @@ struct mm_chunk * mm_chunk_create(size_t size);
 void mm_chunk_destroy(struct mm_chunk *chunk);
 void mm_chunk_destroy_global(struct mm_chunk *chunk);
 
-void mm_chunk_destroy_chain(struct mm_list *head, struct mm_list *tail);
-void mm_chunk_destroy_chain_global(struct mm_list *head, struct mm_list *tail);
+void mm_chunk_destroy_chain(struct mm_chunk *chunk);
+void mm_chunk_destroy_chain_global(struct mm_chunk *chunk);
 
 #endif /* CHUNK_H */

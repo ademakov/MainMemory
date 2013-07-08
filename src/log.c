@@ -36,22 +36,31 @@
 
 #define MM_LOG_CHUNK_SIZE	(2000)
 
-static struct mm_list mm_log_data = { &mm_log_data, &mm_log_data };
+// The pending log chunk list.
+static struct mm_chunk *mm_log_head;
+static struct mm_chunk *mm_log_tail;
+
 static mm_global_lock_t mm_log_lock = MM_ATOMIC_LOCK_INIT;
 static bool mm_log_busy = false;
 
 static void
-mm_log_add_chain(struct mm_list *head, struct mm_list *tail)
+mm_log_add_chain(struct mm_chunk *head, struct mm_chunk *tail)
 {
 	mm_global_lock(&mm_log_lock);
-	mm_list_splice_prev(&mm_log_data, head, tail);
+
+	if (mm_log_tail == NULL)
+		mm_log_head = head;
+	else
+		mm_log_tail->next = head;
+	mm_log_tail = tail;
+
 	mm_global_unlock(&mm_log_lock);
 }
 
 static void
 mm_log_add_chunk(struct mm_chunk *chunk)
 {
-	mm_log_add_chain(&chunk->link, &chunk->link);
+	mm_log_add_chain(chunk, chunk);
 }
 
 static struct mm_chunk *
@@ -63,11 +72,17 @@ mm_log_create_chunk(size_t size)
 		chunk->size = size;
 		chunk->used = 0;
 		chunk->core = NULL;
+		chunk->next = NULL;
 	} else {
 		if (size < MM_LOG_CHUNK_SIZE)
 			size = MM_LOG_CHUNK_SIZE;
+
 		chunk = mm_chunk_create(size);
-		mm_list_append(&mm_core->log_chunks, &chunk->link);
+		if (mm_core->log_tail == NULL)
+			mm_core->log_head = chunk;
+		else
+			mm_core->log_tail->next = chunk;
+		mm_core->log_tail = chunk;
 	}
 
 	return chunk;
@@ -79,9 +94,8 @@ mm_log_str(const char *str)
 	size_t len = strlen(str);
 
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
-		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
-		chunk = containerof(tail, struct mm_chunk, link);
+	if (mm_core != NULL && mm_core->log_tail != NULL) {
+		chunk = mm_core->log_tail;
 
 		size_t avail = chunk->size - chunk->used;
 		if (avail < len) {
@@ -112,10 +126,8 @@ void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
-		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
-		chunk = containerof(tail, struct mm_chunk, link);
-	}
+	if (mm_core != NULL && mm_core->log_tail != NULL)
+		chunk = mm_core->log_tail;
 
 	char dummy[1];
 	char *space;
@@ -158,15 +170,15 @@ mm_log_write(void)
 {
 	mm_global_lock(&mm_log_lock);
 
-	if (mm_log_busy || mm_list_empty(&mm_log_data)) {
+	if (mm_log_busy || mm_log_head == NULL) {
 		mm_global_unlock(&mm_log_lock);
 		// TODO: wait for write completion.
 		return 0;
 	}
 
-	struct mm_list *head = mm_list_head(&mm_log_data);
-	struct mm_list *tail = mm_list_tail(&mm_log_data);
-	mm_list_cleave(head, tail);
+	struct mm_chunk *chunk = mm_log_head;
+	mm_log_head = NULL;
+	mm_log_tail = NULL;
 	mm_log_busy = true;
 
 	mm_global_unlock(&mm_log_lock);
@@ -174,26 +186,21 @@ mm_log_write(void)
 	// The number of written bytes.
 	size_t written = 0;
 
-	for (;;) {
-		struct mm_chunk *chunk = containerof(head, struct mm_chunk, link);
+	do {
 		if (write(2, chunk->data, chunk->used) != chunk->used) {
 			ABORT();
 		}
-
 		written += chunk->used;
 
-		struct mm_list *next = head->next;
+		struct mm_chunk *next = chunk->next;
 		if (chunk->core == NULL) {
 			mm_free(chunk);
 		} else {
 			mm_chunk_destroy_global(chunk);
 		}
+		chunk = next;
 
-		if (head == tail)
-			break;
-
-		head = next;
-	}
+	} while (chunk != NULL);
 
 	// TODO: signal the write completion to waiting threads.
 	mm_memory_store(mm_log_busy, false);
@@ -308,10 +315,9 @@ mm_fatal(int error, const char *restrict msg, ...)
 void
 mm_flush(void)
 {
-	if (mm_core != NULL && !mm_list_empty(&mm_core->log_chunks)) {
-		struct mm_list *head = mm_list_head(&mm_core->log_chunks);
-		struct mm_list *tail = mm_list_tail(&mm_core->log_chunks);
-		mm_list_cleave(head, tail);
-		mm_log_add_chain(head, tail);
+	if (mm_core != NULL && mm_core->log_head != NULL) {
+		mm_log_add_chain(mm_core->log_head, mm_core->log_tail);
+		mm_core->log_head = NULL;
+		mm_core->log_tail = NULL;
 	}
 }

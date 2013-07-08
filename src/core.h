@@ -81,7 +81,8 @@ struct mm_core
 	struct mm_thread *thread;
 
 	/* The log message memory. */
-	struct mm_list log_chunks;
+	struct mm_chunk *log_head;
+	struct mm_chunk *log_tail;
 
 	/* Memory pool for timers. */
 	struct mm_pool timer_pool;

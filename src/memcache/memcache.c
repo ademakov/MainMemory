@@ -20,6 +20,7 @@
 #include "memcache.h"
 
 #include "../alloc.h"
+#include "../chunk.h"
 #include "../core.h"
 #include "../future.h"
 #include "../list.h"
@@ -518,50 +519,37 @@ mc_table_term(void)
 
 #define MC_DEFAULT_BUFFER_SIZE	4000
 
-struct mc_buffer
-{
-	struct mc_buffer *next;
-	size_t size;
-	size_t used;
-	char data[];
-};
-
-static struct mc_buffer *
+static struct mm_chunk *
 mc_buffer_create(size_t size)
 {
 	ENTER();
 
-	size +=  MC_DEFAULT_BUFFER_SIZE - 1;
+	size += MC_DEFAULT_BUFFER_SIZE - 1;
 	size -= size % MC_DEFAULT_BUFFER_SIZE;
-
-	size_t total_size = sizeof(struct mc_buffer) + size;
-	struct mc_buffer *buffer = mm_alloc(total_size);
-	buffer->next = NULL;
-	buffer->size = size;
-	buffer->used = 0;
+	struct mm_chunk *buffer = mm_chunk_create(size);
 
 	LEAVE();
 	return buffer;
 }
 
 static void
-mc_buffer_destroy(struct mc_buffer *buffer)
+mc_buffer_destroy(struct mm_chunk *buffer)
 {
 	ENTER();
 
-	mm_free(buffer);
+	mm_chunk_destroy(buffer);
 
 	LEAVE();
 }
 
 static inline bool
-mc_buffer_contains(struct mc_buffer *buffer, const char *ptr)
+mc_buffer_contains(struct mm_chunk *buffer, const char *ptr)
 {
 	return ptr >= buffer->data && ptr < (buffer->data + buffer->size);
 }
 
 static inline bool
-mc_buffer_finished(struct mc_buffer *buffer, const char *ptr)
+mc_buffer_finished(struct mm_chunk *buffer, const char *ptr)
 {
 	return ptr == (buffer->data + buffer->size);
 }
@@ -581,7 +569,7 @@ struct mc_string
 
 struct mc_value
 {
-	struct mc_buffer *buffer;
+	struct mm_chunk *buffer;
 	const char *start;
 	uint32_t bytes;
 };
@@ -859,12 +847,9 @@ struct mc_state
 	char *start_ptr;
 //	struct mc_buffer *start_buf;
 
-	// Current input buffer.
-//	struct mc_buffer *read_buf;
-
 	// Input buffer queue.
-	struct mc_buffer *read_head;
-	struct mc_buffer *read_tail;
+	struct mm_chunk *read_head;
+	struct mm_chunk *read_tail;
 
 	// Command processing queue.
 	struct mc_command *command_head;
@@ -888,7 +873,6 @@ mc_create(struct mm_net_socket *sock)
 	state->start_ptr = NULL;
 //	state->start_buf = NULL;
 
-//	state->read_buf = NULL;
 	state->read_head = NULL;
 	state->read_tail = NULL;
 
@@ -908,7 +892,7 @@ mc_destroy(struct mc_state *state)
 	ENTER();
 
 	while (state->read_head != NULL) {
-		struct mc_buffer *buffer = state->read_head;
+		struct mm_chunk *buffer = state->read_head;
 		state->read_head = buffer->next;
 		mc_buffer_destroy(buffer);
 	}
@@ -924,12 +908,12 @@ mc_destroy(struct mc_state *state)
 	LEAVE();
 }
 
-static struct mc_buffer *
+static struct mm_chunk *
 mc_add_read_buffer(struct mc_state *state, size_t size)
 {
 	ENTER();
 
-	struct mc_buffer *buffer = mc_buffer_create(size);
+	struct mm_chunk *buffer = mc_buffer_create(size);
 	if (state->read_tail == NULL) {
 		state->read_head = buffer;
 	} else {
@@ -963,31 +947,29 @@ mc_release_buffers(struct mc_state *state, const char *ptr)
 	ENTER();
 
 	while (state->read_head != NULL) {
-		struct mc_buffer *buffer = state->read_head;
+		struct mm_chunk *buffer = state->read_head;
 		if (mc_buffer_contains(buffer, ptr)) {
 			/* The buffer is (might be) still in use. */
 			break;
 		}
 
 		ASSERT(!mc_buffer_contains(buffer, state->start_ptr));
+		state->read_head = buffer->next;
 
 		if (mc_buffer_finished(buffer, ptr)) {
 			/* The buffer has been used up to its end. */
-			if (buffer->next == NULL) {
-				state->read_head = state->read_tail = NULL;
-				state->start_ptr = NULL;
-			} else {
-				state->read_head = buffer->next;
-				if (state->start_ptr == ptr) {
-					state->start_ptr = state->read_head->data;
-				}
-			}
 			mc_buffer_destroy(buffer);
+
+			if (state->read_head == NULL) {
+				state->read_tail = NULL;
+				state->start_ptr = NULL;
+			} else if (state->start_ptr == ptr) {
+				state->start_ptr = state->read_head->data;
+			}
 			break;
 		}
 
 		/* The buffer use is long past. */
-		state->read_head = buffer->next;
 		mc_buffer_destroy(buffer);
 	}
 
@@ -1027,7 +1009,7 @@ mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
 	size_t total = required + optional;
 	size_t count = total;
 
-	struct mc_buffer *buffer = state->read_head;
+	struct mm_chunk *buffer = state->read_head;
 	while (count > optional) {
 		size_t size;
 		if (buffer == NULL) {
@@ -1095,7 +1077,7 @@ mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset
 
 	const char *src = value->start;
 	uint32_t bytes = value->bytes;
-	struct mc_buffer *buffer = value->buffer;
+	struct mm_chunk *buffer = value->buffer;
 	ASSERT(src >= buffer->data && src <= buffer->data + buffer->used);
 
 	char *dst = mc_entry_value(entry) + offset;
@@ -1581,7 +1563,7 @@ struct mc_parser
 	char *start_ptr;
 	char *end_ptr;
 
-	struct mc_buffer *buffer;
+	struct mm_chunk *buffer;
 
 	struct mc_command *command;
 	struct mc_state *state;
@@ -1599,7 +1581,7 @@ mc_start_input(struct mc_parser *parser,
 {
 	ENTER();
 
-	struct mc_buffer *buffer = state->read_head;
+	struct mm_chunk *buffer = state->read_head;
 	if (state->start_ptr == NULL) {
 		parser->start_ptr = buffer->data;
 	} else {
@@ -1637,7 +1619,7 @@ mc_shift_input(struct mc_parser *parser)
 {
 	ENTER();
 
-	struct mc_buffer *buffer = parser->buffer->next;
+	struct mm_chunk *buffer = parser->buffer->next;
 	bool rc = (buffer != NULL && buffer->used > 0);
 	if (rc) {
 		parser->buffer = buffer;
@@ -1657,7 +1639,7 @@ mc_widen_input(struct mc_parser *parser)
 {
 	ENTER();
 
-	struct mc_buffer *buffer = parser->buffer;
+	struct mm_chunk *buffer = parser->buffer;
 	parser->end_ptr = buffer->data + buffer->used;
 
 	LEAVE();
@@ -1672,7 +1654,7 @@ mc_carry_param(struct mc_parser *parser, int count)
 {
 	ENTER();
 
-	struct mc_buffer *buffer = parser->buffer->next;
+	struct mm_chunk *buffer = parser->buffer->next;
 	if (buffer == NULL) {
 		buffer = mc_add_read_buffer(parser->state, MC_DEFAULT_BUFFER_SIZE);
 	} else if (buffer->used > 0) {
@@ -1714,10 +1696,9 @@ mc_peek_input(struct mc_parser *parser, char *s, char *e)
 
 	if ((s + 1) < e)
 		return s[1];
-	else if (parser->buffer->next && parser->buffer->next->used > 0)
+	if (parser->buffer->next && parser->buffer->next->used > 0)
 		return parser->buffer->next->data[0];
-	else
-		return 256; /* a non-char */
+	return 256; /* a non-char */
 }
 
 static bool
@@ -1814,7 +1795,7 @@ mc_parse_eol(struct mc_parser *parser)
 	if ((c == '\r' && mc_peek_input(parser, s, e) == '\n') || c == '\n') {
 		/* All right, got the line end. */
 		if (c == '\r' && ++s == e) {
-			struct mc_buffer *buffer = parser->buffer->next;
+			struct mm_chunk *buffer = parser->buffer->next;
 			parser->buffer = buffer;
 			parser->start_ptr = buffer->data + 1;
 			parser->end_ptr = buffer->data + buffer->used;
