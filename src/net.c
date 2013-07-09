@@ -1159,18 +1159,18 @@ static int
 mm_net_may_rblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on reading from a socket.
-	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR | MM_NET_NONBLOCK)) == 0) {
-		if (sock->read_timeout != MM_TIMEOUT_INFINITE
-		    && (start + sock->read_timeout) < mm_core->time_value) {
+	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
+		if (sock->read_timeout == MM_TIMEOUT_INFINITE
+		    || (start + sock->read_timeout) > mm_core->time_value) {
+			// Okay to block.
+			return 1;
+		} else if (sock->read_timeout) {
 			// Cannot block as there is no time left.
 			errno = ETIMEDOUT;
 		} else {
-			// Okay to block.
-			return 1;
+			// The socket is in non-blocking mode.
+			errno = EAGAIN;
 		}
-	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
-		// Cannot block as the socket is in the non-block mode.
-		errno = EAGAIN;
 	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
 		// Cannot block as the socket is closed.
 		errno = EBADF;
@@ -1186,18 +1186,18 @@ static int
 mm_net_may_wblock(struct mm_net_socket *sock, mm_timeval_t start)
 {
 	// Check to see if it is allowed to block on writing to a socket.
-	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR | MM_NET_NONBLOCK)) == 0) {
-		if (sock->write_timeout != MM_TIMEOUT_INFINITE
-		    && (start + sock->write_timeout) < mm_core->time_value) {
+	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
+		if (sock->write_timeout == MM_TIMEOUT_INFINITE
+		    || (start + sock->write_timeout) > mm_core->time_value) {
+			// Okay to block.
+			return 1;
+		} else if (sock->write_timeout) {
 			// Cannot block as there is no time left.
 			errno = ETIMEDOUT;
 		} else {
-			// Okay to block.
-			return 1;
+			// The socket is in non-blocking mode.
+			errno = EAGAIN;
 		}
-	} else if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
-		// Cannot block as the socket is in the non-block mode.
-		errno = EAGAIN;
 	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
 		// Cannot block as the socket is closed.
 		errno = EBADF;

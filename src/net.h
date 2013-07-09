@@ -54,7 +54,7 @@ typedef enum {
 
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
-#define MM_NET_NONBLOCK		0x0002
+/*#define MM_NET_NONBLOCK		0x0002*/
 #define MM_NET_READ_READY	0x0010
 #define MM_NET_WRITE_READY	0x0020
 #define MM_NET_READ_ERROR	0x0040
@@ -181,18 +181,6 @@ void mm_net_spawn_reader(struct mm_net_socket *sock);
 void mm_net_spawn_writer(struct mm_net_socket *sock);
 
 void mm_net_close(struct mm_net_socket *sock);
-
-static inline void
-mm_net_set_nonblock(struct mm_net_socket *sock)
-{
-	sock->flags |= MM_NET_NONBLOCK;
-}
-
-static inline void
-mm_net_clear_nonblock(struct mm_net_socket *sock)
-{
-	sock->flags &= ~MM_NET_NONBLOCK;
-}
 
 static inline bool
 mm_net_is_closed(struct mm_net_socket *sock)
