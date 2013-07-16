@@ -179,7 +179,7 @@ mm_task_create_boot(void)
 	strcpy(task->name, mm_task_boot_name);
 
 	// Initialize the task info.
-	mm_task_set_attr(task, MM_TASK_CANCEL_DISABLE, MM_PRIO_DEFAULT);
+	mm_task_set_attr(task, MM_TASK_CANCEL_DISABLE, MM_PRIO_BOOT);
 	task->start = NULL;
 	task->start_arg = 0;
 

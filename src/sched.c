@@ -33,29 +33,20 @@ mm_sched_switch(mm_task_state_t state)
 {
 	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
 
-	struct mm_task *old_task;
-	struct mm_task *new_task;
-
-	old_task = mm_running_task;
+	struct mm_task *old_task = mm_running_task;
 	old_task->state = state;
 
-	if (state == MM_TASK_PENDING) {
+	if (state == MM_TASK_PENDING)
 		mm_runq_put_task(&mm_core->run_queue, old_task);
-		new_task = mm_runq_get_task(&mm_core->run_queue);
-	} else {
-		new_task = mm_runq_get_task(&mm_core->run_queue);
-		if (unlikely(new_task == NULL)) {
-			new_task = mm_core->boot;
-		}
-		if (state == MM_TASK_INVALID) {
-			mm_task_recycle(old_task);
-		}
-	}
+	else if (state == MM_TASK_INVALID)
+		mm_task_recycle(old_task);
 
+	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
+	new_task->state = MM_TASK_RUNNING;
 	mm_running_task = new_task;
-	mm_running_task->state = MM_TASK_RUNNING;
 
 	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
+
 	mm_task_testcancel_asynchronous();
 }
 
@@ -65,6 +56,7 @@ mm_sched_run(struct mm_task *task)
 	ENTER();
 	TRACE("enqueue task: [%d %s] %d", mm_task_id(task), task->name, task->state);
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
+	ASSERT(task->priority != MM_PRIO_BOOT);
 
 	if (task->state != MM_TASK_PENDING) {
 		mm_runq_put_task(&mm_core->run_queue, task);

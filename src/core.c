@@ -438,7 +438,7 @@ mm_core_boot(uintptr_t arg)
 	}
 
 	// Run the other tasks while there are any.
-	mm_sched_block();
+	mm_sched_yield();
 
 	// Call the stop hooks on the first core.
 	if (is_primary_core) {

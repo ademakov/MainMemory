@@ -733,7 +733,7 @@ mm_event_start(void)
 	mm_event_port = mm_port_create(mm_event_task);
 
 	// Set the lowest priority for event loop.
-	mm_event_task->priority = MM_PRIO_LOWEST;
+	mm_event_task->priority = MM_PRIO_IDLE;
 
 	// Schedule the task.
 	mm_sched_run(mm_event_task);
