@@ -27,7 +27,6 @@
 #include "pool.h"
 #include "port.h"
 #include "task.h"
-#include "sched.h"
 #include "timer.h"
 #include "trace.h"
 #include "util.h"
@@ -468,7 +467,7 @@ mm_net_acceptor(uintptr_t arg)
 
 	/* Accept incoming connections. */
 	while (mm_net_accept(srv)) {
-		mm_sched_yield();
+		mm_task_yield();
 	}
 
 	LEAVE();
@@ -791,7 +790,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			sock->flags |= MM_NET_READ_READY;
 			if (sock->reader != NULL) {
-				mm_sched_run(sock->reader);
+				mm_task_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
 				/* Submit read work. */
 				mm_core_add_work(mm_net_reader, msg[1], true);
@@ -806,7 +805,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			sock->flags |= MM_NET_WRITE_READY;
 			if (sock->writer != NULL) {
-				mm_sched_run(sock->writer);
+				mm_task_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
 				/* Submit write work. */
 				mm_core_add_work(mm_net_writer, msg[1], true);
@@ -821,7 +820,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			sock->flags |= MM_NET_READ_ERROR;
 			if (sock->reader != NULL) {
-				mm_sched_run(sock->reader);
+				mm_task_run(sock->reader);
 			} else if (MM_NET_IS_READER_PENDING(sock->flags | rf)) {
 				/* Submit read work. */
 				mm_core_add_work(mm_net_reader, msg[1], true);
@@ -836,7 +835,7 @@ mm_net_io_loop(uintptr_t arg)
 
 			sock->flags |= MM_NET_WRITE_ERROR;
 			if (sock->writer != NULL) {
-				mm_sched_run(sock->writer);
+				mm_task_run(sock->writer);
 			} else if (MM_NET_IS_WRITER_PENDING(sock->flags | wf)) {
 				/* Submit write work. */
 				mm_core_add_work(mm_net_writer, msg[1], true);
@@ -1121,7 +1120,7 @@ mm_net_rblock(struct mm_net_socket *sock)
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
 		mm_timer_block(sock->read_timeout);
 	else
-		mm_sched_block();
+		mm_task_block();
 
 	// Unregister the task as reader.
 	mm_net_detach_reader(sock);
@@ -1144,7 +1143,7 @@ mm_net_wblock(struct mm_net_socket *sock)
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
 		mm_timer_block(sock->write_timeout);
 	else
-		mm_sched_block();
+		mm_task_block();
 
 	// Unregister the task as reader.
 	mm_net_detach_writer(sock);
@@ -1413,12 +1412,12 @@ mm_net_close(struct mm_net_socket *sock)
 
 		// Notify a blocked reader/writer about closing.
 		if (sock->reader != NULL && sock->reader != mm_running_task) {
-			mm_sched_run(sock->reader);
-			mm_sched_yield();
+			mm_task_run(sock->reader);
+			mm_task_yield();
 		}
 		if (sock->writer != NULL && sock->writer != mm_running_task) {
-			mm_sched_run(sock->writer);
-			mm_sched_yield();
+			mm_task_run(sock->writer);
+			mm_task_yield();
 		}
 
 		// Remove the socket from the event loop.

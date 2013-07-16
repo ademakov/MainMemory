@@ -25,7 +25,6 @@
 #include "hook.h"
 #include "log.h"
 #include "port.h"
-#include "sched.h"
 #include "task.h"
 #include "thread.h"
 #include "timeq.h"
@@ -139,7 +138,7 @@ mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
 	// Wake up the master possibly waiting for worker availability.
 	if (mm_core->nworkers == mm_core->nworkers_max) {
-		mm_sched_run(mm_core->master);
+		mm_task_run(mm_core->master);
 	}
 
 	// Account for the exiting worker.
@@ -202,7 +201,7 @@ mm_core_worker_start(struct mm_work *work)
 					      (uintptr_t) work);
 	task->priority = MM_PRIO_WORKER;
 	mm_core->nworkers++;
-	mm_sched_run(task);
+	mm_task_run(task);
 
 	LEAVE();
 }
@@ -222,7 +221,7 @@ mm_core_master(uintptr_t arg)
 
 		// Check to see if there are workers available.
 		if (core->nworkers >= core->nworkers_max) {
-			mm_sched_block();
+			mm_task_block();
 			continue;
 		}
 
@@ -390,12 +389,12 @@ mm_core_boot_init(struct mm_core *core)
 	// Create the master task for this core and schedule it for execution.
 	core->master = mm_task_create("master", mm_core_master, (uintptr_t) core);
 	core->master->priority = MM_PRIO_MASTER;
-	mm_sched_run(core->master);
+	mm_task_run(core->master);
 
 	// Create the dealer task for this core and schedule it for execution.
 	core->dealer = mm_task_create("dealer", mm_core_dealer, (uintptr_t) core);
 	core->dealer->priority = MM_PRIO_MASTER;
-	mm_sched_run(core->dealer);
+	mm_task_run(core->dealer);
 }
 
 static void
@@ -438,7 +437,7 @@ mm_core_boot(uintptr_t arg)
 	}
 
 	// Run the other tasks while there are any.
-	mm_sched_yield();
+	mm_task_yield();
 
 	// Call the stop hooks on the first core.
 	if (is_primary_core) {

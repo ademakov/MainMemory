@@ -26,7 +26,6 @@
 #include "net.h"
 #include "port.h"
 #include "selfpipe.h"
-#include "sched.h"
 #include "task.h"
 #include "timer.h"
 #include "trace.h"
@@ -716,7 +715,7 @@ mm_event_loop(uintptr_t arg __attribute__((unused)))
 	while (!mm_exit_test()) {
 		mm_event_dispatch();
 		mm_timer_tick();
-		mm_sched_yield();
+		mm_task_yield();
 	}
 
 	LEAVE();
@@ -736,7 +735,7 @@ mm_event_start(void)
 	mm_event_task->priority = MM_PRIO_IDLE;
 
 	// Schedule the task.
-	mm_sched_run(mm_event_task);
+	mm_task_run(mm_event_task);
 
 	// Start serving the event loop self-pipe.
 	mm_event_start_selfpipe();

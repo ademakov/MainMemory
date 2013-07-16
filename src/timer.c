@@ -22,7 +22,6 @@
 #include "alloc.h"
 #include "core.h"
 #include "pool.h"
-#include "sched.h"
 #include "timeq.h"
 #include "trace.h"
 
@@ -72,7 +71,7 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 	if (entry->ident == MM_TIMER_BLOCK) {
 		struct mm_timer_resume *resume =
 			containerof(entry, struct mm_timer_resume, entry);
-		mm_sched_run(resume->task);
+		mm_task_run(resume->task);
 	} else {
 		struct mm_timer *timer =
 			containerof(entry, struct mm_timer, entry);
@@ -253,7 +252,7 @@ mm_timer_block(mm_timeout_t timeout)
 	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);
 
 	mm_timeq_insert(mm_core->time_queue, &timer.entry);
-	mm_sched_block();
+	mm_task_block();
 
 	mm_task_cleanup_pop(mm_timer_is_armed(&timer.entry));
 

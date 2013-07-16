@@ -21,7 +21,6 @@
 
 #include "alloc.h"
 #include "pool.h"
-#include "sched.h"
 #include "task.h"
 #include "trace.h"
 
@@ -39,7 +38,7 @@ static void
 mm_port_block_on_receive(struct mm_port *port)
 {
 	mm_running_task->blocked_on = port;
-	mm_sched_block();
+	mm_task_block();
 	mm_running_task->blocked_on = NULL;
 }
 
@@ -120,7 +119,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 	if (port->task->state == MM_TASK_CREATED
 	    || (port->task->state == MM_TASK_BLOCKED
 	        && port->task->blocked_on == port)) {
-		mm_sched_run(port->task);
+		mm_task_run(port->task);
 	}
 
 leave:

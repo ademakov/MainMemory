@@ -20,7 +20,6 @@
 #include "trace.h"
 
 #include "log.h"
-#include "sched.h"
 #include "task.h"
 #include "thread.h"
 

@@ -21,7 +21,7 @@
 #define LOCK_H
 
 #include "common.h"
-#include "sched.h"
+#include "task.h"
 #include "thread.h"
 #include "trace.h"
 
@@ -56,7 +56,7 @@ mm_core_lock(mm_core_lock_t *lock)
 				if ((count & 0x3f) == 0x3f) {
 					mm_thread_yield();
 				} else {
-					mm_sched_yield();
+					mm_task_yield();
 				}
 			}
 			count++;
@@ -102,7 +102,7 @@ mm_global_lock(mm_global_lock_t *lock)
 				if ((count & 0x3f) == 0x3f) {
 					mm_thread_yield();
 				} else if (mm_running_task != NULL) {
-					mm_sched_yield();
+					mm_task_yield();
 				}
 			}
 			count++;

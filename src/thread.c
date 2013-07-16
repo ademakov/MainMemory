@@ -24,6 +24,7 @@
 #include "trace.h"
 
 #include <pthread.h>
+#include <sched.h>
 
 struct mm_thread
 {
@@ -227,9 +228,6 @@ mm_thread_join(struct mm_thread *thread)
 void
 mm_thread_yield(void)
 {
-	/* TODO: resolve <sched.h> vs "sched.h" conflict. */
-	int sched_yield();
-
 	ENTER();
 
 	sched_yield();

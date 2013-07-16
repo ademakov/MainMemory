@@ -22,7 +22,6 @@
 #include "alloc.h"
 #include "core.h"
 #include "pool.h"
-#include "sched.h"
 #include "trace.h"
 
 void

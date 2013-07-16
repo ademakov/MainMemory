@@ -23,7 +23,6 @@
 #include "core.h"
 #include "pool.h"
 #include "port.h"
-#include "sched.h"
 #include "stack.h"
 #include "timer.h"
 #include "trace.h"
@@ -47,6 +46,9 @@ static struct mm_pool mm_task_pool;
 // Special task mames.
 static char mm_task_boot_name[] = "boot";
 static char mm_task_dead_name[] = "dead";
+
+// The currently running task.
+__thread struct mm_task *mm_running_task = NULL;
 
 /**********************************************************************
  * Global task data initialization and termination.
@@ -267,31 +269,6 @@ mm_task_recycle(struct mm_task *task)
 	LEAVE();
 }
 
-/* Finish the current task. */
-void
-mm_task_exit(mm_result_t result)
-{
-	ENTER();
-	TRACE("exiting task '%s' with status %lu",
-	      mm_running_task->name, (unsigned long) result);
-
-	// Set the task result.
-	mm_running_task->result = result;
-
-	// TODO: invalidate ports ?
-
-	// Call the cleanup handlers.
-	mm_task_cleanup(mm_running_task);
-
-	// Free the dynamic memory.
-	mm_task_free_chunks(mm_running_task);
-
-	// Give the control to still running tasks.
-	mm_sched_abort();
-
-	LEAVE();
-}
-
 /* Set or change the task name. */
 void
 mm_task_set_name(struct mm_task *task, const char *name)
@@ -315,6 +292,105 @@ uint32_t
 mm_task_id(struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
+}
+
+/**********************************************************************
+ * Task execution.
+ **********************************************************************/
+
+/* Switch to the next task in the run queue. */
+static void
+mm_sched_switch(mm_task_state_t state)
+{
+	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
+
+	struct mm_task *old_task = mm_running_task;
+	old_task->state = state;
+
+	if (state == MM_TASK_PENDING)
+		mm_runq_put_task(&mm_core->run_queue, old_task);
+	else if (state == MM_TASK_INVALID)
+		mm_task_recycle(old_task);
+
+	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
+	new_task->state = MM_TASK_RUNNING;
+	mm_running_task = new_task;
+
+	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
+
+	mm_task_testcancel_asynchronous();
+}
+
+void
+mm_task_run(struct mm_task *task)
+{
+	ENTER();
+	TRACE("enqueue task: [%d %s] %d", mm_task_id(task), task->name, task->state);
+	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
+	ASSERT(task->priority != MM_PRIO_BOOT);
+
+	if (task->state != MM_TASK_PENDING) {
+		mm_runq_put_task(&mm_core->run_queue, task);
+		task->state = MM_TASK_PENDING;
+	}
+
+	LEAVE();
+}
+
+void
+mm_task_yield(void)
+{
+	ENTER();
+
+	mm_sched_switch(MM_TASK_PENDING);
+
+	LEAVE();
+}
+
+void
+mm_task_block(void)
+{
+	ENTER();
+
+	mm_sched_switch(MM_TASK_BLOCKED);
+
+	LEAVE();
+}
+
+void
+mm_sched_abort(void)
+{
+	ENTER();
+
+	LEAVE();
+}
+
+/* Finish the current task. */
+void
+mm_task_exit(mm_result_t result)
+{
+	ENTER();
+	TRACE("exiting task '%s' with status %lu",
+	      mm_running_task->name, (unsigned long) result);
+
+	// Set the task result.
+	mm_running_task->result = result;
+
+	// TODO: invalidate ports ?
+
+	// Call the cleanup handlers.
+	mm_task_cleanup(mm_running_task);
+
+	// Free the dynamic memory.
+	mm_task_free_chunks(mm_running_task);
+
+	// Give the control to still running tasks.
+	mm_sched_switch(MM_TASK_INVALID);
+
+	// Must never get here after the switch above.
+	ABORT();
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -406,7 +482,7 @@ mm_task_cancel(struct mm_task *task)
 		ASSERT(task == mm_running_task);
 		mm_task_testcancel_asynchronous();
 	} else {
-		mm_sched_run(task);
+		mm_task_run(task);
 	}
 
 	LEAVE();
@@ -441,7 +517,7 @@ mm_task_wait(struct mm_list *queue)
 	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
 
 	// Wait for a wakeup signal.
-	mm_sched_block();
+	mm_task_block();
 
 	// Dequeue on return.
 	mm_task_cleanup_pop(true);
@@ -464,7 +540,7 @@ mm_task_waitfirst(struct mm_list *queue)
 	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
 
 	// Wait for a wakeup signal.
-	mm_sched_block();
+	mm_task_block();
 
 	// Dequeue on return.
 	mm_task_cleanup_pop(true);
@@ -504,7 +580,7 @@ mm_task_signal(struct mm_list *queue)
 	if (!mm_list_empty(queue)) {
 		struct mm_list *link = mm_list_head(queue);
 		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
-		mm_sched_run(task);
+		mm_task_run(task);
 	}
 
 	LEAVE();
@@ -520,7 +596,7 @@ mm_task_broadcast(struct mm_list *queue)
 	while (link != queue) {
 		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
 		link = link->next;
-		mm_sched_run(task);
+		mm_task_run(task);
 	}
 
 	LEAVE();

@@ -22,7 +22,6 @@
 
 #include "common.h"
 #include "list.h"
-#include "sched.h"
 
 /* Maximal task name length (including terminating zero). */
 #define MM_TASK_NAME_SIZE	40
@@ -131,6 +130,9 @@ struct mm_task
 #endif
 };
 
+/* The currently running task. */
+extern __thread struct mm_task *mm_running_task;
+
 void mm_task_init(void);
 void mm_task_term(void);
 
@@ -147,14 +149,23 @@ void mm_task_destroy(struct mm_task *task)
 void mm_task_recycle(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_exit(mm_result_t result)
-	__attribute__((noreturn));
-
 void mm_task_set_name(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
 
 uint32_t mm_task_id(struct mm_task *task)
 	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Task execution.
+ **********************************************************************/
+
+void mm_task_run(struct mm_task *task);
+
+void mm_task_yield(void);
+void mm_task_block(void);
+
+void mm_task_exit(mm_result_t result)
+	__attribute__((noreturn));
 
 /**********************************************************************
  * Task cancellation.
