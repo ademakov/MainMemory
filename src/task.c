@@ -251,24 +251,6 @@ mm_task_destroy(struct mm_task *task)
 	LEAVE();
 }
 
-/* Let the task to be either reused or destroyed. The task may still run
- * at the moment but it should be guaranteed that it is not going to be
- * used after it yields. That is it should not be referenced in any queue. */
-void
-mm_task_recycle(struct mm_task *task)
-{
-	ENTER();
-	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
-	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
-
-	ASSERT(sizeof task->name > sizeof mm_task_dead_name);
-	strcpy(task->name, mm_task_dead_name);
-
-	mm_list_append(&mm_core->dead_list, &task->queue);
-
-	LEAVE();
-}
-
 /* Set or change the task name. */
 void
 mm_task_set_name(struct mm_task *task, const char *name)
@@ -300,17 +282,16 @@ mm_task_id(struct mm_task *task)
 
 /* Switch to the next task in the run queue. */
 static void
-mm_sched_switch(mm_task_state_t state)
+mm_task_switch(mm_task_state_t state)
 {
 	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
 
 	struct mm_task *old_task = mm_running_task;
-	old_task->state = state;
-
 	if (state == MM_TASK_PENDING)
 		mm_runq_put_task(&mm_core->run_queue, old_task);
 	else if (state == MM_TASK_INVALID)
-		mm_task_recycle(old_task);
+		mm_list_append(&mm_core->dead_list, &old_task->queue);
+	old_task->state = state;
 
 	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
 	new_task->state = MM_TASK_RUNNING;
@@ -342,7 +323,7 @@ mm_task_yield(void)
 {
 	ENTER();
 
-	mm_sched_switch(MM_TASK_PENDING);
+	mm_task_switch(MM_TASK_PENDING);
 
 	LEAVE();
 }
@@ -352,15 +333,7 @@ mm_task_block(void)
 {
 	ENTER();
 
-	mm_sched_switch(MM_TASK_BLOCKED);
-
-	LEAVE();
-}
-
-void
-mm_sched_abort(void)
-{
-	ENTER();
+	mm_task_switch(MM_TASK_BLOCKED);
 
 	LEAVE();
 }
@@ -381,11 +354,20 @@ mm_task_exit(mm_result_t result)
 	// Call the cleanup handlers.
 	mm_task_cleanup(mm_running_task);
 
+	// At this point the task must not be in any queue.
+	ASSERT((mm_running_task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
+
 	// Free the dynamic memory.
 	mm_task_free_chunks(mm_running_task);
 
+	// Reset the task name.
+	ASSERT(sizeof mm_running_task->name > sizeof mm_task_dead_name);
+	strcpy(mm_running_task->name, mm_task_dead_name);
+
+	// Add it to the list of dead tasks.
+
 	// Give the control to still running tasks.
-	mm_sched_switch(MM_TASK_INVALID);
+	mm_task_switch(MM_TASK_INVALID);
 
 	// Must never get here after the switch above.
 	ABORT();

@@ -146,9 +146,6 @@ struct mm_task * mm_task_create(const char *name,
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_recycle(struct mm_task *task)
-	__attribute__((nonnull(1)));
-
 void mm_task_set_name(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
 
@@ -159,7 +156,8 @@ uint32_t mm_task_id(struct mm_task *task)
  * Task execution.
  **********************************************************************/
 
-void mm_task_run(struct mm_task *task);
+void mm_task_run(struct mm_task *task)
+	__attribute__((nonnull(1)));
 
 void mm_task_yield(void);
 void mm_task_block(void);
