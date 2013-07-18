@@ -293,6 +293,8 @@ mm_task_switch(mm_task_state_t state)
 		mm_list_append(&mm_core->dead_list, &old_task->queue);
 	old_task->state = state;
 
+	// As long as this function is called there is at least a boot task
+	// in the run queue. So the next task should never be NULL here.
 	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
 	new_task->state = MM_TASK_RUNNING;
 	mm_running_task = new_task;

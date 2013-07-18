@@ -130,8 +130,8 @@ mm_server_open(void)
 		.flags = MM_NET_INBOUND,
 		.prepare = NULL,
 		.cleanup = NULL,
-		.reader_routine = mm_cmd_reader,
-		.writer_routine = NULL,
+		.reader = mm_cmd_reader,
+		.writer = NULL,
 	};
 
 	mm_ucmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");

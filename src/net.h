@@ -54,7 +54,6 @@ typedef enum {
 
 /* Socket flags. */
 #define MM_NET_CLOSED		0x0001
-/*#define MM_NET_NONBLOCK		0x0002*/
 #define MM_NET_READ_READY	0x0010
 #define MM_NET_WRITE_READY	0x0020
 #define MM_NET_READ_ERROR	0x0040
@@ -62,7 +61,7 @@ typedef enum {
 #define MM_NET_READER_SPAWNED	0x0100
 #define MM_NET_WRITER_SPAWNED	0x0200
 #define MM_NET_READER_PENDING	0x0400
-#define MM_NET_WRITER_PENDING	0x0400
+#define MM_NET_WRITER_PENDING	0x0800
 
 /* Socket address. */
 struct mm_net_addr
@@ -137,7 +136,7 @@ struct mm_net_socket
 	intptr_t proto_data;
 
 	/* Socket server. */
-	struct mm_net_server *srv;
+	struct mm_net_server *server;
 
 	/* A link in the server's list of all client sockets. */
 	struct mm_list clients;
@@ -154,8 +153,8 @@ struct mm_net_proto
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
 
-	void (*reader_routine)(struct mm_net_socket *sock);
-	void (*writer_routine)(struct mm_net_socket *sock);
+	void (*reader)(struct mm_net_socket *sock);
+	void (*writer)(struct mm_net_socket *sock);
 };
 
 void mm_net_init(void);

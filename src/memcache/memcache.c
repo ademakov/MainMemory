@@ -2883,8 +2883,8 @@ mm_memcache_init(void)
 		.flags = MM_NET_INBOUND,
 		.prepare = mc_prepare,
 		.cleanup = mc_cleanup,
-		.reader_routine = mc_reader_routine,
-		.writer_routine = mc_writer_routine,
+		.reader = mc_reader_routine,
+		.writer = mc_writer_routine,
 	};
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", "127.0.0.1", 11211);

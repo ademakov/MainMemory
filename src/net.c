@@ -303,7 +303,7 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	sock->proto_data = 0;
 	sock->reader = NULL;
 	sock->writer = NULL;
-	sock->srv = srv;
+	sock->server = srv;
 
 	/* Register with the server. */
 	mm_list_append(&srv->clients, &sock->clients);
@@ -580,7 +580,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_SPAWN_READER, id };
-	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+	mm_port_send_blocking(sock->server->io_port, msg, 2);
 
 leave:
 	LEAVE();
@@ -596,7 +596,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_SPAWN_WRITER, id };
-	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+	mm_port_send_blocking(sock->server->io_port, msg, 2);
 
 leave:
 	LEAVE();
@@ -612,7 +612,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_YIELD_READER, id };
-	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+	mm_port_send_blocking(sock->server->io_port, msg, 2);
 
 leave:
 	LEAVE();
@@ -628,7 +628,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 
 	uint32_t id = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	uint32_t msg[2] = { MM_NET_MSG_YIELD_WRITER, id };
-	mm_port_send_blocking(sock->srv->io_port, msg, 2);
+	mm_port_send_blocking(sock->server->io_port, msg, 2);
 
 leave:
 	LEAVE();
@@ -663,7 +663,7 @@ mm_net_reader(uintptr_t arg)
 	mm_running_task->flags |= MM_TASK_READING;
 
 	// Run the protocol handler routine.
-	(sock->srv->proto->reader_routine)(sock);
+	(sock->server->proto->reader)(sock);
 
 	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
@@ -701,7 +701,7 @@ mm_net_writer(uintptr_t arg)
 	mm_running_task->flags |= MM_TASK_WRITING;
 
 	// Run the protocol handler routine.
-	(sock->srv->proto->writer_routine)(sock);
+	(sock->server->proto->writer)(sock);
 
 	// Yield the socket on return.
 	mm_task_cleanup_pop(true);
