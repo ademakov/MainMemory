@@ -2725,7 +2725,7 @@ mc_prepare(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	sock->proto_data = 0;
+	sock->data = 0;
 
 	LEAVE();
 }
@@ -2735,9 +2735,9 @@ mc_cleanup(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (sock->proto_data) {
-		mc_destroy((struct mc_state *) sock->proto_data);
-		sock->proto_data = 0;
+	if (sock->data) {
+		mc_destroy((struct mc_state *) sock->data);
+		sock->data = 0;
 	}
 
 	LEAVE();
@@ -2749,10 +2749,10 @@ mc_reader_routine(struct mm_net_socket *sock)
 	ENTER();
 
 	// Get the protocol data.
-	struct mc_state *state = (struct mc_state *) sock->proto_data;
+	struct mc_state *state = (struct mc_state *) sock->data;
 	if (state == NULL) {
 		state = mc_create(sock);
-		sock->proto_data = (intptr_t) state;
+		sock->data = (intptr_t) state;
 	}
 
 	// Try to get some input w/o blocking.
@@ -2828,7 +2828,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 	// TODO: release command for sure
 
 	/* Get the protocol data if any. */
-	struct mc_state *state = (struct mc_state *) sock->proto_data;
+	struct mc_state *state = (struct mc_state *) sock->data;
 	if (state == NULL)
 		goto leave;
 

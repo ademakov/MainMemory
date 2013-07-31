@@ -60,7 +60,6 @@ static struct mm_port *mm_event_port;
 struct mm_event_hd
 {
 	mm_event_handler_t handler;
-	uintptr_t handler_data;
 };
 
 // Event handler table.
@@ -72,7 +71,6 @@ static int mm_event_hd_table_size;
 // A dummy event handler.
 static void
 mm_event_dummy(mm_event_t event __attribute__((unused)),
-	       uintptr_t handler_data __attribute__((unused)),
 	       uint32_t data __attribute__((unused)))
 {
 	DEBUG("hmm, dummy event handler invoked.");
@@ -87,7 +85,7 @@ mm_event_init_handlers(void)
 
 	// Register dummy handler with zero id.
 	ASSERT(mm_event_hd_table_size == 0);
-	(void) mm_event_register_handler(mm_event_dummy, 0);
+	(void) mm_event_register_handler(mm_event_dummy);
 	ASSERT(mm_event_hd_table_size == 1);
 
 	LEAVE();
@@ -95,7 +93,7 @@ mm_event_init_handlers(void)
 
 /* Register an event handler in the table. */
 mm_event_hid_t
-mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data)
+mm_event_register_handler(mm_event_handler_t handler)
 {
 	ENTER();
 
@@ -104,7 +102,6 @@ mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data)
 
 	mm_event_hid_t id = mm_event_hd_table_size++;
 	mm_event_hd_table[id].handler = handler;
-	mm_event_hd_table[id].handler_data = handler_data;
 
 	DEBUG("registered event handler %d", id);
 
@@ -190,34 +187,46 @@ mm_event_verify_fd(int fd)
 	}
 }
 
-void
+static inline void
 mm_event_input(struct mm_event_fd *fd)
 {
+	ENTER();
+
 	mm_event_hid_t id = fd->input_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(MM_EVENT_INPUT, hd->handler_data, fd->data);
+	hd->handler(MM_EVENT_INPUT, fd->data);
+
+	LEAVE();
 }
 
-void
+static inline void
 mm_event_output(struct mm_event_fd *fd)
 {
+	ENTER();
+
 	mm_event_hid_t id = fd->output_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(MM_EVENT_OUTPUT, hd->handler_data, fd->data);
+	hd->handler(MM_EVENT_OUTPUT, fd->data);
+
+	LEAVE();
 }
 
-void
+static inline void
 mm_event_control(struct mm_event_fd *fd, mm_event_t event)
 {
+	ENTER();
+
 	mm_event_hid_t id = fd->control_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(event, hd->handler_data, fd->data);
+	hd->handler(event, fd->data);
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -230,7 +239,6 @@ static mm_event_hid_t mm_event_selfpipe_handler;
 
 static void
 mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)),
-			uintptr_t handler_data __attribute__((unused)),
 			uint32_t data __attribute__((unused)))
 {
 	mm_selfpipe_set_ready(&mm_event_selfpipe);
@@ -245,7 +253,7 @@ mm_event_init_selfpipe(void)
 	mm_selfpipe_prepare(&mm_event_selfpipe);
 
 	// Register the self-pipe event handler.
-	mm_event_selfpipe_handler = mm_event_register_handler(mm_event_selfpipe_ready, 0);
+	mm_event_selfpipe_handler = mm_event_register_handler(mm_event_selfpipe_ready);
 
 	LEAVE();
 }

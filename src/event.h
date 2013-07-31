@@ -46,7 +46,7 @@ typedef enum {
 typedef uint8_t mm_event_hid_t;
 
 /* Event handler routine. */
-typedef void (*mm_event_handler_t)(mm_event_t event, uintptr_t handler_data, uint32_t data);
+typedef void (*mm_event_handler_t)(mm_event_t event, uint32_t data);
 
 /**********************************************************************
  * Common event routines.
@@ -57,7 +57,7 @@ void mm_event_term(void);
 
 void mm_event_notify(void);
 
-mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler, uintptr_t handler_data);
+mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 
 /**********************************************************************
  * I/O Events Support.

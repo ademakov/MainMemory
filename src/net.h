@@ -34,20 +34,6 @@
 struct mm_port;
 struct mm_task;
 
-/* Net task communication codes. */
-typedef enum {
-	MM_NET_MSG_REGISTER,
-	MM_NET_MSG_UNREGISTER,
-	MM_NET_MSG_READ_READY,
-	MM_NET_MSG_WRITE_READY,
-	MM_NET_MSG_READ_ERROR,
-	MM_NET_MSG_WRITE_ERROR,
-	MM_NET_MSG_SPAWN_READER,
-	MM_NET_MSG_SPAWN_WRITER,
-	MM_NET_MSG_YIELD_READER,
-	MM_NET_MSG_YIELD_WRITER,
-} mm_net_msg_t;
-
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x0001
 #define MM_NET_OUTBOUND		0x0002
@@ -128,12 +114,15 @@ struct mm_net_socket
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;
 
+	/* Protocol data. */
+	intptr_t data;
+
+	/* Pinned core. */
+	struct mm_core *core;
+
 	/* Tasks pending on the socket I/O. */
 	struct mm_task *reader;
 	struct mm_task *writer;
-
-	/* Protocol data. */
-	intptr_t proto_data;
 
 	/* Socket server. */
 	struct mm_net_server *server;
@@ -155,6 +144,7 @@ struct mm_net_proto
 
 	void (*reader)(struct mm_net_socket *sock);
 	void (*writer)(struct mm_net_socket *sock);
+	void (*closer)(struct mm_net_socket *sock);
 };
 
 void mm_net_init(void);
