@@ -532,16 +532,6 @@ mc_buffer_create(size_t size)
 	return buffer;
 }
 
-static void
-mc_buffer_destroy(struct mm_chunk *buffer)
-{
-	ENTER();
-
-	mm_chunk_destroy(buffer);
-
-	LEAVE();
-}
-
 static inline bool
 mc_buffer_contains(struct mm_chunk *buffer, const char *ptr)
 {
@@ -845,7 +835,9 @@ struct mc_state
 {
 	// Current parse position.
 	char *start_ptr;
-//	struct mc_buffer *start_buf;
+
+	// Last released position.
+	char *clear_ptr;
 
 	// Input buffer queue.
 	struct mm_chunk *read_head;
@@ -871,7 +863,7 @@ mc_create(struct mm_net_socket *sock)
 	struct mc_state *state = mm_alloc(sizeof(struct mc_state));
 
 	state->start_ptr = NULL;
-//	state->start_buf = NULL;
+	state->clear_ptr = NULL;
 
 	state->read_head = NULL;
 	state->read_tail = NULL;
@@ -894,7 +886,7 @@ mc_destroy(struct mc_state *state)
 	while (state->read_head != NULL) {
 		struct mm_chunk *buffer = state->read_head;
 		state->read_head = buffer->next;
-		mc_buffer_destroy(buffer);
+		mm_chunk_destroy(buffer);
 	}
 
 	while (state->command_head != NULL) {
@@ -942,37 +934,42 @@ mc_queue_command(struct mc_state *state, struct mc_command *command)
 }
 
 static void
-mc_release_buffers(struct mc_state *state, const char *ptr)
+mc_release_buffers(struct mc_state *state, char *ptr)
 {
 	ENTER();
 
-	while (state->read_head != NULL) {
-		struct mm_chunk *buffer = state->read_head;
+	struct mm_chunk *buffer = state->read_head;
+	if (buffer == NULL)
+		goto leave;
+
+	for (;;) {
 		if (mc_buffer_contains(buffer, ptr)) {
 			/* The buffer is (might be) still in use. */
+			state->clear_ptr = ptr;
 			break;
 		}
 
-		ASSERT(!mc_buffer_contains(buffer, state->start_ptr));
 		state->read_head = buffer->next;
-
-		if (mc_buffer_finished(buffer, ptr)) {
-			/* The buffer has been used up to its end. */
-			mc_buffer_destroy(buffer);
-
-			if (state->read_head == NULL) {
-				state->read_tail = NULL;
-				state->start_ptr = NULL;
-			} else if (state->start_ptr == ptr) {
-				state->start_ptr = state->read_head->data;
-			}
+		if (state->read_head == NULL) {
+			mm_chunk_destroy(buffer);
+			state->read_tail = NULL;
+			state->start_ptr = NULL;
+			state->clear_ptr = NULL;
 			break;
 		}
 
-		/* The buffer use is long past. */
-		mc_buffer_destroy(buffer);
+		if (mc_buffer_finished(buffer, ptr) && state->start_ptr == ptr) {
+			mm_chunk_destroy(buffer);
+			state->start_ptr = NULL;
+			state->clear_ptr = NULL;
+			break;
+		}
+
+		mm_chunk_destroy(buffer);
+		buffer = state->read_head;
 	}
 
+leave:
 	LEAVE();
 }
 
@@ -1544,6 +1541,11 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 	mc_queue_command(state, command);
 	mm_net_spawn_writer(state->sock);
+
+	// If the command completion requires execution
+	// of other tasks give them a chance to run.
+	mm_task_yield();
+	mm_task_yield();
 
 	LEAVE();
 	return 0;
@@ -2744,6 +2746,19 @@ mc_cleanup(struct mm_net_socket *sock)
 }
 
 static void
+mc_clean_read_buffer(struct mc_state *state)
+{
+	struct mm_chunk *buffer = state->read_head;
+	if (buffer != NULL
+	    && state->start_ptr == state->clear_ptr
+	    && state->start_ptr == buffer->data + buffer->used) {
+		state->start_ptr = buffer->data;
+		state->clear_ptr = NULL;
+		buffer->used = 0;
+	}
+}
+
+static void
 mc_reader_routine(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -2787,6 +2802,9 @@ mc_reader_routine(struct mm_net_socket *sock)
 			mc_end_input(&parser);
 			// Process the parsed command.
 			mc_process_command(state, parser.command);
+
+			mc_clean_read_buffer(state);
+
 			// TODO: check if there is more input.
 			parser.command = mc_command_create();
 			parser.error = false;
@@ -2802,7 +2820,6 @@ mc_reader_routine(struct mm_net_socket *sock)
 		// Get out if there is no more input.
 		if (n <= 0) {
  			if (hangup) {
-				DEBUG("n: %d, errno: %d %s", (int) n, errno, strerror(errno));
 				parser.command->result_type = MC_RESULT_QUIT;
 				parser.command->end_ptr = parser.start_ptr;
 				mc_process_command(state, parser.command);
