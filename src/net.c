@@ -408,10 +408,12 @@ retry:
 
 	// Register the socket with the event loop.
 	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	bool input_oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
+	bool output_oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 	mm_event_register_fd(sock->fd,
 			     sock_index,
-			     srv->input_handler,
-			     srv->output_handler,
+			     srv->input_handler, input_oneshot,
+			     srv->output_handler, output_oneshot,
 			     srv->control_handler);
 
 leave:
@@ -437,8 +439,7 @@ mm_net_acceptor(uintptr_t arg)
 }
 
 static void
-mm_net_accept_handler(mm_event_t event __attribute__((unused)),
-		      uint32_t data)
+mm_net_accept_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 {
 	ENTER();
 
@@ -512,12 +513,26 @@ static void
 mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
 	sock->flags &= ~MM_NET_READ_READY;
+
+#if MM_ONESHOT_HANDLERS
+	bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
+	if (oneshot) {
+		mm_event_trigger_input(sock->fd, sock->server->input_handler);
+	}
+#endif
 }
 
 static void
 mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
 	sock->flags &= ~MM_NET_WRITE_READY;
+
+#if MM_ONESHOT_HANDLERS
+	bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
+	if (oneshot) {
+		mm_event_trigger_output(sock->fd, sock->server->output_handler);
+	}
+#endif
 }
 
 static mm_result_t
@@ -731,8 +746,7 @@ leave:
 }
 
 static void
-mm_net_input_handler(mm_event_t event __attribute__((unused)),
-		     uint32_t data)
+mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 {
 	ENTER();
 
@@ -766,8 +780,7 @@ leave:
 }
 
 static void
-mm_net_output_handler(mm_event_t event __attribute__((unused)),
-		      uint32_t data)
+mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 {
 	ENTER();
 
@@ -1045,7 +1058,7 @@ mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
 	return srv;
 }
 
- static void
+static void
 mm_net_start_server_hook(void *arg)
 {
 	ENTER();
@@ -1069,7 +1082,7 @@ mm_net_start_server_hook(void *arg)
 	// Register the server socket with the event loop.
 	mm_event_register_fd(srv->fd,
 			     (uint32_t) mm_net_server_index(srv),
-			     mm_net_accept_hid, 0, 0);
+			     mm_net_accept_hid, false, 0, false, 0);
 
 	LEAVE();
 }

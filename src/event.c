@@ -127,8 +127,14 @@ struct mm_event_fd
 	mm_event_hid_t output_handler;
 	mm_event_hid_t control_handler;
 
-	// change flag
+	// flags
+#if MM_ONESHOT_HANDLERS
+	unsigned changed : 1;
+	unsigned oneshot_input : 1;
+	unsigned oneshot_output : 1;
+#else
 	uint8_t changed;
+#endif
 };
 
 // File descriptor table.
@@ -145,9 +151,9 @@ mm_event_init_fd_table(void)
 
 	// Determine the table size.
 	int max_fd = sysconf(_SC_OPEN_MAX);
-	if (max_fd > mm_event_fd_table_size) {
+	if (max_fd > mm_event_fd_table_size)
 		mm_event_fd_table_size = max_fd;
-	}
+
 	if (mm_event_fd_table_size > MM_EVENT_FD_MAX) {
 		mm_brief("truncating too high fd limit: %d", mm_event_fd_table_size);
 		mm_event_fd_table_size = MM_EVENT_FD_MAX;
@@ -195,6 +201,11 @@ mm_event_input(struct mm_event_fd *fd)
 	mm_event_hid_t id = fd->input_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
+#if MM_ONESHOT_HANDLERS
+	if (fd->oneshot_input)
+		fd->input_handler = 0;
+#endif
+
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
 	hd->handler(MM_EVENT_INPUT, fd->data);
 
@@ -208,6 +219,11 @@ mm_event_output(struct mm_event_fd *fd)
 
 	mm_event_hid_t id = fd->output_handler;
 	ASSERT(id < mm_event_hd_table_size);
+
+#if MM_ONESHOT_HANDLERS
+	if (fd->oneshot_output)
+		fd->output_handler = 0;
+#endif
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
 	hd->handler(MM_EVENT_OUTPUT, fd->data);
@@ -264,7 +280,9 @@ mm_event_start_selfpipe(void)
 	ENTER();
 
 	// Register the self-pipe read end in the event loop.
-	mm_event_register_fd(mm_event_selfpipe.read_fd, 0, mm_event_selfpipe_handler, 0, 0);
+	mm_event_register_fd(mm_event_selfpipe.read_fd, 0,
+			     mm_event_selfpipe_handler, false,
+			     0, false, 0);
 
 	LEAVE();
 }
@@ -337,10 +355,12 @@ mm_event_dispatch(void)
 	uint32_t msg[3];
 	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
 		int fd = msg[0];
-		uint32_t data = msg[1];
-		mm_event_hid_t input_handler = (msg[2] >> 16) & 0xff;
-		mm_event_hid_t output_handler = (msg[2] >> 8) & 0xff;
-		mm_event_hid_t control_handler = msg[2] & 0xff;
+		uint32_t code = msg[1];
+		uint32_t data = msg[2];
+
+		mm_event_hid_t input_handler = (code >> 24) & 0xff;
+		mm_event_hid_t output_handler = (code >> 16) & 0xff;
+		mm_event_hid_t control_handler = (code >> 8) & 0xff;
 
 		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
 		uint32_t events = 0, new_events = 0;
@@ -428,9 +448,9 @@ mm_event_dispatch(void)
 	// Find the event wait timeout.
 	mm_timeval_t timeout; 
 	if (mm_selfpipe_listen(&mm_event_selfpipe) || sent_msgs) {
-		// If event system changes have been requested it is needed to
-		// notify the interested parties on their completion so do not
-		// wait for more events.
+		// If some event system changes have been requested then it is
+		// needed to notify as soon as possible the interested parties
+		// on their completion so do not wait for any other events.
 		timeout = 0;
 	} else {
 		timeout = mm_timer_next();
@@ -489,35 +509,38 @@ leave:
 #define MM_EVENT_NCHANGES_MAX	512
 
 // File descriptor change record.
-struct mm_event_fd_change_rec
+struct mm_kevent_change_rec
 {
 	int fd;
-	uint32_t data;
-	mm_event_hid_t input_handler;
-	mm_event_hid_t output_handler;
-	mm_event_hid_t control_handler;
+	mm_event_t event;
 };
 
 // The kqueue descriptor.
-static int mm_event_kq;
+static int mm_kevent_kq;
+
+// The kevent list size.
+static int mm_nkevents = 0;
+
+// The change list size.
+static int mm_kevent_nchanges = 0;
 
 // The kevent list.
 static struct kevent mm_kevents[MM_EVENT_NKEVENTS_MAX];
 
 // File descriptor change list.
-static struct mm_event_fd_change_rec mm_event_fd_changes[MM_EVENT_NCHANGES_MAX];
+static struct mm_kevent_change_rec mm_kevent_changes[MM_EVENT_NCHANGES_MAX];
 
 // A delayed file descriptor change record.
-static struct mm_event_fd_change_rec mm_event_fd_delayed;
-static bool mm_event_fd_delayed_is_set = false;
+static uint32_t mm_kevent_delayed_msg[3];
+static bool mm_kevent_has_delayed_msg = false;
 
 static void
 mm_event_init_sys(void)
 {
 	ENTER();
 
-	mm_event_kq = kqueue();
-	if (mm_event_kq == -1) {
+	mm_kevent_kq = kqueue();
+	if (mm_kevent_kq == -1) {
 		mm_fatal(errno, "Failed to create kqueue");
 	}
 
@@ -529,11 +552,132 @@ mm_event_free_sys(void)
 {
 	ENTER();
 
-	if (mm_event_kq >= 0) {
-		close(mm_event_kq);
+	if (mm_kevent_kq >= 0) {
+		close(mm_kevent_kq);
 	}
 
 	LEAVE();
+}
+
+static void
+mm_event_process_msg(uint32_t *msg)
+{
+	// Parse the message.
+	int fd = msg[0];
+	uint32_t code = msg[1];
+
+	// Get the requested fd.
+	struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
+	ASSERT(!ev_fd->changed);
+
+	if (code == 0) {
+		// Handle an UNREG message.
+
+		ASSERT(msg[2] == 0);
+
+		if (ev_fd->input_handler) {
+			ev_fd->input_handler = 0;
+
+			DEBUG("unregister fd %d for read events", fd);
+			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
+			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			EV_SET(kp, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+		}
+
+		if (ev_fd->output_handler) {
+			ev_fd->output_handler = 0;
+
+			DEBUG("unregister fd %d for write events", fd);
+			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
+			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			EV_SET(kp, fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+		}
+
+		if (ev_fd->control_handler) {
+			ev_fd->changed = 1;
+
+			mm_kevent_changes[mm_kevent_nchanges].fd = fd;
+			mm_kevent_changes[mm_kevent_nchanges].event = MM_EVENT_UNREGISTER;
+			++mm_kevent_nchanges;
+		}
+
+	} else {
+		// Handle a REG or TRIGGER message.
+
+		mm_event_hid_t input_handler = (code >> 24) & 0xff;
+		mm_event_hid_t output_handler = (code >> 16) & 0xff;
+		mm_event_hid_t control_handler = (code >> 8) & 0xff;
+		ASSERT(input_handler < mm_event_hd_table_size);
+		ASSERT(output_handler < mm_event_hd_table_size);
+		ASSERT(control_handler < mm_event_hd_table_size);
+		ASSERT(input_handler || output_handler);
+
+#if MM_ONESHOT_HANDLERS
+		uint8_t flags = code & 0xff;
+		bool oneshot_input = (flags & MM_EVENT_MSG_ONESHOT_INPUT) != 0;
+		bool oneshot_output = (flags & MM_EVENT_MSG_ONESHOT_OUTPUT) != 0;
+		// Set the data field only for a REG message, not for a TRIGGER.
+		if (mm_event_verify_handlers(input_handler, oneshot_input,
+					     output_handler, oneshot_output,
+					     control_handler))
+			ev_fd->data = msg[2];
+#else
+		ev_fd->data = msg[2];
+#endif
+
+		if (input_handler) {
+			ev_fd->input_handler = input_handler;
+
+			int ev_flags;
+#if MM_ONESHOT_HANDLERS
+			if (oneshot_input) {
+				ev_fd->oneshot_input = 1;
+				ev_flags = EV_ADD | EV_ONESHOT;
+			} else {
+				ev_fd->oneshot_input = 0;
+				ev_flags = EV_ADD | EV_CLEAR;
+			}
+#else
+			ev_flags = EV_ADD | EV_CLEAR;
+#endif
+
+			DEBUG("register fd %d for read events", fd);
+			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
+			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			EV_SET(kp, fd, EVFILT_READ, ev_flags, 0, 0, 0);
+		}
+
+		if (output_handler) {
+			ev_fd->output_handler = output_handler;
+
+			int ev_flags;
+#if MM_ONESHOT_HANDLERS
+			if (oneshot_output) {
+				ev_fd->oneshot_output = 1;
+				ev_flags = EV_ADD | EV_ONESHOT;
+			} else {
+				ev_fd->oneshot_output = 0;
+				ev_flags = EV_ADD | EV_CLEAR;
+			}
+#else
+			ev_flags = EV_ADD | EV_CLEAR;
+#endif
+
+			DEBUG("register fd %d for write events", fd);
+			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
+			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			EV_SET(kp, fd, EVFILT_WRITE, ev_flags, 0, 0, 0);
+		}
+
+		if (control_handler) {
+			ev_fd->changed = 1;
+			ev_fd->control_handler = control_handler;
+
+			mm_kevent_changes[mm_kevent_nchanges].fd = fd;
+			mm_kevent_changes[mm_kevent_nchanges].event = MM_EVENT_REGISTER;
+			++mm_kevent_nchanges;
+		}
+	}
 }
 
 static void __attribute__((noinline))
@@ -541,86 +685,36 @@ mm_event_dispatch(void)
 {
 	ENTER();
 
-	// The change list size.
-	int nchanges = 0;
+	mm_kevent_nchanges = 0;
+	mm_nkevents = 0;
 
-	// The kevent list size.
-	int nkevents = 0;
-
-	// Pick the delayed change if any.
-	if (mm_event_fd_delayed_is_set) {
-		mm_event_fd_delayed_is_set = false;
-		mm_event_fd_changes[nchanges++] = mm_event_fd_delayed;
+	// Pick a delayed change if any.
+	if (unlikely(mm_kevent_has_delayed_msg)) {
+		mm_kevent_has_delayed_msg = false;
+		mm_event_process_msg(mm_kevent_delayed_msg);
 	}
 
 	// Fill the change list.
-	uint32_t msg[3];
-	while (likely(nchanges < MM_EVENT_NCHANGES_MAX) 
-	       && mm_port_receive(mm_event_port, msg, 3) == 0) {
+	while (likely(mm_kevent_nchanges < MM_EVENT_NCHANGES_MAX)) {
 
+		// Get the message.
+		uint32_t msg[3];
+		if (mm_port_receive(mm_event_port, msg, 3) < 0)
+			break;
+
+		// To simplify logic handle only one event related to a
+		// particular fd per cycle.
 		int fd = msg[0];
-		uint32_t data = msg[1];
-		mm_event_hid_t input_handler = (msg[2] >> 16) & 0xff;
-		mm_event_hid_t output_handler = (msg[2] >> 8) & 0xff;
-		mm_event_hid_t control_handler = msg[2] & 0xff;
-
-		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
-		if (unlikely(mm_fd->changed)) {
-			mm_event_fd_delayed.fd = fd;
-			mm_event_fd_delayed.data = data;
-			mm_event_fd_delayed.input_handler = input_handler;
-			mm_event_fd_delayed.output_handler = output_handler;
-			mm_event_fd_delayed.control_handler = control_handler;
-			mm_event_fd_delayed_is_set = true;
+		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
+		if (unlikely(ev_fd->changed)) {
+			mm_kevent_delayed_msg[0] = msg[0];
+			mm_kevent_delayed_msg[1] = msg[1];
+			mm_kevent_delayed_msg[2] = msg[2];
+			mm_kevent_has_delayed_msg = true;
 			break;
 		}
 
-		mm_fd->changed = 1;
-
-		mm_event_fd_changes[nchanges].fd = fd;
-		mm_event_fd_changes[nchanges].data = data;
-		mm_event_fd_changes[nchanges].input_handler = input_handler;
-		mm_event_fd_changes[nchanges].output_handler = output_handler;
-		mm_event_fd_changes[nchanges].control_handler = control_handler;
-		++nchanges;
-
-		int a, b;
-
-		// Change a read event registration if needed.
-		a = (mm_fd->input_handler != 0);
-		b = (input_handler != 0);
-		if (likely(a != b)) {
-			int flags;
-			if (b) {
-				DEBUG("register fd %d for read events", fd);
-				flags = EV_ADD | EV_CLEAR;
-			} else {
-				DEBUG("unregister fd %d for read events", fd);
-				flags = EV_DELETE;
-			}
-
-			ASSERT(nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[nkevents++];
-			EV_SET(kp, fd, EVFILT_READ, flags, 0, 0, 0);
-		}
-
-		// Change a write event registration if needed.
-		a = (mm_fd->output_handler != 0);
-		b = (output_handler != 0);
-		if (likely(a != b)) {
-			int flags;
-			if (b) {
-				DEBUG("register fd %d for write events", fd);
-				flags = EV_ADD | EV_CLEAR;
-			} else {
-				DEBUG("unregister fd %d for write events", fd);
-				flags = EV_DELETE;
-			}
-
-			ASSERT(nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[nkevents++];
-			EV_SET(kp, fd, EVFILT_WRITE, flags, 0, 0, 0);
-		}
+		mm_event_process_msg(msg);
 	}
 
 	// Flush the log before possible sleep.
@@ -628,50 +722,51 @@ mm_event_dispatch(void)
 
 	// Find the event wait timeout.
 	struct timespec ts;
-	if (mm_selfpipe_listen(&mm_event_selfpipe) || nkevents) {
-		// If event system changes have been requested it is needed to
-		// notify the interested parties on their completion so do not
-		// wait for more events.
+	if (mm_selfpipe_listen(&mm_event_selfpipe) || mm_nkevents) {
+		// If some event system changes have been requested then it is
+		// needed to notify as soon as possible the interested parties
+		// on their completion so do not wait for any other events.
 		DEBUG("timeout: 0");
 		ts.tv_sec = 0;
 		ts.tv_nsec = 0;
 	} else {
 		mm_timeval_t timeout = mm_timer_next();
-		if (timeout > MM_EVENT_TIMEOUT) {
+		if (timeout > MM_EVENT_TIMEOUT)
 			timeout = MM_EVENT_TIMEOUT;
-		}
+
 		DEBUG("timeout: %lld", timeout);
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
 	}
 
 	// Poll the system for events.
-	int n = kevent(mm_event_kq,
-		       mm_kevents, nkevents,
+	int n = kevent(mm_kevent_kq,
+		       mm_kevents, mm_nkevents,
 		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
 		       &ts);
 
 	mm_selfpipe_divert(&mm_event_selfpipe);
 
-	DEBUG("kevent changed: %d, received: %d", nkevents, n);
+	DEBUG("kevent changed: %d, received: %d", mm_nkevents, n);
 
-	// Send REG/UNREG messages.
-	for (int i = 0; i < nchanges; i++) {
-		int fd = mm_event_fd_changes[i].fd;
-		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
-		mm_fd->changed = 0;
+	// Issue REG/UNREG events.
+	for (int i = 0; i < mm_kevent_nchanges; i++) {
+		int fd = mm_kevent_changes[i].fd;
 
-		// Invoke the old handler if any.
-		mm_event_control(mm_fd, MM_EVENT_UNREGISTER);
+		// Reset the change flag.
+		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
+		ev_fd->changed = 0;
 
-		// Store the requested I/O handler.
-		mm_fd->data = mm_event_fd_changes[i].data;
-		mm_fd->input_handler = mm_event_fd_changes[i].input_handler;
-		mm_fd->output_handler = mm_event_fd_changes[i].output_handler;
-		mm_fd->control_handler = mm_event_fd_changes[i].control_handler;
-
-		// Invoke the new handler if any.
-		mm_event_control(mm_fd, MM_EVENT_REGISTER);
+		// Invoke the control handler with pertinent event.
+		ASSERT(ev_fd->control_handler);
+		if (mm_kevent_changes[i].event == MM_EVENT_REGISTER) {
+			mm_event_control(ev_fd, MM_EVENT_REGISTER);
+		} else {
+			mm_event_control(ev_fd, MM_EVENT_UNREGISTER);
+			// Perform the final cleanup.
+			ev_fd->control_handler = 0;
+			ev_fd->data = 0;
+		}
 	}
 
 	if (unlikely(n < 0)) {
@@ -752,6 +847,21 @@ mm_event_start(void)
 }
 
 void
+mm_event_send(int fd, uint32_t code, uint32_t data)
+{
+	TRACE("fd: %d", fd);
+	ASSERT(fd >= 0);
+	ASSERT(fd < mm_event_fd_table_size);
+
+	uint32_t msg[3];
+	msg[0] = (uint32_t) fd;
+	msg[1] = code;
+	msg[2] = data;
+
+	mm_port_send_blocking(mm_event_port, msg, 3);
+}
+
+void
 mm_event_init(void)
 {
 	ENTER();
@@ -784,51 +894,6 @@ mm_event_term(void)
 
 	// Release system specific resources.
 	mm_event_free_sys();
-
-	LEAVE();
-}
-
-void
-mm_event_register_fd(int fd,
-		     uint32_t data,
-		     mm_event_hid_t input_handler,
-		     mm_event_hid_t output_handler,
-		     mm_event_hid_t control_handler)
-{
-	ENTER();
-	TRACE("fd: %d", fd);
-
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_event_fd_table_size);
-	ASSERT(input_handler < mm_event_hd_table_size);
-	ASSERT(output_handler < mm_event_hd_table_size);
-	ASSERT(control_handler < mm_event_hd_table_size);
-
-	uint32_t msg[3];
-	msg[0] = (uint32_t) fd;
-	msg[1] = data;
-	msg[2] = (input_handler << 16) | (output_handler << 8) | control_handler;
-
-	mm_port_send_blocking(mm_event_port, msg, 3);
-
-	LEAVE();
-}
-
-void
-mm_event_unregister_fd(int fd)
-{
-	ENTER();
-	TRACE("fd: %d", fd);
-
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_event_fd_table_size);
-
-	uint32_t msg[3];
-	msg[0] = (uint32_t) fd;
-	msg[1] = 0;
-	msg[2] = 0;
-
-	mm_port_send_blocking(mm_event_port, msg, 3);
 
 	LEAVE();
 }

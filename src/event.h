@@ -21,9 +21,13 @@
 #define EVENT_H
 
 #include "common.h"
+#include "trace.h"
 
-/* Forward declaration. */
-struct mm_port;
+#if defined(HAVE_SYS_EPOLL_H)
+# undef MM_ONESHOT_HANDLERS
+#else
+# define MM_ONESHOT_HANDLERS 1
+#endif
 
 /* Event types. */
 typedef enum {
@@ -34,13 +38,6 @@ typedef enum {
 	MM_EVENT_INPUT_ERROR,
 	MM_EVENT_OUTPUT_ERROR,
 } mm_event_t;
-
-/* Return values of mm_event_verify_fd() */
-typedef enum {
-	MM_EVENT_FD_VALID = 0,
-	MM_EVENT_FD_INVALID = -1,
-	MM_EVENT_FD_TOO_BIG = -2,
-} mm_event_verify_t;
 
 /* Event handler identifier. */
 typedef uint8_t mm_event_hid_t;
@@ -63,15 +60,99 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
  * I/O Events Support.
  **********************************************************************/
 
+/* Return values of mm_event_verify_fd() */
+typedef enum {
+	MM_EVENT_FD_VALID = 0,
+	MM_EVENT_FD_INVALID = -1,
+	MM_EVENT_FD_TOO_BIG = -2,
+} mm_event_verify_t;
+
+/* Event message flags. */
+#define MM_EVENT_MSG_ONESHOT_INPUT	1
+#define MM_EVENT_MSG_ONESHOT_OUTPUT	2
+
 mm_event_verify_t mm_event_verify_fd(int fd);
 
-void mm_event_register_fd(int fd,
-			  uint32_t data,
-			  mm_event_hid_t input_handler,
-			  mm_event_hid_t output_handler,
-			  mm_event_hid_t control_handler);
+void mm_event_send(int fd, uint32_t code, uint32_t data);
 
-void mm_event_unregister_fd(int fd);
+/* Check to see if there is at least one regular handler provided. */
+static inline bool
+mm_event_verify_handlers(mm_event_hid_t input_handler, bool input_oneshot,
+			 mm_event_hid_t output_handler, bool output_oneshot,
+			 mm_event_hid_t control_handler)
+{
+	if (input_handler && !input_oneshot)
+		return true;
+	if (output_handler && !output_oneshot)
+		return true;
+	if (control_handler)
+		return true;
+	return false;
+}
+
+static inline void
+mm_event_register_fd(int fd, uint32_t data,
+		     mm_event_hid_t input_handler, bool input_oneshot,
+		     mm_event_hid_t output_handler, bool output_oneshot,
+		     mm_event_hid_t control_handler)
+{
+	ENTER();
+
+	ASSERT(mm_event_verify_handlers(input_handler, input_oneshot,
+				        output_handler, output_oneshot,
+					control_handler));
+
+	uint32_t code = ((input_handler << 24)
+			 | (output_handler << 16)
+			 | (control_handler << 8));
+#if MM_ONESHOT_HANDLERS
+	if (input_handler && input_oneshot)
+		code |= MM_EVENT_MSG_ONESHOT_INPUT;
+	if (output_handler && output_oneshot)
+		code |= MM_EVENT_MSG_ONESHOT_OUTPUT;
+#else
+	(void) input_oneshot;
+	(void) output_oneshot;
+#endif
+	mm_event_send(fd, code, data);
+
+	LEAVE();
+}
+
+static inline void
+mm_event_unregister_fd(int fd)
+{
+	ENTER();
+
+	mm_event_send(fd, 0, 0);
+
+	LEAVE();
+}
+
+#if MM_ONESHOT_HANDLERS
+static inline void
+mm_event_trigger_input(int fd, mm_event_hid_t input_handler)
+{
+	ENTER();
+
+	uint32_t code = (input_handler << 24) | MM_EVENT_MSG_ONESHOT_INPUT;
+	mm_event_send(fd, code, 0);
+
+	LEAVE();
+}
+#endif
+
+#if MM_ONESHOT_HANDLERS
+static inline void
+mm_event_trigger_output(int fd, mm_event_hid_t output_handler)
+{
+	ENTER();
+
+	uint32_t code = (output_handler << 16) | MM_EVENT_MSG_ONESHOT_OUTPUT;
+	mm_event_send(fd, code, 0);
+
+	LEAVE();
+}
+#endif
 
 #endif /* EVENT_H */
-
