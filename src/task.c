@@ -211,7 +211,7 @@ mm_task_create(const char *name, mm_routine_t start, uintptr_t start_arg)
 		      task->stack_base, task->stack_size);
 
 	// Set the task name.
-	mm_task_set_name(task, name);
+	mm_task_setname(task, name);
 
 	// Initialize the task info.
 	mm_task_set_attr(task, 0, MM_PRIO_DEFAULT);
