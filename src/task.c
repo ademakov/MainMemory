@@ -253,7 +253,7 @@ mm_task_destroy(struct mm_task *task)
 
 /* Set or change the task name. */
 void
-mm_task_set_name(struct mm_task *task, const char *name)
+mm_task_setname(struct mm_task *task, const char *name)
 {
 	ENTER();
 
@@ -271,9 +271,15 @@ mm_task_set_name(struct mm_task *task, const char *name)
 }
 
 uint32_t
-mm_task_id(struct mm_task *task)
+mm_task_getid(struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
+}
+
+struct mm_task *
+mm_task_getptr(uint32_t id)
+{
+	return mm_pool_idx2ptr(&mm_task_pool, id);
 }
 
 /**********************************************************************

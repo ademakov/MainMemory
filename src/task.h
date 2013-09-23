@@ -146,11 +146,13 @@ struct mm_task * mm_task_create(const char *name,
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_task_set_name(struct mm_task *task, const char *name)
+void mm_task_setname(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
 
-uint32_t mm_task_id(struct mm_task *task)
+uint32_t mm_task_getid(struct mm_task *task)
 	__attribute__((nonnull(1)));
+
+struct mm_task * mm_task_getptr(uint32_t id);
 
 /**********************************************************************
  * Task execution.
