@@ -134,11 +134,13 @@ mm_server_open(void)
 		.writer = NULL,
 	};
 
-	mm_ucmd_server = mm_net_create_unix_server("test", "mm_cmd.sock");
-	mm_icmd_server = mm_net_create_inet_server("test", "127.0.0.1", 8000);
+	mm_ucmd_server = mm_net_create_unix_server("test", &proto,
+						   "mm_cmd.sock");
+	mm_icmd_server = mm_net_create_inet_server("test", &proto,
+						   "127.0.0.1", 8000);
 
-	//mm_net_start_server(mm_ucmd_server, &proto);
-	mm_net_start_server(mm_icmd_server, &proto);
+	//mm_core_register_server(mm_ucmd_server);
+	mm_core_register_server(mm_icmd_server);
 
 	mm_memcache_init();
 

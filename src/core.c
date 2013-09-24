@@ -24,6 +24,7 @@
 #include "future.h"
 #include "hook.h"
 #include "log.h"
+#include "net.h"
 #include "port.h"
 #include "task.h"
 #include "thread.h"
@@ -596,6 +597,20 @@ mm_core_term(void)
 	mm_port_term();
 
 	mm_thread_term();
+
+	LEAVE();
+}
+
+void
+mm_core_register_server(struct mm_net_server *srv)
+{
+	ENTER();
+
+	// Register the server start hook.
+	mm_core_hook_param_start((mm_hook_rtn1) mm_net_start_server, srv);
+
+	// Register the server stop hook.
+	mm_core_hook_param_stop((mm_hook_rtn1) mm_net_stop_server, srv);
 
 	LEAVE();
 }

@@ -28,8 +28,9 @@
 #include "runq.h"
 #include "task.h"
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mm_timeq;
+struct mm_net_server;
 
 #define MM_CORE_SCHED_RING_SIZE		(1024)
 #define MM_CORE_INBOX_RING_SIZE		(1024)
@@ -116,6 +117,8 @@ void mm_core_hook_start(void (*proc)(void));
 void mm_core_hook_param_start(void (*proc)(void *), void *data);
 void mm_core_hook_stop(void (*proc)(void));
 void mm_core_hook_param_stop(void (*proc)(void *), void *data);
+
+void mm_core_register_server(struct mm_net_server *srv);
 
 void mm_core_start(void);
 void mm_core_stop(void);
