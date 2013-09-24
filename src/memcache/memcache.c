@@ -1544,8 +1544,8 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 	// If the command completion requires execution
 	// of other tasks give them a chance to run.
-	mm_task_yield();
-	mm_task_yield();
+	//mm_task_yield();
+	//mm_task_yield();
 
 	LEAVE();
 	return 0;
@@ -2904,8 +2904,9 @@ mm_memcache_init(void)
 		.writer = mc_writer_routine,
 	};
 
-	mc_tcp_server = mm_net_create_inet_server("memcache", "127.0.0.1", 11211);
-	mm_net_start_server(mc_tcp_server, &proto);
+	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
+						  "127.0.0.1", 11211);
+	mm_core_register_server(mc_tcp_server);
 
 	LEAVE();
 }
