@@ -27,16 +27,16 @@ struct mm_hook_link
 	struct mm_hook_link *next;
 };
 
-struct mm_hook_proc
+struct mm_hook_rtn0_link
 {
 	struct mm_hook_link link;
-	void (*proc)(void);
+	mm_hook_rtn0 proc;
 };
 
-struct mm_hook_data_proc
+struct mm_hook_rtn1_link
 {
 	struct mm_hook_link link;
-	void (*proc)(void *);
+	mm_hook_rtn1 proc;
 	void *data;
 };
 
@@ -67,42 +67,42 @@ mm_hook_init(struct mm_hook *hook)
 }
 
 void
-mm_hook_head_proc(struct mm_hook *hook, void (*proc)(void))
+mm_hook_head_proc(struct mm_hook *hook, mm_hook_rtn0 proc)
 {
 	ASSERT(proc != NULL);
 
-	struct mm_hook_proc *link = mm_alloc(sizeof(struct mm_hook_proc));
+	struct mm_hook_rtn0_link *link = mm_alloc(sizeof(struct mm_hook_rtn0_link));
 	link->proc = proc;
 	mm_hook_add_head(hook, &link->link);
 }
 
 void
-mm_hook_tail_proc(struct mm_hook *hook, void (*proc)(void))
+mm_hook_tail_proc(struct mm_hook *hook, mm_hook_rtn0 proc)
 {
 	ASSERT(proc != NULL);
 
-	struct mm_hook_proc *link = mm_alloc(sizeof(struct mm_hook_proc));
+	struct mm_hook_rtn0_link *link = mm_alloc(sizeof(struct mm_hook_rtn0_link));
 	link->proc = proc;
 	mm_hook_add_tail(hook, &link->link);
 }
 
 void
-mm_hook_head_data_proc(struct mm_hook *hook, void (*proc)(void *), void *data)
+mm_hook_head_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data)
 {
 	ASSERT(proc != NULL);
 
-	struct mm_hook_data_proc *link = mm_alloc(sizeof(struct mm_hook_data_proc));
+	struct mm_hook_rtn1_link *link = mm_alloc(sizeof(struct mm_hook_rtn1_link));
 	link->proc = proc;
 	link->data = data;
 	mm_hook_add_head(hook, &link->link);
 }
 
 void
-mm_hook_tail_data_proc(struct mm_hook *hook, void (*proc)(void *), void *data)
+mm_hook_tail_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data)
 {
 	ASSERT(proc != NULL);
 
-	struct mm_hook_data_proc *link = mm_alloc(sizeof(struct mm_hook_data_proc));
+	struct mm_hook_rtn1_link *link = mm_alloc(sizeof(struct mm_hook_rtn1_link));
 	link->proc = proc;
 	link->data = data;
 	mm_hook_add_tail(hook, &link->link);
@@ -113,7 +113,7 @@ mm_hook_call_proc(struct mm_hook *hook, bool free)
 {
 	struct mm_hook_link *link = hook->head;
 	while (link != NULL) {
-		struct mm_hook_proc *proc = (struct mm_hook_proc *) link;
+		struct mm_hook_rtn0_link *proc = (struct mm_hook_rtn0_link *) link;
 		struct mm_hook_link *next = link->next;
 
 		proc->proc();
@@ -132,7 +132,7 @@ mm_hook_call_data_proc(struct mm_hook *hook, bool free)
 {
 	struct mm_hook_link *link = hook->head;
 	while (link != NULL) {
-		struct mm_hook_data_proc *proc = (struct mm_hook_data_proc *) link;
+		struct mm_hook_rtn1_link *proc = (struct mm_hook_rtn1_link *) link;
 		struct mm_hook_link *next = link->next;
 
 		proc->proc(proc->data);

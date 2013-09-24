@@ -28,15 +28,18 @@ struct mm_hook
 	struct mm_hook_link *tail;
 };
 
+typedef void (*mm_hook_rtn0)(void);
+typedef void (*mm_hook_rtn1)(void *);
+
 void mm_hook_init(struct mm_hook *hook);
 void mm_hook_free(struct mm_hook *hook);
 
-void mm_hook_head_proc(struct mm_hook *hook, void (*proc)(void));
-void mm_hook_tail_proc(struct mm_hook *hook, void (*proc)(void));
+void mm_hook_head_proc(struct mm_hook *hook, mm_hook_rtn0 proc);
+void mm_hook_tail_proc(struct mm_hook *hook, mm_hook_rtn0 proc);
 void mm_hook_call_proc(struct mm_hook *hook, bool free);
 
-void mm_hook_head_data_proc(struct mm_hook *hook, void (*proc)(void *), void *data);
-void mm_hook_tail_data_proc(struct mm_hook *hook, void (*proc)(void *), void *data);
+void mm_hook_head_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data);
+void mm_hook_tail_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data);
 void mm_hook_call_data_proc(struct mm_hook *hook, bool free);
 
 #endif /* HOOK_H */
