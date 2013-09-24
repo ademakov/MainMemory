@@ -314,7 +314,7 @@ void
 mm_task_run(struct mm_task *task)
 {
 	ENTER();
-	TRACE("enqueue task: [%d %s] %d", mm_task_id(task), task->name, task->state);
+	TRACE("enqueue task: [%d %s] %d", mm_task_getid(task), task->name, task->state);
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 	ASSERT(task->priority != MM_PRIO_BOOT);
 
