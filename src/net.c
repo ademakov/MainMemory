@@ -1011,127 +1011,114 @@ mm_net_term(void)
  **********************************************************************/
 
 struct mm_net_server *
-mm_net_create_unix_server(const char *name, const char *path)
+mm_net_create_unix_server(const char *name,
+                          struct mm_net_proto *proto,
+                          const char *path)
 {
-	ENTER();
+        ENTER();
 
-	struct mm_net_server *srv = mm_net_alloc_server();
-	if (mm_net_set_un_addr(&srv->addr, path) < 0)
-		mm_fatal(0, "failed to create '%s' server with path '%s'",
-			 name, path);
+        struct mm_net_server *srv = mm_net_alloc_server();
+        srv->name = mm_asprintf("%s (%s)", name, path);
+        srv->proto = proto;
 
-	srv->name = mm_asprintf("%s (%s)", name, path);
+        if (mm_net_set_un_addr(&srv->addr, path) < 0)
+                mm_fatal(0, "failed to create '%s' server with path '%s'",
+                         name, path);
 
-	LEAVE();
-	return srv;
+        LEAVE();
+        return srv;
 }
 
 struct mm_net_server *
-mm_net_create_inet_server(const char *name, const char *addrstr, uint16_t port)
+mm_net_create_inet_server(const char *name,
+                          struct mm_net_proto *proto,
+                          const char *addrstr, uint16_t port)
 {
-	ENTER();
+        ENTER();
 
-	struct mm_net_server *srv = mm_net_alloc_server();
-	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
-			 name, addrstr, port);
+        struct mm_net_server *srv = mm_net_alloc_server();
+        srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+        srv->proto = proto;
 
-	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+        if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
+                mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
+                         name, addrstr, port);
 
-	LEAVE();
-	return srv;
+        LEAVE();
+        return srv;
 }
 
 struct mm_net_server *
-mm_net_create_inet6_server(const char *name, const char *addrstr, uint16_t port)
+mm_net_create_inet6_server(const char *name,
+                           struct mm_net_proto *proto,
+                           const char *addrstr, uint16_t port)
 {
-	ENTER();
+        ENTER();
 
-	struct mm_net_server *srv = mm_net_alloc_server();
-	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
-			 name, addrstr, port);
+        struct mm_net_server *srv = mm_net_alloc_server();
+        srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+        srv->proto = proto;
 
-	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+        if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)
+                mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
+                         name, addrstr, port);
 
-	LEAVE();
-	return srv;
-}
-
-static void
-mm_net_start_server_hook(void *arg)
-{
-	ENTER();
-
-	struct mm_net_server *srv = arg;
-
-	// Create the event handler task.
-	srv->io_task = mm_task_create("net-io", mm_net_io_loop, (intptr_t) srv);
-
-	// Make the task priority higher.
-	srv->io_task->priority /= 2;
-
-	// Create the event handler port.
-	srv->io_port = mm_port_create(srv->io_task);
-
-	// Allocate an event handler ID for the port.
-	srv->input_handler = mm_event_register_handler(mm_net_input_handler);
-	srv->output_handler = mm_event_register_handler(mm_net_output_handler);
-	srv->control_handler = mm_event_register_handler(mm_net_control_handler);
-
-	// Register the server socket with the event loop.
-	mm_event_register_fd(srv->fd,
-			     (uint32_t) mm_net_server_index(srv),
-			     mm_net_accept_hid, false, 0, false, 0);
-
-	LEAVE();
-}
-
-static void
-mm_net_stop_server_hook(void *arg)
-{
-	ENTER();
-
-	struct mm_net_server *srv = arg;
-	ASSERT(srv->fd != -1);
-
-	mm_brief("stop server: %s", srv->name);
-
-	// Unregister the socket.
-	mm_event_unregister_fd(srv->fd);
-
-	// TODO: Destroy the event handler task.
-	// mm_task_destroy(srv->io_task);
-
-	// Close the socket.
-	mm_net_close_server_socket(&srv->addr, srv->fd);
-	srv->fd = -1;
-
-	LEAVE();
-
+        LEAVE();
+        return srv;
 }
 
 void
-mm_net_start_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+mm_net_start_server(struct mm_net_server *srv)
 {
-	ENTER();
-	ASSERT(srv->fd == -1);
+        ENTER();
+        ASSERT(srv->fd == -1);
 
-	mm_brief("start server '%s'", srv->name);
+        mm_brief("start server '%s'", srv->name);
 
-	// Store the protocol handlers.
-	srv->proto = proto;
+        // Create the server socket.
+        srv->fd = mm_net_open_server_socket(&srv->addr, 0);
 
-	// Create the server socket.
-	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
+        // Create the event handler task.
+        srv->io_task = mm_task_create("net-io", mm_net_io_loop, (intptr_t) srv);
 
-	// Register the server start hook.
-	mm_core_hook_param_start(mm_net_start_server_hook, srv);
+        // Make the task priority higher.
+        srv->io_task->priority /= 2;
 
-	// Register the server stop hook.
-	mm_core_hook_param_stop(mm_net_stop_server_hook, srv);
+        // Create the event handler port.
+        srv->io_port = mm_port_create(srv->io_task);
 
-	LEAVE();
+        // Allocate an event handler IDs.
+        srv->input_handler = mm_event_register_handler(mm_net_input_handler);
+        srv->output_handler = mm_event_register_handler(mm_net_output_handler);
+        srv->control_handler = mm_event_register_handler(mm_net_control_handler);
+
+        // Register the server socket with the event loop.
+        mm_event_register_fd(srv->fd,
+                             (uint32_t) mm_net_server_index(srv),
+                             mm_net_accept_hid, false, 0, false, 0);
+
+        LEAVE();
+}
+
+void
+mm_net_stop_server(struct mm_net_server *srv)
+{
+        ENTER();
+        ASSERT(srv->fd != -1);
+
+        mm_brief("stop server: %s", srv->name);
+
+        // Unregister the socket.
+        mm_event_unregister_fd(srv->fd);
+
+        // TODO: Destroy the event handler task.
+        // mm_task_destroy(srv->io_task);
+
+        // Close the socket.
+        mm_net_close_server_socket(&srv->addr, srv->fd);
+        srv->fd = -1;
+
+        LEAVE();
 }
 
 /**********************************************************************
