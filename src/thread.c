@@ -141,8 +141,8 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	CPU_SET(cpu_tag, &cpu_set);
 
 	pthread_t tid = pthread_self();
-	int error = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
-	if (error) {
+	int rc = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
+	if (rc) {
 		mm_error(error, "failed to set thread affinity");
 	}
 }
@@ -154,11 +154,11 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	policy.affinity_tag = cpu_tag + 1;
 
 	thread_t tid = mach_thread_self();
-	int ret = thread_policy_set(tid,
-				    THREAD_AFFINITY_POLICY,
-				    (thread_policy_t) &policy,
-				    THREAD_AFFINITY_POLICY_COUNT);
-	if (ret != KERN_SUCCESS) {
+	int rc = thread_policy_set(tid,
+				   THREAD_AFFINITY_POLICY,
+				   (thread_policy_t) &policy,
+				   THREAD_AFFINITY_POLICY_COUNT);
+	if (rc != KERN_SUCCESS) {
 		mm_error(0, "failed to set thread affinity");
 	}
 }
