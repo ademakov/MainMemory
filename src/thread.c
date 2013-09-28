@@ -28,6 +28,11 @@
 #include <pthread.h>
 #include <sched.h>
 
+#if HAVE_MACH_THREAD_POLICY_H
+# include <mach/mach.h>
+# include <mach/thread_policy.h>
+#endif
+
 struct mm_thread
 {
 	/* Underlying system thread. */
@@ -139,6 +144,22 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	int error = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
 	if (error) {
 		mm_error(error, "failed to set thread affinity");
+	}
+}
+#elif ENABLE_SMP && HAVE_MACH_THREAD_POLICY_H
+static void
+mm_thread_setaffinity(uint32_t cpu_tag)
+{
+	thread_affinity_policy_data_t policy;
+	policy.affinity_tag = cpu_tag + 1;
+
+	thread_t tid = mach_thread_self();
+	int ret = thread_policy_set(tid,
+				    THREAD_AFFINITY_POLICY,
+				    (thread_policy_t) &policy,
+				    THREAD_AFFINITY_POLICY_COUNT);
+	if (ret != KERN_SUCCESS) {
+		mm_error(0, "failed to set thread affinity");
 	}
 }
 #else
