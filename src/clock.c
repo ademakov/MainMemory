@@ -19,6 +19,7 @@
 
 #include "clock.h"
 
+#include "log.h"
 #include "trace.h"
 
 #ifdef HAVE_MACH_MACH_TIME_H
