@@ -17,6 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define _GNU_SOURCE
+
 #include "thread.h"
 
 #include "alloc.h"
@@ -34,6 +36,9 @@ struct mm_thread
 	/* The task start routine and its argument. */
 	mm_routine_t start;
 	uintptr_t start_arg;
+
+	/* CPU affinity tag. */
+	uint32_t cpu_tag;
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
@@ -102,26 +107,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
  * Thread creation routines.
  **********************************************************************/
 
-static void *
-mm_thread_entry(void *arg)
-{
-	ENTER();
-
-	struct mm_thread *thread = arg;
-	mm_brief("start thread: %s", thread->name);
-
-	// Set the thread-local pointer to the thread object.
-	mm_thread = thread;
-
-	// Run the required routine.
-	thread->start(thread->start_arg);
-
-	mm_thread = NULL;
-
-	LEAVE();
-	return NULL;
-}
-
 static void
 mm_thread_setstack_attr(pthread_attr_t *pthr_attr, struct mm_thread_attr *attr)
 {
@@ -142,6 +127,53 @@ mm_thread_setstack_attr(pthread_attr_t *pthr_attr, struct mm_thread_attr *attr)
 	}
 }
 
+#if ENABLE_SMP && HAVE_PTHREAD_SETAFFINITY_NP
+static void
+mm_thread_setaffinity(uint32_t cpu_tag)
+{
+	cpu_set_t cpu_set;
+	CPU_ZERO(&cpu_set);
+	CPU_SET(cpu_tag, &cpu_set);
+
+	pthread_t tid = pthread_self();
+	int error = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
+	if (error) {
+		mm_error(error, "failed to set thread affinity");
+	}
+}
+#else
+# define mm_thread_setaffinity(cpu_tag) ((void) cpu_tag)
+#endif
+
+static void *
+mm_thread_entry(void *arg)
+{
+	ENTER();
+
+	struct mm_thread *thread = arg;
+
+	if (thread->name[0]) {
+		mm_brief("start '%s' thread", thread->name);
+	} else {
+		mm_brief("start a thread");
+	}
+
+	// Set CPU affinity.
+	mm_thread_setaffinity(thread->cpu_tag);
+
+	// Set the thread-local pointer to the thread object.
+	mm_thread = thread;
+
+	// Run the required routine.
+	thread->start(thread->start_arg);
+
+	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
+	mm_thread = NULL;
+
+	LEAVE();
+	return NULL;
+}
+
 struct mm_thread *
 mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, uintptr_t start_arg)
@@ -153,10 +185,12 @@ mm_thread_create(struct mm_thread_attr *attr,
 	thread->start = start;
 	thread->start_arg = start_arg;
 
-	// Set thread name.
+	// Set thread attributes.
 	if (attr == NULL) {
+		thread->cpu_tag = 0;
 		memset(thread->name, 0, MM_THREAD_NAME_SIZE);
 	} else {
+		thread->cpu_tag = attr->cpu_tag;
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
 
@@ -165,8 +199,6 @@ mm_thread_create(struct mm_thread_attr *attr,
 	pthread_attr_init(&pthr_attr);
 	if (attr != NULL) {
 		mm_thread_setstack_attr(&pthr_attr, attr);
-
-		// TODO: handle CPU tag.
 	}
 
 	// Start the thread.

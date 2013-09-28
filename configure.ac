@@ -42,9 +42,13 @@ AM_PROG_AS
 AC_PROG_RANLIB
 
 dnl Checks for libraries.
+AC_SEARCH_LIBS([clock_gettime], [rt])
+AC_SEARCH_LIBS([pthread_create], [pthread],
+        [], [AC_MSG_ERROR(Cannot find pthread library)])
 
 dnl Checks for header files.
 AC_CHECK_HEADERS([stdlib.h unistd.h ucontext.h])
+AC_CHECK_HEADERS([sched.h.h pthread.h])
 AC_CHECK_HEADERS([sys/epoll.h sys/event.h])
 AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h]) 
 AC_CHECK_HEADERS([xmmintrin.h])
@@ -52,7 +56,7 @@ AC_CHECK_HEADERS([xmmintrin.h])
 dnl Checks for typedefs, structures, and compiler characteristics.
 
 dnl Checks for library functions.
-AC_SEARCH_LIBS(clock_gettime, rt)
+AC_CHECK_FUNCS(pthread_setaffinity_np)
 
 dnl Check command line arguments
 
