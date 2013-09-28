@@ -143,7 +143,7 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	pthread_t tid = pthread_self();
 	int rc = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
 	if (rc) {
-		mm_error(error, "failed to set thread affinity");
+		mm_error(rc, "failed to set thread affinity");
 	}
 }
 #elif ENABLE_SMP && HAVE_MACH_THREAD_POLICY_H
