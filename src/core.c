@@ -37,12 +37,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#if ENABLE_SMP
-# define MM_DEFAULT_CORES	2
-#else
-# define MM_DEFAULT_CORES	1
-#endif
-
+#define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	256
 
 #define MM_PRIO_MASTER		1
@@ -557,6 +552,22 @@ mm_core_start_single(struct mm_core *core, int core_tag)
 	LEAVE();
 }
 
+static int
+mm_core_get_num(void)
+{
+#if ENABLE_SMP
+# if defined(_SC_NPROCESSORS_ONLN)
+	int nproc_onln = sysconf(_SC_NPROCESSORS_ONLN);
+	if (nproc_onln < 0)
+		mm_fatal(errno, "Failed to count cores.");
+	return nproc_onln;
+# else
+#  error "Unsupported SMP architecture."
+# endif
+#endif
+	return MM_DEFAULT_CORES;
+}
+
 void
 mm_core_init(void)
 {
@@ -565,14 +576,18 @@ mm_core_init(void)
 
 	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
 
+	mm_core_num = mm_core_get_num();
+	ASSERT(mm_core_num > 0);
+	if (mm_core_num == 1)
+		mm_brief("Running on 1 core.");
+	else
+		mm_brief("Running on %d cores.", mm_core_num);
+
 	mm_clock_init();
 	mm_thread_init();
 
 	mm_task_init();
 	mm_port_init();
-
-	// TODO: get the number of available CPU cores on the system.
-	mm_core_num = MM_DEFAULT_CORES;
 
 	mm_core_set = mm_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (int i = 0; i < mm_core_num; i++)
