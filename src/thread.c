@@ -173,12 +173,6 @@ mm_thread_entry(void *arg)
 
 	struct mm_thread *thread = arg;
 
-	if (thread->name[0]) {
-		mm_brief("start '%s' thread", thread->name);
-	} else {
-		mm_brief("start a thread");
-	}
-
 	// Set CPU affinity.
 	mm_thread_setaffinity(thread->cpu_tag);
 
@@ -186,7 +180,9 @@ mm_thread_entry(void *arg)
 	mm_thread = thread;
 
 	// Run the required routine.
+	mm_brief("start thread '%s'", mm_thread_name());
 	thread->start(thread->start_arg);
+	mm_brief("end thread '%s'", mm_thread_name());
 
 	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
 	mm_thread = NULL;
@@ -281,11 +277,7 @@ mm_thread_join(struct mm_thread *thread)
 void
 mm_thread_yield(void)
 {
-	ENTER();
-
 	sched_yield();
-
-	LEAVE();
 }
 
 /**********************************************************************
@@ -295,5 +287,9 @@ mm_thread_yield(void)
 const char *
 mm_thread_name(void)
 {
-	return mm_thread == NULL ? "main" : mm_thread->name;
+	if (mm_thread == NULL)
+		return "main";
+	if (mm_thread->name[0] == 0)
+		return "unnamed";
+	return mm_thread->name;
 }
