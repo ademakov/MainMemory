@@ -40,12 +40,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// Default event loop timeout - 10 seconds 
-#define MM_EVENT_TIMEOUT ((mm_timeout_t) 10000000)
-
-// Event loop task.
-static struct mm_task *mm_event_task;
-
 // Event loop port.
 static struct mm_port *mm_event_port;
 
@@ -343,7 +337,7 @@ mm_event_free_sys(void)
 	LEAVE();
 }
 
-static void
+void
 mm_event_dispatch(void)
 {
 	ENTER();
@@ -680,8 +674,8 @@ mm_event_process_msg(uint32_t *msg)
 	}
 }
 
-static void __attribute__((noinline))
-mm_event_dispatch(void)
+void
+mm_event_dispatch(mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -730,11 +724,11 @@ mm_event_dispatch(void)
 		ts.tv_sec = 0;
 		ts.tv_nsec = 0;
 	} else {
-		mm_timeval_t timeout = mm_timer_next();
-		if (timeout > MM_EVENT_TIMEOUT)
-			timeout = MM_EVENT_TIMEOUT;
+		mm_timeval_t next_timeout = mm_timer_next();
+		if (timeout > next_timeout)
+			timeout = next_timeout;
 
-		DEBUG("timeout: %lld", timeout);
+		DEBUG("timeout: %lu", (unsigned long) timeout);
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
 	}
@@ -810,35 +804,13 @@ leave:
  * Event loop control.
  **********************************************************************/
 
-static mm_result_t
-mm_event_loop(uintptr_t arg __attribute__((unused)))
-{
-	ENTER();
-
-	while (!mm_exit_test()) {
-		mm_event_dispatch();
-		mm_timer_tick();
-		mm_task_yield();
-	}
-
-	LEAVE();
-	return 0;
-}
-
 static void
 mm_event_start(void)
 {
 	ENTER();
 
 	// Create the event loop task and port.
-	mm_event_task = mm_task_create("event", mm_event_loop, 0);
-	mm_event_port = mm_port_create(mm_event_task);
-
-	// Set the lowest priority for event loop.
-	mm_event_task->priority = MM_PRIO_IDLE;
-
-	// Schedule the task.
-	mm_task_run(mm_event_task);
+	mm_event_port = mm_port_create(mm_core->dealer);
 
 	// Start serving the event loop self-pipe.
 	mm_event_start_selfpipe();
@@ -885,8 +857,7 @@ mm_event_term(void)
 {
 	ENTER();
 
-	// Release the event loop task.
-	mm_task_destroy(mm_event_task);
+	// TODO: destroy event port
 
 	// Release generic data.
 	mm_event_term_selfpipe();

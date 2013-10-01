@@ -42,6 +42,10 @@
 
 #define MM_PRIO_MASTER		1
 #define MM_PRIO_WORKER		MM_PRIO_DEFAULT
+#define MM_PRIO_DEALER		MM_PRIO_IDLE
+
+// Default dealer loop timeout - 1 second
+#define MM_DEALER_TIMEOUT ((mm_timeout_t) 1000000)
 
 #define MM_TIME_QUEUE_MAX_WIDTH	500
 #define MM_TIME_QUEUE_MAX_COUNT	2000
@@ -52,6 +56,8 @@ static struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
+
+#define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
 
 /**********************************************************************
  * Work queue.
@@ -260,6 +266,8 @@ mm_core_receive_work(struct mm_core *core)
 
 	return true;
 }
+#else
+# define mm_core_receive_work(core) ({(void) core; false})
 #endif
 
 static bool
@@ -284,16 +292,20 @@ mm_core_dealer(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	mm_timeout_t timeout = 1000000;
-
 	while (!mm_memory_load(core->master_stop)) {
-		mm_timer_block(timeout);
-
-#if ENABLE_SMP
-		mm_core_receive_work(core);
-#endif
-
+		if (!mm_core_receive_work(core)) {
+			if (MM_CORE_IS_PRIMARY(core)) {
+				mm_event_dispatch(MM_DEALER_TIMEOUT);
+			} else {
+				// TODO: use a blocking system call here so that
+				// the idle task never yields to the boot task
+				// which causes premature thread exit.
+				mm_timer_block(MM_DEALER_TIMEOUT);
+			}
+		}
 		mm_core_destroy_chunks(core);
+		mm_timer_tick();
+		mm_task_yield();
 	}
 
 	LEAVE();
@@ -389,13 +401,25 @@ mm_core_boot_init(struct mm_core *core)
 
 	// Create the dealer task for this core and schedule it for execution.
 	core->dealer = mm_task_create("dealer", mm_core_dealer, (uintptr_t) core);
-	core->dealer->priority = MM_PRIO_MASTER;
+	core->dealer->priority = MM_PRIO_DEALER;
 	mm_task_run(core->dealer);
+
+	// Call the start hooks on the first core.
+	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_hook_call_proc(&mm_core_start_hook, false);
+		mm_hook_call_data_proc(&mm_core_param_start_hook, false);
+	}
 }
 
 static void
 mm_core_boot_term(struct mm_core *core)
 {
+	// Call the stop hooks on the first core.
+	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_hook_call_data_proc(&mm_core_param_stop_hook, false);
+		mm_hook_call_proc(&mm_core_stop_hook, false);
+	}
+
 	mm_timeq_destroy(core->time_queue);
 
 	mm_future_term();
@@ -413,7 +437,6 @@ mm_core_boot(uintptr_t arg)
 	ENTER();
 
 	struct mm_core *core = (struct mm_core *) arg;
-	bool is_primary_core = (core == mm_core_set);
 
 	// Set the thread-local pointer to the core object.
 	mm_core = core;
@@ -426,20 +449,8 @@ mm_core_boot(uintptr_t arg)
 	// Initialize per-core resources.
 	mm_core_boot_init(core);
 
-	// Call the start hooks on the first core.
-	if (is_primary_core) {
-		mm_hook_call_proc(&mm_core_start_hook, false);
-		mm_hook_call_data_proc(&mm_core_param_start_hook, false);
-	}
-
 	// Run the other tasks while there are any.
 	mm_task_yield();
-
-	// Call the stop hooks on the first core.
-	if (is_primary_core) {
-		mm_hook_call_data_proc(&mm_core_param_stop_hook, false);
-		mm_hook_call_proc(&mm_core_stop_hook, false);
-	}
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);

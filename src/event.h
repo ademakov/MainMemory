@@ -52,6 +52,8 @@ typedef void (*mm_event_handler_t)(mm_event_t event, uint32_t data);
 void mm_event_init(void);
 void mm_event_term(void);
 
+void mm_event_dispatch(mm_timeout_t timeout);
+
 void mm_event_notify(void);
 
 mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
