@@ -338,7 +338,7 @@ mm_event_free_sys(void)
 }
 
 void
-mm_event_dispatch(void)
+mm_event_dispatch(mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -440,17 +440,15 @@ mm_event_dispatch(void)
 	mm_flush();
 
 	// Find the event wait timeout.
-	mm_timeval_t timeout; 
 	if (mm_selfpipe_listen(&mm_event_selfpipe) || sent_msgs) {
 		// If some event system changes have been requested then it is
 		// needed to notify as soon as possible the interested parties
 		// on their completion so do not wait for any other events.
 		timeout = 0;
 	} else {
-		timeout = mm_timer_next();
-		if (timeout > MM_EVENT_TIMEOUT) {
-			timeout = MM_EVENT_TIMEOUT;
-		}
+		mm_timeval_t next_timeout = mm_timer_next();
+		if (timeout > next_timeout)
+			timeout = next_timeout;
 		timeout /= 1000;
 	}
 
