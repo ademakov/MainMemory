@@ -297,10 +297,7 @@ mm_core_dealer(uintptr_t arg)
 			if (MM_CORE_IS_PRIMARY(core)) {
 				mm_event_dispatch(MM_DEALER_TIMEOUT);
 			} else {
-				// TODO: use a blocking system call here so that
-				// the idle task never yields to the boot task
-				// which causes premature thread exit.
-				mm_timer_block(MM_DEALER_TIMEOUT);
+				mm_thread_timedwait(MM_DEALER_TIMEOUT);
 			}
 		}
 		mm_core_destroy_chunks(core);
@@ -460,7 +457,6 @@ mm_core_boot(uintptr_t arg)
 	mm_running_task = NULL;
 
 	// Abandon the core.
-	mm_flush();
 	mm_core = NULL;
 
 	LEAVE();

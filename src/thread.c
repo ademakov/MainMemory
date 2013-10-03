@@ -22,6 +22,7 @@
 #include "thread.h"
 
 #include "alloc.h"
+#include "clock.h"
 #include "log.h"
 #include "trace.h"
 
@@ -44,6 +45,12 @@ struct mm_thread
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
+
+	/* Wait/signal control. */
+	uint8_t wait_flag;
+	mm_atomic_uint8_t wake_flag;
+	pthread_mutex_t wait_lock;
+	pthread_cond_t wait_cond;
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
@@ -183,6 +190,7 @@ mm_thread_entry(void *arg)
 	mm_brief("start thread '%s'", mm_thread_name());
 	thread->start(thread->start_arg);
 	mm_brief("end thread '%s'", mm_thread_name());
+	mm_flush();
 
 	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
 	mm_thread = NULL;
@@ -196,6 +204,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
+	int rc;
 
 	// Create a thread object.
 	struct mm_thread *thread = mm_alloc(sizeof (struct mm_thread));
@@ -211,6 +220,18 @@ mm_thread_create(struct mm_thread_attr *attr,
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
 
+	// Initialize wait/signal control data.
+	thread->wait_flag = 0;
+	thread->wake_flag.value = 0;
+	rc = pthread_mutex_init(&thread->wait_lock, NULL);
+	if (rc) {
+		mm_fatal(rc, "pthread_mutex_init");
+	}
+	rc = pthread_cond_init(&thread->wait_cond, NULL);
+	if (rc) {
+		mm_fatal(rc, "pthread_cond_init");
+	}
+
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
 	pthread_attr_init(&pthr_attr);
@@ -219,8 +240,8 @@ mm_thread_create(struct mm_thread_attr *attr,
 	}
 
 	// Start the thread.
-	int rc = pthread_create(&thread->system_thread, &pthr_attr,
-				mm_thread_entry, thread);
+	rc = pthread_create(&thread->system_thread, &pthr_attr,
+			    mm_thread_entry, thread);
 	if (rc) {
 		mm_fatal(rc, "pthread_create");
 	}
@@ -236,6 +257,9 @@ void
 mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
+
+	pthread_mutex_destroy(&thread->wait_lock);
+	pthread_cond_destroy(&thread->wait_cond);
 
 	mm_free(thread);
 
@@ -278,6 +302,69 @@ void
 mm_thread_yield(void)
 {
 	sched_yield();
+}
+
+void
+mm_thread_wait(void)
+{
+	ENTER();
+
+	// Flush the log before possible sleep.
+	mm_flush();
+
+	mm_memory_store(mm_thread->wait_flag, 1);
+
+	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) != 0) {
+		pthread_mutex_lock(&mm_thread->wait_lock);
+		pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
+		pthread_mutex_unlock(&mm_thread->wait_lock);
+	}
+
+	mm_memory_store(mm_thread->wait_flag, 0);
+
+	LEAVE();
+}
+
+void
+mm_thread_timedwait(mm_timeout_t timeout)
+{
+	ENTER();
+
+	// Flush the log before possible sleep.
+	mm_flush();
+
+	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
+
+	struct timespec ts;
+	ts.tv_sec = (time / 1000000);
+	ts.tv_nsec = (time % 1000000) * 1000;
+
+	mm_memory_store(mm_thread->wait_flag, 1);
+
+	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) == 0) {
+		pthread_mutex_lock(&mm_thread->wait_lock);
+		pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
+		pthread_mutex_unlock(&mm_thread->wait_lock);
+	}
+
+	mm_memory_store(mm_thread->wait_flag, 0);
+
+	LEAVE();
+}
+
+void
+mm_thread_signal(void)
+{
+	ENTER();
+
+	mm_memory_store(mm_thread->wake_flag.value, 1);
+	mm_memory_fence();
+
+	if (mm_memory_load(mm_thread->wait_flag)) {
+		pthread_cond_signal(&mm_thread->wait_cond);
+	}
+
+	LEAVE();
 }
 
 /**********************************************************************

@@ -28,6 +28,7 @@
 /* Declare opaque thread type. */
 struct mm_thread;
 
+/* Thread creation attributes. */
 struct mm_thread_attr
 {
 	/* CPU affinity tag. */
@@ -85,6 +86,12 @@ void mm_thread_join(struct mm_thread *thread)
 	__attribute__((nonnull(1)));
 
 void mm_thread_yield(void);
+
+void mm_thread_wait(void);
+
+void mm_thread_timedwait(mm_timeout_t timeout);
+
+void mm_thread_signal(void);
 
 /**********************************************************************
  * Thread information.
