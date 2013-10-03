@@ -1,14 +1,14 @@
 
 ASAP:
+* work dealing between worker threads
 * devise generic net buffer mechanism
-* make net module core thread aware and safe
-* worker threads, work dealing between core threads
+* make net module thread aware and safe
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
 ** ensure socket & server object destruction
 * correct destruction:
 ** ensure destroyed socket & server objects are not accessed anymore
-** ensure safe task & port objects destruction (refcount? capabilities?)
+** ensure safe task & port objects destruction (refcount? capabilities? )
 
 Essentials:
 * use non-blocking data structures instead of locks where possible

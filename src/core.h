@@ -55,7 +55,7 @@ struct mm_core
 	/* Queue of delayed tasks. */
 	struct mm_timeq *time_queue;
 
-	/* A current (almost) time. */
+	/* The (almost) current time. */
 	mm_timeval_t time_value;
 	mm_timeval_t real_time_value;
 
