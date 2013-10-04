@@ -132,6 +132,9 @@ mm_task_new(uint32_t stack_size)
 	// Allocate a task.
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
 
+	// Store the core that owns the task.
+	task->core = mm_core;
+
 	// Allocate a task stack.
 	task->stack_size = stack_size;
 	task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
@@ -158,8 +161,6 @@ mm_task_set_attr(struct mm_task *task,
 	task->flags = flags;
 	task->priority = priority;
 
-	task->blocked_on = NULL;
-
 	task->result = MM_TASK_UNRESOLVED;
 
 #if ENABLE_TRACE
@@ -172,6 +173,7 @@ struct mm_task *
 mm_task_create_boot(void)
 {
 	ENTER();
+	ASSERT(mm_core == NULL);
 
 	// Create a new task object.
 	struct mm_task *task = mm_task_new(MM_TASK_BOOT_STACK_SIZE);
@@ -194,6 +196,7 @@ struct mm_task *
 mm_task_create(const char *name, mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
+	ASSERT(mm_core != NULL);
 
 	struct mm_task *task;
 

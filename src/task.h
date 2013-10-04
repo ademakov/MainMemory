@@ -98,29 +98,29 @@ struct mm_task
 	/* Task scheduling priority. */
 	uint8_t priority;
 
-	/* The task stack. */
-	uint32_t stack_size;
-	void *stack_base;
-	mm_stack_ctx_t stack_ctx;
+	/* The list of task-local dynamically-allocated memory. */
+	struct mm_list chunks;
 
 	/* The list of task's ports. */
 	struct mm_list ports;
 
-	/* The port the task is blocked on. */
-	struct mm_port *blocked_on;
+	/* The list of task cleanup records. */
+	struct mm_task_cleanup_rec *cleanup;
+
+	/* The task result. */
+	mm_result_t result;
 
 	/* The task start routine and its argument. */
 	mm_routine_t start;
 	uintptr_t start_arg;
 
-	/* The list of task cleanup records. */
-	struct mm_task_cleanup_rec *cleanup;
+	/* The task stack. */
+	uint32_t stack_size;
+	void *stack_base;
+	mm_stack_ctx_t stack_ctx;
 
-	/* The list of task-local dynamically-allocated memory. */
-	struct mm_list chunks;
-
-	/* The task result. */
-	mm_result_t result;
+	/* The task core. */
+	struct mm_core *core;
 
 	/* The task name. */
 	char name[MM_TASK_NAME_SIZE];

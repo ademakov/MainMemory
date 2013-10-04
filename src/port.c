@@ -24,28 +24,6 @@
 #include "task.h"
 #include "trace.h"
 
-/**********************************************************************
- * Internal Port Functions.
- **********************************************************************/
-
-static void
-mm_port_block_on_send(struct mm_port *port)
-{
-	mm_task_wait(&port->blocked_senders);
-}
-
-static void
-mm_port_block_on_receive(struct mm_port *port)
-{
-	mm_running_task->blocked_on = port;
-	mm_task_block();
-	mm_running_task->blocked_on = NULL;
-}
-
-/**********************************************************************
- * External Port Functions.
- **********************************************************************/
-
 void
 mm_port_init(void)
 {
@@ -116,11 +94,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 		*ring_ptr++ = *start++;
 	}
 
-	if (port->task->state == MM_TASK_CREATED
-	    || (port->task->state == MM_TASK_BLOCKED
-	        && port->task->blocked_on == port)) {
-		mm_task_run(port->task);
-	}
+	mm_task_run(port->task);
 
 leave:
 	LEAVE();
@@ -175,7 +149,7 @@ mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	int cp = mm_task_enter_cancel_point();
 	while (mm_port_send(port, start, count) < 0)
-		mm_port_block_on_send(port);
+		mm_task_wait(&port->blocked_senders);
 	mm_task_leave_cancel_point(cp);
 
 	LEAVE();
@@ -188,7 +162,7 @@ mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 
 	int cp = mm_task_enter_cancel_point();
 	while (mm_port_receive(port, start, count) < 0)
-		mm_port_block_on_receive(port);
+		mm_task_block();
 	mm_task_leave_cancel_point(cp);
 
 	LEAVE();
