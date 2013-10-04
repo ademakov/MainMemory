@@ -106,7 +106,25 @@ mm_core_create_work(struct mm_core *core,
 static void
 mm_core_destroy_work(struct mm_work *work)
 {
+	ENTER();
+
 	mm_free(work);
+
+	LEAVE();
+}
+
+static void
+mm_core_add_work(struct mm_core *core, struct mm_work *work)
+{
+	ENTER();
+
+	// Enqueue the item in the LIFO order.
+	mm_list_insert(&core->work_queue, &work->queue);
+
+	// If there is a task waiting for work then let it run now.
+	mm_task_signal(&core->wait_queue);
+
+	LEAVE();
 }
 
 void
@@ -114,19 +132,13 @@ mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
 {
 	ENTER();
 
-	// Cache thread-specific data.
-	struct mm_core *core = mm_core;
-
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(core,
+	struct mm_work *work = mm_core_create_work(mm_core,
 						   routine, routine_arg,
 						   pinned);
 
-	// Queue the item in the LIFO order.
-	mm_list_insert(&core->work_queue, &work->queue);
-
-	// If there is a task waiting for work then let it run now.
-	mm_task_signal(&core->wait_queue);
+	// Enqueue it.
+	mm_core_add_work(mm_core, work);
 
 	LEAVE();
 }
@@ -143,11 +155,8 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 						   true);
 
 	if (core == mm_core) {
-		// Queue the item in the LIFO order.
-		mm_list_insert(&core->work_queue, &work->queue);
-
-		// If there is a task waiting for work then let it run now.
-		mm_task_signal(&core->wait_queue);
+		// Enqueue it directly if on the same core.
+		mm_core_add_work(core, work);
 	} else {
 		// Put the item to the target core inbox.
 		while (!mm_ring_core_put(&core->inbox, work)) {
@@ -294,7 +303,7 @@ mm_core_receive_work(struct mm_core *core)
 		return false;
 
 	do {
-		mm_list_insert(&core->work_queue, &work->queue);
+		mm_core_add_work(core, work);
 		work = mm_ring_get(&core->inbox);
 	} while (work != NULL);
 
