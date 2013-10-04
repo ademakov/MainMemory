@@ -124,7 +124,7 @@ mm_future_start(struct mm_future *future)
 
 	if (future->status == MM_FUTURE_CREATED) {
 		future->status = MM_FUTURE_STARTED;
-		mm_core_add_work(mm_future_routine, (uintptr_t) future, false);
+		mm_core_post(false, mm_future_routine, (uintptr_t) future);
 	}
 
 	LEAVE();

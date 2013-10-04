@@ -91,7 +91,8 @@ void mm_thread_wait(void);
 
 void mm_thread_timedwait(mm_timeout_t timeout);
 
-void mm_thread_signal(void);
+void mm_thread_signal(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
 
 /**********************************************************************
  * Thread information.

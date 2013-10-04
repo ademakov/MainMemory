@@ -123,7 +123,8 @@ void mm_core_register_server(struct mm_net_server *srv);
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned);
+void mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg);
+void mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg);
 
 /**********************************************************************
  * Core time utilities.

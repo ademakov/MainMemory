@@ -110,7 +110,7 @@ mm_core_destroy_work(struct mm_work *work)
 }
 
 void
-mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
+mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
 {
 	ENTER();
 
@@ -127,6 +127,40 @@ mm_core_add_work(mm_routine_t routine, uintptr_t routine_arg, bool pinned)
 
 	// If there is a task waiting for work then let it run now.
 	mm_task_signal(&core->wait_queue);
+
+	LEAVE();
+}
+
+void
+mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg)
+{
+	ENTER();
+	ASSERT(mm_core != NULL);
+
+	// Create a work item.
+	struct mm_work *work = mm_core_create_work(core,
+						   routine, routine_arg,
+						   true);
+
+	if (core == mm_core) {
+		// Queue the item in the LIFO order.
+		mm_list_insert(&core->work_queue, &work->queue);
+
+		// If there is a task waiting for work then let it run now.
+		mm_task_signal(&core->wait_queue);
+	} else {
+		// Put the item to the target core inbox.
+		while (!mm_ring_core_put(&core->inbox, work)) {
+			mm_task_yield();
+		}
+
+		// Wakeup the target core if it is asleep.
+		if (MM_CORE_IS_PRIMARY(core)) {
+			mm_event_notify();
+		} else {
+			mm_thread_signal(core->thread);
+		}
+	}
 
 	LEAVE();
 }

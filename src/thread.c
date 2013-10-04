@@ -353,15 +353,15 @@ mm_thread_timedwait(mm_timeout_t timeout)
 }
 
 void
-mm_thread_signal(void)
+mm_thread_signal(struct mm_thread *thread)
 {
 	ENTER();
 
-	mm_memory_store(mm_thread->wake_flag.value, 1);
+	mm_memory_store(thread->wake_flag.value, 1);
 	mm_memory_fence();
 
-	if (mm_memory_load(mm_thread->wait_flag)) {
-		pthread_cond_signal(&mm_thread->wait_cond);
+	if (mm_memory_load(thread->wait_flag)) {
+		pthread_cond_signal(&thread->wait_cond);
 	}
 
 	LEAVE();

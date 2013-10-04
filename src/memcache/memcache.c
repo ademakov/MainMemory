@@ -355,7 +355,7 @@ mc_table_start_striding(void)
 {
 	ENTER();
 
-	mm_core_add_work(mc_table_stride_routine, 0, false);
+	mm_core_post(false, mc_table_stride_routine, 0);
 
 	LEAVE();
 }

@@ -443,7 +443,7 @@ mm_net_accept_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 {
 	ENTER();
 
-	mm_core_add_work(mm_net_acceptor, data, true);
+	mm_core_post(true, mm_net_acceptor, data);
 
 	LEAVE();
 }
@@ -573,11 +573,11 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
-		mm_core_add_work(mm_net_reader, (uintptr_t) sock, true);
+		mm_core_post(true, mm_net_reader, (uintptr_t) sock);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		if ((sock->flags & MM_NET_READ_ERROR) != 0) {
-			mm_core_add_work(mm_net_closer, (uintptr_t) sock, true);
+			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
 		}
 	}
 
@@ -603,11 +603,11 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
-		mm_core_add_work(mm_net_writer, (uintptr_t) sock, true);
+		mm_core_post(true, mm_net_writer, (uintptr_t) sock);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		if ((sock->flags & MM_NET_WRITE_ERROR) != 0) {
-			mm_core_add_work(mm_net_closer, (uintptr_t) sock, true);
+			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
 		}
 	}
 
@@ -710,7 +710,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 
 	// Submit a reader work.
 	sock->flags |= MM_NET_READER_SPAWNED;
-	mm_core_add_work(mm_net_reader, (uintptr_t) sock, true);
+	mm_core_post(true, mm_net_reader, (uintptr_t) sock);
 
 	// Let it start immediately.
 	mm_task_yield();
@@ -736,7 +736,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 
 	// Submit a writer work.
 	sock->flags |= MM_NET_WRITER_SPAWNED;
-	mm_core_add_work(mm_net_writer, (uintptr_t) sock, true);
+	mm_core_post(true, mm_net_writer, (uintptr_t) sock);
 
 	// Let it start immediately.
 	mm_task_yield();
@@ -772,7 +772,7 @@ mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 		sock->flags |= MM_NET_READER_SPAWNED;
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
-		mm_core_add_work(mm_net_reader, (uintptr_t) sock, true);
+		mm_core_post(true, mm_net_reader, (uintptr_t) sock);
 	}
 
 leave:
@@ -806,7 +806,7 @@ mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
-		mm_core_add_work(mm_net_writer, (uintptr_t) sock, true);
+		mm_core_post(true, mm_net_writer, (uintptr_t) sock);
 	}
 
 leave:
@@ -913,7 +913,7 @@ mm_net_io_loop(uintptr_t arg)
 				sock->flags |= MM_NET_READER_SPAWNED;
 				if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 					sock->flags &= ~MM_NET_READER_PENDING;
-				mm_core_add_work(mm_net_reader, (uintptr_t) sock, true);
+				mm_core_post(true, mm_net_reader, (uintptr_t) sock);
 			}
 			break;
 
@@ -929,7 +929,7 @@ mm_net_io_loop(uintptr_t arg)
 				sock->flags |= MM_NET_WRITER_SPAWNED;
 				if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 					sock->flags &= ~MM_NET_WRITER_PENDING;
-				mm_core_add_work(mm_net_writer, (uintptr_t) sock, true);
+				mm_core_post(true, mm_net_writer, (uintptr_t) sock);
 			}
 			break;
 
