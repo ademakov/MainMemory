@@ -60,6 +60,38 @@ __thread struct mm_core *mm_core;
 #define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
 
 /**********************************************************************
+ * Core sleep and wakeup routines.
+ **********************************************************************/
+
+static void
+mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_event_dispatch(timeout);
+	} else {
+		mm_thread_timedwait(timeout);
+	}
+
+	LEAVE();
+}
+
+static void
+mm_core_wake(struct mm_core *core)
+{
+	ENTER();
+
+	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_event_notify();
+	} else {
+		mm_thread_signal(core->thread);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Work queue.
  **********************************************************************/
 
@@ -164,15 +196,74 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 		}
 
 		// Wakeup the target core if it is asleep.
-		if (MM_CORE_IS_PRIMARY(core)) {
-			mm_event_notify();
-		} else {
-			mm_thread_signal(core->thread);
-		}
+		mm_core_wake(core);
 	}
 
 	LEAVE();
 }
+
+#if ENABLE_SMP
+static bool
+mm_core_receive_work(struct mm_core *core)
+{
+	struct mm_work *work = mm_ring_get(&core->inbox);
+	if (work == NULL)
+		return false;
+
+	do {
+		mm_core_add_work(core, work);
+		work = mm_ring_get(&core->inbox);
+	} while (work != NULL);
+
+	return true;
+}
+#else
+# define mm_core_receive_work(core) ({(void) core; false})
+#endif
+
+/**********************************************************************
+ * Task queue.
+ **********************************************************************/
+
+void
+mm_core_run_task(struct mm_task *task)
+{
+	ENTER();
+
+	if (task->core == mm_core) {
+		// Put the task to the core run queue directly.
+		mm_task_run(task);
+	} else {
+		// Put the task to the target core sched ring.
+		while (!mm_ring_core_put(&task->core->sched, task)) {
+			mm_task_yield();
+		}
+
+		// Wakeup the target core if it is asleep.
+		mm_core_wake(task->core);
+	}
+
+	LEAVE();
+}
+
+#if ENABLE_SMP
+static bool
+mm_core_receive_tasks(struct mm_core *core)
+{
+	struct mm_task *task = mm_ring_get(&core->sched);
+	if (task == NULL)
+		return false;
+
+	do {
+		mm_task_run(task);
+		task = mm_ring_get(&core->sched);
+	} while (task != NULL);
+
+	return true;
+}
+#else
+# define mm_core_receive_tasks(core) ({(void) core; false})
+#endif
 
 /**********************************************************************
  * Worker task.
@@ -294,25 +385,6 @@ mm_core_master(uintptr_t arg)
  * Dealer task.
  **********************************************************************/
 
-#if ENABLE_SMP
-static bool
-mm_core_receive_work(struct mm_core *core)
-{
-	struct mm_work *work = mm_ring_get(&core->inbox);
-	if (work == NULL)
-		return false;
-
-	do {
-		mm_core_add_work(core, work);
-		work = mm_ring_get(&core->inbox);
-	} while (work != NULL);
-
-	return true;
-}
-#else
-# define mm_core_receive_work(core) ({(void) core; false})
-#endif
-
 static bool
 mm_core_destroy_chunks(struct mm_core *core)
 {
@@ -336,13 +408,14 @@ mm_core_dealer(uintptr_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 
 	while (!mm_memory_load(core->master_stop)) {
-		if (!mm_core_receive_work(core)) {
-			if (MM_CORE_IS_PRIMARY(core)) {
-				mm_event_dispatch(MM_DEALER_TIMEOUT);
-			} else {
-				mm_thread_timedwait(MM_DEALER_TIMEOUT);
-			}
-		}
+		bool halt = true;
+		if (mm_core_receive_work(core))
+			halt = false;
+		if (mm_core_receive_tasks(core))
+			halt = false;
+		if (halt)
+			mm_core_halt(core, MM_DEALER_TIMEOUT);
+
 		mm_core_destroy_chunks(core);
 		mm_timer_tick();
 		mm_task_yield();
