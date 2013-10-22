@@ -1,7 +1,6 @@
 
 ASAP:
 * work dealing between worker threads
-* devise generic net buffer mechanism
 * make net module thread aware and safe
 * correct shutdown:
 ** ensure worker & master & aux tasks are finished
@@ -34,6 +33,7 @@ Essentials:
 ** add UDP protocol support
 ** add binary protocol support
 ** use multi-threaded workers
+* DNS resolver
 * HTTP module
 
 Enhancements:
