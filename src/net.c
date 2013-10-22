@@ -20,6 +20,7 @@
 #include "net.h"
 
 #include "alloc.h"
+#include "buffer.h"
 #include "core.h"
 #include "event.h"
 #include "exit.h"
@@ -1125,6 +1126,8 @@ mm_net_stop_server(struct mm_net_server *srv)
  * Network sockets.
  **********************************************************************/
 
+#define MM_NET_MAXIOV	64
+
 static void
 mm_net_rblock(struct mm_net_socket *sock)
 {
@@ -1320,7 +1323,9 @@ leave:
 }
 
 ssize_t
-mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
+mm_net_readv(struct mm_net_socket *sock,
+	     const struct iovec *iov, int iovcnt,
+	     ssize_t nbytes)
 {
 	ENTER();
 	ASSERT(sock->core == mm_core);
@@ -1343,13 +1348,9 @@ retry:
 	// Try to read (nonblocking).
 	n = readv(sock->fd, iov, iovcnt);
 	if (n > 0) {
-		// FIXME: count nbytes in iov or do nothing here and let
-		// the next call to hit EAGAIN.
-#if 0
 		if (n < nbytes) {
 			mm_net_reset_read_ready(sock);
 		}
-#endif
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
@@ -1372,7 +1373,9 @@ leave:
 }
 
 ssize_t
-mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt)
+mm_net_writev(struct mm_net_socket *sock,
+	      const struct iovec *iov, int iovcnt,
+	      ssize_t nbytes)
 {
 	ENTER();
 	ASSERT(sock->core == mm_core);
@@ -1395,13 +1398,9 @@ retry:
 	// Try to write (nonblocking).
 	n = writev(sock->fd, iov, iovcnt);
 	if (n > 0) {
-		// FIXME: count nbytes in iov or do nothing here and let
-		// the next call to hit EAGAIN.
-#if 0
 		if (n < nbytes) {
 			mm_net_reset_write_ready(sock);
 		}
-#endif
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
@@ -1415,6 +1414,86 @@ retry:
 			mm_error(saved_errno, "writev()");
 			errno = saved_errno;
 		}
+	}
+
+leave:
+	DEBUG("n: %ld", (long) n);
+	LEAVE();
+	return n;
+}
+
+ssize_t
+mm_net_readbuf(struct mm_net_socket *sock, struct mm_buffer *buf)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+	ssize_t n = 0;
+
+	int iovcnt = 0;
+	struct iovec iov[MM_NET_MAXIOV];
+
+	struct mm_buffer_cursor cur;
+	bool ok = mm_buffer_first_in(buf, &cur);
+	while (ok) {
+		if (cur.size) {
+			n += cur.size;
+			iov[iovcnt].iov_len = cur.size;
+			iov[iovcnt].iov_base = cur.data;
+			if (++iovcnt == MM_NET_MAXIOV)
+				break;
+		}
+		ok = mm_buffer_next_in(buf, &cur);
+	}
+
+	if (n <= 0) {
+		n = -1;
+		errno = EINVAL;
+		goto leave;
+	}
+
+	n = mm_net_readv(sock, iov, iovcnt, n);
+	if (n > 0) {
+		mm_buffer_expand(buf, n);
+	}
+
+leave:
+	DEBUG("n: %ld", (long) n);
+	LEAVE();
+	return n;
+}
+
+ssize_t
+mm_net_writebuf(struct mm_net_socket *sock, struct mm_buffer *buf)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+	ssize_t n = 0;
+
+	int iovcnt = 0;
+	struct iovec iov[MM_NET_MAXIOV];
+
+	struct mm_buffer_cursor cur;
+	bool ok = mm_buffer_first_out(buf, &cur);
+	while (ok) {
+		if (cur.size) {
+			n += cur.size;
+			iov[iovcnt].iov_len = cur.size;
+			iov[iovcnt].iov_base = cur.data;
+			if (++iovcnt == MM_NET_MAXIOV)
+				break;
+		}
+		ok = mm_buffer_next_out(buf, &cur);
+	}
+
+	if (n <= 0) {
+		n = -1;
+		errno = EINVAL;
+		goto leave;
+	}
+
+	n = mm_net_writev(sock, iov, iovcnt, n);
+	if (n > 0) {
+		mm_buffer_reduce(buf, n);
 	}
 
 leave:

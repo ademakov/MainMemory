@@ -31,6 +31,7 @@
 #include <sys/un.h>
 
 /* Forward declarations. */
+struct mm_buffer;
 struct mm_port;
 struct mm_task;
 
@@ -170,16 +171,33 @@ void mm_net_start_server(struct mm_net_server *srv)
 void mm_net_stop_server(struct mm_net_server *srv)
         __attribute__((nonnull(1)));
 
-ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
-ssize_t mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
+ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
+        __attribute__((nonnull(1, 2)));
+ssize_t mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
+        __attribute__((nonnull(1, 2)));
 
-ssize_t mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
-ssize_t mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt);
+ssize_t mm_net_readv(struct mm_net_socket *sock,
+		     const struct iovec *iov, int iovcnt,
+		     ssize_t nbytes)
+        __attribute__((nonnull(1, 2)));
+ssize_t mm_net_writev(struct mm_net_socket *sock,
+		      const struct iovec *iov, int iovcnt,
+		      ssize_t nbytes)
+        __attribute__((nonnull(1, 2)));
 
-void mm_net_spawn_reader(struct mm_net_socket *sock);
-void mm_net_spawn_writer(struct mm_net_socket *sock);
+ssize_t mm_net_readbuf(struct mm_net_socket *sock, struct mm_buffer *buf)
+        __attribute__((nonnull(1, 2)));
+ssize_t mm_net_writebuf(struct mm_net_socket *sock, struct mm_buffer *buf)
+        __attribute__((nonnull(1, 2)));
 
-void mm_net_close(struct mm_net_socket *sock);
+void mm_net_spawn_reader(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
+void mm_net_spawn_writer(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
+void mm_net_close(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
 
 static inline bool
 mm_net_is_closed(struct mm_net_socket *sock)
