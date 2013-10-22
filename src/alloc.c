@@ -47,7 +47,7 @@ mm_libc_call(const char *name)
 	static __thread int recurrent = 0;
 	if (!recurrent) {
 		++recurrent;
-		mm_brief("attempt to call libc function '%s'", name);
+		mm_brief("attempt to call a libc function '%s'", name);
 		--recurrent;
 	}
 }
@@ -188,4 +188,3 @@ mm_free(void *ptr)
 	dlfree(ptr);
 	mm_global_unlock(&mm_alloc_lock);
 }
-

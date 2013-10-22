@@ -118,7 +118,8 @@ void mm_core_hook_param_start(void (*proc)(void *), void *data);
 void mm_core_hook_stop(void (*proc)(void));
 void mm_core_hook_param_stop(void (*proc)(void *), void *data);
 
-void mm_core_register_server(struct mm_net_server *srv);
+void mm_core_register_server(struct mm_net_server *srv)
+	__attribute__((nonnull(1)));
 
 void mm_core_start(void);
 void mm_core_stop(void);
