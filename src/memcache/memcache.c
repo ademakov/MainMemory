@@ -20,6 +20,7 @@
 #include "memcache.h"
 
 #include "../alloc.h"
+#include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
 #include "../future.h"
@@ -849,6 +850,10 @@ struct mc_state
 
 	// The client socket,
 	struct mm_net_socket *sock;
+	// Receive buffer.
+	struct mm_buffer rbuf;
+	// Transmit buffer.
+	struct mm_buffer tbuf;
 
 	// The quit flag.
 	bool quit;
@@ -872,6 +877,8 @@ mc_create(struct mm_net_socket *sock)
 	state->command_tail = NULL;
 
 	state->sock = sock;
+	mm_buffer_prepare(&state->rbuf);
+	mm_buffer_prepare(&state->tbuf);
 	state->quit = false;
 
 	LEAVE();
@@ -895,6 +902,8 @@ mc_destroy(struct mc_state *state)
 		mc_command_destroy(command);
 	}
 
+	mm_buffer_cleanup(&state->rbuf);
+	mm_buffer_cleanup(&state->tbuf);
 	mm_free(state);
 
 	LEAVE();
@@ -1036,25 +1045,6 @@ mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
 
 	LEAVE();
 	return (total - count);
-}
-
-static ssize_t
-mc_write(struct mm_net_socket *sock, const char *data, size_t size)
-{
-	ENTER();
-
-	size_t o_size = size;
-	while (size > 0) {
-		ssize_t n = mm_net_write(sock, data, size);
-		if (n <= 0)
-			break;
-
-		size -= n;
-		data += n;
-	}
-
-	LEAVE();
-	return (o_size - size);
 }
 
 /**********************************************************************
@@ -2626,101 +2616,103 @@ leave:
 }
 
 /**********************************************************************
- * Protocol Handlers.
+ * Transmitting command results.
  **********************************************************************/
 
-#define MC_READ_TIMEOUT		10000
-
-static bool
-mc_transmit_result(struct mm_net_socket *sock,
-		   struct mc_state *state __attribute__((unused)),
-		   struct mc_command *command)
+static void
+mc_transmit_unref(struct mm_buffer *buf __attribute__((unused)),
+		  uintptr_t data)
 {
 	ENTER();
 
-	bool rc;
+	struct mc_entry *entry = (struct mc_entry *) data;
+	mc_entry_unref(entry);
+
+	LEAVE();
+}
+
+static void
+mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
+{
+	ENTER();
 
 	switch (command->result_type) {
-	case MC_RESULT_NONE:
-		rc = false;
+	case MC_RESULT_BLANK:
 		break;
 	case MC_RESULT_REPLY:
-		if (mc_write(sock, command->result.reply.str, command->result.reply.len) < 0) {
-			rc = false;
-		} else {
-			rc = true;
-		}
+		mm_buffer_append(&state->tbuf,
+				 command->result.reply.str,
+				 command->result.reply.len);
 		break;
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS:
-		rc = true;
 		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
 			struct mc_entry *entry = command->result.entries.entries[i];
 			const char *key = mc_entry_key(entry);
-			const char *value = mc_entry_value(entry);
+			char *value = mc_entry_value(entry);
+			uint8_t key_len = entry->key_len;
+			uint32_t value_len = entry->value_len;
 
-			char buf[512];
 			if (command->result_type == MC_RESULT_ENTRY) {
-				sprintf(buf, "VALUE %.*s %u %u\r\n",
-					entry->key_len, key,
-					entry->flags,
-					entry->value_len);
+				mm_buffer_printf(
+					&state->tbuf,
+					"VALUE %.*s %u %u\r\n",
+					key_len, key,
+					entry->flags, value_len);
 			} else {
-				sprintf(buf, "VALUE %.*s %u %u %llu\r\n",
-					entry->key_len, key,
-					entry->flags,
-					entry->value_len,
+				mm_buffer_printf(
+					&state->tbuf,
+					"VALUE %.*s %u %u %llu\r\n",
+					key_len, key,
+					entry->flags, value_len,
 					(unsigned long long) entry->cas);
 			}
-			size_t len = strlen(buf);
-			if (mc_write(sock, buf, len) != (int) len) {
-				rc = false;
-				break;
-			}
-			if (mc_write(sock, value, entry->value_len) != entry->value_len) {
-				rc = false;
-				break;
-			}
-			if (mc_write(sock, "\r\n", 2) != 2) {
-				rc = false;
-				break;
-			}
+
+			mc_entry_ref(entry);
+			mm_buffer_splice(&state->tbuf, value, value_len,
+					 mc_transmit_unref, (uintptr_t) entry);
+
+			mm_buffer_append(&state->tbuf, "\r\n", 2);
 		}
-		if (rc) {
-			if (mc_write(sock, "END\r\n", 5) != 5) {
-				rc = false;
-				break;
-			}
-		}
+		mm_buffer_append(&state->tbuf, "END\r\n", 5);
 		break;
-	case MC_RESULT_VALUE:
-		rc = true;
-		const char *value = mc_entry_value(command->result.entry);
-		if (mc_write(sock, value, command->result.entry->value_len)
-			 != command->result.entry->value_len) {
-			rc = false;
-			break;
-		}
-		if (mc_write(sock, "\r\n", 2) != 2) {
-			rc = false;
-			break;
-		}
+	case MC_RESULT_VALUE: {
+		struct mc_entry *entry = command->result.entry;
+		char *value = mc_entry_value(entry);
+		uint32_t value_len = entry->value_len;
+
+		mc_entry_ref(entry);
+		mm_buffer_splice(&state->tbuf, value, value_len,
+				 mc_transmit_unref, (uintptr_t) entry);
+
+		mm_buffer_append(&state->tbuf, "END\r\n", 5);
 		break;
-	case MC_RESULT_BLANK:
-		rc = true;
-		break;
+	}
 	case MC_RESULT_QUIT:
 		state->quit = true;
-		mm_net_close(sock);
-		rc = true;
+		mm_net_close(state->sock);
 		break;
 	default:
 		ABORT();
 	}
 
 	LEAVE();
-	return rc;
 }
+
+static bool
+mc_transmit(struct mc_state *state)
+{
+	ssize_t n = mm_net_writebuf(state->sock, &state->tbuf);
+	if (n < 0 && errno != EINVAL && errno != EAGAIN && errno != EWOULDBLOCK)
+		return false;
+	return true;
+}
+
+/**********************************************************************
+ * Protocol Handlers.
+ **********************************************************************/
+
+#define MC_READ_TIMEOUT		10000
 
 static void
 mc_prepare(struct mm_net_socket *sock)
@@ -2841,41 +2833,33 @@ mc_writer_routine(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	// TODO: protect against cancellation
-	// TODO: release command for sure
-
-	/* Get the protocol data if any. */
+	// Get the protocol data if any.
 	struct mc_state *state = (struct mc_state *) sock->data;
 	if (state == NULL)
 		goto leave;
 
-	/* Get the first queued command and try to transmit its result. */
+	// Buffer all the ready command results.
 	struct mc_command *command = state->command_head;
-	if (command == NULL)
-		goto leave;
-	if (!mc_transmit_result(sock, state, command))
-		goto leave;
-
-	/* Try to transmit more command results. */
-	for (;;) {
+	while (command != NULL && command->result_type != MC_RESULT_NONE) {
 		struct mc_command *next = command->next;
-		if (next == NULL) {
-			state->command_head = state->command_tail = NULL;
-			break;
-		}
-		if (!mc_transmit_result(sock, state, next)) {
+		if (next != NULL)
 			state->command_head = next;
-			break;
-		}
+		else
+			state->command_head = state->command_tail = NULL;
 
-		/* Free no longer needed command. */
+		// Free the receive buffers.
+		mc_release_buffers(state, command->end_ptr);
+
+		// Put the result into the transmit buffer.
+		mc_transmit_buffer(state, command);
+
+		// Free no longer needed command.
 		mc_command_destroy(command);
 		command = next;
 	}
 
-	/* Free pertinent input buffers along with the last command. */
-	mc_release_buffers(state, command->end_ptr);
-	mc_command_destroy(command);
+	// Transmit buffered results.
+	mc_transmit(state);
 
 leave:
 	LEAVE();
