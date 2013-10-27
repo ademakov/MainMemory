@@ -218,7 +218,7 @@ mm_core_receive_work(struct mm_core *core)
 	return true;
 }
 #else
-# define mm_core_receive_work(core) ({(void) core; false})
+# define mm_core_receive_work(core) ({(void) core; false;})
 #endif
 
 /**********************************************************************
@@ -262,7 +262,7 @@ mm_core_receive_tasks(struct mm_core *core)
 	return true;
 }
 #else
-# define mm_core_receive_tasks(core) ({(void) core; false})
+# define mm_core_receive_tasks(core) ({(void) core; false;})
 #endif
 
 /**********************************************************************
