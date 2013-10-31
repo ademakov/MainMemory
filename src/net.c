@@ -1433,25 +1433,33 @@ mm_net_readbuf(struct mm_net_socket *sock, struct mm_buffer *buf)
 	struct iovec iov[MM_NET_MAXIOV];
 
 	struct mm_buffer_cursor cur;
-	bool ok = mm_buffer_first_in(buf, &cur);
-	while (ok) {
-		if (cur.size) {
-			n += cur.size;
-			iov[iovcnt].iov_len = cur.size;
-			iov[iovcnt].iov_base = cur.data;
-			if (++iovcnt == MM_NET_MAXIOV)
+	bool rc = mm_buffer_first_in(buf, &cur);
+	while (rc) {
+		size_t len = cur.end - cur.ptr;
+		if (likely(len)) {
+			n += len;
+
+			iov[iovcnt].iov_len = len;
+			iov[iovcnt].iov_base = cur.ptr;
+			++iovcnt;
+
+			if (unlikely(iovcnt == MM_NET_MAXIOV))
 				break;
 		}
-		ok = mm_buffer_next_in(buf, &cur);
+		rc = mm_buffer_next_in(buf, &cur);
 	}
 
-	if (n <= 0) {
+	if (unlikely(n <= 0)) {
 		n = -1;
 		errno = EINVAL;
 		goto leave;
 	}
 
-	n = mm_net_readv(sock, iov, iovcnt, n);
+	if (iovcnt == 1) {
+		n = mm_net_read(sock, iov[0].iov_base, iov[0].iov_len);
+	} else {
+		n = mm_net_readv(sock, iov, iovcnt, n);
+	}
 	if (n > 0) {
 		mm_buffer_expand(buf, n);
 	}
@@ -1473,25 +1481,33 @@ mm_net_writebuf(struct mm_net_socket *sock, struct mm_buffer *buf)
 	struct iovec iov[MM_NET_MAXIOV];
 
 	struct mm_buffer_cursor cur;
-	bool ok = mm_buffer_first_out(buf, &cur);
-	while (ok) {
-		if (cur.size) {
-			n += cur.size;
-			iov[iovcnt].iov_len = cur.size;
-			iov[iovcnt].iov_base = cur.data;
-			if (++iovcnt == MM_NET_MAXIOV)
+	bool rc = mm_buffer_first_out(buf, &cur);
+	while (rc) {
+		size_t len = cur.end - cur.ptr;
+		if (likely(len)) {
+			n += len;
+
+			iov[iovcnt].iov_len = len;
+			iov[iovcnt].iov_base = cur.ptr;
+			++iovcnt;
+
+			if (unlikely(iovcnt == MM_NET_MAXIOV))
 				break;
 		}
-		ok = mm_buffer_next_out(buf, &cur);
+		rc = mm_buffer_next_out(buf, &cur);
 	}
 
-	if (n <= 0) {
+	if (unlikely(n <= 0)) {
 		n = -1;
 		errno = EINVAL;
 		goto leave;
 	}
 
-	n = mm_net_writev(sock, iov, iovcnt, n);
+	if (iovcnt == 1) {
+		n = mm_net_write(sock, iov[0].iov_base, iov[0].iov_len);
+	} else {
+		n = mm_net_writev(sock, iov, iovcnt, n);
+	}
 	if (n > 0) {
 		mm_buffer_reduce(buf, n);
 	}

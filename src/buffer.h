@@ -42,7 +42,7 @@ struct mm_buffer;
  * across cores.
  */
 
-typedef void (*mm_buffer_release_t)(struct mm_buffer *buf, uintptr_t release_data);
+typedef void (*mm_buffer_release_t)(uintptr_t release_data);
 
 struct mm_buffer
 {
@@ -55,19 +55,18 @@ struct mm_buffer
 	size_t out_off;
 
 	/* Internal data store. */
-	struct mm_chunk *store_head;
-	struct mm_chunk *store_tail;
-	size_t store_size;
+	size_t chunk_size;
+	size_t extra_size;
 };
 
 struct mm_buffer_segment
 {
-	/* The next segment in the buffer. */
-	struct mm_buffer_segment *next;
-
 	/* The data block. */
 	char *data;
 	size_t size;
+
+	/* The next segment in the buffer. */
+	struct mm_buffer_segment *next;
 
 	/* Release info. */
 	mm_buffer_release_t release;
@@ -115,10 +114,10 @@ void mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 
 struct mm_buffer_cursor
 {
-	/* Current data block. */
-	char *data;
-	size_t size;
-
+	/* Current data pointer. */
+	char *ptr;
+	/* End of data pointer. */
+	char *end;
 	/* Current segment. */
 	struct mm_buffer_segment *seg;
 };
@@ -126,61 +125,58 @@ struct mm_buffer_cursor
 static inline bool
 mm_buffer_first_in(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
 {
-	if (buf->in_seg != NULL) {
-		cur->seg = buf->in_seg;
-		cur->size = cur->seg->size - buf->in_off;
-		cur->data = cur->seg->data + buf->in_off;
-		return true;
-	}
-	return false;
+	if (buf->in_seg == NULL)
+		return false;
+
+	cur->seg = buf->in_seg;
+	cur->ptr = cur->seg->data + buf->in_off;
+	cur->end = cur->seg->data + cur->seg->size;
+	return true;
 }
 
 static inline bool
 mm_buffer_next_in(struct mm_buffer *buf __attribute__((unused)), struct mm_buffer_cursor *cur)
 {
-	if (cur->seg->next != NULL) {
-		cur->seg = cur->seg->next;
-		cur->size = cur->seg->size;
-		cur->data = cur->seg->data;
-		return true;
-	}
-	return false;
+	if (cur->seg->next == NULL)
+		return false;
+
+	cur->seg = cur->seg->next;
+	cur->ptr = cur->seg->data;
+	cur->end = cur->seg->data + cur->seg->size;
+	return true;
+}
+
+static inline void
+mm_buffer_size_out(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
+{
+	if (cur->seg != buf->in_seg)
+		cur->end = cur->seg->data + cur->seg->size;
+	else
+		cur->end = cur->seg->data + buf->in_off;
 }
 
 static inline bool
 mm_buffer_first_out(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
 {
-	if (buf->out_seg != buf->in_seg) {
-		cur->seg = buf->out_seg;
-		cur->size = cur->seg->size - buf->out_off;
-		cur->data = cur->seg->data + buf->out_off;
-		return true;
-	} else if (buf->out_seg != NULL) {
-		cur->seg = buf->out_seg;
-		cur->size = buf->in_off - buf->out_off;
-		cur->data = cur->seg->data + buf->out_off;
-		return true;
-	}
-	return false;
+	if (buf->out_seg == NULL)
+		return false;
+
+	cur->seg = buf->out_seg;
+	cur->ptr = cur->seg->data + buf->out_off;
+	mm_buffer_size_out(buf, cur);
+	return true;
 }
 
 static inline bool
 mm_buffer_next_out(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
 {
-	if (cur->seg != buf->in_seg) {
-		if (cur->seg->next != buf->in_seg) {
-			cur->seg = cur->seg->next;
-			cur->size = cur->seg->size;
-			cur->data = cur->seg->data;
-			return true;
-		} else {
-			cur->seg = cur->seg->next;
-			cur->size = buf->in_off;
-			cur->data = cur->seg->data;
-			return true;
-		}
-	}
-	return false;
+	if (cur->seg == buf->in_seg)
+		return false;
+
+	cur->seg = cur->seg->next;
+	cur->ptr = cur->seg->data;
+	mm_buffer_size_out(buf, cur);
+	return true;
 }
 
 #endif /* BUFFER_H */

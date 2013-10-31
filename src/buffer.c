@@ -20,30 +20,27 @@
 #include "buffer.h"
 
 #include "alloc.h"
-#include "log.h"
-#include "trace.h"
 #include "chunk.h"
+#include "log.h"
 
-#include <stdio.h>
 #include <stdarg.h>
+#include <stdio.h>
 
 /**********************************************************************
  * Buffer segments.
  **********************************************************************/
 
-#define MM_BUFFER_MIN_CHUNK_SIZE	(4 * 1024 - MM_CHUNK_OVERHEAD)
-#define MM_BUFFER_MAX_CHUNK_SIZE	(256 * 1024 - MM_CHUNK_OVERHEAD)
-
 static struct mm_buffer_segment *
 mm_buffer_segment_create(char *data, size_t size,
-			 mm_buffer_release_t release, uintptr_t release_data)
+			 mm_buffer_release_t release,
+			 uintptr_t release_data)
 {
 	ENTER();
 
 	struct mm_buffer_segment *seg = mm_core_alloc(sizeof *seg);
-	seg->next = NULL;
 	seg->data = data;
 	seg->size = size;
+	seg->next = NULL;
 	seg->release = release;
 	seg->release_data = release_data;
 
@@ -52,110 +49,101 @@ mm_buffer_segment_create(char *data, size_t size,
 }
 
 static void
-mm_buffer_segment_destroy(struct mm_buffer *buf, struct mm_buffer_segment *seg)
+mm_buffer_segment_destroy(struct mm_buffer_segment *seg)
 {
 	ENTER();
 
 	if (seg->release != NULL)
-		(*seg->release)(buf, seg->release_data);
+		(*seg->release)(seg->release_data);
 	mm_core_free(seg);
 
 	LEAVE();
 }
 
+/**********************************************************************
+ * Buffer internal segments.
+ **********************************************************************/
+
+#define MM_BUFFER_MIN_CHUNK_SIZE	(4 * 1024 - MM_CHUNK_OVERHEAD)
+#define MM_BUFFER_MAX_CHUNK_SIZE	(256 * 1024 - MM_CHUNK_OVERHEAD)
+
 static void
-mm_buffer_segment_release(struct mm_buffer *buf, uintptr_t release_data)
+mm_buffer_chunk_release(uintptr_t release_data)
 {
 	ENTER();
 
-	struct mm_chunk *chunk = (struct mm_chunk *) release_data;
-	ASSERT(chunk == buf->store_head);
-
-	if (chunk->next == NULL) {
-		buf->store_head = NULL;
-		buf->store_tail = NULL;
-	} else {
-		buf->store_head = chunk->next;
-	}
-
-	buf->store_size -= chunk->size;
-
-	mm_chunk_destroy(chunk);
+	mm_chunk_destroy((struct mm_chunk *) release_data);
 
 	LEAVE();
+}
+
+// Create a new buffer segment that resides in an internal buffer chunk.
+// The created segment size may be smaller or bigger than requested.
+static struct mm_buffer_segment *
+mm_buffer_chunk_reserve(size_t desired_size)
+{
+	ENTER();
+
+	// The chunk should have a reasonable size that does not
+	// put too much pressure on the memory allocator.
+	size_t size = desired_size;
+	if (size < MM_BUFFER_MIN_CHUNK_SIZE)
+		size = MM_BUFFER_MIN_CHUNK_SIZE;
+	if (size > MM_BUFFER_MAX_CHUNK_SIZE)
+		size = MM_BUFFER_MAX_CHUNK_SIZE;
+	DEBUG("reserve %d/%d bytes for a buffer chunk",
+	      (int) size, (int) desired_size);
+
+	// Create an internal chunk.
+	struct mm_chunk *chunk = mm_chunk_create(size);
+
+	// Create a buffer segment based on the chunk.
+	struct mm_buffer_segment *seg
+		= mm_buffer_segment_create(chunk->data, chunk->size,
+					   mm_buffer_chunk_release,
+					   (uintptr_t) chunk);
+
+	LEAVE();
+	return seg;
+}
+
+static inline bool
+mm_buffer_is_chunk_segment(struct mm_buffer_segment *seg)
+{
+	return (seg->release == mm_buffer_chunk_release);
 }
 
 /**********************************************************************
  * Buffer helper routines.
  **********************************************************************/
 
-// Create a new buffer segment that should reside in a backing store chunk.
-// The created segment may be smaller than requested if the available chunk
-// cannot fit it all.
 static struct mm_buffer_segment *
-mm_buffer_reserve(struct mm_buffer *buf, size_t desired_size)
-{
-	ENTER();
-
-	// Create a backing store chunk if needed.
-	struct mm_chunk *chunk = buf->store_tail;
-	if (chunk == NULL || chunk->used == chunk->size) {
-		size_t chunk_size = desired_size;
-		if (chunk_size > MM_BUFFER_MIN_CHUNK_SIZE)
-			chunk_size = MM_BUFFER_MIN_CHUNK_SIZE;
-		if (chunk_size < MM_BUFFER_MAX_CHUNK_SIZE)
-			chunk_size = MM_BUFFER_MAX_CHUNK_SIZE;
-
-		chunk = mm_chunk_create(chunk_size);
-		if (buf->store_tail == NULL)
-			buf->store_head = chunk;
-		else
-			buf->store_tail->next = chunk;
-		buf->store_tail = chunk;
-
-		buf->store_size += chunk_size;
-	}
-
-	// Allot space in the last available backing store chunk.
-	char *data = chunk->data + chunk->used;
-	uint32_t size = chunk->size - chunk->used;
-	if (size > desired_size)
-		size = desired_size;
-	chunk->used += size;
-
-	DEBUG("reserve %d/%d bytes for a buffer segment", (int) size, (int) desired_size);
-
-	// If the chunk is full then it has to be released when the segment
-	// is consumed.
-	mm_buffer_release_t release = NULL;
-	uintptr_t release_data = 0;
-	if (chunk->used == chunk->size) {
-		release = mm_buffer_segment_release;
-		release_data = (uintptr_t) chunk;
-	}
-
-	// Create a new segment.
-	struct mm_buffer_segment *seg = mm_buffer_segment_create(data, size,
-								 release, release_data);
-
-	LEAVE();
-	return seg;
-}
-
-static struct mm_buffer_segment *
-mm_buffer_ensure(struct mm_buffer *buf, size_t desired_size)
+mm_buffer_ensure_first_in(struct mm_buffer *buf, size_t desired_size)
 {
 	struct mm_buffer_segment *seg = buf->in_seg;
 	if (seg == NULL) {
-		seg = mm_buffer_reserve(buf, desired_size);
+		seg = mm_buffer_chunk_reserve(desired_size);
 		buf->in_seg = seg;
 		buf->out_seg = seg;
+		buf->chunk_size += seg->size;
 	}
 	return seg;
 }
 
+static struct mm_buffer_segment *
+mm_buffer_ensure_next_in(struct mm_buffer *buf,
+			 struct mm_buffer_segment *seg,
+			 size_t desired_size)
+{
+	if (seg->next == NULL) {
+		seg->next = mm_buffer_chunk_reserve(desired_size);
+		buf->chunk_size += seg->size;
+	}
+	return seg->next;
+}
+
 /**********************************************************************
- * Buffers.
+ * Buffer routines.
  **********************************************************************/
 
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
@@ -178,7 +166,7 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 	struct mm_buffer_segment *seg = buf->out_seg;
 	while (seg != NULL) {
 		struct mm_buffer_segment *next = seg->next;
-		mm_buffer_segment_destroy(buf, seg);
+		mm_buffer_segment_destroy(seg);
 		seg = next;
 	}
 
@@ -192,22 +180,26 @@ mm_buffer_rectify(struct mm_buffer *buf)
 	ENTER();
 
 	struct mm_buffer_segment *seg = buf->out_seg;
-	if (seg != NULL && mm_buffer_empty(buf)) {
-		if (buf->store_head != NULL
-		    && seg->data >= buf->store_head->data
-		    && seg->data < buf->store_head->data + buf->store_head->used) {
-			size_t n = seg->data - buf->store_head->data;
-			seg->data -= n;
-			seg->size += n;
-		} else if (seg->release != NULL) {
-			buf->in_seg = seg->next;
-			buf->out_seg = seg->next;
-			mm_buffer_segment_destroy(buf, seg);
-		}
-		buf->in_off = 0;
-		buf->out_off = 0;
-	}
+	if (seg == NULL)
+		goto leave;
+	if (!mm_buffer_empty(buf))
+		goto leave;
 
+	if (mm_buffer_is_chunk_segment(seg)) {
+		struct mm_chunk *chunk = (struct mm_chunk *) seg->release_data;
+		size_t n = seg->data - chunk->data;
+		seg->data -= n;
+		seg->size += n;
+	} else if (seg->release != NULL) {
+		buf->in_seg = seg->next;
+		buf->out_seg = seg->next;
+		buf->extra_size -= seg->size;
+		mm_buffer_segment_destroy(seg);
+	}
+	buf->in_off = 0;
+	buf->out_off = 0;
+
+leave:
 	LEAVE();
 }
 
@@ -216,33 +208,32 @@ mm_buffer_append(struct mm_buffer *buf, const char *data, size_t size)
 {
 	ENTER();
 
-	if (likely(size)) {
-		struct mm_buffer_segment *seg = mm_buffer_ensure(buf, size);
-		char *p = seg->data + buf->in_off;
-		size_t n = seg->size - buf->in_off;
+	if (unlikely(size == 0))
+		goto leave;
 
-		while (n < size) {
-			memcpy(p, data, n);
-			data += n;
-			size -= n;
+	struct mm_buffer_segment *seg = mm_buffer_ensure_first_in(buf, size);
+	char *p = seg->data + buf->in_off;
+	size_t n = seg->size - buf->in_off;
 
-			if (seg->next == NULL)
-				seg->next = mm_buffer_reserve(buf, size);
-			seg = seg->next;
+	while (n < size) {
+		memcpy(p, data, n);
+		data += n;
+		size -= n;
 
-			p = seg->data;
-			n = seg->size;
-		}
-
-		memcpy(p, data, size);
-		if (buf->in_seg == seg) {
-			buf->in_off += size;
-		} else {
-			buf->in_off = size;
-			buf->in_seg = seg;
-		}
+		seg = mm_buffer_ensure_next_in(buf, seg, size);
+		p = seg->data;
+		n = seg->size;
 	}
 
+	memcpy(p, data, size);
+	if (buf->in_seg == seg) {
+		buf->in_off += size;
+	} else {
+		buf->in_off = size;
+		buf->in_seg = seg;
+	}
+
+leave:
 	LEAVE();
 }
 
@@ -251,7 +242,7 @@ mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 {
 	ENTER();
 
-	struct mm_buffer_segment *seg = mm_buffer_ensure(buf, 1);
+	struct mm_buffer_segment *seg = mm_buffer_ensure_first_in(buf, 1);
 	char *p = seg->data + buf->in_off;
 	size_t n = seg->size - buf->in_off;
 
@@ -283,21 +274,18 @@ mm_buffer_demand(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
 
-	if (likely(size)) {
-		struct mm_buffer_segment *seg = mm_buffer_ensure(buf, size);
-		size_t n = seg->size - buf->in_off;
+	if (unlikely(size == 0))
+		goto leave;
 
-		while (n < size) {
-			size -= n;
-
-			if (seg->next == NULL)
-				seg->next = mm_buffer_reserve(buf, size);
-			seg = seg->next;
-
-			n = seg->size;
-		}
+	struct mm_buffer_segment *seg = mm_buffer_ensure_first_in(buf, size);
+	size_t n = seg->size - buf->in_off;
+	while (n < size) {
+		size -= n;
+		seg = mm_buffer_ensure_next_in(buf, seg, size);
+		n = seg->size;
 	}
 
+leave:
 	LEAVE();
 }
 
@@ -306,7 +294,7 @@ mm_buffer_expand(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
 
-	size_t orig_size = size;
+	size_t o_size = size;
 	struct mm_buffer_segment *seg = buf->in_seg;
 	if (seg != NULL) {
 		size_t n = seg->size - buf->in_off;
@@ -329,7 +317,7 @@ mm_buffer_expand(struct mm_buffer *buf, size_t size)
 	}
 
 	LEAVE();
-	return (orig_size - size);
+	return (o_size - size);
 }
 
 size_t
@@ -337,16 +325,24 @@ mm_buffer_reduce(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
 
-	size_t orig_size = size;
+	size_t o_size = size;
 	struct mm_buffer_segment *seg = buf->out_seg;
 	if (seg != NULL) {
 		size_t n = seg->size - buf->out_off;
 		while (n <= size && seg != buf->in_seg) {
-			struct mm_buffer_segment *tmp = seg;
+			if (mm_buffer_is_chunk_segment(seg)) {
+				struct mm_chunk *chunk = (struct mm_chunk *) seg->release_data;
+				buf->chunk_size -= chunk->size;
+			} else {
+				buf->extra_size -= seg->size;
+			}
+
+			struct mm_buffer_segment *next = seg->next;
+			mm_buffer_segment_destroy(seg);
+			seg = next;
+
 			size -= n;
-			seg = seg->next;
 			n = seg->size;
-			mm_buffer_segment_destroy(buf, tmp);
 		}
 
 		if (buf->in_seg == seg)
@@ -364,7 +360,7 @@ mm_buffer_reduce(struct mm_buffer *buf, size_t size)
 	}
 
 	LEAVE();
-	return (orig_size - size);
+	return (o_size - size);
 }
 
 void
@@ -378,7 +374,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 	if (size < MM_BUFFER_SPLICE_THRESHOLD) {
 		mm_buffer_append(buf, data, size);
 		if (release != NULL) {
-			(*release)(buf, release_data);
+			(*release)(release_data);
 		}
 		goto leave;
 	}
@@ -419,6 +415,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 	}
 	buf->in_seg = seg;
 	buf->in_off = size;
+	buf->extra_size += size;
 
 leave:
 	LEAVE();
