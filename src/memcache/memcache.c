@@ -515,37 +515,6 @@ mc_table_term(void)
 }
 
 /**********************************************************************
- * Protocol I/O Buffer.
- **********************************************************************/
-
-#define MC_DEFAULT_BUFFER_SIZE	4000
-
-static struct mm_chunk *
-mc_buffer_create(size_t size)
-{
-	ENTER();
-
-	size += MC_DEFAULT_BUFFER_SIZE - 1;
-	size -= size % MC_DEFAULT_BUFFER_SIZE;
-	struct mm_chunk *buffer = mm_chunk_create(size);
-
-	LEAVE();
-	return buffer;
-}
-
-static inline bool
-mc_buffer_contains(struct mm_chunk *buffer, const char *ptr)
-{
-	return ptr >= buffer->data && ptr < (buffer->data + buffer->size);
-}
-
-static inline bool
-mc_buffer_finished(struct mm_chunk *buffer, const char *ptr)
-{
-	return ptr == (buffer->data + buffer->size);
-}
-
-/**********************************************************************
  * Command Data.
  **********************************************************************/
 
@@ -560,7 +529,7 @@ struct mc_string
 
 struct mc_value
 {
-	struct mm_chunk *buffer;
+	struct mm_buffer_segment *seg;
 	const char *start;
 	uint32_t bytes;
 };
@@ -655,7 +624,7 @@ struct mc_command
 	union mc_result result;
 	mc_result_t result_type;
 
-	struct mc_future *future;
+	struct mm_future *future;
 };
 
 /* Command parsing routine. */
@@ -837,13 +806,6 @@ struct mc_state
 	// Current parse position.
 	char *start_ptr;
 
-	// Last released position.
-	char *clear_ptr;
-
-	// Input buffer queue.
-	struct mm_chunk *read_head;
-	struct mm_chunk *read_tail;
-
 	// Command processing queue.
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
@@ -859,7 +821,6 @@ struct mc_state
 	bool quit;
 };
 
-
 static struct mc_state *
 mc_create(struct mm_net_socket *sock)
 {
@@ -868,10 +829,6 @@ mc_create(struct mm_net_socket *sock)
 	struct mc_state *state = mm_alloc(sizeof(struct mc_state));
 
 	state->start_ptr = NULL;
-	state->clear_ptr = NULL;
-
-	state->read_head = NULL;
-	state->read_tail = NULL;
 
 	state->command_head = NULL;
 	state->command_tail = NULL;
@@ -890,12 +847,6 @@ mc_destroy(struct mc_state *state)
 {
 	ENTER();
 
-	while (state->read_head != NULL) {
-		struct mm_chunk *buffer = state->read_head;
-		state->read_head = buffer->next;
-		mm_chunk_destroy(buffer);
-	}
-
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
@@ -907,23 +858,6 @@ mc_destroy(struct mc_state *state)
 	mm_free(state);
 
 	LEAVE();
-}
-
-static struct mm_chunk *
-mc_add_read_buffer(struct mc_state *state, size_t size)
-{
-	ENTER();
-
-	struct mm_chunk *buffer = mc_buffer_create(size);
-	if (state->read_tail == NULL) {
-		state->read_head = buffer;
-	} else {
-		state->read_tail->next = buffer;
-	}
-	state->read_tail = buffer;
-
-	LEAVE();
-	return buffer;
 }
 
 static void
@@ -947,38 +881,26 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 {
 	ENTER();
 
-	struct mm_chunk *buffer = state->read_head;
-	if (buffer == NULL)
-		goto leave;
+	size_t size = 0;
 
-	for (;;) {
-		if (mc_buffer_contains(buffer, ptr)) {
-			/* The buffer is (might be) still in use. */
-			state->clear_ptr = ptr;
+	struct mm_buffer_cursor cur;
+	bool rc = mm_buffer_first_out(&state->rbuf, &cur);
+	while (rc) {
+		if (ptr >= cur.ptr && ptr <= cur.end) {
+			// The buffer is (might be) still in use.
+			if (ptr == cur.end && state->start_ptr == cur.end)
+				state->start_ptr = NULL;
+			size += ptr - cur.ptr;
 			break;
 		}
 
-		state->read_head = buffer->next;
-		if (state->read_head == NULL) {
-			mm_chunk_destroy(buffer);
-			state->read_tail = NULL;
-			state->start_ptr = NULL;
-			state->clear_ptr = NULL;
-			break;
-		}
-
-		if (mc_buffer_finished(buffer, ptr) && state->start_ptr == ptr) {
-			mm_chunk_destroy(buffer);
-			state->start_ptr = NULL;
-			state->clear_ptr = NULL;
-			break;
-		}
-
-		mm_chunk_destroy(buffer);
-		buffer = state->read_head;
+		size += cur.end - cur.ptr;
+		rc = mm_buffer_next_out(&state->rbuf, &cur);
 	}
 
-leave:
+	if (size > 0)
+		mm_buffer_reduce(&state->rbuf, size);
+
 	LEAVE();
 }
 
@@ -1013,34 +935,21 @@ mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
 	*hangup = false;
 
 	size_t total = required + optional;
+	mm_buffer_demand(&state->rbuf, total);
+
 	size_t count = total;
-
-	struct mm_chunk *buffer = state->read_head;
 	while (count > optional) {
-		size_t size;
-		if (buffer == NULL) {
-			buffer = mc_add_read_buffer(state, count);
-			size = buffer->size;
-		} else {
-			size = buffer->size - buffer->used;
-			if (size == 0) {
-				buffer = buffer->next;
-				continue;
-			}
-		}
-
-		ssize_t n = mm_net_read(state->sock, buffer->data + buffer->used, size);
+		ssize_t n = mm_net_readbuf(state->sock, &state->rbuf);
 		if (n <= 0) {
 			*hangup = mc_read_hangup(n, errno);
 			break;
 		}
 
-		buffer->used += n;
-		if (count > (size_t) n) {
-			count -= n;
-		} else {
+		if (count < (size_t) n) {
 			count = 0;
+			break;
 		}
+		count -= n;
 	}
 
 	LEAVE();
@@ -1064,20 +973,20 @@ mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset
 
 	const char *src = value->start;
 	uint32_t bytes = value->bytes;
-	struct mm_chunk *buffer = value->buffer;
-	ASSERT(src >= buffer->data && src <= buffer->data + buffer->used);
+	struct mm_buffer_segment *seg = value->seg;
+	ASSERT(src >= seg->data && src <= seg->data + seg->size);
 
 	char *dst = mc_entry_value(entry) + offset;
 	for (;;) {
-		uint32_t n = (buffer->data + buffer->used) - src;
+		uint32_t n = (seg->data + seg->size) - src;
 		if (n >= bytes) {
 			memcpy(dst, src, bytes);
 			break;
 		}
 
 		memcpy(dst, src, n);
-		buffer = buffer->next;
-		src = buffer->data;
+		seg = seg->next;
+		src = seg->data;
 		dst += n;
 		bytes -= n;
 	}
@@ -1532,11 +1441,6 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	mc_queue_command(state, command);
 	mm_net_spawn_writer(state->sock);
 
-	// If the command completion requires execution
-	// of other tasks give them a chance to run.
-	//mm_task_yield();
-	//mm_task_yield();
-
 	LEAVE();
 	return 0;
 }
@@ -1552,16 +1456,17 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 struct mc_parser
 {
-	char *start_ptr;
-	char *end_ptr;
-
-	struct mm_chunk *buffer;
-
+	struct mm_buffer_cursor cursor;
 	struct mc_command *command;
 	struct mc_state *state;
-
 	bool error;
 };
+
+static inline bool
+mc_buffer_contains(struct mm_buffer_cursor *cur, const char *ptr)
+{
+	return ptr >= cur->ptr && ptr < cur->end;
+}
 
 /*
  * Prepare for parsing a command.
@@ -1573,17 +1478,12 @@ mc_start_input(struct mc_parser *parser,
 {
 	ENTER();
 
-	struct mm_chunk *buffer = state->read_head;
-	if (state->start_ptr == NULL) {
-		parser->start_ptr = buffer->data;
-	} else {
-		while (!mc_buffer_contains(buffer, state->start_ptr))
-			buffer = buffer->next;
-		parser->start_ptr = state->start_ptr;
+	mm_buffer_first_out(&state->rbuf, &parser->cursor);
+	if (state->start_ptr != NULL) {
+		while (!mc_buffer_contains(&parser->cursor, state->start_ptr)) {
+			mm_buffer_next_out(&state->rbuf, &parser->cursor);
+		}
 	}
-	parser->end_ptr = buffer->data + buffer->used;
-
-	parser->buffer = buffer;
 
 	parser->state = state;
 	parser->command = command;
@@ -1592,105 +1492,49 @@ mc_start_input(struct mc_parser *parser,
 	LEAVE();
 }
 
-static void
-mc_end_input(struct mc_parser *parser)
-{
-	ENTER();
-
-	parser->command->end_ptr = parser->start_ptr;
-	parser->state->start_ptr = parser->start_ptr;
-
-	LEAVE();
-}
-
-/*
- * Move to the next input buffer.
- */
-static bool
-mc_shift_input(struct mc_parser *parser)
-{
-	ENTER();
-
-	struct mm_chunk *buffer = parser->buffer->next;
-	bool rc = (buffer != NULL && buffer->used > 0);
-	if (rc) {
-		parser->buffer = buffer;
-		parser->start_ptr = buffer->data;
-		parser->end_ptr = buffer->data + buffer->used;
-	}
-
-	LEAVE();
-	return rc;
-}
-
-/*
- * Update parser after reading more data into the input buffer.
- */
-static void
-mc_widen_input(struct mc_parser *parser)
-{
-	ENTER();
-
-	struct mm_chunk *buffer = parser->buffer;
-	parser->end_ptr = buffer->data + buffer->used;
-
-	LEAVE();
-}
-
-/* 
- * Carry the param over to the next input buffer. Create one if there is
- * no already.
- */
-static void
-mc_carry_param(struct mc_parser *parser, int count)
-{
-	ENTER();
-
-	struct mm_chunk *buffer = parser->buffer->next;
-	if (buffer == NULL) {
-		buffer = mc_add_read_buffer(parser->state, MC_DEFAULT_BUFFER_SIZE);
-	} else if (buffer->used > 0) {
-		ASSERT((buffer->size - buffer->used) >= MC_KEY_LEN_MAX);
-		memmove(buffer->data + count, buffer->data, buffer->used);
-	}
-
-	memcpy(buffer->data, parser->start_ptr, count);
-	memset(parser->start_ptr, ' ', count);
-	buffer->used += count;
-
-	parser->buffer = buffer;
-	parser->start_ptr = buffer->data;
-	parser->end_ptr = buffer->data + buffer->used;
-
-	LEAVE();
-}
-
 /*
  * Ask for the next input buffer with additional sanity checking.
  */
 static bool
-mc_claim_input(struct mc_parser *parser, int count)
+mc_more_input(struct mc_parser *parser, int count)
 {
-	if (count > 1024) {
+	if (unlikely(count > 1024)) {
 		/* The client looks insane. Quit fast. */
 		parser->command->result_type = MC_RESULT_QUIT;
 		parser->state->quit = true;
 		return false;
 	}
-	return mc_shift_input(parser);
+	return mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
+}
+
+static void
+mc_end_input(struct mc_parser *parser)
+{
+	ENTER();
+
+	parser->command->end_ptr = parser->cursor.ptr;
+	parser->state->start_ptr = parser->cursor.ptr;
+
+	LEAVE();
 }
 
 static int
-mc_peek_input(struct mc_parser *parser, char *s, char *e)
+mc_peek_input(struct mc_parser *parser, char *s)
 {
-	ASSERT(mc_buffer_contains(parser->buffer, s));
-	ASSERT(e == (parser->buffer->data + parser->buffer->used));
+	ASSERT(mc_buffer_contains(&parser->cursor, s));
 
-	if ((s + 1) < e)
-		return s[1];
-	if (parser->buffer->next && parser->buffer->next->used > 0)
-		return parser->buffer->next->data[0];
-	return 256; /* a non-char */
+	if ((s + 1) < parser->cursor.end)
+		return *(s + 1);
+
+	struct mm_buffer_segment *seg = parser->cursor.seg;
+	if (seg != parser->state->rbuf.in_seg) {
+		seg = seg->next;
+		if (seg != parser->state->rbuf.in_seg || parser->state->rbuf.in_off) {
+			return seg->data[0];
+		}
+	}
+
+	return 256; // not a char
 }
 
 static bool
@@ -1703,24 +1547,21 @@ mc_parse_space(struct mc_parser *parser)
 	/* The count of scanned chars. Used to check if the client sends
 	   too much junk data. */
 	int count = 0;
-
-	for (;;) {
-		char *s = parser->start_ptr;
-		char *e = parser->end_ptr;
+	do {
+		char *s = parser->cursor.ptr;
+		char *e = parser->cursor.end;
 
 		for (; s < e; s++) {
 			if (*s != ' ') {
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				goto leave;
 			}
 		}
 
-		count += parser->end_ptr - parser->start_ptr;
-		if (!mc_claim_input(parser, count)) {
-			rc = false;
-			goto leave;
-		}
-	}
+		count += e - parser->cursor.ptr;
+		rc = mc_more_input(parser, count);
+
+	} while (rc);
 
 leave:
 	LEAVE();
@@ -1739,29 +1580,24 @@ mc_parse_error(struct mc_parser *parser, const char *error_string)
 	/* The count of scanned chars. Used to check if the client sends
 	   too much junk data. */
 	int count = 0;
-
-	for (;;) {
-		char *s = parser->start_ptr;
-		char *e = parser->end_ptr;
+	do {
+		char *s = parser->cursor.ptr;
+		char *e = parser->cursor.end;
 
 		/* Scan input for a newline. */
 		char *p = memchr(s, '\n', e - s);
 		if (p != NULL) {
 			/* Go past the newline ready for the next command. */
-			parser->start_ptr = p + 1;
+			parser->cursor.ptr = p + 1;
 			/* Report the error. */
 			mc_reply(parser->command, error_string);
 			break;
 		}
 
-		count += parser->end_ptr - parser->start_ptr;
-		if (!mc_claim_input(parser, count)) {
-			/* The line is not complete, wait for completion
-			   before reporting error. */
-			rc = false;
-			break;
-		}
-	}
+		count += e - parser->cursor.ptr;
+		rc = mc_more_input(parser, count);
+
+	} while (rc);
 
 	LEAVE();
 	return rc;
@@ -1774,25 +1610,22 @@ mc_parse_eol(struct mc_parser *parser)
 
 	/* Skip spaces. */
 	bool rc = mc_parse_space(parser);
-	if (!rc) {
+	if (!rc)
 		goto leave;
-	}
 
-	char *s = parser->start_ptr;
-	char *e = parser->end_ptr;
+	char *s = parser->cursor.ptr;
+	char *e = parser->cursor.end;
 
 	int c = *s;
 
 	/* Check for optional CR char and required LF. */
-	if ((c == '\r' && mc_peek_input(parser, s, e) == '\n') || c == '\n') {
+	if ((c == '\r' && mc_peek_input(parser, s) == '\n') || c == '\n') {
 		/* All right, got the line end. */
 		if (c == '\r' && ++s == e) {
-			struct mm_chunk *buffer = parser->buffer->next;
-			parser->buffer = buffer;
-			parser->start_ptr = buffer->data + 1;
-			parser->end_ptr = buffer->data + buffer->used;
+			mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
+			parser->cursor.ptr += 1;
 		} else {
-			parser->start_ptr = s + 1;
+			parser->cursor.ptr = s + 1;
 		}
 	} else {
 		/* Oops, unexpected char. */
@@ -1810,27 +1643,26 @@ mc_parse_param(struct mc_parser *parser, struct mc_string *value, bool required)
 	ENTER();
 
 	bool rc = mc_parse_space(parser);
-	if (!rc) {
+	if (!rc)
 		goto leave;
-	}
 
 	char *s, *e;
 
 retry:
-	s = parser->start_ptr;
-	e = parser->end_ptr;
+	s = parser->cursor.ptr;
+	e = parser->cursor.end;
 	for (; s < e; s++) {
 		int c = *s;
-		if (c == ' ' || (c == '\r' && mc_peek_input(parser, s, e) == '\n') || c == '\n') {
-			int count = s - parser->start_ptr;
+		if (c == ' ' || (c == '\r' && mc_peek_input(parser, s) == '\n') || c == '\n') {
+			int count = s - parser->cursor.ptr;
 			if (required && count == 0) {
 				rc = mc_parse_error(parser, "CLIENT_ERROR missing parameter\r\n");
 			} else if (count > MC_KEY_LEN_MAX) {
 				rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
 			} else {
 				value->len = count;
-				value->str = parser->start_ptr;
-				parser->start_ptr = s;
+				value->str = parser->cursor.ptr;
+				parser->cursor.ptr = s;
 
 				DEBUG("%.*s", (int) value->len, value->str);
 			}
@@ -1838,19 +1670,49 @@ retry:
 		}
 	}
 
-	DEBUG("buffer size: %d, used: %d",
-	      (int) parser->buffer->size,
-	      (int) parser->buffer->used);
-
-	int count = e - parser->start_ptr;
+	size_t count = e - parser->cursor.ptr;
 	if (count > MC_KEY_LEN_MAX) {
 		rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
-	} else if (parser->buffer->used < parser->buffer->size) {
-		rc = false;
-	} else {
-		mc_carry_param(parser, count);
-		goto retry;
+		goto leave;
 	}
+
+	struct mm_buffer *rbuf = &parser->state->rbuf;
+	struct mm_buffer_segment *seg = parser->cursor.seg;
+	if (seg == rbuf->in_seg) {
+		ASSERT(e == (rbuf->in_seg->data + rbuf->in_off));
+		if (rbuf->in_seg->size > rbuf->in_off) {
+			rc = false;
+			goto leave;
+		}
+
+		if (seg->next == NULL) {
+			mm_buffer_demand(rbuf, MC_KEY_LEN_MAX + 1);
+			ASSERT(seg->next != NULL);
+		}
+
+		memcpy(seg->next->data, parser->cursor.ptr, count);
+		memset(parser->cursor.ptr, ' ', count);
+		mm_buffer_expand(rbuf, count);
+
+	} else if (seg->next == rbuf->in_seg) {
+		size_t n = rbuf->in_seg->size - rbuf->in_off;
+		if (n < count) {
+			// TODO: handle this case
+			ABORT();
+		}
+
+		memmove(seg->next->data + count, seg->next->data, rbuf->in_off);
+		memcpy(seg->next->data, parser->cursor.ptr, count);
+		memset(parser->cursor.ptr, ' ', count);
+		mm_buffer_expand(rbuf, count);
+
+	} else {
+		// TODO: handle this case
+		ABORT();
+	}
+
+	mm_buffer_next_out(rbuf, &parser->cursor);
+	goto retry;
 
 leave:
 	LEAVE();
@@ -1905,15 +1767,14 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 	ENTER();
 
 	bool rc = mc_parse_space(parser);
-	if (!rc) {
+	if (!rc)
 		goto leave;
-	}
 
 	char *s, *e;
-	s = parser->start_ptr;
-	e = parser->end_ptr;
+	s = parser->cursor.ptr;
+	e = parser->cursor.end;
 
-	char *t = "noreply";
+	const char *t = "noreply";
 
 	int n = e - s;
 	if (n > 7) {
@@ -1924,12 +1785,11 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 			goto leave;
 		}
 
-		if (!mc_shift_input(parser)) {
-			rc = false;
+		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
+		if (!rc)
 			goto leave;
-		}
-		s = parser->start_ptr;
-		e = parser->end_ptr;
+		s = parser->cursor.ptr;
+		e = parser->cursor.end;
 
 		t = t + n;
 		n = 7 - n;
@@ -1946,7 +1806,7 @@ mc_parse_noreply(struct mc_parser *parser, bool *value)
 	}
 
 	*value = true;
-	parser->start_ptr += n;
+	parser->cursor.ptr += n;
 
 leave:
 	LEAVE();
@@ -1963,45 +1823,45 @@ mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 	uint32_t cr = 1;
 
 	/* Save current input buffer position. */
-  	data->buffer = parser->buffer;
-	data->start = parser->start_ptr;
+  	data->seg = parser->cursor.seg;
+	data->start = parser->cursor.ptr;
 
 	for (;;) {
-		uint32_t avail = parser->end_ptr - parser->start_ptr;
+		uint32_t avail = parser->cursor.end - parser->cursor.ptr;
 		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) bytes);
 		if (avail > bytes) {
-			parser->start_ptr += bytes;
+			parser->cursor.ptr += bytes;
 			avail -= bytes;
 			bytes = 0;
 
-			if (parser->start_ptr[0] == '\n') {
-				parser->start_ptr++;
+			if (parser->cursor.ptr[0] == '\n') {
+				parser->cursor.ptr++;
 				break;
 			}
 
 			if (!cr
-			    || parser->start_ptr[0] != '\r'
-			    || (avail > 1 && parser->start_ptr[1] != '\n')) {
+			    || parser->cursor.ptr[0] != '\r'
+			    || (avail > 1 && parser->cursor.ptr[1] != '\n')) {
 				parser->error = true;
 				mc_reply(parser->command,
 					 "CLIENT_ERROR bad data chunk\r\n");
 			}
 
 			if (!cr || avail > 1) {
-				parser->start_ptr++;
+				parser->cursor.ptr++;
 				if (cr)
-					parser->start_ptr++;
+					parser->cursor.ptr++;
 				break;
 			}
 
-			parser->start_ptr++;
+			parser->cursor.ptr++;
 			cr = 0;
 		} else {
-			parser->start_ptr += avail;
+			parser->cursor.ptr += avail;
 			bytes -= avail;
 		}
 
-		if (!mc_shift_input(parser)) {
+		if (!mm_buffer_next_out(&parser->state->rbuf, &parser->cursor)) {
 			bool hangup;
 			ssize_t r = bytes + 1;
 			ssize_t n = mc_read(parser->state, r, cr, &hangup);
@@ -2010,7 +1870,7 @@ mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 				rc = false;
 				break;
 			}
-			mc_widen_input(parser);
+			mm_buffer_size_out(&parser->state->rbuf, &parser->cursor);
 		}
 	}
 
@@ -2041,8 +1901,8 @@ mc_parse_command(struct mc_parser *parser)
 	}
 
 	/* Get current position in the input buffer. */
-	char *s = parser->start_ptr;
-	char *e = parser->end_ptr;
+	char *s = parser->cursor.ptr;
+	char *e = parser->cursor.end;
 
 	/* Must have some ready input at this point. */
 	ASSERT(s < e);
@@ -2164,7 +2024,7 @@ mc_parse_command(struct mc_parser *parser)
 		case SCAN_CMD_GET:
 			if (c == ' ') {
 				parser->command->desc = &mc_desc_get;
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				goto leave;
 			} else if (c == 's') {
 				parser->command->desc = &mc_desc_gets;
@@ -2177,7 +2037,7 @@ mc_parse_command(struct mc_parser *parser)
 				   without arguments, albeit pointless this
 				   is actually legal. */
 				parser->command->desc = &mc_desc_get;
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				goto leave;
 			} else {
 				/* Unexpected char. */
@@ -2233,7 +2093,7 @@ mc_parse_command(struct mc_parser *parser)
 			if (c == *cmd_rest) {
 				if (unlikely(c == 0)) {
 					/* Hmm, zero byte in the input. */
-					parser->start_ptr = s;
+					parser->cursor.ptr = s;
 					rc = mc_parse_error(parser, "ERROR\r\n");
 					goto leave;
 				}
@@ -2246,15 +2106,15 @@ mc_parse_command(struct mc_parser *parser)
 				goto leave;
 			} else if (c == ' ') {
 				/* Success. */
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				goto leave;
 			} else if (c == '\r' || c == '\n') {
 				/* Success. */
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				goto leave;
 			} else {
 				/* Unexpected char after the command name. */
-				parser->start_ptr = s;
+				parser->cursor.ptr = s;
 				rc = mc_parse_error(parser, "ERROR\r\n");
 				goto leave;
 			}
@@ -2262,14 +2122,13 @@ mc_parse_command(struct mc_parser *parser)
 
 	next:
 		if (++s == e) {
-			count += parser->end_ptr - parser->start_ptr;
-			if (!mc_claim_input(parser, count)) {
-				rc = false;
+			count += parser->cursor.end - parser->cursor.ptr;
+			rc = mc_more_input(parser, count);
+			if (!rc)
 				goto leave;
-			}
 
-			s = parser->start_ptr;
-			e = parser->end_ptr;
+			s = parser->cursor.ptr;
+			e = parser->cursor.end;
 		}
 	}
 
@@ -2620,8 +2479,7 @@ leave:
  **********************************************************************/
 
 static void
-mc_transmit_unref(struct mm_buffer *buf __attribute__((unused)),
-		  uintptr_t data)
+mc_transmit_unref(uintptr_t data)
 {
 	ENTER();
 
@@ -2699,13 +2557,16 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 	LEAVE();
 }
 
-static bool
+static void
 mc_transmit(struct mc_state *state)
 {
+	ENTER();
+
 	ssize_t n = mm_net_writebuf(state->sock, &state->tbuf);
-	if (n < 0 && errno != EINVAL && errno != EAGAIN && errno != EWOULDBLOCK)
-		return false;
-	return true;
+	if (n > 0)
+		mm_buffer_rectify(&state->tbuf);
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -2735,19 +2596,6 @@ mc_cleanup(struct mm_net_socket *sock)
 	}
 
 	LEAVE();
-}
-
-static void
-mc_clean_read_buffer(struct mc_state *state)
-{
-	struct mm_chunk *buffer = state->read_head;
-	if (buffer != NULL
-	    && state->start_ptr == state->clear_ptr
-	    && state->start_ptr == buffer->data + buffer->used) {
-		state->start_ptr = buffer->data;
-		state->clear_ptr = NULL;
-		buffer->used = 0;
-	}
 }
 
 static void
@@ -2795,7 +2643,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 			// Process the parsed command.
 			mc_process_command(state, parser.command);
 
-			mc_clean_read_buffer(state);
+			mm_buffer_rectify(&state->rbuf);
 
 			// TODO: check if there is more input.
 			parser.command = mc_command_create();
@@ -2813,7 +2661,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 		if (n <= 0) {
  			if (hangup) {
 				parser.command->result_type = MC_RESULT_QUIT;
-				parser.command->end_ptr = parser.start_ptr;
+				parser.command->end_ptr = parser.cursor.ptr;
 				mc_process_command(state, parser.command);
 			} else {
 				mc_command_destroy(parser.command);
@@ -2835,31 +2683,45 @@ mc_writer_routine(struct mm_net_socket *sock)
 
 	// Get the protocol data if any.
 	struct mc_state *state = (struct mc_state *) sock->data;
-	if (state == NULL)
+	if (unlikely(state == NULL))
 		goto leave;
 
-	// Buffer all the ready command results.
-	struct mc_command *command = state->command_head;
-	while (command != NULL && command->result_type != MC_RESULT_NONE) {
-		struct mc_command *next = command->next;
-		if (next != NULL)
-			state->command_head = next;
-		else
-			state->command_head = state->command_tail = NULL;
+	// Check to see if there at least one ready result.
+	struct mc_command *last = state->command_head;
+	if (unlikely(last == NULL))
+		goto leave;
+	if (unlikely(last->result_type == MC_RESULT_NONE))
+		goto leave;
 
-		// Free the receive buffers.
-		mc_release_buffers(state, command->end_ptr);
+	// Put the results into the transmit buffer.
+	for (;;) {
+		mc_transmit_buffer(state, last);
 
-		// Put the result into the transmit buffer.
-		mc_transmit_buffer(state, command);
+		struct mc_command *next = last->next;
+		if (next == NULL || next->result_type == MC_RESULT_NONE)
+			break;
 
-		// Free no longer needed command.
-		mc_command_destroy(command);
-		command = next;
+		last = next;
 	}
 
 	// Transmit buffered results.
 	mc_transmit(state);
+
+	// Free the receive buffers.
+	mc_release_buffers(state, last->end_ptr);
+
+	// Release the command data
+	for (;;) {
+		struct mc_command *head = state->command_head;
+		state->command_head = head->next;
+		mc_command_destroy(head);
+
+		if (head == last) {
+			if (state->command_head == NULL)
+				state->command_tail = NULL;
+			break;
+		}
+	}
 
 leave:
 	LEAVE();
