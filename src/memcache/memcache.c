@@ -1573,29 +1573,25 @@ mc_parse_error(struct mc_parser *parser, const char *error_string)
 {
 	ENTER();
 
-	/* Initialize the result. */
+	// Initialize the result.
 	bool rc = true;
 	parser->error = true;
 
-	/* The count of scanned chars. Used to check if the client sends
-	   too much junk data. */
-	int count = 0;
 	do {
 		char *s = parser->cursor.ptr;
 		char *e = parser->cursor.end;
 
-		/* Scan input for a newline. */
+		// Scan input for a newline.
 		char *p = memchr(s, '\n', e - s);
 		if (p != NULL) {
-			/* Go past the newline ready for the next command. */
+			// Go past the newline for the next command.
 			parser->cursor.ptr = p + 1;
-			/* Report the error. */
+			// Report the error.
 			mc_reply(parser->command, error_string);
 			break;
 		}
 
-		count += e - parser->cursor.ptr;
-		rc = mc_more_input(parser, count);
+		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
 
 	} while (rc);
 
