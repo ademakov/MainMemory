@@ -597,7 +597,6 @@ typedef enum
 	MC_RESULT_ENTRY,
 	MC_RESULT_ENTRY_CAS,
 	MC_RESULT_VALUE,
-	MC_RESULT_VERSION,
 	MC_RESULT_QUIT,
 } mc_result_t;
 
@@ -639,6 +638,7 @@ struct mc_command_desc
 	mc_parse_routine parse;
 	mm_routine_t process;
 	mc_destroy_routine destroy;
+	bool async;
 };
 
 static struct mm_pool mc_command_pool;
@@ -769,7 +769,7 @@ mc_destroy_incr(struct mc_command *command)
  * Command Descriptors.
  **********************************************************************/
 
-#define MC_DESC(cmd, parse_name, process_name, destroy_name)		\
+#define MC_DESC(cmd, parse_name, process_name, destroy_name, async_val)	\
 	static bool mc_parse_##parse_name(struct mc_parser *);		\
 	static mm_result_t mc_process_##process_name(uintptr_t);	\
 	static struct mc_command_desc mc_desc_##cmd = {			\
@@ -777,24 +777,25 @@ mc_destroy_incr(struct mc_command *command)
 		.parse = mc_parse_##parse_name,				\
 		.process = mc_process_##process_name,			\
 		.destroy = mc_destroy_##destroy_name,			\
+		.async = async_val,					\
 	}
 
-MC_DESC(get,		get,		get,		get);
-MC_DESC(gets,		get,		gets,		gets);
-MC_DESC(set,		set,		set,		dummy);
-MC_DESC(add,		set,		add,		dummy);
-MC_DESC(replace,	set,		replace,	dummy);
-MC_DESC(append,		set,		append,		dummy);
-MC_DESC(prepend,	set,		prepend,	dummy);
-MC_DESC(cas,		cas,		cas,		dummy);
-MC_DESC(incr,		incr,		incr,		incr);
-MC_DESC(decr,		incr,		decr,		incr);
-MC_DESC(delete,		delete,		delete,		dummy);
-MC_DESC(touch,		touch,		touch,		dummy);
-MC_DESC(slabs,		slabs,		slabs,		dummy);
-MC_DESC(stats,		stats,		stats,		dummy);
-MC_DESC(flush_all,	flush_all,	flush_all,	dummy);
-MC_DESC(verbosity,	verbosity,	dummy,		dummy);
+MC_DESC(get,		get,		get,		get,		true);
+MC_DESC(gets,		get,		gets,		gets,		true);
+MC_DESC(set,		set,		set,		dummy,		true);
+MC_DESC(add,		set,		add,		dummy,		true);
+MC_DESC(replace,	set,		replace,	dummy,		true);
+MC_DESC(append,		set,		append,		dummy,		true);
+MC_DESC(prepend,	set,		prepend,	dummy,		true);
+MC_DESC(cas,		cas,		cas,		dummy,		true);
+MC_DESC(incr,		incr,		incr,		incr,		true);
+MC_DESC(decr,		incr,		decr,		incr,		true);
+MC_DESC(delete,		delete,		delete,		dummy,		true);
+MC_DESC(touch,		touch,		touch,		dummy,		true);
+MC_DESC(slabs,		slabs,		slabs,		dummy,		false);
+MC_DESC(stats,		stats,		stats,		dummy,		false);
+MC_DESC(flush_all,	flush_all,	flush_all,	dummy,		false);
+MC_DESC(verbosity,	verbosity,	dummy,		dummy,		false);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -1432,7 +1433,9 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 	if (likely(command->desc != NULL)) {
 		DEBUG("command %s", command->desc->name);
+
 		if (command->result_type == MC_RESULT_NONE) {
+			// TODO: create a future for async commands.
 			command->desc->process((intptr_t) command);
 		}
 	}
@@ -1940,41 +1943,51 @@ again:
 					// Unexpected line end.
 					parser->cursor.ptr = s;
 					goto error;
-				} else if (c != ' ') {
-					start = c;
+				} else if (c == ' ') {
+					// SKip space.
+					break;
+				} else {
+					// Store the first command char.
+					start = c << 24;
 					state = S_CMD_1;
+					break;
 				}
-				break;
 
 			case S_CMD_1:
-			case S_CMD_2:
+				// Store the second command char.
 				if (c == '\n') {
 					// Unexpected line end.
 					parser->cursor.ptr = s;
 					goto error;
 				}
-				start <<= 8;
-				start |= c;
-				state += 1;
+				start |= c << 16;
+				state = S_CMD_2;
+				break;
+
+			case S_CMD_2:
+				// Store the third command char.
+				if (c == '\n') {
+					// Unexpected line end.
+					parser->cursor.ptr = s;
+					goto error;
+				}
+				start |= c << 8;
+				state = S_CMD_3;
 				break;
 
 			case S_CMD_3:
-				// This might be a get command without
-				// arguments, albeit pointless this is
-				// actually legal.
-				if (unlikely(c == '\r' || c == '\n'))
-					c = ' ';
-				start <<= 8;
+				// Have the 4 first chars of the command,
+				// it is enough to learn what it is.
 				start |= c;
 
 #define C(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 				if (start == C('g', 'e', 't', ' ')) {
 					parser->command->desc = &mc_desc_get;
-					parser->cursor.ptr = s;
+					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == C('s', 'e', 't', ' ')) {
 					parser->command->desc = &mc_desc_set;
-					parser->cursor.ptr = s;
+					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == C('r', 'e', 'p', 'l')) {
 					parser->command->desc = &mc_desc_replace;
@@ -1988,7 +2001,7 @@ again:
 					break;
 				} else if (start == C('a', 'd', 'd', ' ')) {
 					parser->command->desc = &mc_desc_add;
-					parser->cursor.ptr = s;
+					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == C('i', 'n', 'c', 'r')) {
 					parser->command->desc = &mc_desc_incr;
@@ -2007,7 +2020,7 @@ again:
 					break;
 				} else if (start == C('c', 'a', 's', ' ')) {
 					parser->command->desc = &mc_desc_cas;
-					parser->cursor.ptr = s;
+					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == C('a', 'p', 'p', 'e')) {
 					parser->command->desc = &mc_desc_append;
@@ -2040,7 +2053,7 @@ again:
 					rest = "h_all";
 					break;
 				} else if (start == C('v', 'e', 'r', 's')) {
-					parser->command->result_type = MC_RESULT_VERSION;
+					mc_reply(parser->command, "VERSION 0.0\r\n");
 					state = S_CMD_REST;
 					rest = "ion";
 					break;
@@ -2062,12 +2075,12 @@ again:
 
 			case S_CMD_REST:
 				if (c == *rest) {
+					// So far so good.
 					if (unlikely(c == 0)) {
 						// Hmm, zero byte in the input.
-						parser->cursor.ptr = s;
+						parser->cursor.ptr = s + 1;
 						goto error;
 					}
-					// So far so good.
 					rest++;
 					break;
 				} else if (*rest != 0) {
@@ -2076,7 +2089,7 @@ again:
 					goto error;
 				} else if (c != ' ' && c != '\r' && c != '\n') {
 					// Unexpected char after the end.
-					parser->cursor.ptr = s;
+					parser->cursor.ptr = s + 1;
 					goto error;
 				} else {
 					// Success.
@@ -2091,19 +2104,17 @@ again:
 			case S_EOL_0:
 				if (c == '\r') {
 					state = S_EOL_1;
-				} else if (c != ' ') {
-					parser->cursor.ptr = s + 1;
-					if (c != '\n')
-						goto error;
-					goto leave;
+					break;
+				} else if (c == ' ') {
+					// Skip space.
+					break;
 				}
-				break;
-
+				// FALLTHRU
 			case S_EOL_1:
 				parser->cursor.ptr = s + 1;
-				if (c == '\n')
-					goto leave;
-				goto error;
+				if (c != '\n')
+					goto error;
+				goto leave;
 			}
 		}
 
@@ -2499,9 +2510,6 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 		mm_buffer_append(&state->tbuf, "END\r\n", 5);
 		break;
 	}
-	case MC_RESULT_VERSION:
-		mm_buffer_append(&state->tbuf, "VERSION 0.0\r\n", 13);
-		break;
 	case MC_RESULT_QUIT:
 		state->quit = true;
 		mm_net_close(state->sock);
