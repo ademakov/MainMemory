@@ -35,6 +35,8 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
+#define MC_VERSION "VERSION MainMemory 0.0\r\n"
+
 // The logging verbosity level.
 static int mc_verbose = 0;
 
@@ -793,9 +795,11 @@ MC_DESC(decr,		incr,		decr,		incr,		true);
 MC_DESC(delete,		delete,		delete,		dummy,		true);
 MC_DESC(touch,		touch,		touch,		dummy,		true);
 MC_DESC(slabs,		slabs,		slabs,		dummy,		false);
-MC_DESC(stats,		stats,		stats,		dummy,		false);
+MC_DESC(stats,		dummy,		stats,		dummy,		false);
 MC_DESC(flush_all,	flush_all,	flush_all,	dummy,		false);
+MC_DESC(version,	dummy,		version,	dummy,		false);
 MC_DESC(verbosity,	verbosity,	dummy,		dummy,		false);
+MC_DESC(quit,		dummy,		quit,		dummy,		false);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -1408,7 +1412,7 @@ mc_process_stats(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	mc_reply(command, "END\r\n");
 
 	LEAVE();
 	return 0;
@@ -1421,6 +1425,30 @@ mc_process_flush_all(uintptr_t arg)
 
 	struct mc_command *command = (struct mc_command *) arg;
 	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mc_process_version(uintptr_t arg)
+{
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+	mc_reply(command, MC_VERSION);
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mc_process_quit(uintptr_t arg)
+{
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+	command->result_type = MC_RESULT_QUIT;
 
 	LEAVE();
 	return 0;
@@ -1906,23 +1934,26 @@ mc_parse_command(struct mc_parser *parser)
 	ENTER();
 
 	enum parse_state {
-		S_START = 0,
-		S_CMD_1 = 1,
-		S_CMD_2 = 2,
-		S_CMD_3 = 3,
-		S_CMD_REST,
-
-		S_EOL_0,
+		S_START,
+		S_CMD_1,
+		S_CMD_2,
+		S_CMD_3,
+		S_CMD_MATCH,
+		S_OPT,
+		S_OPT_N,
+		S_EOL,
 		S_EOL_1,
+		S_ABORT
 	};
 
 	// Initialize the result.
 	bool rc = true;
 
-	// Initialize the scanner state. */
+	// Initialize the scanner state.
 	enum parse_state state = S_START;
+	enum parse_state match_state = S_ABORT;
 	uint32_t start = -1;
-	char *rest = "";
+	char *match = "";
 
 	// The count of scanned chars. Used to check if the client sends
 	// too much junk data.
@@ -1939,13 +1970,13 @@ mc_parse_command(struct mc_parser *parser)
 again:
 			switch (state) {
 			case S_START:
-				if (c == '\n') {
+				if (c == ' ') {
+					// SKip space.
+					break;
+				} else if (c == '\n') {
 					// Unexpected line end.
 					parser->cursor.ptr = s;
 					goto error;
-				} else if (c == ' ') {
-					// SKip space.
-					break;
 				} else {
 					// Store the first command char.
 					start = c << 24;
@@ -1976,114 +2007,116 @@ again:
 				break;
 
 			case S_CMD_3:
-				// Have the 4 first chars of the command,
+				// Have the first 4 chars of the command,
 				// it is enough to learn what it is.
 				start |= c;
 
-#define C(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
-				if (start == C('g', 'e', 't', ' ')) {
+#define Cx4(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
+				if (start == Cx4('g', 'e', 't', ' ')) {
 					parser->command->desc = &mc_desc_get;
 					parser->cursor.ptr = s + 1;
 					goto leave;
-				} else if (start == C('s', 'e', 't', ' ')) {
+				} else if (start == Cx4('s', 'e', 't', ' ')) {
 					parser->command->desc = &mc_desc_set;
 					parser->cursor.ptr = s + 1;
 					goto leave;
-				} else if (start == C('r', 'e', 'p', 'l')) {
+				} else if (start == Cx4('r', 'e', 'p', 'l')) {
 					parser->command->desc = &mc_desc_replace;
-					state = S_CMD_REST;
-					rest = "ace";
+					state = S_CMD_MATCH;
+					match = "ace";
 					break;
-				} else if (start == C('d', 'e', 'l', 'e')) {
+				} else if (start == Cx4('d', 'e', 'l', 'e')) {
 					parser->command->desc = &mc_desc_delete;
-					state = S_CMD_REST;
-					rest = "te";
+					state = S_CMD_MATCH;
+					match = "te";
 					break;
-				} else if (start == C('a', 'd', 'd', ' ')) {
+				} else if (start == Cx4('a', 'd', 'd', ' ')) {
 					parser->command->desc = &mc_desc_add;
 					parser->cursor.ptr = s + 1;
 					goto leave;
-				} else if (start == C('i', 'n', 'c', 'r')) {
+				} else if (start == Cx4('i', 'n', 'c', 'r')) {
 					parser->command->desc = &mc_desc_incr;
-					state = S_CMD_REST;
-					//rest = "";
+					state = S_CMD_MATCH;
+					//match = "";
 					break;
-				} else if (start == C('d', 'e', 'c', 'r')) {
+				} else if (start == Cx4('d', 'e', 'c', 'r')) {
 					parser->command->desc = &mc_desc_decr;
-					state = S_CMD_REST;
-					//rest = "";
+					state = S_CMD_MATCH;
+					//match = "";
 					break;
-				} else if (start == C('g', 'e', 't', 's')) {
+				} else if (start == Cx4('g', 'e', 't', 's')) {
 					parser->command->desc = &mc_desc_gets;
-					state = S_CMD_REST;
-					//rest = "";
+					state = S_CMD_MATCH;
+					//match = "";
 					break;
-				} else if (start == C('c', 'a', 's', ' ')) {
+				} else if (start == Cx4('c', 'a', 's', ' ')) {
 					parser->command->desc = &mc_desc_cas;
 					parser->cursor.ptr = s + 1;
 					goto leave;
-				} else if (start == C('a', 'p', 'p', 'e')) {
+				} else if (start == Cx4('a', 'p', 'p', 'e')) {
 					parser->command->desc = &mc_desc_append;
-					state = S_CMD_REST;
-					rest = "nd";
+					state = S_CMD_MATCH;
+					match = "nd";
 					break;
-				} else if (start == C('p', 'r', 'e', 'p')) {
+				} else if (start == Cx4('p', 'r', 'e', 'p')) {
 					parser->command->desc = &mc_desc_prepend;
-					state = S_CMD_REST;
-					rest = "end";
+					state = S_CMD_MATCH;
+					match = "end";
 					break;
-				} else if (start == C('t', 'o', 'u', 'c')) {
+				} else if (start == Cx4('t', 'o', 'u', 'c')) {
 					parser->command->desc = &mc_desc_touch;
-					state = S_CMD_REST;
-					rest = "h";
+					state = S_CMD_MATCH;
+					match = "h";
 					break;
-				} else if (start == C('s', 'l', 'a', 'b')) {
+				} else if (start == Cx4('s', 'l', 'a', 'b')) {
 					parser->command->desc = &mc_desc_slabs;
-					state = S_CMD_REST;
-					rest = "s";
+					state = S_CMD_MATCH;
+					match = "s";
 					break;
-				} else if (start == C('s', 't', 'a', 't')) {
+				} else if (start == Cx4('s', 't', 'a', 't')) {
 					parser->command->desc = &mc_desc_stats;
-					state = S_CMD_REST;
-					rest = "s";
+					match_state = S_OPT;
+					state = S_CMD_MATCH;
+					match = "s";
 					break;
-				} else if (start == C('f', 'l', 'u', 's')) {
+				} else if (start == Cx4('f', 'l', 'u', 's')) {
 					parser->command->desc = &mc_desc_flush_all;
-					state = S_CMD_REST;
-					rest = "h_all";
+					state = S_CMD_MATCH;
+					match = "h_all";
 					break;
-				} else if (start == C('v', 'e', 'r', 's')) {
-					mc_reply(parser->command, "VERSION 0.0\r\n");
-					state = S_CMD_REST;
-					rest = "ion";
+				} else if (start == Cx4('v', 'e', 'r', 's')) {
+					parser->command->desc = &mc_desc_version;
+					match_state = S_EOL;
+					state = S_CMD_MATCH;
+					match = "ion";
 					break;
-				} else if (start == C('v', 'e', 'r', 'b')) {
+				} else if (start == Cx4('v', 'e', 'r', 'b')) {
 					parser->command->desc = &mc_desc_verbosity;
-					state = S_CMD_REST;
-					rest = "osity";
+					state = S_CMD_MATCH;
+					match = "osity";
 					break;
-				} else if (start == C('q', 'u', 'i', 't')) {
-					parser->command->result_type = MC_RESULT_QUIT;
-					state = S_EOL_0;
+				} else if (start == Cx4('q', 'u', 'i', 't')) {
+					parser->command->desc = &mc_desc_quit;
+					state = S_EOL;
 					break;
 				} else {
 					// Unrecognized command.
 					parser->cursor.ptr = s;
 					goto error;
 				}
-#undef C
+#undef Cx4
 
-			case S_CMD_REST:
-				if (c == *rest) {
+			case S_CMD_MATCH:
+				if (c == *match) {
 					// So far so good.
 					if (unlikely(c == 0)) {
 						// Hmm, zero byte in the input.
 						parser->cursor.ptr = s + 1;
 						goto error;
 					}
-					rest++;
+					match++;
 					break;
-				} else if (*rest != 0) {
+				} else if (*match != 0) {
 					// Unexpected char before the end.
 					parser->cursor.ptr = s;
 					goto error;
@@ -2093,15 +2126,37 @@ again:
 					goto error;
 				} else {
 					// Success.
-					if (parser->command->desc != NULL) {
+					if (match_state == S_ABORT) {
 						parser->cursor.ptr = s;
 						goto leave;
 					}
-					state = S_EOL_0;
+					state = match_state;
 					goto again;
 				}
 
-			case S_EOL_0:
+			case S_OPT:
+				if (c == ' ') {
+					// Skip space.
+					break;
+				} else if (c == '\r' || c == '\n') {
+					state = S_EOL;
+					goto again;
+				} else {
+					// TODO: add c to the optional value
+					state = S_OPT_N;
+					break;
+				}
+
+			case S_OPT_N:
+				if (c == ' ' || c == '\r' || c == '\n') {
+					state = S_EOL;
+					goto again;
+				} else {
+					// TODO: add c to the optional value
+					break;
+				}
+
+			case S_EOL:
 				if (c == '\r') {
 					state = S_EOL_1;
 					break;
@@ -2115,6 +2170,9 @@ again:
 				if (c != '\n')
 					goto error;
 				goto leave;
+
+			case S_ABORT:
+				ABORT();
 			}
 		}
 
@@ -2130,6 +2188,12 @@ leave:
 error:
 	rc = mc_parse_error(parser, "ERROR\r\n");
 	goto leave;
+}
+
+static bool
+mc_parse_dummy(struct mc_parser *parser __attribute__((unused)))
+{
+	return true;
 }
 
 static bool
@@ -2315,22 +2379,6 @@ mc_parse_slabs(struct mc_parser *parser)
 }
 
 static bool
-mc_parse_stats(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	mc_reply(parser->command, "END\r\n");
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
 mc_parse_flush_all(struct mc_parser *parser)
 {
 	ENTER();
@@ -2430,8 +2478,7 @@ mc_parse(struct mc_parser *parser)
 		goto leave;
 
 	/* Parse the rest of the command. */
-	if (parser->command->result_type == MC_RESULT_NONE)
-		rc = parser->command->desc->parse(parser);
+	rc = parser->command->desc->parse(parser);
 
 leave:
 	LEAVE();
