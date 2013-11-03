@@ -517,11 +517,82 @@ mc_table_term(void)
 }
 
 /**********************************************************************
- * Command Data.
+ * Command type declarations.
  **********************************************************************/
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mc_parser;
+struct mc_command;
+
+/* Command handling routines. */
+typedef bool (*mc_parse_routine)(struct mc_parser *parser);
+
+#define MC_ASYNC 1
+
+/*
+ * Some preprocessor magic to generate command info.
+ */
+
+#define MC_COMMAND_LIST(_)	\
+	_(get,		get,		get,		MC_ASYNC)	\
+	_(gets,		get,		gets,		MC_ASYNC)	\
+	_(set,		set,		set,		MC_ASYNC)	\
+	_(add,		set,		add,		MC_ASYNC)	\
+	_(replace,	set,		replace,	MC_ASYNC)	\
+	_(append,	set,		append,		MC_ASYNC)	\
+	_(prepend,	set,		prepend,	MC_ASYNC)	\
+	_(cas,		cas,		cas,		MC_ASYNC)	\
+	_(incr,		incr,		incr,		MC_ASYNC)	\
+	_(decr,		incr,		decr,		MC_ASYNC)	\
+	_(delete,	delete,		delete,		MC_ASYNC)	\
+	_(touch,	touch,		touch,		MC_ASYNC)	\
+	_(slabs,	dummy,		slabs,		0)		\
+	_(stats,	dummy,		stats,		0)		\
+	_(flush_all,	flush_all,	flush_all,	0)		\
+	_(version,	dummy,		version,	0)		\
+	_(verbosity,	verbosity,	dummy,		0)		\
+	_(quit,		dummy,		quit,		0)
+
+/*
+ * Define enumerated type to tag commands.
+ */
+
+#define MC_TAG(cmd, parse_name, process_name, async_val)	\
+	mc_command_##cmd,
+
+typedef enum {
+	MC_COMMAND_LIST(MC_TAG)
+} mc_command_t;
+
+/*
+ * Define command handling info.
+ */
+
+struct mc_command_type
+{
+	mc_command_t tag;
+	const char *name;
+	mc_parse_routine parse;
+	mm_routine_t process;
+	uint32_t flags;
+};
+
+#define MC_TYPE(cmd, parse_name, process_name, value)			\
+	static bool mc_parse_##parse_name(struct mc_parser *);		\
+	static mm_result_t mc_process_##process_name(uintptr_t);	\
+	static struct mc_command_type mc_desc_##cmd = {			\
+		.tag = mc_command_##cmd,				\
+		.name = #cmd,						\
+		.parse = mc_parse_##parse_name,				\
+		.process = mc_process_##process_name,			\
+		.flags = value,						\
+	};
+
+MC_COMMAND_LIST(MC_TYPE)
+
+/**********************************************************************
+ * Command Data.
+ **********************************************************************/
 
 struct mc_string
 {
@@ -581,6 +652,16 @@ struct mc_touch_params
 	bool noreply;
 };
 
+struct mc_slabs_params
+{
+	uint32_t nopts;
+};
+
+struct mc_stats_params
+{
+	uint32_t nopts;
+};
+
 union mc_params
 {
 	struct mc_set_params set;
@@ -589,6 +670,8 @@ union mc_params
 	struct mc_inc_params inc;
 	struct mc_del_params del;
 	struct mc_touch_params touch;
+	struct mc_slabs_params slabs;
+	struct mc_stats_params stats;
 };
 
 typedef enum
@@ -619,28 +702,14 @@ struct mc_command
 {
 	struct mc_command *next;
 
-	struct mc_command_desc *desc;
+	struct mc_command_type *type;
 	union mc_params params;
-	char *end_ptr;
-
 	union mc_result result;
 	mc_result_t result_type;
 
 	struct mm_future *future;
-};
 
-/* Command parsing routine. */
-typedef bool (*mc_parse_routine)(struct mc_parser *parser);
-typedef void (*mc_destroy_routine)(struct mc_command *command);
-
-/* Command parsing and processing info. */
-struct mc_command_desc
-{
-	const char *name;
-	mc_parse_routine parse;
-	mm_routine_t process;
-	mc_destroy_routine destroy;
-	bool async;
+	char *end_ptr;
 };
 
 static struct mm_pool mc_command_pool;
@@ -674,7 +743,7 @@ mc_command_create(void)
 
 	struct mc_command *command = mm_pool_alloc(&mc_command_pool);
 	command->next = NULL;
-	command->desc = NULL;
+	command->type = NULL;
 	command->end_ptr = NULL;
 	command->result_type = MC_RESULT_NONE;
 	command->future = NULL;
@@ -688,10 +757,60 @@ mc_command_destroy(struct mc_command *command)
 {
 	ENTER();
 
-	if (command->desc != NULL) {
-		command->desc->destroy(command);
+	if (command->type != NULL) {
+		switch (command->type->tag) {
+		case mc_command_get:
+		case mc_command_gets:
+			mm_core_free(command->params.get.keys);
+			break;
+
+		default:
+			break;
+		}
+
+		switch (command->result_type) {
+		case MC_RESULT_VALUE:
+			mc_entry_unref(command->result.entry);
+			break;
+
+		case MC_RESULT_ENTRY:
+		case MC_RESULT_ENTRY_CAS:
+			for (uint32_t i = 0; i < command->result.entries.nentries; i++)
+				mc_entry_unref(command->result.entries.entries[i]);
+			mm_free(command->result.entries.entries);
+			break;
+
+		default:
+			break;
+		}
 	}
+
 	mm_pool_free(&mc_command_pool, command);
+
+	LEAVE();
+}
+
+// TODO: Really support some options.
+static void
+mc_command_option(struct mc_command *command)
+{
+	ENTER();
+
+	if (command->type != NULL) {
+
+		switch (command->type->tag) {
+		case mc_command_slabs:
+			command->params.slabs.nopts++;
+			break;
+
+		case mc_command_stats:
+			command->params.stats.nopts++;
+			break;
+
+		default:
+			break;
+		}
+	}
 
 	LEAVE();
 }
@@ -713,93 +832,6 @@ mc_blank(struct mc_command *command)
 
 	command->result_type = MC_RESULT_BLANK;
 }
-
-/**********************************************************************
- * Command Destruction.
- **********************************************************************/
-
-static void
-mc_destroy_dummy(struct mc_command *command __attribute__((unused)))
-{
-}
-
-static void
-mc_destroy_get(struct mc_command *command)
-{
-	ENTER();
-
-	mm_free(command->params.get.keys);
-	if (command->result_type == MC_RESULT_ENTRY) {
-		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
-			mc_entry_unref(command->result.entries.entries[i]);
-		}
-		mm_free(command->result.entries.entries);
-	}
-
-	LEAVE();
-}
-
-static void
-mc_destroy_gets(struct mc_command *command)
-{
-	ENTER();
-
-	mm_free(command->params.get.keys);
-	if (command->result_type == MC_RESULT_ENTRY_CAS) {
-		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
-			mc_entry_unref(command->result.entries.entries[i]);
-		}
-		mm_free(command->result.entries.entries);
-	}
-
-	LEAVE();
-}
-
-static void
-mc_destroy_incr(struct mc_command *command)
-{
-	ENTER();
-
-	if (command->result_type == MC_RESULT_VALUE) {
-		mc_entry_unref(command->result.entry);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Command Descriptors.
- **********************************************************************/
-
-#define MC_DESC(cmd, parse_name, process_name, destroy_name, async_val)	\
-	static bool mc_parse_##parse_name(struct mc_parser *);		\
-	static mm_result_t mc_process_##process_name(uintptr_t);	\
-	static struct mc_command_desc mc_desc_##cmd = {			\
-		.name = #cmd,						\
-		.parse = mc_parse_##parse_name,				\
-		.process = mc_process_##process_name,			\
-		.destroy = mc_destroy_##destroy_name,			\
-		.async = async_val,					\
-	}
-
-MC_DESC(get,		get,		get,		get,		true);
-MC_DESC(gets,		get,		gets,		gets,		true);
-MC_DESC(set,		set,		set,		dummy,		true);
-MC_DESC(add,		set,		add,		dummy,		true);
-MC_DESC(replace,	set,		replace,	dummy,		true);
-MC_DESC(append,		set,		append,		dummy,		true);
-MC_DESC(prepend,	set,		prepend,	dummy,		true);
-MC_DESC(cas,		cas,		cas,		dummy,		true);
-MC_DESC(incr,		incr,		incr,		incr,		true);
-MC_DESC(decr,		incr,		decr,		incr,		true);
-MC_DESC(delete,		delete,		delete,		dummy,		true);
-MC_DESC(touch,		touch,		touch,		dummy,		true);
-MC_DESC(slabs,		slabs,		slabs,		dummy,		false);
-MC_DESC(stats,		dummy,		stats,		dummy,		false);
-MC_DESC(flush_all,	flush_all,	flush_all,	dummy,		false);
-MC_DESC(version,	dummy,		version,	dummy,		false);
-MC_DESC(verbosity,	verbosity,	dummy,		dummy,		false);
-MC_DESC(quit,		dummy,		quit,		dummy,		false);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -1412,7 +1444,10 @@ mc_process_stats(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "END\r\n");
+	if (command->params.stats.nopts)
+		mc_reply(command, "SERVER_ERROR not implemented\r\n");
+	else
+		mc_reply(command, "END\r\n");
 
 	LEAVE();
 	return 0;
@@ -1459,12 +1494,12 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
 
-	if (likely(command->desc != NULL)) {
-		DEBUG("command %s", command->desc->name);
+	if (likely(command->type != NULL)) {
+		DEBUG("command %s", command->type->name);
 
 		if (command->result_type == MC_RESULT_NONE) {
 			// TODO: create a future for async commands.
-			command->desc->process((intptr_t) command);
+			command->type->process((intptr_t) command);
 		}
 	}
 
@@ -2013,90 +2048,93 @@ again:
 
 #define Cx4(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 				if (start == Cx4('g', 'e', 't', ' ')) {
-					parser->command->desc = &mc_desc_get;
+					parser->command->type = &mc_desc_get;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('s', 'e', 't', ' ')) {
-					parser->command->desc = &mc_desc_set;
+					parser->command->type = &mc_desc_set;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('r', 'e', 'p', 'l')) {
-					parser->command->desc = &mc_desc_replace;
+					parser->command->type = &mc_desc_replace;
 					state = S_CMD_MATCH;
 					match = "ace";
 					break;
 				} else if (start == Cx4('d', 'e', 'l', 'e')) {
-					parser->command->desc = &mc_desc_delete;
+					parser->command->type = &mc_desc_delete;
 					state = S_CMD_MATCH;
 					match = "te";
 					break;
 				} else if (start == Cx4('a', 'd', 'd', ' ')) {
-					parser->command->desc = &mc_desc_add;
+					parser->command->type = &mc_desc_add;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('i', 'n', 'c', 'r')) {
-					parser->command->desc = &mc_desc_incr;
+					parser->command->type = &mc_desc_incr;
 					state = S_CMD_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
-					parser->command->desc = &mc_desc_decr;
+					parser->command->type = &mc_desc_decr;
 					state = S_CMD_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
-					parser->command->desc = &mc_desc_gets;
+					parser->command->type = &mc_desc_gets;
 					state = S_CMD_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
-					parser->command->desc = &mc_desc_cas;
+					parser->command->type = &mc_desc_cas;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
-					parser->command->desc = &mc_desc_append;
+					parser->command->type = &mc_desc_append;
 					state = S_CMD_MATCH;
 					match = "nd";
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
-					parser->command->desc = &mc_desc_prepend;
+					parser->command->type = &mc_desc_prepend;
 					state = S_CMD_MATCH;
 					match = "end";
 					break;
 				} else if (start == Cx4('t', 'o', 'u', 'c')) {
-					parser->command->desc = &mc_desc_touch;
+					parser->command->type = &mc_desc_touch;
 					state = S_CMD_MATCH;
 					match = "h";
 					break;
 				} else if (start == Cx4('s', 'l', 'a', 'b')) {
-					parser->command->desc = &mc_desc_slabs;
+					parser->command->type = &mc_desc_slabs;
+					parser->command->params.slabs.nopts = 0;
 					state = S_CMD_MATCH;
 					match = "s";
+					match_state = S_OPT;
 					break;
 				} else if (start == Cx4('s', 't', 'a', 't')) {
-					parser->command->desc = &mc_desc_stats;
-					match_state = S_OPT;
+					parser->command->type = &mc_desc_stats;
+					parser->command->params.stats.nopts = 0;
 					state = S_CMD_MATCH;
 					match = "s";
+					match_state = S_OPT;
 					break;
 				} else if (start == Cx4('f', 'l', 'u', 's')) {
-					parser->command->desc = &mc_desc_flush_all;
+					parser->command->type = &mc_desc_flush_all;
 					state = S_CMD_MATCH;
 					match = "h_all";
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 's')) {
-					parser->command->desc = &mc_desc_version;
-					match_state = S_EOL;
+					parser->command->type = &mc_desc_version;
 					state = S_CMD_MATCH;
 					match = "ion";
+					match_state = S_EOL;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 'b')) {
-					parser->command->desc = &mc_desc_verbosity;
+					parser->command->type = &mc_desc_verbosity;
 					state = S_CMD_MATCH;
 					match = "osity";
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
-					parser->command->desc = &mc_desc_quit;
+					parser->command->type = &mc_desc_quit;
 					state = S_EOL;
 					break;
 				} else {
@@ -2149,7 +2187,10 @@ again:
 
 			case S_OPT_N:
 				if (c == ' ' || c == '\r' || c == '\n') {
-					state = S_EOL;
+					// TODO: limit the option number
+					// TODO: pass the value
+					mc_command_option(parser->command);
+					state = S_OPT;
 					goto again;
 				} else {
 					// TODO: add c to the optional value
@@ -2206,13 +2247,13 @@ mc_parse_get(struct mc_parser *parser)
 
 	bool rc;
 	int nkeys = 0, nkeys_max = 8;
-	struct mc_string *keys = mm_alloc(nkeys_max * sizeof(struct mc_string));
+	struct mc_string *keys = mm_core_alloc(nkeys_max * sizeof(struct mc_string));
 	// TODO: free it
 
 	for (;;) {
 		rc = mc_parse_param(parser, &keys[nkeys], nkeys == 0);
 		if (!rc || parser->error) {
-			mm_free(keys);
+			mm_core_free(keys);
 			goto leave;
 		}
 
@@ -2222,13 +2263,13 @@ mc_parse_get(struct mc_parser *parser)
 
 		if (++nkeys == nkeys_max) {
 			nkeys_max += 8;
-			keys = mm_realloc(keys, nkeys_max * sizeof(struct mc_string));
+			keys = mm_core_realloc(keys, nkeys_max * sizeof(struct mc_string));
 		}
 	}
 
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error) {
-		mm_free(keys);
+		mm_core_free(keys);
 		goto leave;
 	}
 
@@ -2368,17 +2409,6 @@ leave:
 }
 
 static bool
-mc_parse_slabs(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_error(parser, "CLIENT_ERROR not implemented\r\n");
-
-	LEAVE();
-	return rc;
-}
-
-static bool
 mc_parse_flush_all(struct mc_parser *parser)
 {
 	ENTER();
@@ -2478,7 +2508,7 @@ mc_parse(struct mc_parser *parser)
 		goto leave;
 
 	/* Parse the rest of the command. */
-	rc = parser->command->desc->parse(parser);
+	rc = parser->command->type->parse(parser);
 
 leave:
 	LEAVE();
