@@ -592,11 +592,12 @@ union mc_params
 typedef enum
 {
 	MC_RESULT_NONE,
+	MC_RESULT_BLANK,
 	MC_RESULT_REPLY,
 	MC_RESULT_ENTRY,
 	MC_RESULT_ENTRY_CAS,
 	MC_RESULT_VALUE,
-	MC_RESULT_BLANK,
+	MC_RESULT_VERSION,
 	MC_RESULT_QUIT,
 } mc_result_t;
 
@@ -793,9 +794,7 @@ MC_DESC(touch,		touch,		touch,		dummy);
 MC_DESC(slabs,		slabs,		slabs,		dummy);
 MC_DESC(stats,		stats,		stats,		dummy);
 MC_DESC(flush_all,	flush_all,	flush_all,	dummy);
-MC_DESC(version,	version,	dummy,		dummy);
 MC_DESC(verbosity,	verbosity,	dummy,		dummy);
-MC_DESC(quit,		quit,		dummy,		dummy);
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -1909,6 +1908,9 @@ mc_parse_command(struct mc_parser *parser)
 		S_CMD_2 = 2,
 		S_CMD_3 = 3,
 		S_CMD_REST,
+
+		S_EOL_0,
+		S_EOL_1,
 	};
 
 	// Initialize the result.
@@ -1930,15 +1932,15 @@ mc_parse_command(struct mc_parser *parser)
 		DEBUG("'%.*s'", (int) (e - s), s);
 
 		for (; s < e; s++) {
-			int c = *s;
+			int c = *s;	
+again:
 			switch (state) {
 			case S_START:
 				if (c == '\n') {
 					// Unexpected line end.
 					parser->cursor.ptr = s;
 					goto error;
-				}
-				if (c != ' ') {
+				} else if (c != ' ') {
 					start = c;
 					state = S_CMD_1;
 				}
@@ -2038,7 +2040,7 @@ mc_parse_command(struct mc_parser *parser)
 					rest = "h_all";
 					break;
 				} else if (start == C('v', 'e', 'r', 's')) {
-					parser->command->desc = &mc_desc_version;
+					parser->command->result_type = MC_RESULT_VERSION;
 					state = S_CMD_REST;
 					rest = "ion";
 					break;
@@ -2048,9 +2050,8 @@ mc_parse_command(struct mc_parser *parser)
 					rest = "osity";
 					break;
 				} else if (start == C('q', 'u', 'i', 't')) {
-					parser->command->desc = &mc_desc_quit;
-					state = S_CMD_REST;
-					//rest = "";
+					parser->command->result_type = MC_RESULT_QUIT;
+					state = S_EOL_0;
 					break;
 				} else {
 					// Unrecognized command.
@@ -2066,23 +2067,43 @@ mc_parse_command(struct mc_parser *parser)
 						parser->cursor.ptr = s;
 						goto error;
 					}
-					/* So far so good. */
+					// So far so good.
 					rest++;
 					break;
 				} else if (*rest != 0) {
 					// Unexpected char before the end.
 					parser->cursor.ptr = s;
 					goto error;
-				} else if (c == ' ' || c == '\r' || c == '\n') {
-					/* Success. */
-					parser->cursor.ptr = s;
-					goto leave;
-				} else {
+				} else if (c != ' ' && c != '\r' && c != '\n') {
 					// Unexpected char after the end.
 					parser->cursor.ptr = s;
 					goto error;
+				} else {
+					// Success.
+					if (parser->command->desc != NULL) {
+						parser->cursor.ptr = s;
+						goto leave;
+					}
+					state = S_EOL_0;
+					goto again;
+				}
+
+			case S_EOL_0:
+				if (c == '\r') {
+					state = S_EOL_1;
+				} else if (c != ' ') {
+					parser->cursor.ptr = s + 1;
+					if (c != '\n')
+						goto error;
+					goto leave;
 				}
 				break;
+
+			case S_EOL_1:
+				parser->cursor.ptr = s + 1;
+				if (c == '\n')
+					goto leave;
+				goto error;
 			}
 		}
 
@@ -2388,38 +2409,6 @@ leave:
 }
 
 static bool
-mc_parse_version(struct mc_parser *parser)
-{
-	ENTER();
-	
-	bool rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	mc_reply(parser->command, "VERSION 0.0\r\n");
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_quit(struct mc_parser *parser)
-{
-	ENTER();
-	
-	bool rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	parser->command->result_type = MC_RESULT_QUIT;
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
 mc_parse(struct mc_parser *parser)
 {
 	ENTER();
@@ -2430,7 +2419,8 @@ mc_parse(struct mc_parser *parser)
 		goto leave;
 
 	/* Parse the rest of the command. */
-	rc = parser->command->desc->parse(parser);
+	if (parser->command->result_type == MC_RESULT_NONE)
+		rc = parser->command->desc->parse(parser);
 
 leave:
 	LEAVE();
@@ -2509,6 +2499,9 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 		mm_buffer_append(&state->tbuf, "END\r\n", 5);
 		break;
 	}
+	case MC_RESULT_VERSION:
+		mm_buffer_append(&state->tbuf, "VERSION 0.0\r\n", 13);
+		break;
 	case MC_RESULT_QUIT:
 		state->quit = true;
 		mm_net_close(state->sock);
@@ -2657,7 +2650,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 		goto leave;
 
 	// Put the results into the transmit buffer.
-	for (;;) {
+	while (!state->quit) {
 		mc_transmit_buffer(state, last);
 
 		struct mc_command *next = last->next;
