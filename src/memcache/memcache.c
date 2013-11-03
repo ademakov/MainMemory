@@ -1541,12 +1541,12 @@ static bool
 mc_parse_space(struct mc_parser *parser)
 {
 	ENTER();
-
 	bool rc = true;
 
-	/* The count of scanned chars. Used to check if the client sends
-	   too much junk data. */
+	// The count of scanned chars. Used to check if the client sends
+	// too much junk data.
 	int count = 0;
+
 	do {
 		char *s = parser->cursor.ptr;
 		char *e = parser->cursor.end;
@@ -1572,11 +1572,10 @@ static bool
 mc_parse_error(struct mc_parser *parser, const char *error_string)
 {
 	ENTER();
-
-	// Initialize the result.
 	bool rc = true;
 	parser->error = true;
 
+	// Skip everything until a LF char.
 	do {
 		char *s = parser->cursor.ptr;
 		char *e = parser->cursor.end;
@@ -1603,30 +1602,55 @@ static bool
 mc_parse_eol(struct mc_parser *parser)
 {
 	ENTER();
+	bool rc = true;
 
-	/* Skip spaces. */
-	bool rc = mc_parse_space(parser);
-	if (!rc)
-		goto leave;
+	// The count of scanned chars. Used to check if the client sends
+	// too much junk data.
+	int count = 0;
 
-	char *s = parser->cursor.ptr;
-	char *e = parser->cursor.end;
+	// Scan for end of line skipping possible spaces.
+	do {
+		char *s = parser->cursor.ptr;
+		char *e = parser->cursor.end;
 
-	int c = *s;
+		for (; s < e; s++) {
+			int c = *s;
 
-	/* Check for optional CR char and required LF. */
-	if ((c == '\r' && mc_peek_input(parser, s) == '\n') || c == '\n') {
-		/* All right, got the line end. */
-		if (c == '\r' && ++s == e) {
-			mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
-			parser->cursor.ptr += 1;
-		} else {
-			parser->cursor.ptr = s + 1;
+			// Check for optional CR and required LF chars.
+			if (c == '\r') {
+				++s;
+				if (unlikely(s == e)) {
+					if (!mm_buffer_next_out(&parser->state->rbuf,
+								&parser->cursor)) {
+						rc = false;
+						goto leave;
+					}
+					s = parser->cursor.ptr;
+					e = parser->cursor.end;
+					if (s == e) {
+						rc = false;
+						goto leave;
+					}
+				}
+				parser->cursor.ptr = s + 1;
+				if (unlikely(*s != '\n'))
+					rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
+				goto leave;
+			} else if (c == '\n') {
+				parser->cursor.ptr = s + 1;
+				goto leave;
+			} else if (c != ' ') {
+				// Oops, unexpected char.
+				parser->cursor.ptr = s + 1;
+				rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
+				goto leave;
+			}
 		}
-	} else {
-		/* Oops, unexpected char. */
-		rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
-	}
+
+		count += e - parser->cursor.ptr;
+		rc = mc_more_input(parser, count);
+
+	} while (rc);
 
 leave:
 	LEAVE();
@@ -1879,258 +1903,201 @@ mc_parse_command(struct mc_parser *parser)
 {
 	ENTER();
 
-	enum scan {
-		SCAN_START,
-		SCAN_CMD,
-		SCAN_CMD_GE,
-		SCAN_CMD_GET,
-		SCAN_CMD_DE,
-		SCAN_CMD_VE,
-		SCAN_CMD_VER,
-		SCAN_CMD_REST,
+	enum parse_state {
+		S_START = 0,
+		S_CMD_1 = 1,
+		S_CMD_2 = 2,
+		S_CMD_3 = 3,
+		S_CMD_REST,
 	};
 
-	/* Initialize the result. */
-	bool rc = mc_parse_space(parser);
-	if (!rc) {
-		goto leave;
-	}
+	// Initialize the result.
+	bool rc = true;
 
-	/* Get current position in the input buffer. */
-	char *s = parser->cursor.ptr;
-	char *e = parser->cursor.end;
+	// Initialize the scanner state. */
+	enum parse_state state = S_START;
+	uint32_t start = -1;
+	char *rest = "";
 
-	/* Must have some ready input at this point. */
-	ASSERT(s < e);
-	DEBUG("'%.*s'", (int) (e - s), s);
-
-	/* Initialize the scanner state. */
-	enum scan scan = SCAN_START;
-	int cmd_first = -1;
-	char *cmd_rest = "";
-
-	/* The count of scanned chars. Used to check if the client sends
-	   too much junk data. */
+	// The count of scanned chars. Used to check if the client sends
+	// too much junk data.
 	int count = 0;
 
-	for (;;) {
-		int c = *s;
-		switch (scan) {
-		case SCAN_START:
-			if (likely(c != '\n')) {
-				/* Got the first command char. */
-				scan = SCAN_CMD;
-				cmd_first = c;
-				goto next;
-			} else {
-				/* Unexpected line end. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
+	do {
+		// Get the input buffer position.
+		char *s = parser->cursor.ptr;
+		char *e = parser->cursor.end;
+		DEBUG("'%.*s'", (int) (e - s), s);
 
-		case SCAN_CMD:
-#define C(a, b) (((a) << 8) | (b))
-			switch (C(cmd_first, c)) {
-			case C('g', 'e'):
-				scan = SCAN_CMD_GE;
-				goto next;
-			case C('s', 'e'):
-				parser->command->desc = &mc_desc_set;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "t";
-				goto next;
-			case C('a', 'd'):
-				parser->command->desc = &mc_desc_add;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "d";
-				goto next;
-			case C('r', 'e'):
-				parser->command->desc = &mc_desc_replace;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "place";
-				goto next;
-			case C('a', 'p'):
-				parser->command->desc = &mc_desc_append;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "pend";
-				goto next;
-			case C('p', 'r'):
-				parser->command->desc = &mc_desc_prepend;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "epend";
-				goto next;
-			case C('c', 'a'):
-				parser->command->desc = &mc_desc_cas;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "s";
-				goto next;
-			case C('i', 'n'):
-				parser->command->desc = &mc_desc_incr;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "cr";
-				goto next;
-			case C('d', 'e'):
-				scan = SCAN_CMD_DE;
-				goto next;
-			case C('t', 'o'):
-				parser->command->desc = &mc_desc_touch;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "uch";
-				goto next;
-			case C('s', 'l'):
-				parser->command->desc = &mc_desc_slabs;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "abs";
-				goto next;
-			case C('s', 't'):
-				parser->command->desc = &mc_desc_stats;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "ats";
-				goto next;
-			case C('f', 'l'):
-				parser->command->desc = &mc_desc_flush_all;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "ush_all";
-				goto next;
-			case C('v', 'e'):
-				scan = SCAN_CMD_VE;
-				goto next;
-			case C('q', 'u'):
-				parser->command->desc = &mc_desc_quit;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "it";
-				goto next;
-			default:
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
+		for (; s < e; s++) {
+			int c = *s;
+			switch (state) {
+			case S_START:
+				if (c == '\n') {
+					// Unexpected line end.
+					parser->cursor.ptr = s;
+					goto error;
+				}
+				if (c != ' ') {
+					start = c;
+					state = S_CMD_1;
+				}
+				break;
+
+			case S_CMD_1:
+			case S_CMD_2:
+				if (c == '\n') {
+					// Unexpected line end.
+					parser->cursor.ptr = s;
+					goto error;
+				}
+				start <<= 8;
+				start |= c;
+				state += 1;
+				break;
+
+			case S_CMD_3:
+				// This might be a get command without
+				// arguments, albeit pointless this is
+				// actually legal.
+				if (unlikely(c == '\r' || c == '\n'))
+					c = ' ';
+				start <<= 8;
+				start |= c;
+
+#define C(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
+				if (start == C('g', 'e', 't', ' ')) {
+					parser->command->desc = &mc_desc_get;
+					parser->cursor.ptr = s;
+					goto leave;
+				} else if (start == C('s', 'e', 't', ' ')) {
+					parser->command->desc = &mc_desc_set;
+					parser->cursor.ptr = s;
+					goto leave;
+				} else if (start == C('r', 'e', 'p', 'l')) {
+					parser->command->desc = &mc_desc_replace;
+					state = S_CMD_REST;
+					rest = "ace";
+					break;
+				} else if (start == C('d', 'e', 'l', 'e')) {
+					parser->command->desc = &mc_desc_delete;
+					state = S_CMD_REST;
+					rest = "te";
+					break;
+				} else if (start == C('a', 'd', 'd', ' ')) {
+					parser->command->desc = &mc_desc_add;
+					parser->cursor.ptr = s;
+					goto leave;
+				} else if (start == C('i', 'n', 'c', 'r')) {
+					parser->command->desc = &mc_desc_incr;
+					state = S_CMD_REST;
+					//rest = "";
+					break;
+				} else if (start == C('d', 'e', 'c', 'r')) {
+					parser->command->desc = &mc_desc_decr;
+					state = S_CMD_REST;
+					//rest = "";
+					break;
+				} else if (start == C('g', 'e', 't', 's')) {
+					parser->command->desc = &mc_desc_gets;
+					state = S_CMD_REST;
+					//rest = "";
+					break;
+				} else if (start == C('c', 'a', 's', ' ')) {
+					parser->command->desc = &mc_desc_cas;
+					parser->cursor.ptr = s;
+					goto leave;
+				} else if (start == C('a', 'p', 'p', 'e')) {
+					parser->command->desc = &mc_desc_append;
+					state = S_CMD_REST;
+					rest = "nd";
+					break;
+				} else if (start == C('p', 'r', 'e', 'p')) {
+					parser->command->desc = &mc_desc_prepend;
+					state = S_CMD_REST;
+					rest = "end";
+					break;
+				} else if (start == C('t', 'o', 'u', 'c')) {
+					parser->command->desc = &mc_desc_touch;
+					state = S_CMD_REST;
+					rest = "h";
+					break;
+				} else if (start == C('s', 'l', 'a', 'b')) {
+					parser->command->desc = &mc_desc_slabs;
+					state = S_CMD_REST;
+					rest = "s";
+					break;
+				} else if (start == C('s', 't', 'a', 't')) {
+					parser->command->desc = &mc_desc_stats;
+					state = S_CMD_REST;
+					rest = "s";
+					break;
+				} else if (start == C('f', 'l', 'u', 's')) {
+					parser->command->desc = &mc_desc_flush_all;
+					state = S_CMD_REST;
+					rest = "h_all";
+					break;
+				} else if (start == C('v', 'e', 'r', 's')) {
+					parser->command->desc = &mc_desc_version;
+					state = S_CMD_REST;
+					rest = "ion";
+					break;
+				} else if (start == C('v', 'e', 'r', 'b')) {
+					parser->command->desc = &mc_desc_verbosity;
+					state = S_CMD_REST;
+					rest = "osity";
+					break;
+				} else if (start == C('q', 'u', 'i', 't')) {
+					parser->command->desc = &mc_desc_quit;
+					state = S_CMD_REST;
+					//rest = "";
+					break;
+				} else {
+					// Unrecognized command.
+					parser->cursor.ptr = s;
+					goto error;
+				}
 #undef C
 
-		case SCAN_CMD_GE:
-			if (likely(c == 't')) {
-				scan = SCAN_CMD_GET;
-				goto next;
-			} else {
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
-
-		case SCAN_CMD_GET:
-			if (c == ' ') {
-				parser->command->desc = &mc_desc_get;
-				parser->cursor.ptr = s;
-				goto leave;
-			} else if (c == 's') {
-				parser->command->desc = &mc_desc_gets;
-				/* Scan one char more with empty "rest" string
-				   to verify that the command name ends here. */
-				scan = SCAN_CMD_REST;
-				goto next;
-			} else if (c == '\r' || c == '\n') {
-				/* Well, this turns out to be a get command
-				   without arguments, albeit pointless this
-				   is actually legal. */
-				parser->command->desc = &mc_desc_get;
-				parser->cursor.ptr = s;
-				goto leave;
-			} else {
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
-
-		case SCAN_CMD_DE:
-			if (likely(c == 'c')) {
-				parser->command->desc = &mc_desc_decr;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "r";
-				goto next;
-			} else if (likely(c == 'l')) {
-				parser->command->desc = &mc_desc_delete;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "ete";
-				goto next;
-			} else {
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
-
-		case SCAN_CMD_VE:
-			if (c == 'r') {
-				scan = SCAN_CMD_VER;
-				goto next;
-			} else {
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
-
-		case SCAN_CMD_VER:
-			if (c == 's') {
-				parser->command->desc = &mc_desc_version;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "ion";
-				goto next;
-			} else if (c == 'b') {
-				parser->command->desc = &mc_desc_verbosity;
-				scan = SCAN_CMD_REST;
-				cmd_rest = "osity";
-				goto next;
-			} else {
-				/* Unexpected char. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			}
-
-		case SCAN_CMD_REST:
-			if (c == *cmd_rest) {
-				if (unlikely(c == 0)) {
-					/* Hmm, zero byte in the input. */
+			case S_CMD_REST:
+				if (c == *rest) {
+					if (unlikely(c == 0)) {
+						// Hmm, zero byte in the input.
+						parser->cursor.ptr = s;
+						goto error;
+					}
+					/* So far so good. */
+					rest++;
+					break;
+				} else if (*rest != 0) {
+					// Unexpected char before the end.
 					parser->cursor.ptr = s;
-					rc = mc_parse_error(parser, "ERROR\r\n");
+					goto error;
+				} else if (c == ' ' || c == '\r' || c == '\n') {
+					/* Success. */
+					parser->cursor.ptr = s;
 					goto leave;
+				} else {
+					// Unexpected char after the end.
+					parser->cursor.ptr = s;
+					goto error;
 				}
-				/* So far so good. */
-				cmd_rest++;
-				goto next;
-			} else if (*cmd_rest != 0) {
-				/* Unexpected char in the command name. */
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
-			} else if (c == ' ') {
-				/* Success. */
-				parser->cursor.ptr = s;
-				goto leave;
-			} else if (c == '\r' || c == '\n') {
-				/* Success. */
-				parser->cursor.ptr = s;
-				goto leave;
-			} else {
-				/* Unexpected char after the command name. */
-				parser->cursor.ptr = s;
-				rc = mc_parse_error(parser, "ERROR\r\n");
-				goto leave;
+				break;
 			}
 		}
 
-	next:
-		if (++s == e) {
-			count += parser->cursor.end - parser->cursor.ptr;
-			rc = mc_more_input(parser, count);
-			if (!rc)
-				goto leave;
+		count += e - parser->cursor.ptr;
+		rc = mc_more_input(parser, count);
 
-			s = parser->cursor.ptr;
-			e = parser->cursor.end;
-		}
-	}
+	} while (rc);
 
 leave:
 	LEAVE();
 	return rc;
+
+error:
+	rc = mc_parse_error(parser, "ERROR\r\n");
+	goto leave;
 }
 
 static bool
