@@ -38,7 +38,7 @@
 #define MC_VERSION "VERSION MainMemory 0.0\r\n"
 
 // The logging verbosity level.
-static int mc_verbose = 0;
+static uint8_t mc_verbose = 0;
 
 static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
@@ -530,10 +530,10 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 #define MC_ASYNC 1
 
 /*
- * Some preprocessor magic to generate command info.
+ * Some preprocessor magic to emit command definitions.
  */
 
-#define MC_COMMAND_LIST(_)	\
+#define MC_COMMAND_LIST(_)						\
 	_(get,		get,		get,		MC_ASYNC)	\
 	_(gets,		get,		gets,		MC_ASYNC)	\
 	_(set,		set,		set,		MC_ASYNC)	\
@@ -548,20 +548,20 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 	_(touch,	touch,		touch,		MC_ASYNC)	\
 	_(slabs,	dummy,		slabs,		0)		\
 	_(stats,	dummy,		stats,		0)		\
-	_(flush_all,	flush_all,	flush_all,	0)		\
+	_(flush_all,	dummy,		flush_all,	0)		\
 	_(version,	dummy,		version,	0)		\
-	_(verbosity,	verbosity,	dummy,		0)		\
+	_(verbosity,	dummy,		verbosity,	0)		\
 	_(quit,		dummy,		quit,		0)
 
 /*
  * Define enumerated type to tag commands.
  */
 
-#define MC_TAG(cmd, parse_name, process_name, async_val)	\
+#define MC_COMMAND_TAG(cmd, parse_name, process_name, async_val)	\
 	mc_command_##cmd,
 
 typedef enum {
-	MC_COMMAND_LIST(MC_TAG)
+	MC_COMMAND_LIST(MC_COMMAND_TAG)
 } mc_command_t;
 
 /*
@@ -577,7 +577,7 @@ struct mc_command_type
 	uint32_t flags;
 };
 
-#define MC_TYPE(cmd, parse_name, process_name, value)			\
+#define MC_COMMAND_TYPE(cmd, parse_name, process_name, value)		\
 	static bool mc_parse_##parse_name(struct mc_parser *);		\
 	static mm_result_t mc_process_##process_name(uintptr_t);	\
 	static struct mc_command_type mc_desc_##cmd = {			\
@@ -588,7 +588,7 @@ struct mc_command_type
 		.flags = value,						\
 	};
 
-MC_COMMAND_LIST(MC_TYPE)
+MC_COMMAND_LIST(MC_COMMAND_TYPE)
 
 /**********************************************************************
  * Command Data.
@@ -619,7 +619,6 @@ struct mc_set_params
 	uint32_t flags;
 	uint32_t exptime;
 	struct mc_value value;
-	bool noreply;
 };
 
 struct mc_cas_params
@@ -629,27 +628,23 @@ struct mc_cas_params
 	uint32_t exptime;
 	struct mc_value value;
 	uint64_t cas;
-	bool noreply;
 };
 
 struct mc_inc_params
 {
 	struct mc_string key;
 	uint64_t value;
-	bool noreply;
 };
 
 struct mc_del_params
 {
 	struct mc_string key;
-	bool noreply;
 };
 
 struct mc_touch_params
 {
 	struct mc_string key;
 	uint32_t exptime;
-	bool noreply;
 };
 
 struct mc_slabs_params
@@ -672,6 +667,8 @@ union mc_params
 	struct mc_touch_params touch;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
+	uint32_t flush_exptime;
+	uint32_t verbosity;
 };
 
 typedef enum
@@ -706,6 +703,7 @@ struct mc_command
 	union mc_params params;
 	union mc_result result;
 	mc_result_t result_type;
+	bool noreply;
 
 	struct mm_future *future;
 
@@ -744,9 +742,10 @@ mc_command_create(void)
 	struct mc_command *command = mm_pool_alloc(&mc_command_pool);
 	command->next = NULL;
 	command->type = NULL;
-	command->end_ptr = NULL;
 	command->result_type = MC_RESULT_NONE;
 	command->future = NULL;
+	command->end_ptr = NULL;
+	command->noreply = false;
 
 	LEAVE();
 	return command;
@@ -996,12 +995,6 @@ mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
  * Command Processing.
  **********************************************************************/
 
-static mm_result_t
-mc_process_dummy(uintptr_t arg __attribute__((unused)))
-{
-	return 0;
-}
-
 static void
 mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset)
 {
@@ -1095,7 +1088,7 @@ mc_process_set(uintptr_t arg)
 	mc_table_insert(index, new_entry);
 	mc_entry_ref(new_entry);
 
-	if (command->params.set.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else {
 		mc_reply(command, "STORED\r\n");
@@ -1127,7 +1120,7 @@ mc_process_add(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.set.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1163,7 +1156,7 @@ mc_process_replace(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.set.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1201,7 +1194,7 @@ mc_process_cas(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.cas.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1244,7 +1237,7 @@ mc_process_append(uintptr_t arg)
 		mc_entry_unref(old_entry);
 	}
 
-	if (command->params.set.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1285,7 +1278,7 @@ mc_process_prepend(uintptr_t arg)
 		mc_entry_unref(old_entry);
 	}
 
-	if (command->params.set.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		mc_reply(command, "STORED\r\n");
@@ -1325,7 +1318,7 @@ mc_process_incr(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.inc.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		command->result_type = MC_RESULT_VALUE;
@@ -1372,7 +1365,7 @@ mc_process_decr(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->params.inc.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (new_entry != NULL) {
 		command->result_type = MC_RESULT_VALUE;
@@ -1400,7 +1393,7 @@ mc_process_delete(uintptr_t arg)
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
-	if (command->params.del.noreply) {
+	if (command->noreply) {
 		mc_blank(command);
 	} else if (old_entry != NULL) {
 		mc_reply(command, "DELETED\r\n");
@@ -1444,10 +1437,11 @@ mc_process_stats(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	if (command->params.stats.nopts)
+	if (command->params.stats.nopts) {
 		mc_reply(command, "SERVER_ERROR not implemented\r\n");
-	else
+	} else {
 		mc_reply(command, "END\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -1459,7 +1453,27 @@ mc_process_flush_all(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	mc_reply(command, "SERVER_ERROR not implemented\r\n");
+
+	// TODO: really use the exptime.
+	mc_exptime = mc_curtime + command->params.flush_exptime * 1000000ull;
+
+	// TODO: do this as a background task.
+	while (!mm_list_empty(&mc_entry_list)) {
+		struct mm_list *link = mm_list_head(&mc_entry_list);
+		struct mc_entry *entry = containerof(link, struct mc_entry, link);
+
+		char *key = mc_entry_key(entry);
+		uint32_t index = mc_table_key_index(key, entry->key_len);
+		mc_table_remove(index, key, entry->key_len);
+
+		mc_entry_unref(entry);
+	}
+
+	if (command->noreply) {
+		mc_blank(command);
+	} else {
+		mc_reply(command, "OK\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -1472,6 +1486,26 @@ mc_process_version(uintptr_t arg)
 
 	struct mc_command *command = (struct mc_command *) arg;
 	mc_reply(command, MC_VERSION);
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mc_process_verbosity(uintptr_t arg)
+{
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+
+	mc_verbose = min(command->params.verbosity, 2u);
+	DEBUG("set verbosity %d", mc_verbose);
+
+	if (command->noreply) {
+		mc_blank(command);
+	} else {
+		mc_reply(command, "OK\r\n");
+	}
 
 	LEAVE();
 	return 0;
@@ -1973,11 +2007,23 @@ mc_parse_command(struct mc_parser *parser)
 		S_CMD_1,
 		S_CMD_2,
 		S_CMD_3,
-		S_CMD_MATCH,
+		S_MATCH,
+		S_SPACE,
+
+		S_FLUSH_ALL_1,
+		S_FLUSH_ALL_2,
+		S_VERBOSITY_1,
+		S_VERBOSITY_2,
+		S_NOREPLY,
+
+		S_NUM32,
+		S_NUM64,
 		S_OPT,
 		S_OPT_N,
 		S_EOL,
 		S_EOL_1,
+
+		S_ERROR,
 		S_ABORT
 	};
 
@@ -1986,8 +2032,10 @@ mc_parse_command(struct mc_parser *parser)
 
 	// Initialize the scanner state.
 	enum parse_state state = S_START;
-	enum parse_state match_state = S_ABORT;
+	enum parse_state shift = S_ABORT;
 	uint32_t start = -1;
+	uint32_t num32 = 0;
+	uint64_t num64 = 0;
 	char *match = "";
 
 	// The count of scanned chars. Used to check if the client sends
@@ -2006,12 +2054,12 @@ again:
 			switch (state) {
 			case S_START:
 				if (c == ' ') {
-					// SKip space.
+					// Skip space.
 					break;
 				} else if (c == '\n') {
 					// Unexpected line end.
-					parser->cursor.ptr = s;
-					goto error;
+					state = S_ERROR;
+					goto again;
 				} else {
 					// Store the first command char.
 					start = c << 24;
@@ -2023,8 +2071,8 @@ again:
 				// Store the second command char.
 				if (c == '\n') {
 					// Unexpected line end.
-					parser->cursor.ptr = s;
-					goto error;
+					state = S_ERROR;
+					goto again;
 				}
 				start |= c << 16;
 				state = S_CMD_2;
@@ -2034,8 +2082,8 @@ again:
 				// Store the third command char.
 				if (c == '\n') {
 					// Unexpected line end.
-					parser->cursor.ptr = s;
-					goto error;
+					state = S_ERROR;
+					goto again;
 				}
 				start |= c << 8;
 				state = S_CMD_3;
@@ -2057,12 +2105,12 @@ again:
 					goto leave;
 				} else if (start == Cx4('r', 'e', 'p', 'l')) {
 					parser->command->type = &mc_desc_replace;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "ace";
 					break;
 				} else if (start == Cx4('d', 'e', 'l', 'e')) {
 					parser->command->type = &mc_desc_delete;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "te";
 					break;
 				} else if (start == Cx4('a', 'd', 'd', ' ')) {
@@ -2071,17 +2119,17 @@ again:
 					goto leave;
 				} else if (start == Cx4('i', 'n', 'c', 'r')) {
 					parser->command->type = &mc_desc_incr;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
 					parser->command->type = &mc_desc_decr;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
 					parser->command->type = &mc_desc_gets;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
@@ -2090,130 +2138,255 @@ again:
 					goto leave;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
 					parser->command->type = &mc_desc_append;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "nd";
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
 					parser->command->type = &mc_desc_prepend;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "end";
 					break;
 				} else if (start == Cx4('t', 'o', 'u', 'c')) {
 					parser->command->type = &mc_desc_touch;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "h";
 					break;
 				} else if (start == Cx4('s', 'l', 'a', 'b')) {
 					parser->command->type = &mc_desc_slabs;
 					parser->command->params.slabs.nopts = 0;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "s";
-					match_state = S_OPT;
+					shift = S_OPT;
 					break;
 				} else if (start == Cx4('s', 't', 'a', 't')) {
 					parser->command->type = &mc_desc_stats;
 					parser->command->params.stats.nopts = 0;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "s";
-					match_state = S_OPT;
+					shift = S_OPT;
 					break;
 				} else if (start == Cx4('f', 'l', 'u', 's')) {
 					parser->command->type = &mc_desc_flush_all;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "h_all";
+					shift = S_FLUSH_ALL_1;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 's')) {
 					parser->command->type = &mc_desc_version;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "ion";
-					match_state = S_EOL;
+					shift = S_EOL;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 'b')) {
 					parser->command->type = &mc_desc_verbosity;
-					state = S_CMD_MATCH;
+					state = S_MATCH;
 					match = "osity";
+					shift = S_VERBOSITY_1;
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
 					parser->command->type = &mc_desc_quit;
-					state = S_EOL;
+					state = S_SPACE;
+					shift = S_EOL;
 					break;
 				} else {
 					// Unrecognized command.
-					parser->cursor.ptr = s;
-					goto error;
+					state = S_ERROR;
+					goto again;
 				}
 #undef Cx4
 
-			case S_CMD_MATCH:
+			case S_MATCH:
 				if (c == *match) {
 					// So far so good.
 					if (unlikely(c == 0)) {
 						// Hmm, zero byte in the input.
-						parser->cursor.ptr = s + 1;
-						goto error;
+						state = S_ERROR;
+						break;
 					}
 					match++;
 					break;
-				} else if (*match != 0) {
+				} else if (*match) {
 					// Unexpected char before the end.
-					parser->cursor.ptr = s;
-					goto error;
-				} else if (c != ' ' && c != '\r' && c != '\n') {
-					// Unexpected char after the end.
-					parser->cursor.ptr = s + 1;
-					goto error;
-				} else {
-					// Success.
-					if (match_state == S_ABORT) {
-						parser->cursor.ptr = s;
-						goto leave;
-					}
-					state = match_state;
+					state = S_ERROR;
 					goto again;
+				} else if (c == ' ') {
+					// It matched.
+					state = S_SPACE;
+					goto again;
+				} else if (c == '\r' || c == '\n') {
+					// It matched as well.
+					state = shift;
+					goto again;
+				} else {
+					// Unexpected char after the end.
+					state = S_ERROR;
+					break;
 				}
 
-			case S_OPT:
+			case S_SPACE:
 				if (c == ' ') {
 					// Skip space.
 					break;
+				} else {
+					state = shift;
+					goto again;
+				}
+
+			case S_FLUSH_ALL_1:
+				ASSERT(c != ' ');
+				parser->command->params.flush_exptime = 0;
+				if (c == '\r' || c == '\n') {
+					state = S_EOL;
+					goto again;
+				} else if (c >= '0' && c <= '9') {
+					num32 = 0;
+					state = S_NUM32;
+					shift = S_FLUSH_ALL_2;
+					goto again;
+				} else if (c == 'n') {
+					state = S_MATCH;
+					match = "noreply";
+					shift = S_NOREPLY;
+					goto again;
+				} else {
+					state = S_ERROR;
+					goto again;
+				}
+
+			case S_FLUSH_ALL_2:
+				ASSERT(c != ' ');
+				parser->command->params.flush_exptime = num32;
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "noreply";
+					shift = S_NOREPLY;
+					goto again;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
+
+			case S_VERBOSITY_1:
+				ASSERT(c != ' ');
+				if (c >= '0' && c <= '9') {
+					num32 = 0;
+					state = S_NUM32;
+					shift = S_VERBOSITY_2;
+					goto again;
+				} else {
+					state = S_ERROR;
+					goto again;
+				}
+
+			case S_VERBOSITY_2:
+				ASSERT(c != ' ');
+				parser->command->params.verbosity = num32;
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "noreply";
+					shift = S_NOREPLY;
+					goto again;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
+
+			case S_NOREPLY:
+				ASSERT(c != ' ');
+				parser->command->noreply = true;
+				state = S_EOL;
+				goto again;
+
+			case S_NUM32:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num32 = num32 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					goto again;
 				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_NUM64:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num64 = num64 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					goto again;
+				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_OPT:
+				if (c == '\r' || c == '\n') {
 					state = S_EOL;
 					goto again;
 				} else {
-					// TODO: add c to the optional value
+					// TODO: add c to the option value
 					state = S_OPT_N;
 					break;
 				}
 
 			case S_OPT_N:
-				if (c == ' ' || c == '\r' || c == '\n') {
-					// TODO: limit the option number
-					// TODO: pass the value
+				// TODO: limit the option number
+				// TODO: use the option value
+				if (c == ' ') {
 					mc_command_option(parser->command);
-					state = S_OPT;
+					state = S_SPACE;
+					goto again;
+				} else if (c == '\r' || c == '\n') {
+					mc_command_option(parser->command);
+					state = S_EOL;
 					goto again;
 				} else {
-					// TODO: add c to the optional value
+					// TODO: add c to the option value
 					break;
 				}
 
 			case S_EOL:
+				ASSERT(c != ' ');
 				if (c == '\r') {
 					state = S_EOL_1;
-					break;
-				} else if (c == ' ') {
-					// Skip space.
 					break;
 				}
 				// FALLTHRU
 			case S_EOL_1:
-				parser->cursor.ptr = s + 1;
-				if (c != '\n')
-					goto error;
-				goto leave;
+				if (c == '\n') {
+					parser->cursor.ptr = s + 1;
+					goto leave;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_ERROR:
+				if (c == '\n') {
+					mc_reply(parser->command, "ERROR\r\n");
+					parser->cursor.ptr = s + 1;
+					parser->error = true;
+					goto leave;
+				}
+				break;
 
 			case S_ABORT:
+#if 1
+				parser->cursor.ptr = s;
+				goto leave;
+#else
 				ABORT();
+#endif
 			}
 		}
 
@@ -2225,10 +2398,6 @@ again:
 leave:
 	LEAVE();
 	return rc;
-
-error:
-	rc = mc_parse_error(parser, "ERROR\r\n");
-	goto leave;
 }
 
 static bool
@@ -2298,7 +2467,7 @@ mc_parse_set(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->params.set.noreply);
+	rc = mc_parse_noreply(parser, &parser->command->noreply);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_eol(parser);
@@ -2333,7 +2502,7 @@ mc_parse_cas(struct mc_parser *parser)
 	rc = mc_parse_u64(parser, &parser->command->params.cas.cas);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->params.cas.noreply);
+	rc = mc_parse_noreply(parser, &parser->command->noreply);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_eol(parser);
@@ -2359,7 +2528,7 @@ mc_parse_incr(struct mc_parser *parser)
 	rc = mc_parse_u64(parser, &parser->command->params.inc.value);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->params.inc.noreply);
+	rc = mc_parse_noreply(parser, &parser->command->noreply);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_eol(parser);
@@ -2377,7 +2546,7 @@ mc_parse_delete(struct mc_parser *parser)
 	bool rc = mc_parse_param(parser, &parser->command->params.del.key, true);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->params.del.noreply);
+	rc = mc_parse_noreply(parser, &parser->command->noreply);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_eol(parser);
@@ -2398,99 +2567,10 @@ mc_parse_touch(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.touch.exptime);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->params.touch.noreply);
+	rc = mc_parse_noreply(parser, &parser->command->noreply);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_eol(parser);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_flush_all(struct mc_parser *parser)
-{
-	ENTER();
-
-	uint32_t exptime = 0;
-	bool noreply = false;
-	struct mc_string param;
-
-	bool rc = mc_parse_param(parser, &param, false);
-	if (rc && !parser->error && param.len) {
-		char *endp;
-		unsigned long v = strtoul(param.str, &endp, 10);
-		if (endp < param.str + param.len) {
-			if (param.len == 7 && memcmp(param.str, "noreply", 7) == 0) {
-				noreply = true;
-			} else {
-				rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
-				goto leave;
-			}
-		} else {
-			exptime = v;
-
-			rc = mc_parse_noreply(parser, &noreply);
-			if (!rc || parser->error)
-				goto leave;
-		}
-	}
-	rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	// TODO: really use the exptime.
-	mc_exptime = mc_curtime + exptime * 1000000ull;
-
-	// TODO: do this as a background task.
-	while (!mm_list_empty(&mc_entry_list)) {
-		struct mm_list *link = mm_list_head(&mc_entry_list);
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-
-		char *key = mc_entry_key(entry);
-		uint32_t index = mc_table_key_index(key, entry->key_len);
-		mc_table_remove(index, key, entry->key_len);
-
-		mc_entry_unref(entry);
-	}
-
-	if (noreply) {
-		mc_blank(parser->command);
-	} else {
-		mc_reply(parser->command, "OK\r\n");
-	}
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_verbosity(struct mc_parser *parser)
-{
-	ENTER();
-
-	uint32_t verbose;
-	bool noreply;
-
-	bool rc = mc_parse_u32(parser, &verbose);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	mc_verbose = (int) (verbose < 2 ? verbose : 2);
-
-	if (noreply) {
-		mc_blank(parser->command);
-	} else {
-		mc_reply(parser->command, "OK\r\n");
-	}
 
 leave:
 	LEAVE();
