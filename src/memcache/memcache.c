@@ -619,26 +619,13 @@ struct mc_set_params
 	uint32_t flags;
 	uint32_t exptime;
 	struct mc_value value;
-};
-
-struct mc_cas_params
-{
-	struct mc_string key;
-	uint32_t flags;
-	uint32_t exptime;
-	struct mc_value value;
 	uint64_t cas;
 };
 
-struct mc_inc_params
+struct mc_arith_params
 {
 	struct mc_string key;
 	uint64_t value;
-};
-
-struct mc_del_params
-{
-	struct mc_string key;
 };
 
 struct mc_touch_params
@@ -661,9 +648,8 @@ union mc_params
 {
 	struct mc_set_params set;
 	struct mc_get_params get;
-	struct mc_cas_params cas;
-	struct mc_inc_params inc;
-	struct mc_del_params del;
+	struct mc_string delete_key;
+	struct mc_arith_params arith;
 	struct mc_touch_params touch;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
@@ -1174,15 +1160,15 @@ mc_process_cas(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.cas.key.str;
-	size_t key_len = command->params.cas.key.len;
-	struct mc_value *value = &command->params.cas.value;
+	const char *key = command->params.set.key.str;
+	size_t key_len = command->params.set.key.len;
+	struct mc_value *value = &command->params.set.value;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL && old_entry->cas == command->params.cas.cas) {
+	if (old_entry != NULL && old_entry->cas == command->params.set.cas) {
 		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
 		ASSERT(old_entry == old_entry2);
 		mc_entry_unref(old_entry2);
@@ -1190,7 +1176,7 @@ mc_process_cas(uintptr_t arg)
 		new_entry = mc_entry_create(key_len, value->bytes);
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, value, 0);
-		new_entry->flags = command->params.cas.flags;
+		new_entry->flags = command->params.set.flags;
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1296,8 +1282,8 @@ mc_process_incr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.inc.key.str;
-	size_t key_len = command->params.inc.key.len;
+	const char *key = command->params.arith.key.str;
+	size_t key_len = command->params.arith.key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
@@ -1305,7 +1291,7 @@ mc_process_incr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		value += command->params.inc.value;
+		value += command->params.arith.value;
 
 		new_entry = mc_entry_create_u64(key_len, value);
 		mc_entry_set_key(new_entry, key);
@@ -1340,8 +1326,8 @@ mc_process_decr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.inc.key.str;
-	size_t key_len = command->params.inc.key.len;
+	const char *key = command->params.arith.key.str;
+	size_t key_len = command->params.arith.key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
@@ -1349,8 +1335,8 @@ mc_process_decr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		if (value > command->params.inc.value)
-			value -= command->params.inc.value;
+		if (value > command->params.arith.value)
+			value -= command->params.arith.value;
 		else
 			value = 0;
 
@@ -1387,8 +1373,8 @@ mc_process_delete(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.del.key.str;
-	size_t key_len = command->params.del.key.len;
+	const char *key = command->params.delete_key.str;
+	size_t key_len = command->params.delete_key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
@@ -2487,19 +2473,19 @@ mc_parse_cas(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.cas.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->params.set.key, true);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.cas.flags);
+	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.cas.exptime);
+	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.cas.value.bytes);
+	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u64(parser, &parser->command->params.cas.cas);
+	rc = mc_parse_u64(parser, &parser->command->params.set.cas);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
@@ -2509,8 +2495,8 @@ mc_parse_cas(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_data(parser,
-		&parser->command->params.cas.value,
-		parser->command->params.cas.value.bytes);
+		&parser->command->params.set.value,
+		parser->command->params.set.value.bytes);
 
 leave:
 	LEAVE();
@@ -2522,10 +2508,10 @@ mc_parse_incr(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.inc.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->params.arith.key, true);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u64(parser, &parser->command->params.inc.value);
+	rc = mc_parse_u64(parser, &parser->command->params.arith.value);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
@@ -2543,7 +2529,7 @@ mc_parse_delete(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.del.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->params.delete_key, true);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
