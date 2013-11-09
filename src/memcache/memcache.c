@@ -602,8 +602,7 @@ struct mc_string
 
 struct mc_get_params
 {
-	struct mc_string *keys;
-	uint32_t nkeys;
+	bool is_last;
 };
 
 struct mc_set_params
@@ -649,16 +648,9 @@ typedef enum
 	MC_RESULT_QUIT,
 } mc_result_t;
 
-struct mc_result_entries
-{
-	struct mc_entry **entries;
-	uint32_t nentries;
-};
-
 union mc_result
 {
 	struct mc_string reply;
-	struct mc_result_entries entries;
 	struct mc_entry *entry;
 };
 
@@ -720,27 +712,14 @@ mc_command_destroy(struct mc_command *command)
 	ENTER();
 
 	if (command->type != NULL) {
-		switch (command->type->tag) {
-		case mc_command_get:
-		case mc_command_gets:
-			mm_core_free(command->params.get.keys);
-			break;
-		default:
-			if (command->own_key)
-				mm_core_free((char *) command->key.str);
-			break;
-		}
+		if (command->own_key)
+			mm_core_free((char *) command->key.str);
 
 		switch (command->result_type) {
-		case MC_RESULT_VALUE:
-			mc_entry_unref(command->result.entry);
-			break;
-
 		case MC_RESULT_ENTRY:
 		case MC_RESULT_ENTRY_CAS:
-			for (uint32_t i = 0; i < command->result.entries.nentries; i++)
-				mc_entry_unref(command->result.entries.entries[i]);
-			mm_free(command->result.entries.entries);
+		case MC_RESULT_VALUE:
+			mc_entry_unref(command->result.entry);
 			break;
 
 		default:
@@ -779,6 +758,14 @@ mc_command_option(struct mc_command *command)
 }
 
 static void
+mc_blank(struct mc_command *command)
+{
+	DEBUG("no reply");
+
+	command->result_type = MC_RESULT_BLANK;
+}
+
+static void
 mc_reply(struct mc_command *command, const char *str)
 {
 	DEBUG("reply '%s'", str);
@@ -789,11 +776,19 @@ mc_reply(struct mc_command *command, const char *str)
 }
 
 static void
-mc_blank(struct mc_command *command)
+mc_entry(struct mc_command *command, struct mc_entry *entry, mc_result_t res_type)
 {
-	DEBUG("no reply");
+	command->result_type = res_type;
+	command->result.entry = entry;
+	mc_entry_ref(entry);
+}
 
-	command->result_type = MC_RESULT_BLANK;
+static void
+mc_value(struct mc_command *command, struct mc_entry *entry)
+{
+	command->result_type = MC_RESULT_VALUE;
+	command->result.entry = entry;
+	mc_entry_ref(entry);
 }
 
 /**********************************************************************
@@ -860,17 +855,20 @@ mc_destroy(struct mc_state *state)
 }
 
 static void
-mc_queue_command(struct mc_state *state, struct mc_command *command)
+mc_queue_command(struct mc_state *state,
+		 struct mc_command *command,
+		 struct mc_command *last_command)
 {
 	ENTER();
 	ASSERT(command != NULL);
+	ASSERT(last_command != NULL);
 
 	if (state->command_head == NULL) {
 		state->command_head = command;
 	} else {
 		state->command_tail->next = command;
 	}
-	state->command_tail = command;
+	state->command_tail = last_command;
 
 	LEAVE();
 }
@@ -993,24 +991,17 @@ mc_process_get2(uintptr_t arg, mc_result_t res_type)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_entry **entries = mm_alloc(command->params.get.nkeys * sizeof(struct mc_entry *));
-	uint32_t nentries = 0;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
 
-	for (uint32_t i = 0; i < command->params.get.nkeys; i++) {
-		const char *key = command->params.get.keys[i].str;
-		size_t key_len = command->params.get.keys[i].len;
-
-		uint32_t index = mc_table_key_index(key, key_len);
-		struct mc_entry *entry = mc_table_lookup(index, key, key_len);
-		if (entry != NULL) {
-			entries[nentries++] = entry;
-			mc_entry_ref(entry);
-		}
-	}
-
-	command->result_type = res_type;
-	command->result.entries.entries = entries;
-	command->result.entries.nentries = nentries;
+	uint32_t index = mc_table_key_index(key, key_len);
+	struct mc_entry *entry = mc_table_lookup(index, key, key_len);
+	if (entry != NULL)
+		mc_entry(command, entry, res_type);
+	else if (command->params.get.is_last)
+		mc_reply(command, "END\r\n");
+	else
+		mc_blank(command);
 
 	LEAVE();
 	return 0;
@@ -1040,9 +1031,8 @@ mc_process_set(uintptr_t arg)
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
-	if (old_entry != NULL) {
+	if (old_entry != NULL)
 		mc_entry_unref(old_entry);
-	}
 
 	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
 	mc_entry_set_key(new_entry, key);
@@ -1052,11 +1042,10 @@ mc_process_set(uintptr_t arg)
 	mc_table_insert(index, new_entry);
 	mc_entry_ref(new_entry);
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else {
+	else
 		mc_reply(command, "STORED\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1084,13 +1073,12 @@ mc_process_add(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
+	else if (new_entry != NULL)
 		mc_reply(command, "STORED\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_STORED\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1120,13 +1108,12 @@ mc_process_replace(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
+	else if (new_entry != NULL)
 		mc_reply(command, "STORED\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_STORED\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1158,15 +1145,14 @@ mc_process_cas(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
+	else if (new_entry != NULL)
 		mc_reply(command, "STORED\r\n");
-	} else if (old_entry != NULL){
+	else if (old_entry != NULL)
 		mc_reply(command, "EXISTS\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_FOUND\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1201,13 +1187,12 @@ mc_process_append(uintptr_t arg)
 		mc_entry_unref(old_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
+	else if (new_entry != NULL)
 		mc_reply(command, "STORED\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_STORED\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1242,13 +1227,12 @@ mc_process_prepend(uintptr_t arg)
 		mc_entry_unref(old_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
+	else if (new_entry != NULL)
 		mc_reply(command, "STORED\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_STORED\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1282,17 +1266,14 @@ mc_process_incr(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
-		command->result_type = MC_RESULT_VALUE;
-		command->result.entry = new_entry;
-		mc_entry_ref(new_entry);
-	} else if (old_entry != NULL) {
+	else if (new_entry != NULL)
+		mc_value(command, new_entry);
+	else if (old_entry != NULL)
 		mc_reply(command, "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_FOUND\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1329,17 +1310,14 @@ mc_process_decr(uintptr_t arg)
 		mc_table_insert(index, new_entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (new_entry != NULL) {
-		command->result_type = MC_RESULT_VALUE;
-		command->result.entry = new_entry;
-		mc_entry_ref(new_entry);
-	} else if (old_entry != NULL) {
+	else if (new_entry != NULL)
+		mc_value(command, new_entry);
+	else if (old_entry != NULL)
 		mc_reply(command, "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_FOUND\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1357,13 +1335,12 @@ mc_process_delete(uintptr_t arg)
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else if (old_entry != NULL) {
+	else if (old_entry != NULL)
 		mc_reply(command, "DELETED\r\n");
-	} else {
+	else
 		mc_reply(command, "NOT_FOUND\r\n");
-	}
 
 	mc_entry_destroy(old_entry);
 
@@ -1401,11 +1378,10 @@ mc_process_stats(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	if (command->params.stats.nopts) {
+	if (command->params.stats.nopts)
 		mc_reply(command, "SERVER_ERROR not implemented\r\n");
-	} else {
+	else
 		mc_reply(command, "END\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1433,11 +1409,10 @@ mc_process_flush_all(uintptr_t arg)
 		mc_entry_unref(entry);
 	}
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else {
+	else
 		mc_reply(command, "OK\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1465,11 +1440,10 @@ mc_process_verbosity(uintptr_t arg)
 	mc_verbose = min(command->params.verbosity, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
 
-	if (command->noreply) {
+	if (command->noreply)
 		mc_blank(command);
-	} else {
+	else
 		mc_reply(command, "OK\r\n");
-	}
 
 	LEAVE();
 	return 0;
@@ -1492,16 +1466,22 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
 
+	struct mc_command *last = command;
 	if (likely(command->type != NULL)) {
 		DEBUG("command %s", command->type->name);
+		for (;;) {
+			if (last->result_type == MC_RESULT_NONE) {
+				// TODO: create a future for async commands.
+				last->type->process((intptr_t) last);
+			}
 
-		if (command->result_type == MC_RESULT_NONE) {
-			// TODO: create a future for async commands.
-			command->type->process((intptr_t) command);
+			if (last->next == NULL)
+				break;
+			last = last->next;
 		}
 	}
 
-	mc_queue_command(state, command);
+	mc_queue_command(state, command, last);
 	mm_net_spawn_writer(state->sock);
 
 	LEAVE();
@@ -1575,7 +1555,13 @@ mc_end_input(struct mc_parser *parser)
 {
 	ENTER();
 
-	parser->command->end_ptr = parser->cursor.ptr;
+	struct mc_command *command = parser->command;
+	while (command->next != NULL) {
+		command->end_ptr = parser->state->start_ptr;
+		command = command->next;
+	}
+
+	command->end_ptr = parser->cursor.ptr;
 	parser->state->start_ptr = parser->cursor.ptr;
 
 	LEAVE();
@@ -2375,39 +2361,36 @@ mc_parse_get(struct mc_parser *parser)
 {
 	ENTER();
 
-	parser->command->params.get.keys = NULL;
-	parser->command->params.get.nkeys = 0;
+	bool rc = true;
 
-	bool rc;
-	int nkeys = 0, nkeys_max = 8;
-	struct mc_string *keys = mm_core_alloc(nkeys_max * sizeof(struct mc_string));
-	// TODO: free it
+	bool first = true;
+	struct mc_command *command = parser->command;
 
 	for (;;) {
-		rc = mc_parse_param(parser, &keys[nkeys], nkeys == 0);
-		if (!rc || parser->error) {
-			mm_core_free(keys);
+		struct mc_string key;
+		rc = mc_parse_param(parser, &key, first);
+		if (!rc || parser->error)
 			goto leave;
-		}
-
-		if (keys[nkeys].len == 0) {
+		if (key.len == 0)
 			break;
-		}
 
-		if (++nkeys == nkeys_max) {
-			nkeys_max += 8;
-			keys = mm_core_realloc(keys, nkeys_max * sizeof(struct mc_string));
+		if (first) {
+			first = false;
+			command->key = key;
+		} else {
+			command->next = mc_command_create();
+			command->next->type = command->type;
+			command->next->key = key;
+			command = command->next;
 		}
 	}
 
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error) {
-		mm_core_free(keys);
 		goto leave;
 	}
 
-	parser->command->params.get.keys = keys;
-	parser->command->params.get.nkeys = nkeys;
+	command->params.get.is_last = true;
 
 leave:
 	LEAVE();
@@ -2578,43 +2561,47 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 	switch (command->result_type) {
 	case MC_RESULT_BLANK:
 		break;
+
 	case MC_RESULT_REPLY:
 		mm_buffer_append(&state->tbuf,
 				 command->result.reply.str,
 				 command->result.reply.len);
 		break;
+
 	case MC_RESULT_ENTRY:
-	case MC_RESULT_ENTRY_CAS:
-		for (uint32_t i = 0; i < command->result.entries.nentries; i++) {
-			struct mc_entry *entry = command->result.entries.entries[i];
-			const char *key = mc_entry_key(entry);
-			char *value = mc_entry_value(entry);
-			uint8_t key_len = entry->key_len;
-			uint32_t value_len = entry->value_len;
+	case MC_RESULT_ENTRY_CAS: {
+		struct mc_entry *entry = command->result.entry;
+		const char *key = mc_entry_key(entry);
+		char *value = mc_entry_value(entry);
+		uint8_t key_len = entry->key_len;
+		uint32_t value_len = entry->value_len;
 
-			if (command->result_type == MC_RESULT_ENTRY) {
-				mm_buffer_printf(
-					&state->tbuf,
-					"VALUE %.*s %u %u\r\n",
-					key_len, key,
-					entry->flags, value_len);
-			} else {
-				mm_buffer_printf(
-					&state->tbuf,
-					"VALUE %.*s %u %u %llu\r\n",
-					key_len, key,
-					entry->flags, value_len,
-					(unsigned long long) entry->cas);
-			}
-
-			mc_entry_ref(entry);
-			mm_buffer_splice(&state->tbuf, value, value_len,
-					 mc_transmit_unref, (uintptr_t) entry);
-
-			mm_buffer_append(&state->tbuf, "\r\n", 2);
+		if (command->result_type == MC_RESULT_ENTRY) {
+			mm_buffer_printf(
+				&state->tbuf,
+				"VALUE %.*s %u %u\r\n",
+				key_len, key,
+				entry->flags, value_len);
+		} else {
+			mm_buffer_printf(
+				&state->tbuf,
+				"VALUE %.*s %u %u %llu\r\n",
+				key_len, key,
+				entry->flags, value_len,
+				(unsigned long long) entry->cas);
 		}
-		mm_buffer_append(&state->tbuf, "END\r\n", 5);
+
+		mc_entry_ref(entry);
+		mm_buffer_splice(&state->tbuf, value, value_len,
+				 mc_transmit_unref, (uintptr_t) entry);
+
+		if (command->params.get.is_last)
+			mm_buffer_append(&state->tbuf, "\r\nEND\r\n", 7);
+		else
+			mm_buffer_append(&state->tbuf, "\r\n", 2);
 		break;
+	}
+
 	case MC_RESULT_VALUE: {
 		struct mc_entry *entry = command->result.entry;
 		char *value = mc_entry_value(entry);
@@ -2627,10 +2614,12 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 		mm_buffer_append(&state->tbuf, "END\r\n", 5);
 		break;
 	}
+
 	case MC_RESULT_QUIT:
 		state->quit = true;
 		mm_net_close(state->sock);
 		break;
+
 	default:
 		ABORT();
 	}
