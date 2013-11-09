@@ -600,13 +600,6 @@ struct mc_string
 	const char *str;
 };
 
-struct mc_value
-{
-	struct mm_buffer_segment *seg;
-	const char *start;
-	uint32_t bytes;
-};
-
 struct mc_get_params
 {
 	struct mc_string *keys;
@@ -615,23 +608,13 @@ struct mc_get_params
 
 struct mc_set_params
 {
-	struct mc_string key;
+	struct mm_buffer_segment *seg;
+	const char *start;
+	uint32_t bytes;
+
 	uint32_t flags;
 	uint32_t exptime;
-	struct mc_value value;
 	uint64_t cas;
-};
-
-struct mc_arith_params
-{
-	struct mc_string key;
-	uint64_t value;
-};
-
-struct mc_touch_params
-{
-	struct mc_string key;
-	uint32_t exptime;
 };
 
 struct mc_slabs_params
@@ -646,20 +629,18 @@ struct mc_stats_params
 
 union mc_params
 {
-	struct mc_set_params set;
 	struct mc_get_params get;
-	struct mc_string delete_key;
-	struct mc_arith_params arith;
-	struct mc_touch_params touch;
+	struct mc_set_params set;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
-	uint32_t flush_exptime;
+	uint64_t value;
+	uint32_t exptime;
 	uint32_t verbosity;
 };
 
 typedef enum
 {
-	MC_RESULT_NONE,
+	MC_RESULT_NONE = 0,
 	MC_RESULT_BLANK,
 	MC_RESULT_REPLY,
 	MC_RESULT_ENTRY,
@@ -686,10 +667,12 @@ struct mc_command
 	struct mc_command *next;
 
 	struct mc_command_type *type;
+	struct mc_string key;
 	union mc_params params;
 	union mc_result result;
 	mc_result_t result_type;
 	bool noreply;
+	bool own_key;
 
 	struct mm_future *future;
 
@@ -697,7 +680,6 @@ struct mc_command
 };
 
 static struct mm_pool mc_command_pool;
-
 
 static void
 mc_command_init(void)
@@ -726,12 +708,7 @@ mc_command_create(void)
 	ENTER();
 
 	struct mc_command *command = mm_pool_alloc(&mc_command_pool);
-	command->next = NULL;
-	command->type = NULL;
-	command->result_type = MC_RESULT_NONE;
-	command->future = NULL;
-	command->end_ptr = NULL;
-	command->noreply = false;
+	memset(command, 0, sizeof(struct mc_command));
 
 	LEAVE();
 	return command;
@@ -748,8 +725,9 @@ mc_command_destroy(struct mc_command *command)
 		case mc_command_gets:
 			mm_core_free(command->params.get.keys);
 			break;
-
 		default:
+			if (command->own_key)
+				mm_core_free((char *) command->key.str);
 			break;
 		}
 
@@ -982,13 +960,13 @@ mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
  **********************************************************************/
 
 static void
-mc_process_value(struct mc_entry *entry, struct mc_value *value, uint32_t offset)
+mc_process_value(struct mc_entry *entry, struct mc_set_params *params, uint32_t offset)
 {
 	ENTER();
 
-	const char *src = value->start;
-	uint32_t bytes = value->bytes;
-	struct mm_buffer_segment *seg = value->seg;
+	const char *src = params->start;
+	uint32_t bytes = params->bytes;
+	struct mm_buffer_segment *seg = params->seg;
 	ASSERT(src >= seg->data && src <= seg->data + seg->size);
 
 	char *dst = mc_entry_value(entry) + offset;
@@ -1056,9 +1034,9 @@ mc_process_set(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
@@ -1066,10 +1044,10 @@ mc_process_set(uintptr_t arg)
 		mc_entry_unref(old_entry);
 	}
 
-	struct mc_entry *new_entry = mc_entry_create(key_len, value->bytes);
+	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
 	mc_entry_set_key(new_entry, key);
-	mc_process_value(new_entry, value, 0);
-	new_entry->flags = command->params.set.flags;
+	mc_process_value(new_entry, params, 0);
+	new_entry->flags = params->flags;
 
 	mc_table_insert(index, new_entry);
 	mc_entry_ref(new_entry);
@@ -1090,19 +1068,19 @@ mc_process_add(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
-		new_entry = mc_entry_create(key_len, value->bytes);
+		new_entry = mc_entry_create(key_len, params->bytes);
 		mc_entry_set_key(new_entry, key);
-		mc_process_value(new_entry, value, 0);
-		new_entry->flags = command->params.set.flags;
+		mc_process_value(new_entry, params, 0);
+		new_entry->flags = params->flags;
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1124,9 +1102,9 @@ mc_process_replace(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
@@ -1135,10 +1113,10 @@ mc_process_replace(uintptr_t arg)
 	if (old_entry != NULL) {
 		mc_entry_unref(old_entry);
 
-		new_entry = mc_entry_create(key_len, value->bytes);
+		new_entry = mc_entry_create(key_len, params->bytes);
 		mc_entry_set_key(new_entry, key);
-		mc_process_value(new_entry, value, 0);
-		new_entry->flags = command->params.set.flags;
+		mc_process_value(new_entry, params, 0);
+		new_entry->flags = params->flags;
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1160,23 +1138,23 @@ mc_process_cas(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL && old_entry->cas == command->params.set.cas) {
+	if (old_entry != NULL && old_entry->cas == params->cas) {
 		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
 		ASSERT(old_entry == old_entry2);
 		mc_entry_unref(old_entry2);
 
-		new_entry = mc_entry_create(key_len, value->bytes);
+		new_entry = mc_entry_create(key_len, params->bytes);
 		mc_entry_set_key(new_entry, key);
-		mc_process_value(new_entry, value, 0);
-		new_entry->flags = command->params.set.flags;
+		mc_process_value(new_entry, params, 0);
+		new_entry->flags = params->flags;
 		mc_table_insert(index, new_entry);
 	}
 
@@ -1200,23 +1178,23 @@ mc_process_append(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
-		size_t value_len = old_entry->value_len + value->bytes;
+		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_value(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
 		mc_entry_set_key(new_entry, key);
 		char *new_value = mc_entry_value(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
-		mc_process_value(new_entry, value, old_entry->value_len);
+		mc_process_value(new_entry, params, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
 		mc_table_insert(index, new_entry);
 
@@ -1241,23 +1219,23 @@ mc_process_prepend(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.set.key.str;
-	size_t key_len = command->params.set.key.len;
-	struct mc_value *value = &command->params.set.value;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	struct mc_set_params *params = &command->params.set;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
-		size_t value_len = old_entry->value_len + value->bytes;
+		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_value(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
 		mc_entry_set_key(new_entry, key);
 		char *new_value = mc_entry_value(new_entry);
-		mc_process_value(new_entry, value, 0);
-		memcpy(new_value + value->bytes, old_value, old_entry->value_len);
+		mc_process_value(new_entry, params, 0);
+		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
 		mc_table_insert(index, new_entry);
 
@@ -1282,8 +1260,8 @@ mc_process_incr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.arith.key.str;
-	size_t key_len = command->params.arith.key.len;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
@@ -1291,7 +1269,7 @@ mc_process_incr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		value += command->params.arith.value;
+		value += command->params.value;
 
 		new_entry = mc_entry_create_u64(key_len, value);
 		mc_entry_set_key(new_entry, key);
@@ -1326,8 +1304,8 @@ mc_process_decr(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.arith.key.str;
-	size_t key_len = command->params.arith.key.len;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
@@ -1335,8 +1313,8 @@ mc_process_decr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		if (value > command->params.arith.value)
-			value -= command->params.arith.value;
+		if (value > command->params.value)
+			value -= command->params.value;
 		else
 			value = 0;
 
@@ -1373,8 +1351,8 @@ mc_process_delete(uintptr_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->params.delete_key.str;
-	size_t key_len = command->params.delete_key.len;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
@@ -1441,7 +1419,7 @@ mc_process_flush_all(uintptr_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 
 	// TODO: really use the exptime.
-	mc_exptime = mc_curtime + command->params.flush_exptime * 1000000ull;
+	mc_exptime = mc_curtime + command->params.exptime * 1000000ull;
 
 	// TODO: do this as a background task.
 	while (!mm_list_empty(&mc_entry_list)) {
@@ -1919,7 +1897,7 @@ leave:
 }
 
 static bool
-mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
+mc_parse_data(struct mc_parser *parser, uint32_t bytes)
 {
 	ENTER();
 	DEBUG("bytes: %d", bytes);
@@ -1928,8 +1906,8 @@ mc_parse_data(struct mc_parser *parser, struct mc_value *data, uint32_t bytes)
 	uint32_t cr = 1;
 
 	/* Save current input buffer position. */
-  	data->seg = parser->cursor.seg;
-	data->start = parser->cursor.ptr;
+  	parser->command->params.set.seg = parser->cursor.seg;
+	parser->command->params.set.start = parser->cursor.ptr;
 
 	for (;;) {
 		uint32_t avail = parser->cursor.end - parser->cursor.ptr;
@@ -2220,7 +2198,7 @@ again:
 
 			case S_FLUSH_ALL_1:
 				ASSERT(c != ' ');
-				parser->command->params.flush_exptime = 0;
+				parser->command->params.exptime = 0;
 				if (c == '\r' || c == '\n') {
 					state = S_EOL;
 					goto again;
@@ -2241,7 +2219,7 @@ again:
 
 			case S_FLUSH_ALL_2:
 				ASSERT(c != ' ');
-				parser->command->params.flush_exptime = num32;
+				parser->command->params.exptime = num32;
 				if (c == 'n') {
 					state = S_MATCH;
 					match = "noreply";
@@ -2441,7 +2419,7 @@ mc_parse_set(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.set.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
@@ -2450,7 +2428,7 @@ mc_parse_set(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
+	rc = mc_parse_u32(parser, &parser->command->params.set.bytes);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
@@ -2459,9 +2437,7 @@ mc_parse_set(struct mc_parser *parser)
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_data(parser,
-		&parser->command->params.set.value,
-		parser->command->params.set.value.bytes);
+	rc = mc_parse_data(parser, parser->command->params.set.bytes);
 
 leave:
 	LEAVE();
@@ -2473,7 +2449,7 @@ mc_parse_cas(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.set.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
@@ -2482,7 +2458,7 @@ mc_parse_cas(struct mc_parser *parser)
 	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.value.bytes);
+	rc = mc_parse_u32(parser, &parser->command->params.set.bytes);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_u64(parser, &parser->command->params.set.cas);
@@ -2494,9 +2470,7 @@ mc_parse_cas(struct mc_parser *parser)
 	rc = mc_parse_eol(parser);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_data(parser,
-		&parser->command->params.set.value,
-		parser->command->params.set.value.bytes);
+	rc = mc_parse_data(parser, parser->command->params.set.bytes);
 
 leave:
 	LEAVE();
@@ -2508,10 +2482,10 @@ mc_parse_incr(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.arith.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u64(parser, &parser->command->params.arith.value);
+	rc = mc_parse_u64(parser, &parser->command->params.value);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
@@ -2529,7 +2503,7 @@ mc_parse_delete(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.delete_key, true);
+	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
@@ -2547,10 +2521,10 @@ mc_parse_touch(struct mc_parser *parser)
 {
 	ENTER();
 
-	bool rc = mc_parse_param(parser, &parser->command->params.touch.key, true);
+	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.touch.exptime);
+	rc = mc_parse_u32(parser, &parser->command->params.exptime);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
