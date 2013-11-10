@@ -542,8 +542,8 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 	_(append,	set,		append,		MC_ASYNC)	\
 	_(prepend,	set,		prepend,	MC_ASYNC)	\
 	_(cas,		cas,		cas,		MC_ASYNC)	\
-	_(incr,		incr,		incr,		MC_ASYNC)	\
-	_(decr,		incr,		decr,		MC_ASYNC)	\
+	_(incr,		dummy,		incr,		MC_ASYNC)	\
+	_(decr,		dummy,		decr,		MC_ASYNC)	\
 	_(delete,	dummy,		delete,		MC_ASYNC)	\
 	_(touch,	dummy,		touch,		MC_ASYNC)	\
 	_(slabs,	dummy,		slabs,		0)		\
@@ -632,9 +632,8 @@ union mc_params
 	struct mc_set_params set;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
-	uint64_t value;
-	uint32_t exptime;
-	uint32_t verbosity;
+	uint64_t val64;
+	uint32_t val32;
 };
 
 typedef enum
@@ -1253,7 +1252,7 @@ mc_process_incr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		value += command->params.value;
+		value += command->params.val64;
 
 		new_entry = mc_entry_create_u64(key_len, value);
 		mc_entry_set_key(new_entry, key);
@@ -1294,8 +1293,8 @@ mc_process_decr(uintptr_t arg)
 
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		if (value > command->params.value)
-			value -= command->params.value;
+		if (value > command->params.val64)
+			value -= command->params.val64;
 		else
 			value = 0;
 
@@ -1395,7 +1394,7 @@ mc_process_flush_all(uintptr_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 
 	// TODO: really use the exptime.
-	mc_exptime = mc_curtime + command->params.exptime * 1000000ull;
+	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
 
 	// TODO: do this as a background task.
 	while (!mm_list_empty(&mc_entry_list)) {
@@ -1437,7 +1436,7 @@ mc_process_verbosity(uintptr_t arg)
 
 	struct mc_command *command = (struct mc_command *) arg;
 
-	mc_verbose = min(command->params.verbosity, 2u);
+	mc_verbose = min(command->params.val32, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
 
 	if (command->noreply)
@@ -1960,14 +1959,16 @@ mc_parse_command(struct mc_parser *parser)
 		S_MATCH,
 		S_SPACE,
 
+		S_ARITH_1,
+		S_ARITH_2,
 		S_DELETE_1,
 		S_DELETE_2,
 		S_TOUCH_1,
 		S_TOUCH_2,
 		S_FLUSH_ALL_1,
 		S_VERBOSITY_1,
-		S_VERBOSITY_2,
-		S_EXPTIME,
+		S_VAL32,
+		S_VAL64,
 		S_NOREPLY,
 
 		S_KEY,
@@ -2085,11 +2086,13 @@ again:
 					command->type = &mc_desc_incr;
 					state = S_MATCH;
 					//match = "";
+					shift = S_ARITH_1;
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
 					command->type = &mc_desc_decr;
 					state = S_MATCH;
 					//match = "";
+					shift = S_ARITH_1;
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
 					command->type = &mc_desc_gets;
@@ -2194,6 +2197,23 @@ again:
 					goto again;
 				}
 
+			case S_ARITH_1:
+				state = S_KEY;
+				shift = S_ARITH_2;
+				goto again;
+
+			case S_ARITH_2:
+				ASSERT(c != ' ');
+				if (c == '\r' || c == '\n') {
+					state = S_ERROR;
+					goto again;
+				} else {
+					num64 = 0;
+					state = S_NUM64;
+					shift = S_VAL64;
+					goto again;
+				}
+
 			case S_DELETE_1:
 				state = S_KEY;
 				shift = S_DELETE_2;
@@ -2224,7 +2244,7 @@ again:
 				} else {
 					num32 = 0;
 					state = S_NUM32;
-					shift = S_EXPTIME;
+					shift = S_VAL32;
 					goto again;
 				}
 
@@ -2236,7 +2256,7 @@ again:
 				} else if (c >= '0' && c <= '9') {
 					num32 = 0;
 					state = S_NUM32;
-					shift = S_EXPTIME;
+					shift = S_VAL32;
 					goto again;
 				} else if (c == 'n') {
 					state = S_MATCH;
@@ -2253,16 +2273,16 @@ again:
 				if (c >= '0' && c <= '9') {
 					num32 = 0;
 					state = S_NUM32;
-					shift = S_VERBOSITY_2;
+					shift = S_VAL32;
 					goto again;
 				} else {
 					state = S_ERROR;
 					goto again;
 				}
 
-			case S_VERBOSITY_2:
+			case S_VAL32:
+				command->params.val32 = num32;
 				ASSERT(c != ' ');
-				command->params.verbosity = num32;
 				if (c == 'n') {
 					state = S_MATCH;
 					match = "oreply";
@@ -2273,9 +2293,9 @@ again:
 					goto again;
 				}
 
-			case S_EXPTIME:
+			case S_VAL64:
+				command->params.val64 = num64;
 				ASSERT(c != ' ');
-				command->params.exptime = num32;
 				if (c == 'n') {
 					state = S_MATCH;
 					match = "oreply";
@@ -2583,27 +2603,6 @@ mc_parse_cas(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_data(parser, parser->command->params.set.bytes);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_incr(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_param(parser, &parser->command->key, true);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u64(parser, &parser->command->params.value);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
 
 leave:
 	LEAVE();
