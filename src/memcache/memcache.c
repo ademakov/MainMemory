@@ -544,7 +544,7 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 	_(cas,		cas,		cas,		MC_ASYNC)	\
 	_(incr,		incr,		incr,		MC_ASYNC)	\
 	_(decr,		incr,		decr,		MC_ASYNC)	\
-	_(delete,	delete,		delete,		MC_ASYNC)	\
+	_(delete,	dummy,		delete,		MC_ASYNC)	\
 	_(touch,	touch,		touch,		MC_ASYNC)	\
 	_(slabs,	dummy,		slabs,		0)		\
 	_(stats,	dummy,		stats,		0)		\
@@ -1960,16 +1960,25 @@ mc_parse_command(struct mc_parser *parser)
 		S_MATCH,
 		S_SPACE,
 
+		S_DELETE_1,
+		S_DELETE_2,
+
 		S_FLUSH_ALL_1,
 		S_FLUSH_ALL_2,
 		S_VERBOSITY_1,
 		S_VERBOSITY_2,
 		S_NOREPLY,
 
-		S_NUM32,
-		S_NUM64,
+		S_KEY,
+		S_KEY_N,
+		S_KEY_EDGE,
+		S_KEY_COPY,
+
 		S_OPT,
 		S_OPT_N,
+
+		S_NUM32,
+		S_NUM64,
 		S_EOL,
 		S_EOL_1,
 
@@ -1987,6 +1996,9 @@ mc_parse_command(struct mc_parser *parser)
 	uint32_t num32 = 0;
 	uint64_t num64 = 0;
 	char *match = "";
+
+	// The current command.
+	struct mc_command *command = parser->command;
 
 	// The count of scanned chars. Used to check if the client sends
 	// too much junk data.
@@ -2046,95 +2058,94 @@ again:
 
 #define Cx4(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 				if (start == Cx4('g', 'e', 't', ' ')) {
-					parser->command->type = &mc_desc_get;
+					command->type = &mc_desc_get;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('s', 'e', 't', ' ')) {
-					parser->command->type = &mc_desc_set;
+					command->type = &mc_desc_set;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('r', 'e', 'p', 'l')) {
-					parser->command->type = &mc_desc_replace;
+					command->type = &mc_desc_replace;
 					state = S_MATCH;
 					match = "ace";
 					break;
 				} else if (start == Cx4('d', 'e', 'l', 'e')) {
-					parser->command->type = &mc_desc_delete;
+					command->type = &mc_desc_delete;
 					state = S_MATCH;
 					match = "te";
+					shift = S_DELETE_1;
 					break;
 				} else if (start == Cx4('a', 'd', 'd', ' ')) {
-					parser->command->type = &mc_desc_add;
+					command->type = &mc_desc_add;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('i', 'n', 'c', 'r')) {
-					parser->command->type = &mc_desc_incr;
+					command->type = &mc_desc_incr;
 					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
-					parser->command->type = &mc_desc_decr;
+					command->type = &mc_desc_decr;
 					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
-					parser->command->type = &mc_desc_gets;
+					command->type = &mc_desc_gets;
 					state = S_MATCH;
 					//match = "";
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
-					parser->command->type = &mc_desc_cas;
+					command->type = &mc_desc_cas;
 					parser->cursor.ptr = s + 1;
 					goto leave;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
-					parser->command->type = &mc_desc_append;
+					command->type = &mc_desc_append;
 					state = S_MATCH;
 					match = "nd";
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
-					parser->command->type = &mc_desc_prepend;
+					command->type = &mc_desc_prepend;
 					state = S_MATCH;
 					match = "end";
 					break;
 				} else if (start == Cx4('t', 'o', 'u', 'c')) {
-					parser->command->type = &mc_desc_touch;
+					command->type = &mc_desc_touch;
 					state = S_MATCH;
 					match = "h";
 					break;
 				} else if (start == Cx4('s', 'l', 'a', 'b')) {
-					parser->command->type = &mc_desc_slabs;
-					parser->command->params.slabs.nopts = 0;
+					command->type = &mc_desc_slabs;
 					state = S_MATCH;
 					match = "s";
 					shift = S_OPT;
 					break;
 				} else if (start == Cx4('s', 't', 'a', 't')) {
-					parser->command->type = &mc_desc_stats;
-					parser->command->params.stats.nopts = 0;
+					command->type = &mc_desc_stats;
 					state = S_MATCH;
 					match = "s";
 					shift = S_OPT;
 					break;
 				} else if (start == Cx4('f', 'l', 'u', 's')) {
-					parser->command->type = &mc_desc_flush_all;
+					command->type = &mc_desc_flush_all;
 					state = S_MATCH;
 					match = "h_all";
 					shift = S_FLUSH_ALL_1;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 's')) {
-					parser->command->type = &mc_desc_version;
+					command->type = &mc_desc_version;
 					state = S_MATCH;
 					match = "ion";
 					shift = S_EOL;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 'b')) {
-					parser->command->type = &mc_desc_verbosity;
+					command->type = &mc_desc_verbosity;
 					state = S_MATCH;
 					match = "osity";
 					shift = S_VERBOSITY_1;
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
-					parser->command->type = &mc_desc_quit;
+					command->type = &mc_desc_quit;
 					state = S_SPACE;
 					shift = S_EOL;
 					break;
@@ -2162,7 +2173,7 @@ again:
 				} else if (c == ' ') {
 					// It matched.
 					state = S_SPACE;
-					goto again;
+					break;
 				} else if (c == '\r' || c == '\n') {
 					// It matched as well.
 					state = shift;
@@ -2182,9 +2193,25 @@ again:
 					goto again;
 				}
 
+			case S_DELETE_1:
+				state = S_KEY;
+				shift = S_DELETE_2;
+				goto again;
+
+			case S_DELETE_2:
+				ASSERT(c != ' ');
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_NOREPLY;
+					break;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
+
 			case S_FLUSH_ALL_1:
 				ASSERT(c != ' ');
-				parser->command->params.exptime = 0;
 				if (c == '\r' || c == '\n') {
 					state = S_EOL;
 					goto again;
@@ -2195,9 +2222,9 @@ again:
 					goto again;
 				} else if (c == 'n') {
 					state = S_MATCH;
-					match = "noreply";
+					match = "oreply";
 					shift = S_NOREPLY;
-					goto again;
+					break;
 				} else {
 					state = S_ERROR;
 					goto again;
@@ -2205,12 +2232,12 @@ again:
 
 			case S_FLUSH_ALL_2:
 				ASSERT(c != ' ');
-				parser->command->params.exptime = num32;
+				command->params.exptime = num32;
 				if (c == 'n') {
 					state = S_MATCH;
-					match = "noreply";
+					match = "oreply";
 					shift = S_NOREPLY;
-					goto again;
+					break;
 				} else {
 					state = S_EOL;
 					goto again;
@@ -2230,12 +2257,12 @@ again:
 
 			case S_VERBOSITY_2:
 				ASSERT(c != ' ');
-				parser->command->params.verbosity = num32;
+				command->params.verbosity = num32;
 				if (c == 'n') {
 					state = S_MATCH;
-					match = "noreply";
+					match = "oreply";
 					shift = S_NOREPLY;
-					goto again;
+					break;
 				} else {
 					state = S_EOL;
 					goto again;
@@ -2243,39 +2270,74 @@ again:
 
 			case S_NOREPLY:
 				ASSERT(c != ' ');
-				parser->command->noreply = true;
+				command->noreply = true;
 				state = S_EOL;
 				goto again;
 
-			case S_NUM32:
-				if (c >= '0' && c <= '9') {
-					// TODO: overflow check?
-					num32 = num32 * 10 + (c - '0');
-					break;
-				} else if (c == ' ') {
-					state = S_SPACE;
+			case S_KEY:
+				ASSERT(c != ' ');
+				if (c == '\r' || c == '\n') {
+					state = S_ERROR;
 					goto again;
+				} else {
+					state = S_KEY_N;
+					command->key.str = s;
+					break;
+				}
+
+			case S_KEY_N:
+				if (c == ' ') {
+					size_t len = s - command->key.str;
+					if (len > MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						state = S_SPACE;
+						command->key.len = len;
+					}
+					break;
+				} else if (c == '\r' || c == '\n') {
+					size_t len = s - command->key.str;
+					if (len > MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						state = shift;
+						command->key.len = len;
+					}
+					goto again;
+				} else {
+					// Move over to the next char.
+					break;
+				}
+
+			case S_KEY_EDGE:
+				if (c == ' ') {
+					state = S_SPACE;
+					command->key.len = MC_KEY_LEN_MAX;
+					break;
 				} else if (c == '\r' || c == '\n') {
 					state = shift;
+					command->key.len = MC_KEY_LEN_MAX;
 					goto again;
 				} else {
 					state = S_ERROR;
 					break;
 				}
 
-			case S_NUM64:
-				if (c >= '0' && c <= '9') {
-					// TODO: overflow check?
-					num64 = num64 * 10 + (c - '0');
-					break;
-				} else if (c == ' ') {
+			case S_KEY_COPY:
+				if (c == ' ') {
 					state = S_SPACE;
-					goto again;
+					break;
 				} else if (c == '\r' || c == '\n') {
 					state = shift;
 					goto again;
 				} else {
-					state = S_ERROR;
+					struct mc_string *key = &command->key;
+					if (key->len == MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						char *str = (char *) key->str;
+						str[key->len++] = c;
+					}
 					break;
 				}
 
@@ -2293,15 +2355,47 @@ again:
 				// TODO: limit the option number
 				// TODO: use the option value
 				if (c == ' ') {
-					mc_command_option(parser->command);
+					mc_command_option(command);
 					state = S_SPACE;
-					goto again;
+					break;
 				} else if (c == '\r' || c == '\n') {
-					mc_command_option(parser->command);
+					mc_command_option(command);
 					state = S_EOL;
 					goto again;
 				} else {
 					// TODO: add c to the option value
+					break;
+				}
+
+			case S_NUM32:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num32 = num32 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					break;
+				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_NUM64:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num64 = num64 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					break;
+				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
 					break;
 				}
 
@@ -2323,7 +2417,7 @@ again:
 
 			case S_ERROR:
 				if (c == '\n') {
-					mc_reply(parser->command, "ERROR\r\n");
+					mc_reply(command, "ERROR\r\n");
 					parser->cursor.ptr = s + 1;
 					parser->error = true;
 					goto leave;
@@ -2337,6 +2431,23 @@ again:
 #else
 				ABORT();
 #endif
+			}
+		}
+
+		if (state == S_KEY) {
+			size_t len = e - command->key.str;
+			if (len > MC_KEY_LEN_MAX) {
+				state = S_ERROR;
+			} else if (len == MC_KEY_LEN_MAX) {
+				state = S_KEY_EDGE;
+			} else {
+				state = S_KEY_COPY;
+
+				char *str = mm_core_alloc(MC_KEY_LEN_MAX);
+				memcpy(str, command->key.str, len);
+				command->key.len = len;
+				command->key.str = str;
+				command->own_key = true;
 			}
 		}
 
@@ -2469,24 +2580,6 @@ mc_parse_incr(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_u64(parser, &parser->command->params.value);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_delete(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_param(parser, &parser->command->key, true);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
