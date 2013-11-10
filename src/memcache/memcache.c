@@ -534,8 +534,8 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
  */
 
 #define MC_COMMAND_LIST(_)						\
-	_(get,		get,		get,		MC_ASYNC)	\
-	_(gets,		get,		gets,		MC_ASYNC)	\
+	_(get,		dummy,		get,		MC_ASYNC)	\
+	_(gets,		dummy,		gets,		MC_ASYNC)	\
 	_(set,		set,		set,		MC_ASYNC)	\
 	_(add,		set,		add,		MC_ASYNC)	\
 	_(replace,	set,		replace,	MC_ASYNC)	\
@@ -600,11 +600,6 @@ struct mc_string
 	const char *str;
 };
 
-struct mc_get_params
-{
-	bool is_last;
-};
-
 struct mc_set_params
 {
 	struct mm_buffer_segment *seg;
@@ -628,12 +623,12 @@ struct mc_stats_params
 
 union mc_params
 {
-	struct mc_get_params get;
 	struct mc_set_params set;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
 	uint64_t val64;
 	uint32_t val32;
+	bool last;
 };
 
 typedef enum
@@ -997,7 +992,7 @@ mc_process_get2(uintptr_t arg, mc_result_t res_type)
 	struct mc_entry *entry = mc_table_lookup(index, key, key_len);
 	if (entry != NULL)
 		mc_entry(command, entry, res_type);
-	else if (command->params.get.is_last)
+	else if (command->params.last)
 		mc_reply(command, "END\r\n");
 	else
 		mc_blank(command);
@@ -1959,6 +1954,8 @@ mc_parse_command(struct mc_parser *parser)
 		S_MATCH,
 		S_SPACE,
 
+		S_GET_1,
+		S_GET_N,
 		S_ARITH_1,
 		S_ARITH_2,
 		S_DELETE_1,
@@ -2062,7 +2059,9 @@ again:
 				if (start == Cx4('g', 'e', 't', ' ')) {
 					command->type = &mc_desc_get;
 					parser->cursor.ptr = s + 1;
-					goto leave;
+					state = S_SPACE;
+					shift = S_GET_1;
+					break;
 				} else if (start == Cx4('s', 'e', 't', ' ')) {
 					command->type = &mc_desc_set;
 					parser->cursor.ptr = s + 1;
@@ -2098,6 +2097,7 @@ again:
 					command->type = &mc_desc_gets;
 					state = S_MATCH;
 					//match = "";
+					shift = S_GET_1;
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
 					command->type = &mc_desc_cas;
@@ -2194,6 +2194,26 @@ again:
 					break;
 				} else {
 					state = shift;
+					goto again;
+				}
+
+			case S_GET_1:
+				ASSERT(c != ' ');
+				state = S_KEY;
+				shift = S_GET_N;
+				goto again;
+
+			case S_GET_N:
+				ASSERT(c != ' ');
+				if (c == '\r' || c == '\n') {
+					state = S_EOL;
+					command->params.last = true;
+					goto again;
+				} else {
+					state = S_KEY;
+					command->next = mc_command_create();
+					command->next->type = command->type;
+					command = command->next;
 					goto again;
 				}
 
@@ -2454,6 +2474,18 @@ again:
 				}
 
 			case S_ERROR:
+				if (parser->command->next != NULL) {
+					command = parser->command->next;
+					do {
+						struct mc_command *tmp = command;
+						command = command->next;
+						mc_command_destroy(tmp);
+					} while (command != NULL);
+
+					parser->command->next = NULL;
+					command = parser->command;
+				}
+
 				if (c == '\n') {
 					mc_reply(command, "ERROR\r\n");
 					parser->cursor.ptr = s + 1;
@@ -2503,47 +2535,6 @@ static bool
 mc_parse_dummy(struct mc_parser *parser __attribute__((unused)))
 {
 	return true;
-}
-
-static bool
-mc_parse_get(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = true;
-
-	bool first = true;
-	struct mc_command *command = parser->command;
-
-	for (;;) {
-		struct mc_string key;
-		rc = mc_parse_param(parser, &key, first);
-		if (!rc || parser->error)
-			goto leave;
-		if (key.len == 0)
-			break;
-
-		if (first) {
-			first = false;
-			command->key = key;
-		} else {
-			command->next = mc_command_create();
-			command->next->type = command->type;
-			command->next->key = key;
-			command = command->next;
-		}
-	}
-
-	rc = mc_parse_eol(parser);
-	if (!rc || parser->error) {
-		goto leave;
-	}
-
-	command->params.get.is_last = true;
-
-leave:
-	LEAVE();
-	return rc;
 }
 
 static bool
@@ -2684,7 +2675,7 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 		mm_buffer_splice(&state->tbuf, value, value_len,
 				 mc_transmit_unref, (uintptr_t) entry);
 
-		if (command->params.get.is_last)
+		if (command->params.last)
 			mm_buffer_append(&state->tbuf, "\r\nEND\r\n", 7);
 		else
 			mm_buffer_append(&state->tbuf, "\r\n", 2);
