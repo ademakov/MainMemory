@@ -545,7 +545,7 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 	_(incr,		incr,		incr,		MC_ASYNC)	\
 	_(decr,		incr,		decr,		MC_ASYNC)	\
 	_(delete,	dummy,		delete,		MC_ASYNC)	\
-	_(touch,	touch,		touch,		MC_ASYNC)	\
+	_(touch,	dummy,		touch,		MC_ASYNC)	\
 	_(slabs,	dummy,		slabs,		0)		\
 	_(stats,	dummy,		stats,		0)		\
 	_(flush_all,	dummy,		flush_all,	0)		\
@@ -1962,11 +1962,12 @@ mc_parse_command(struct mc_parser *parser)
 
 		S_DELETE_1,
 		S_DELETE_2,
-
+		S_TOUCH_1,
+		S_TOUCH_2,
 		S_FLUSH_ALL_1,
-		S_FLUSH_ALL_2,
 		S_VERBOSITY_1,
 		S_VERBOSITY_2,
+		S_EXPTIME,
 		S_NOREPLY,
 
 		S_KEY,
@@ -2210,6 +2211,23 @@ again:
 					goto again;
 				}
 
+			case S_TOUCH_1:
+				state = S_KEY;
+				shift = S_TOUCH_2;
+				goto again;
+
+			case S_TOUCH_2:
+				ASSERT(c != ' ');
+				if (c == '\r' || c == '\n') {
+					state = S_ERROR;
+					goto again;
+				} else {
+					num32 = 0;
+					state = S_NUM32;
+					shift = S_EXPTIME;
+					goto again;
+				}
+
 			case S_FLUSH_ALL_1:
 				ASSERT(c != ' ');
 				if (c == '\r' || c == '\n') {
@@ -2218,7 +2236,7 @@ again:
 				} else if (c >= '0' && c <= '9') {
 					num32 = 0;
 					state = S_NUM32;
-					shift = S_FLUSH_ALL_2;
+					shift = S_EXPTIME;
 					goto again;
 				} else if (c == 'n') {
 					state = S_MATCH;
@@ -2227,19 +2245,6 @@ again:
 					break;
 				} else {
 					state = S_ERROR;
-					goto again;
-				}
-
-			case S_FLUSH_ALL_2:
-				ASSERT(c != ' ');
-				command->params.exptime = num32;
-				if (c == 'n') {
-					state = S_MATCH;
-					match = "oreply";
-					shift = S_NOREPLY;
-					break;
-				} else {
-					state = S_EOL;
 					goto again;
 				}
 
@@ -2258,6 +2263,19 @@ again:
 			case S_VERBOSITY_2:
 				ASSERT(c != ' ');
 				command->params.verbosity = num32;
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_NOREPLY;
+					break;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
+
+			case S_EXPTIME:
+				ASSERT(c != ' ');
+				command->params.exptime = num32;
 				if (c == 'n') {
 					state = S_MATCH;
 					match = "oreply";
@@ -2580,27 +2598,6 @@ mc_parse_incr(struct mc_parser *parser)
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_u64(parser, &parser->command->params.value);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_touch(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_param(parser, &parser->command->key, true);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.exptime);
 	if (!rc || parser->error)
 		goto leave;
 	rc = mc_parse_noreply(parser, &parser->command->noreply);
