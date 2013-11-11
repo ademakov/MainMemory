@@ -536,12 +536,12 @@ typedef bool (*mc_parse_routine)(struct mc_parser *parser);
 #define MC_COMMAND_LIST(_)						\
 	_(get,		dummy,		get,		MC_ASYNC)	\
 	_(gets,		dummy,		gets,		MC_ASYNC)	\
-	_(set,		set,		set,		MC_ASYNC)	\
-	_(add,		set,		add,		MC_ASYNC)	\
-	_(replace,	set,		replace,	MC_ASYNC)	\
-	_(append,	set,		append,		MC_ASYNC)	\
-	_(prepend,	set,		prepend,	MC_ASYNC)	\
-	_(cas,		cas,		cas,		MC_ASYNC)	\
+	_(set,		dummy,		set,		MC_ASYNC)	\
+	_(add,		dummy,		add,		MC_ASYNC)	\
+	_(replace,	dummy,		replace,	MC_ASYNC)	\
+	_(append,	dummy,		append,		MC_ASYNC)	\
+	_(prepend,	dummy,		prepend,	MC_ASYNC)	\
+	_(cas,		dummy,		cas,		MC_ASYNC)	\
 	_(incr,		dummy,		incr,		MC_ASYNC)	\
 	_(decr,		dummy,		decr,		MC_ASYNC)	\
 	_(delete,	dummy,		delete,		MC_ASYNC)	\
@@ -1529,363 +1529,34 @@ mc_start_input(struct mc_parser *parser,
 	LEAVE();
 }
 
-/*
- * Ask for the next input buffer with additional sanity checking.
- */
 static bool
-mc_more_input(struct mc_parser *parser, int count)
-{
-	if (unlikely(count > 1024)) {
-		/* The client looks insane. Quit fast. */
-		parser->command->result_type = MC_RESULT_QUIT;
-		parser->state->quit = true;
-		return false;
-	}
-	return mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
-}
-
-static void
-mc_end_input(struct mc_parser *parser)
-{
-	ENTER();
-
-	struct mc_command *command = parser->command;
-	while (command->next != NULL) {
-		command->end_ptr = parser->state->start_ptr;
-		command = command->next;
-	}
-
-	command->end_ptr = parser->cursor.ptr;
-	parser->state->start_ptr = parser->cursor.ptr;
-
-	LEAVE();
-}
-
-static int
-mc_peek_input(struct mc_parser *parser, char *s)
+mc_parse_lf(struct mc_parser *parser, char *s)
 {
 	ASSERT(mc_buffer_contains(&parser->cursor, s));
 
 	if ((s + 1) < parser->cursor.end)
-		return *(s + 1);
+		return *(s + 1) == '\n';
 
 	struct mm_buffer_segment *seg = parser->cursor.seg;
 	if (seg != parser->state->rbuf.in_seg) {
 		seg = seg->next;
 		if (seg != parser->state->rbuf.in_seg || parser->state->rbuf.in_off) {
-			return seg->data[0];
+			return seg->data[0] == '\n';
 		}
 	}
 
-	return 256; // not a char
+	return false;
 }
 
 static bool
-mc_parse_space(struct mc_parser *parser)
+mc_parse_value(struct mc_parser *parser)
 {
 	ENTER();
-	bool rc = true;
-
-	// The count of scanned chars. Used to check if the client sends
-	// too much junk data.
-	int count = 0;
-
-	do {
-		char *s = parser->cursor.ptr;
-		char *e = parser->cursor.end;
-
-		for (; s < e; s++) {
-			if (*s != ' ') {
-				parser->cursor.ptr = s;
-				goto leave;
-			}
-		}
-
-		count += e - parser->cursor.ptr;
-		rc = mc_more_input(parser, count);
-
-	} while (rc);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_error(struct mc_parser *parser, const char *error_string)
-{
-	ENTER();
-	bool rc = true;
-	parser->error = true;
-
-	// Skip everything until a LF char.
-	do {
-		char *s = parser->cursor.ptr;
-		char *e = parser->cursor.end;
-
-		// Scan input for a newline.
-		char *p = memchr(s, '\n', e - s);
-		if (p != NULL) {
-			// Go past the newline for the next command.
-			parser->cursor.ptr = p + 1;
-			// Report the error.
-			mc_reply(parser->command, error_string);
-			break;
-		}
-
-		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
-
-	} while (rc);
-
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_eol(struct mc_parser *parser)
-{
-	ENTER();
-	bool rc = true;
-
-	// The count of scanned chars. Used to check if the client sends
-	// too much junk data.
-	int count = 0;
-
-	// Scan for end of line skipping possible spaces.
-	do {
-		char *s = parser->cursor.ptr;
-		char *e = parser->cursor.end;
-
-		for (; s < e; s++) {
-			int c = *s;
-
-			// Check for optional CR and required LF chars.
-			if (c == '\r') {
-				++s;
-				if (unlikely(s == e)) {
-					if (!mm_buffer_next_out(&parser->state->rbuf,
-								&parser->cursor)) {
-						rc = false;
-						goto leave;
-					}
-					s = parser->cursor.ptr;
-					e = parser->cursor.end;
-					if (s == e) {
-						rc = false;
-						goto leave;
-					}
-				}
-				parser->cursor.ptr = s + 1;
-				if (unlikely(*s != '\n'))
-					rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
-				goto leave;
-			} else if (c == '\n') {
-				parser->cursor.ptr = s + 1;
-				goto leave;
-			} else if (c != ' ') {
-				// Oops, unexpected char.
-				parser->cursor.ptr = s + 1;
-				rc = mc_parse_error(parser, "CLIENT_ERROR unexpected parameter\r\n");
-				goto leave;
-			}
-		}
-
-		count += e - parser->cursor.ptr;
-		rc = mc_more_input(parser, count);
-
-	} while (rc);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_param(struct mc_parser *parser, struct mc_string *value, bool required)
-{
-	ENTER();
-
-	bool rc = mc_parse_space(parser);
-	if (!rc)
-		goto leave;
-
-	char *s, *e;
-
-retry:
-	s = parser->cursor.ptr;
-	e = parser->cursor.end;
-	for (; s < e; s++) {
-		int c = *s;
-		if (c == ' ' || (c == '\r' && mc_peek_input(parser, s) == '\n') || c == '\n') {
-			int count = s - parser->cursor.ptr;
-			if (required && count == 0) {
-				rc = mc_parse_error(parser, "CLIENT_ERROR missing parameter\r\n");
-			} else if (count > MC_KEY_LEN_MAX) {
-				rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
-			} else {
-				value->len = count;
-				value->str = parser->cursor.ptr;
-				parser->cursor.ptr = s;
-
-				DEBUG("%.*s", (int) value->len, value->str);
-			}
-			goto leave;
-		}
-	}
-
-	size_t count = e - parser->cursor.ptr;
-	if (count > MC_KEY_LEN_MAX) {
-		rc = mc_parse_error(parser, "CLIENT_ERROR parameter is too long\r\n");
-		goto leave;
-	}
-
-	struct mm_buffer *rbuf = &parser->state->rbuf;
-	struct mm_buffer_segment *seg = parser->cursor.seg;
-	if (seg == rbuf->in_seg) {
-		ASSERT(e == (rbuf->in_seg->data + rbuf->in_off));
-		if (rbuf->in_seg->size > rbuf->in_off) {
-			rc = false;
-			goto leave;
-		}
-
-		if (seg->next == NULL) {
-			mm_buffer_demand(rbuf, MC_KEY_LEN_MAX + 1);
-			ASSERT(seg->next != NULL);
-		}
-
-		memcpy(seg->next->data, parser->cursor.ptr, count);
-		memset(parser->cursor.ptr, ' ', count);
-		mm_buffer_expand(rbuf, count);
-
-	} else if (seg->next == rbuf->in_seg) {
-		size_t n = rbuf->in_seg->size - rbuf->in_off;
-		if (n < count) {
-			// TODO: handle this case
-			ABORT();
-		}
-
-		memmove(seg->next->data + count, seg->next->data, rbuf->in_off);
-		memcpy(seg->next->data, parser->cursor.ptr, count);
-		memset(parser->cursor.ptr, ' ', count);
-		mm_buffer_expand(rbuf, count);
-
-	} else {
-		// TODO: handle this case
-		ABORT();
-	}
-
-	mm_buffer_next_out(rbuf, &parser->cursor);
-	goto retry;
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_u32(struct mc_parser *parser, uint32_t *value)
-{
-	ENTER();
-
-	struct mc_string param;
-	bool rc = mc_parse_param(parser, &param, true);
-	if (rc && !parser->error) {
-		char *endp;
-		unsigned long v = strtoul(param.str, &endp, 10);
-		if (endp < param.str + param.len) {
-			rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
-		} else {
-			*value = v;
-		}
-	}
-
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_u64(struct mc_parser *parser, uint64_t *value)
-{
-	ENTER();
-
-	struct mc_string param;
-	bool rc = mc_parse_param(parser, &param, true);
-	if (rc && !parser->error) {
-		char *endp;
-		unsigned long long v = strtoull(param.str, &endp, 10);
-		if (endp < param.str + param.len) {
-			rc = mc_parse_error(parser, "CLIENT_ERROR invalid number parameter\r\n");
-		} else {
-			*value = v;
-		}
-	}
-
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_noreply(struct mc_parser *parser, bool *value)
-{
-	ENTER();
-
-	bool rc = mc_parse_space(parser);
-	if (!rc)
-		goto leave;
-
-	char *s, *e;
-	s = parser->cursor.ptr;
-	e = parser->cursor.end;
-
-	const char *t = "noreply";
-
-	int n = e - s;
-	if (n > 7) {
-		n = 7;
-	} else if (n < 7) {
-		if (memcmp(s, t, n) != 0) {
-			*value = false;
-			goto leave;
-		}
-
-		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
-		if (!rc)
-			goto leave;
-		s = parser->cursor.ptr;
-		e = parser->cursor.end;
-
-		t = t + n;
-		n = 7 - n;
-
-		if ((e - s) < n) {
-			rc = false;
-			goto leave;
-		}
-	}
-
-	if (memcmp(s, t, n) != 0) {
-		*value = false;
-		goto leave;
-	}
-
-	*value = true;
-	parser->cursor.ptr += n;
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_data(struct mc_parser *parser, uint32_t bytes)
-{
-	ENTER();
-	DEBUG("bytes: %d", bytes);
 
 	bool rc = true;
-	uint32_t cr = 1;
+	uint32_t bytes = parser->command->params.set.bytes;
 
-	/* Save current input buffer position. */
+	// Store the start position.
   	parser->command->params.set.seg = parser->cursor.seg;
 	parser->command->params.set.start = parser->cursor.ptr;
 
@@ -1894,40 +1565,17 @@ mc_parse_data(struct mc_parser *parser, uint32_t bytes)
 		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) bytes);
 		if (avail > bytes) {
 			parser->cursor.ptr += bytes;
-			avail -= bytes;
-			bytes = 0;
-
-			if (parser->cursor.ptr[0] == '\n') {
-				parser->cursor.ptr++;
-				break;
-			}
-
-			if (!cr
-			    || parser->cursor.ptr[0] != '\r'
-			    || (avail > 1 && parser->cursor.ptr[1] != '\n')) {
-				parser->error = true;
-				mc_reply(parser->command,
-					 "CLIENT_ERROR bad data chunk\r\n");
-			}
-
-			if (!cr || avail > 1) {
-				parser->cursor.ptr++;
-				if (cr)
-					parser->cursor.ptr++;
-				break;
-			}
-
-			parser->cursor.ptr++;
-			cr = 0;
-		} else {
-			parser->cursor.ptr += avail;
-			bytes -= avail;
+			break;
 		}
 
+		parser->cursor.ptr += avail;
+		bytes -= avail;
+
 		if (!mm_buffer_next_out(&parser->state->rbuf, &parser->cursor)) {
+			// Try to read the value and required LF and optional CR.
 			bool hangup;
 			ssize_t r = bytes + 1;
-			ssize_t n = mc_read(parser->state, r, cr, &hangup);
+			ssize_t n = mc_read(parser->state, r, 1, &hangup);
 			if (n < r) {
 				parser->command->result_type = MC_RESULT_QUIT;
 				rc = false;
@@ -1942,7 +1590,7 @@ mc_parse_data(struct mc_parser *parser, uint32_t bytes)
 }
 
 static bool
-mc_parse_command(struct mc_parser *parser)
+mc_parse(struct mc_parser *parser)
 {
 	ENTER();
 
@@ -1953,9 +1601,23 @@ mc_parse_command(struct mc_parser *parser)
 		S_CMD_3,
 		S_MATCH,
 		S_SPACE,
-
+		S_KEY,
+		S_KEY_N,
+		S_KEY_EDGE,
+		S_KEY_COPY,
+		S_NUM32,
+		S_NUM32_N,
+		S_NUM64,
+		S_NUM64_N,
 		S_GET_1,
 		S_GET_N,
+		S_SET_1,
+		S_SET_2,
+		S_SET_3,
+		S_SET_4,
+		S_SET_5,
+		S_SET_6,
+		S_CAS,
 		S_ARITH_1,
 		S_ARITH_2,
 		S_DELETE_1,
@@ -1967,21 +1629,16 @@ mc_parse_command(struct mc_parser *parser)
 		S_VAL32,
 		S_VAL64,
 		S_NOREPLY,
-
-		S_KEY,
-		S_KEY_N,
-		S_KEY_EDGE,
-		S_KEY_COPY,
-
 		S_OPT,
 		S_OPT_N,
-
-		S_NUM32,
-		S_NUM64,
+		S_VALUE,
+		S_VALUE_1,
+		S_VALUE_2,
 		S_EOL,
 		S_EOL_1,
-
 		S_ERROR,
+		S_ERROR_1,
+
 		S_ABORT
 	};
 
@@ -2030,25 +1687,27 @@ again:
 
 			case S_CMD_1:
 				// Store the second command char.
-				if (c == '\n') {
+				if (unlikely(c == '\n')) {
 					// Unexpected line end.
 					state = S_ERROR;
 					goto again;
+				} else {
+					start |= c << 16;
+					state = S_CMD_2;
+					break;
 				}
-				start |= c << 16;
-				state = S_CMD_2;
-				break;
 
 			case S_CMD_2:
 				// Store the third command char.
-				if (c == '\n') {
+				if (unlikely(c == '\n')) {
 					// Unexpected line end.
 					state = S_ERROR;
 					goto again;
+				} else {
+					start |= c << 8;
+					state = S_CMD_3;
+					break;
 				}
-				start |= c << 8;
-				state = S_CMD_3;
-				break;
 
 			case S_CMD_3:
 				// Have the first 4 chars of the command,
@@ -2058,18 +1717,19 @@ again:
 #define Cx4(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 				if (start == Cx4('g', 'e', 't', ' ')) {
 					command->type = &mc_desc_get;
-					parser->cursor.ptr = s + 1;
 					state = S_SPACE;
 					shift = S_GET_1;
 					break;
 				} else if (start == Cx4('s', 'e', 't', ' ')) {
 					command->type = &mc_desc_set;
-					parser->cursor.ptr = s + 1;
-					goto leave;
+					state = S_SPACE;
+					shift = S_SET_1;
+					break;
 				} else if (start == Cx4('r', 'e', 'p', 'l')) {
 					command->type = &mc_desc_replace;
 					state = S_MATCH;
 					match = "ace";
+					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('d', 'e', 'l', 'e')) {
 					command->type = &mc_desc_delete;
@@ -2079,8 +1739,9 @@ again:
 					break;
 				} else if (start == Cx4('a', 'd', 'd', ' ')) {
 					command->type = &mc_desc_add;
-					parser->cursor.ptr = s + 1;
-					goto leave;
+					state = S_SPACE;
+					shift = S_SET_1;
+					break;
 				} else if (start == Cx4('i', 'n', 'c', 'r')) {
 					command->type = &mc_desc_incr;
 					state = S_MATCH;
@@ -2101,17 +1762,20 @@ again:
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
 					command->type = &mc_desc_cas;
-					parser->cursor.ptr = s + 1;
-					goto leave;
+					state = S_SPACE;
+					shift = S_SET_1;
+					break;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
 					command->type = &mc_desc_append;
 					state = S_MATCH;
 					match = "nd";
+					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
 					command->type = &mc_desc_prepend;
 					state = S_MATCH;
 					match = "end";
+					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('t', 'o', 'u', 'c')) {
 					command->type = &mc_desc_touch;
@@ -2170,7 +1834,7 @@ again:
 					}
 					match++;
 					break;
-				} else if (*match) {
+				} else if (unlikely(*match)) {
 					// Unexpected char before the end.
 					state = S_ERROR;
 					goto again;
@@ -2197,8 +1861,128 @@ again:
 					goto again;
 				}
 
-			case S_GET_1:
+			case S_KEY:
 				ASSERT(c != ' ');
+				if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
+					state = S_ERROR;
+					goto again;
+				} else {
+					state = S_KEY_N;
+					command->key.str = s;
+					break;
+				}
+
+			case S_KEY_N:
+				if (c == ' ') {
+					size_t len = s - command->key.str;
+					if (len > MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						state = S_SPACE;
+						command->key.len = len;
+					}
+					break;
+				} else if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
+					size_t len = s - command->key.str;
+					if (len > MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						state = shift;
+						command->key.len = len;
+					}
+					goto again;
+				} else {
+					// Move over to the next char.
+					break;
+				}
+
+			case S_KEY_EDGE:
+				if (c == ' ') {
+					state = S_SPACE;
+					command->key.len = MC_KEY_LEN_MAX;
+					break;
+				} else if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
+					state = shift;
+					command->key.len = MC_KEY_LEN_MAX;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_KEY_COPY:
+				if (c == ' ') {
+					state = S_SPACE;
+					break;
+				} else if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					struct mc_string *key = &command->key;
+					if (key->len == MC_KEY_LEN_MAX) {
+						state = S_ERROR;
+					} else {
+						char *str = (char *) key->str;
+						str[key->len++] = c;
+					}
+					break;
+				}
+
+			case S_NUM32:
+				ASSERT(c != ' ');
+				if (c >= '0' && c <= '9') {
+					state = S_NUM32_N;
+					num32 = c - '0';
+					break;
+				} else {
+					state = S_ERROR;
+					goto again;
+				}
+
+			case S_NUM32_N:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num32 = num32 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					break;
+				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_NUM64:
+				ASSERT(c != ' ');
+				if (c >= '0' && c <= '9') {
+					state = S_NUM64_N;
+					num64 = c - '0';
+					break;
+				} else {
+					state = S_ERROR;
+					goto again;
+				}
+
+			case S_NUM64_N:
+				if (c >= '0' && c <= '9') {
+					// TODO: overflow check?
+					num64 = num64 * 10 + (c - '0');
+					break;
+				} else if (c == ' ') {
+					state = S_SPACE;
+					break;
+				} else if (c == '\r' || c == '\n') {
+					state = shift;
+					goto again;
+				} else {
+					state = S_ERROR;
+					break;
+				}
+
+			case S_GET_1:
 				state = S_KEY;
 				shift = S_GET_N;
 				goto again;
@@ -2211,9 +1995,66 @@ again:
 					goto again;
 				} else {
 					state = S_KEY;
+					command->end_ptr = s;
 					command->next = mc_command_create();
 					command->next->type = command->type;
 					command = command->next;
+					goto again;
+				}
+
+			case S_SET_1:
+				state = S_KEY;
+				shift = S_SET_2;
+				goto again;
+
+			case S_SET_2:
+				state = S_NUM32;
+				shift = S_SET_3;
+				goto again;
+
+			case S_SET_3:
+				command->params.set.flags = num32;
+				state = S_NUM32;
+				shift = S_SET_4;
+				goto again;
+
+			case S_SET_4:
+				command->params.set.exptime = num32;
+				state = S_NUM32;
+				shift = S_SET_5;
+				goto again;
+
+			case S_SET_5:
+				command->params.set.bytes = num32;
+				if (command->type->tag == mc_command_cas) {
+					state = S_NUM64;
+					shift = S_CAS;
+					goto again;
+				} else if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_SET_6;
+					break;
+				} else {
+					state = S_VALUE;
+					goto again;
+				}
+
+			case S_SET_6:
+				command->noreply = true;
+				state = S_VALUE;
+				goto again;
+
+			case S_CAS:
+				command->params.set.cas = num64;
+				ASSERT(c != ' ');
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_SET_6;
+					break;
+				} else {
+					state = S_VALUE;
 					goto again;
 				}
 
@@ -2223,16 +2064,9 @@ again:
 				goto again;
 
 			case S_ARITH_2:
-				ASSERT(c != ' ');
-				if (c == '\r' || c == '\n') {
-					state = S_ERROR;
-					goto again;
-				} else {
-					num64 = 0;
-					state = S_NUM64;
-					shift = S_VAL64;
-					goto again;
-				}
+				state = S_NUM64;
+				shift = S_VAL64;
+				goto again;
 
 			case S_DELETE_1:
 				state = S_KEY;
@@ -2257,16 +2091,9 @@ again:
 				goto again;
 
 			case S_TOUCH_2:
-				ASSERT(c != ' ');
-				if (c == '\r' || c == '\n') {
-					state = S_ERROR;
-					goto again;
-				} else {
-					num32 = 0;
-					state = S_NUM32;
-					shift = S_VAL32;
-					goto again;
-				}
+				state = S_NUM32;
+				shift = S_VAL32;
+				goto again;
 
 			case S_FLUSH_ALL_1:
 				ASSERT(c != ' ');
@@ -2274,7 +2101,6 @@ again:
 					state = S_EOL;
 					goto again;
 				} else if (c >= '0' && c <= '9') {
-					num32 = 0;
 					state = S_NUM32;
 					shift = S_VAL32;
 					goto again;
@@ -2291,7 +2117,6 @@ again:
 			case S_VERBOSITY_1:
 				ASSERT(c != ' ');
 				if (c >= '0' && c <= '9') {
-					num32 = 0;
 					state = S_NUM32;
 					shift = S_VAL32;
 					goto again;
@@ -2327,77 +2152,9 @@ again:
 				}
 
 			case S_NOREPLY:
-				ASSERT(c != ' ');
 				command->noreply = true;
 				state = S_EOL;
 				goto again;
-
-			case S_KEY:
-				ASSERT(c != ' ');
-				if (c == '\r' || c == '\n') {
-					state = S_ERROR;
-					goto again;
-				} else {
-					state = S_KEY_N;
-					command->key.str = s;
-					break;
-				}
-
-			case S_KEY_N:
-				if (c == ' ') {
-					size_t len = s - command->key.str;
-					if (len > MC_KEY_LEN_MAX) {
-						state = S_ERROR;
-					} else {
-						state = S_SPACE;
-						command->key.len = len;
-					}
-					break;
-				} else if (c == '\r' || c == '\n') {
-					size_t len = s - command->key.str;
-					if (len > MC_KEY_LEN_MAX) {
-						state = S_ERROR;
-					} else {
-						state = shift;
-						command->key.len = len;
-					}
-					goto again;
-				} else {
-					// Move over to the next char.
-					break;
-				}
-
-			case S_KEY_EDGE:
-				if (c == ' ') {
-					state = S_SPACE;
-					command->key.len = MC_KEY_LEN_MAX;
-					break;
-				} else if (c == '\r' || c == '\n') {
-					state = shift;
-					command->key.len = MC_KEY_LEN_MAX;
-					goto again;
-				} else {
-					state = S_ERROR;
-					break;
-				}
-
-			case S_KEY_COPY:
-				if (c == ' ') {
-					state = S_SPACE;
-					break;
-				} else if (c == '\r' || c == '\n') {
-					state = shift;
-					goto again;
-				} else {
-					struct mc_string *key = &command->key;
-					if (key->len == MC_KEY_LEN_MAX) {
-						state = S_ERROR;
-					} else {
-						char *str = (char *) key->str;
-						str[key->len++] = c;
-					}
-					break;
-				}
 
 			case S_OPT:
 				if (c == '\r' || c == '\n') {
@@ -2425,37 +2182,31 @@ again:
 					break;
 				}
 
-			case S_NUM32:
-				if (c >= '0' && c <= '9') {
-					// TODO: overflow check?
-					num32 = num32 * 10 + (c - '0');
+			case S_VALUE:
+				ASSERT(c != ' ');
+				if (c == '\r') {
+					state = S_VALUE_1;
 					break;
-				} else if (c == ' ') {
-					state = S_SPACE;
+				}
+				// FALLTHRU
+			case S_VALUE_1:
+				if (c == '\n') {
+					state = S_VALUE_2;
 					break;
-				} else if (c == '\r' || c == '\n') {
-					state = shift;
-					goto again;
 				} else {
 					state = S_ERROR;
 					break;
 				}
 
-			case S_NUM64:
-				if (c >= '0' && c <= '9') {
-					// TODO: overflow check?
-					num64 = num64 * 10 + (c - '0');
-					break;
-				} else if (c == ' ') {
-					state = S_SPACE;
-					break;
-				} else if (c == '\r' || c == '\n') {
-					state = shift;
-					goto again;
-				} else {
-					state = S_ERROR;
-					break;
-				}
+			case S_VALUE_2:
+				parser->cursor.ptr = s;
+				rc = mc_parse_value(parser);
+				if (!rc)
+					goto leave;
+				s = parser->cursor.ptr;
+				e = parser->cursor.end;
+				state = S_EOL;
+				break;
 
 			case S_EOL:
 				ASSERT(c != ' ');
@@ -2467,6 +2218,7 @@ again:
 			case S_EOL_1:
 				if (c == '\n') {
 					parser->cursor.ptr = s + 1;
+					command->end_ptr = parser->cursor.ptr;
 					goto leave;
 				} else {
 					state = S_ERROR;
@@ -2485,22 +2237,39 @@ again:
 					parser->command->next = NULL;
 					command = parser->command;
 				}
-
+				state = S_ERROR_1;
+				// FALLTHRU
+			case S_ERROR_1:
 				if (c == '\n') {
 					mc_reply(command, "ERROR\r\n");
-					parser->cursor.ptr = s + 1;
 					parser->error = true;
+					parser->cursor.ptr = s + 1;
+					command->end_ptr = parser->cursor.ptr;
 					goto leave;
+				} else {
+					// Skip char.
+					break;
 				}
-				break;
 
 			case S_ABORT:
-#if 1
-				parser->cursor.ptr = s;
-				goto leave;
-#else
 				ABORT();
-#endif
+			}
+		}
+
+		count += e - parser->cursor.ptr;
+		if (unlikely(count > 1024)) {
+			bool too_much = true;
+			if (command->type != NULL
+			    && (command->type->tag == mc_command_get
+			        || command->type->tag == mc_command_gets)
+			    && count < (16 * 1024))
+				too_much = false;
+
+			// The client looks insane. Quit fast.
+			if (too_much) {
+				parser->command->result_type = MC_RESULT_QUIT;
+				parser->state->quit = true;
+				goto leave;
 			}
 		}
 
@@ -2521,8 +2290,7 @@ again:
 			}
 		}
 
-		count += e - parser->cursor.ptr;
-		rc = mc_more_input(parser, count);
+		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
 
 	} while (rc);
 
@@ -2535,87 +2303,6 @@ static bool
 mc_parse_dummy(struct mc_parser *parser __attribute__((unused)))
 {
 	return true;
-}
-
-static bool
-mc_parse_set(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_param(parser, &parser->command->key, true);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.bytes);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_data(parser, parser->command->params.set.bytes);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse_cas(struct mc_parser *parser)
-{
-	ENTER();
-
-	bool rc = mc_parse_param(parser, &parser->command->key, true);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.flags);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.exptime);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u32(parser, &parser->command->params.set.bytes);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_u64(parser, &parser->command->params.set.cas);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_noreply(parser, &parser->command->noreply);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_eol(parser);
-	if (!rc || parser->error)
-		goto leave;
-	rc = mc_parse_data(parser, parser->command->params.set.bytes);
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-static bool
-mc_parse(struct mc_parser *parser)
-{
-	ENTER();
-
-	/* Parse the command name. */
-	bool rc = mc_parse_command(parser);
-	if (!rc || parser->error)
-		goto leave;
-
-	/* Parse the rest of the command. */
-	rc = parser->command->type->parse(parser);
-
-leave:
-	LEAVE();
-	return rc;
 }
 
 /**********************************************************************
@@ -2789,7 +2476,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 		bool rc = mc_parse(&parser);
 		if (rc) {
 			// Mark the parsed input as consumed.
-			mc_end_input(&parser);
+			state->start_ptr = parser.cursor.ptr;
 			// Process the parsed command.
 			mc_process_command(state, parser.command);
 
