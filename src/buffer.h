@@ -23,9 +23,6 @@
 #include "common.h"
 #include "trace.h"
 
-/* Forward declarations. */
-struct mm_buffer;
-
 /*
  * MainMemory buffers grow and shrink as necessary. Incoming data is appended
  * to the tail of the buffer and outgoing data is cut from its head. The data
