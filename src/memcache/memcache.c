@@ -520,45 +520,37 @@ mc_table_term(void)
  * Command type declarations.
  **********************************************************************/
 
-/* Forward declarations. */
-struct mc_parser;
-struct mc_command;
-
-/* Command handling routines. */
-typedef bool (*mc_parse_routine)(struct mc_parser *parser);
-
 #define MC_ASYNC 1
 
 /*
  * Some preprocessor magic to emit command definitions.
  */
 
-#define MC_COMMAND_LIST(_)						\
-	_(get,		dummy,		get,		MC_ASYNC)	\
-	_(gets,		dummy,		gets,		MC_ASYNC)	\
-	_(set,		dummy,		set,		MC_ASYNC)	\
-	_(add,		dummy,		add,		MC_ASYNC)	\
-	_(replace,	dummy,		replace,	MC_ASYNC)	\
-	_(append,	dummy,		append,		MC_ASYNC)	\
-	_(prepend,	dummy,		prepend,	MC_ASYNC)	\
-	_(cas,		dummy,		cas,		MC_ASYNC)	\
-	_(incr,		dummy,		incr,		MC_ASYNC)	\
-	_(decr,		dummy,		decr,		MC_ASYNC)	\
-	_(delete,	dummy,		delete,		MC_ASYNC)	\
-	_(touch,	dummy,		touch,		MC_ASYNC)	\
-	_(slabs,	dummy,		slabs,		0)		\
-	_(stats,	dummy,		stats,		0)		\
-	_(flush_all,	dummy,		flush_all,	0)		\
-	_(version,	dummy,		version,	0)		\
-	_(verbosity,	dummy,		verbosity,	0)		\
-	_(quit,		dummy,		quit,		0)
+#define MC_COMMAND_LIST(_)				\
+	_(get,		get,		MC_ASYNC)	\
+	_(gets,		gets,		MC_ASYNC)	\
+	_(set,		set,		MC_ASYNC)	\
+	_(add,		add,		MC_ASYNC)	\
+	_(replace,	replace,	MC_ASYNC)	\
+	_(append,	append,		MC_ASYNC)	\
+	_(prepend,	prepend,	MC_ASYNC)	\
+	_(cas,		cas,		MC_ASYNC)	\
+	_(incr,		incr,		MC_ASYNC)	\
+	_(decr,		decr,		MC_ASYNC)	\
+	_(delete,	delete,		MC_ASYNC)	\
+	_(touch,	touch,		MC_ASYNC)	\
+	_(slabs,	slabs,		0)		\
+	_(stats,	stats,		0)		\
+	_(flush_all,	flush_all,	0)		\
+	_(version,	version,	0)		\
+	_(verbosity,	verbosity,	0)		\
+	_(quit,		quit,		0)
 
 /*
  * Define enumerated type to tag commands.
  */
 
-#define MC_COMMAND_TAG(cmd, parse_name, process_name, async_val)	\
-	mc_command_##cmd,
+#define MC_COMMAND_TAG(cmd, process_name, value)	mc_command_##cmd,
 
 typedef enum {
 	MC_COMMAND_LIST(MC_COMMAND_TAG)
@@ -571,24 +563,44 @@ typedef enum {
 struct mc_command_type
 {
 	mc_command_t tag;
-	const char *name;
-	mc_parse_routine parse;
 	mm_routine_t process;
 	uint32_t flags;
 };
 
-#define MC_COMMAND_TYPE(cmd, parse_name, process_name, value)		\
-	static bool mc_parse_##parse_name(struct mc_parser *);		\
+#define MC_COMMAND_TYPE(cmd, process_name, value)			\
 	static mm_result_t mc_process_##process_name(uintptr_t);	\
 	static struct mc_command_type mc_desc_##cmd = {			\
 		.tag = mc_command_##cmd,				\
-		.name = #cmd,						\
-		.parse = mc_parse_##parse_name,				\
 		.process = mc_process_##process_name,			\
 		.flags = value,						\
 	};
 
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
+
+/*
+ * Define command names.
+ */
+
+#if ENABLE_DEBUG
+
+#define MC_COMMAND_NAME(cmd, process_name, value)	#cmd,
+
+static const char *mc_command_names[] = {
+	MC_COMMAND_LIST(MC_COMMAND_NAME)
+};
+
+static const char *
+mc_command_name(mc_command_t tag)
+{
+	static const size_t n = sizeof(mc_command_names) / sizeof(*mc_command_names);
+
+	if (tag >= n)
+		return "bad command";
+	else
+		return mc_command_names[tag];
+}
+
+#endif
 
 /**********************************************************************
  * Command Data.
@@ -806,6 +818,7 @@ struct mc_state
 	struct mm_buffer tbuf;
 
 	// The quit flag.
+	bool hangup;
 	bool quit;
 };
 
@@ -824,6 +837,8 @@ mc_create(struct mm_net_socket *sock)
 	state->sock = sock;
 	mm_buffer_prepare(&state->rbuf);
 	mm_buffer_prepare(&state->tbuf);
+
+	state->hangup = false;
 	state->quit = false;
 
 	LEAVE();
@@ -893,58 +908,6 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 		mm_buffer_reduce(&state->rbuf, size);
 
 	LEAVE();
-}
-
-/**********************************************************************
- * I/O Routines.
- **********************************************************************/
-
-static bool
-mc_read_hangup(ssize_t n, int error)
-{
-	ASSERT(n <= 0);
-
-	if (n < 0) {
-		if (error == EAGAIN)
-			return false;
-		if (error == EWOULDBLOCK)
-			return false;
-		if (error == ETIMEDOUT)
-			return false;
-		if (error == EINTR)
-			return false;
-	}
-
-	return true;
-}
-
-static ssize_t
-mc_read(struct mc_state *state, size_t required, size_t optional, bool *hangup)
-{
-	ENTER();
-
-	*hangup = false;
-
-	size_t total = required + optional;
-	mm_buffer_demand(&state->rbuf, total);
-
-	size_t count = total;
-	while (count > optional) {
-		ssize_t n = mm_net_readbuf(state->sock, &state->rbuf);
-		if (n <= 0) {
-			*hangup = mc_read_hangup(n, errno);
-			break;
-		}
-
-		if (count < (size_t) n) {
-			count = 0;
-			break;
-		}
-		count -= n;
-	}
-
-	LEAVE();
-	return (total - count);
 }
 
 /**********************************************************************
@@ -1462,7 +1425,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 	struct mc_command *last = command;
 	if (likely(command->type != NULL)) {
-		DEBUG("command %s", command->type->name);
+		DEBUG("command %s", mc_command_name(command->type->tag));
 		for (;;) {
 			if (last->result_type == MC_RESULT_NONE) {
 				// TODO: create a future for async commands.
@@ -1483,6 +1446,37 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 }
 
 /**********************************************************************
+ * Receiving commands.
+ **********************************************************************/
+
+static ssize_t
+mc_read(struct mc_state *state, size_t required, size_t optional)
+{
+	ENTER();
+
+	size_t total = required + optional;
+	mm_buffer_demand(&state->rbuf, total);
+
+	size_t count = total;
+	while (count > optional) {
+		ssize_t n = mm_net_readbuf(state->sock, &state->rbuf);
+		if (n <= 0) {
+			if (n == 0 || (errno != EAGAIN && errno != EINTR))
+				state->hangup = true;
+			break;
+		}
+		if (count < (size_t) n) {
+			count = 0;
+			break;
+		}
+		count -= n;
+	}
+
+	LEAVE();
+	return (total - count);
+}
+
+/**********************************************************************
  * Command Parsing.
  **********************************************************************/
 
@@ -1496,11 +1490,10 @@ struct mc_parser
 	struct mm_buffer_cursor cursor;
 	struct mc_command *command;
 	struct mc_state *state;
-	bool error;
 };
 
 static inline bool
-mc_buffer_contains(struct mm_buffer_cursor *cur, const char *ptr)
+mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
 {
 	return ptr >= cur->ptr && ptr < cur->end;
 }
@@ -1509,22 +1502,19 @@ mc_buffer_contains(struct mm_buffer_cursor *cur, const char *ptr)
  * Prepare for parsing a command.
  */
 static void
-mc_start_input(struct mc_parser *parser,
-	       struct mc_state *state,
-	       struct mc_command *command)
+mc_start_input(struct mc_parser *parser, struct mc_state *state)
 {
 	ENTER();
 
 	mm_buffer_first_out(&state->rbuf, &parser->cursor);
 	if (state->start_ptr != NULL) {
-		while (!mc_buffer_contains(&parser->cursor, state->start_ptr)) {
+		while (!mc_cursor_contains(&parser->cursor, state->start_ptr)) {
 			mm_buffer_next_out(&state->rbuf, &parser->cursor);
 		}
 	}
 
 	parser->state = state;
-	parser->command = command;
-	parser->error = false;
+	parser->command = NULL;
 
 	LEAVE();
 }
@@ -1532,7 +1522,7 @@ mc_start_input(struct mc_parser *parser,
 static bool
 mc_parse_lf(struct mc_parser *parser, char *s)
 {
-	ASSERT(mc_buffer_contains(&parser->cursor, s));
+	ASSERT(mc_cursor_contains(&parser->cursor, s));
 
 	if ((s + 1) < parser->cursor.end)
 		return *(s + 1) == '\n';
@@ -1573,9 +1563,8 @@ mc_parse_value(struct mc_parser *parser)
 
 		if (!mm_buffer_next_out(&parser->state->rbuf, &parser->cursor)) {
 			// Try to read the value and required LF and optional CR.
-			bool hangup;
 			ssize_t r = bytes + 1;
-			ssize_t n = mc_read(parser->state, r, 1, &hangup);
+			ssize_t n = mc_read(parser->state, r, 1);
 			if (n < r) {
 				parser->command->result_type = MC_RESULT_QUIT;
 				rc = false;
@@ -1654,7 +1643,8 @@ mc_parse(struct mc_parser *parser)
 	char *match = "";
 
 	// The current command.
-	struct mc_command *command = parser->command;
+	struct mc_command *command = mc_command_create();
+	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
 	// too much junk data.
@@ -2242,7 +2232,6 @@ again:
 			case S_ERROR_1:
 				if (c == '\n') {
 					mc_reply(command, "ERROR\r\n");
-					parser->error = true;
 					parser->cursor.ptr = s + 1;
 					command->end_ptr = parser->cursor.ptr;
 					goto leave;
@@ -2299,12 +2288,6 @@ leave:
 	return rc;
 }
 
-static bool
-mc_parse_dummy(struct mc_parser *parser __attribute__((unused)))
-{
-	return true;
-}
-
 /**********************************************************************
  * Transmitting command results.
  **********************************************************************/
@@ -2321,7 +2304,7 @@ mc_transmit_unref(uintptr_t data)
 }
 
 static void
-mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
+mc_transmit(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
 
@@ -2395,7 +2378,7 @@ mc_transmit_buffer(struct mc_state *state, struct mc_command *command)
 }
 
 static void
-mc_transmit(struct mc_state *state)
+mc_transmit_flush(struct mc_state *state)
 {
 	ENTER();
 
@@ -2448,15 +2431,14 @@ mc_reader_routine(struct mm_net_socket *sock)
 	}
 
 	// Try to get some input w/o blocking.
-	bool hangup;
 	mm_net_set_read_timeout(state->sock, 0);
-	ssize_t n = mc_read(state, 1, 0, &hangup);
+	ssize_t n = mc_read(state, 1, 0);
 	mm_net_set_read_timeout(state->sock, MC_READ_TIMEOUT);
 
 	// Get out if there is no input available.
 	if (n <= 0) {
 		// If the socket is closed queue a quit command.
-		if (hangup) {
+		if (state->hangup) {
 			struct mc_command *command = mc_command_create();
 			command->result_type = MC_RESULT_QUIT;
 			command->end_ptr = state->start_ptr;
@@ -2467,9 +2449,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 	// Initialize the parser.
 	struct mc_parser parser;
-	mc_start_input(&parser, state, NULL);
-	parser.command = mc_command_create();
-	// TODO: protect the created command against cancellation.
+	mc_start_input(&parser, state);
 
 	// Try to parse the received input.
 	for (;;) {
@@ -2479,34 +2459,36 @@ mc_reader_routine(struct mm_net_socket *sock)
 			state->start_ptr = parser.cursor.ptr;
 			// Process the parsed command.
 			mc_process_command(state, parser.command);
-
+			// Reset the parser state.
+			parser.command = NULL;
 			mm_buffer_rectify(&state->rbuf);
-
-			// TODO: check if there is more input.
-			parser.command = mc_command_create();
-			parser.error = false;
 			continue;
-		} else if (state->quit) {
-			mc_command_destroy(parser.command);
-			goto leave;
+		} else {
+			if (parser.command != NULL) {
+				mc_command_destroy(parser.command);
+				parser.command = NULL;
+			}
+			
+			if (state->quit) {
+				goto leave;
+			}
 		}
 
 		// The input is incomplete, try to get some more.
-		n = mc_read(state, 1, 0, &hangup);
+		n = mc_read(state, 1, 0);
 
 		// Get out if there is no more input.
 		if (n <= 0) {
- 			if (hangup) {
-				parser.command->result_type = MC_RESULT_QUIT;
-				parser.command->end_ptr = parser.cursor.ptr;
-				mc_process_command(state, parser.command);
-			} else {
-				mc_command_destroy(parser.command);
+ 			if (state->hangup) {
+				struct mc_command *command = mc_command_create();
+				command->result_type = MC_RESULT_QUIT;
+				command->end_ptr = parser.cursor.ptr;
+				mc_process_command(state, command);
 			}
 			goto leave;
 		}
 
-		mc_start_input(&parser, state, parser.command);
+		mc_start_input(&parser, state);
 	}
 
 leave:
@@ -2524,28 +2506,27 @@ mc_writer_routine(struct mm_net_socket *sock)
 		goto leave;
 
 	// Check to see if there at least one ready result.
-	struct mc_command *last = state->command_head;
-	if (unlikely(last == NULL))
-		goto leave;
-	if (unlikely(last->result_type == MC_RESULT_NONE))
+	struct mc_command *command = state->command_head;
+	if (command == NULL || command->result_type == MC_RESULT_NONE)
 		goto leave;
 
 	// Put the results into the transmit buffer.
-	while (!state->quit) {
-		mc_transmit_buffer(state, last);
+	for (;;) {
+		if (likely(!state->quit))
+			mc_transmit(state, command);
 
-		struct mc_command *next = last->next;
+		struct mc_command *next = command->next;
 		if (next == NULL || next->result_type == MC_RESULT_NONE)
 			break;
 
-		last = next;
+		command = next;
 	}
 
 	// Transmit buffered results.
-	mc_transmit(state);
+	mc_transmit_flush(state);
 
 	// Free the receive buffers.
-	mc_release_buffers(state, last->end_ptr);
+	mc_release_buffers(state, command->end_ptr);
 
 	// Release the command data
 	for (;;) {
@@ -2553,7 +2534,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 		state->command_head = head->next;
 		mc_command_destroy(head);
 
-		if (head == last) {
+		if (head == command) {
 			if (state->command_head == NULL)
 				state->command_tail = NULL;
 			break;
