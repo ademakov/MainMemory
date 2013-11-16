@@ -95,16 +95,13 @@ struct mm_core
 	 */
 
 	/* Tasks to be scheduled. */
-	struct mm_ring sched;
-	void *sched_store[MM_CORE_SCHED_RING_SIZE];
+	MM_RING(sched, MM_CORE_SCHED_RING_SIZE);
 
 	/* Submitted work items. */
-	struct mm_ring inbox;
-	void *inbox_store[MM_CORE_INBOX_RING_SIZE];
+	MM_RING(inbox, MM_CORE_INBOX_RING_SIZE);
 
 	/* The memory chunks freed by other threads. */
-	struct mm_ring chunks;
-	void *chunks_store[MM_CORE_CHUNK_RING_SIZE];
+	MM_RING(chunks, MM_CORE_CHUNK_RING_SIZE);
 
 } __align(MM_CACHELINE);
 

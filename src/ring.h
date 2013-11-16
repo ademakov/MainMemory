@@ -23,6 +23,28 @@
 #include "common.h"
 #include "lock.h"
 
+/*
+ * MainMemory rings are multiple-producer/single-consumer fixed-size buffers
+ * of pointers that are used to pass certain kinds of data to a target core.
+ * 
+ * The algorithm is based on the single-producer/single-consumer algorithm
+ * described in the following paper:
+ * 
+ * John Giacomoni, Tipp Moseley, Manish Vachharajani
+ * FastForward for Efficient Pipeline Parallelism: A Cache-Optimized
+ * Concurrent Lock-Free Queue.
+ *
+ * However currently only the basic algorithm is implemented, the suggested
+ * enhancements like temporal slipping are not. Instead it is extended to
+ * allow multiple producers that are synchronized with a spinlock.
+ */
+
+#define MM_RING(name, size)			\
+	struct {				\
+		struct mm_ring name;            \
+		void *name##_store[size - 1];	\
+	};
+
 struct mm_ring
 {
 	/* Consumer data. */
@@ -40,7 +62,7 @@ struct mm_ring
 	size_t mask __align(MM_CACHELINE);
 
 	/* Shared communication buffer. */
-	void *ring[];
+	void *ring[1];
 
 } __align(MM_CACHELINE);
 
