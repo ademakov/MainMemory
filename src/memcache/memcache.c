@@ -259,10 +259,9 @@ mc_table_size(size_t nbuckets)
 static inline uint32_t
 mc_table_index(uint32_t h)
 {
-	uint32_t mask = mc_table.mask;
-	uint32_t index = h & mask;
+	uint32_t index = h & mc_table.mask;
 	if (index >= mc_table.used)
-		index &= mask >> 1;
+		index -= mc_table.size / 2;
 	return index;
 }
 
@@ -275,10 +274,9 @@ mc_table_key_index(const char *key, uint8_t key_len)
 static inline bool
 mc_table_is_full(void)
 {
-	if (unlikely(mc_table.size == MC_TABLE_SIZE_MAX)
-	    && unlikely(mc_table.used == mc_table.size))
+	if (unlikely(mc_table.used == MC_TABLE_SIZE_MAX))
 		return false;
-	return mc_table.nentries > (mc_table.size * 4);
+	return mc_table.nentries >= (mc_table.used * 2);
 }
 
 static void
@@ -286,7 +284,7 @@ mc_table_expand(size_t size)
 {
 	ENTER();
 	ASSERT(size > mc_table.size);
-	/* Assert the size is a power of 2. */
+	// Assert the size is a power of 2.
 	ASSERT((size & (size - 1)) == 0);
 
 	mm_brief("Set the memcache table size: %ld", (unsigned long) size);
@@ -337,7 +335,7 @@ mc_table_stride(void)
 				s_entries = entry;
 			} else {
 				ASSERT(index == target);
-				entry->next = t_entries;
+				entry->next = t_entries; 
 				t_entries = entry;
 			}
 
@@ -717,20 +715,18 @@ mc_command_destroy(struct mc_command *command)
 {
 	ENTER();
 
-	if (command->type != NULL) {
-		if (command->own_key)
-			mm_core_free((char *) command->key.str);
+	if (command->own_key)
+		mm_core_free((char *) command->key.str);
 
-		switch (command->result_type) {
-		case MC_RESULT_ENTRY:
-		case MC_RESULT_ENTRY_CAS:
-		case MC_RESULT_VALUE:
-			mc_entry_unref(command->result.entry);
-			break;
+	switch (command->result_type) {
+	case MC_RESULT_ENTRY:
+	case MC_RESULT_ENTRY_CAS:
+	case MC_RESULT_VALUE:
+		mc_entry_unref(command->result.entry);
+		break;
 
-		default:
-			break;
-		}
+	default:
+		break;
 	}
 
 	mm_pool_free(&mc_command_pool, command);
