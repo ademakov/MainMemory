@@ -1,12 +1,11 @@
 
 ASAP:
-* fix quit regression
 * cross-core wait/signal mechanism
-* distributing sockets among cores
+* socket distribution among cores
 * let futures run on other cores
 * let ports work across cores
 * memcache module enhancements:
-** use buffered net I/O and distributing sockets
+** use socket distribution
 ** use futures for commands
 ** implement eviction
 ** implement expiration

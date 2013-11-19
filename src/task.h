@@ -26,6 +26,31 @@
 /* Maximal task name length (including terminating zero). */
 #define MM_TASK_NAME_SIZE	40
 
+/* Task priority type. */
+typedef int8_t			mm_priority_t;
+
+/* The lowest and highest allowed priority values. */
+#define MM_PRIO_LOWERMOST	((mm_priority_t) 31)
+#define MM_PRIO_UPPERMOST	((mm_priority_t) 0)
+
+/* Given a priority value get the value n levels below that. */
+#define MM_PRIO_LOWER(p, n)	min(MM_PRIO_LOWERMOST, (mm_priority_t) ((p) + (n)))
+
+/* Given a priority value get the value n levels above that. */
+#define MM_PRIO_UPPER(p, n)	max(MM_PRIO_UPPERMOST, (mm_priority_t) ((p) - (n)))
+
+/* Basic task priorities. */
+#define MM_PRIO_BOOT		MM_PRIO_LOWERMOST
+#define MM_PRIO_IDLE		MM_PRIO_UPPER(MM_PRIO_BOOT, 1)
+#define MM_PRIO_WORK		MM_PRIO_UPPER(MM_PRIO_IDLE, 1)
+#define MM_PRIO_CORE		MM_PRIO_UPPER(MM_PRIO_WORK, 10)
+
+/* Specific task priorities. */
+#define MM_PRIO_DEALER		MM_PRIO_IDLE
+#define MM_PRIO_WORKER		MM_PRIO_WORK
+#define MM_PRIO_MASTER		MM_PRIO_CORE
+#define MM_PRIO_SYSTEM		MM_PRIO_UPPER(MM_PRIO_CORE, 1)
+
 /* Canceled task execution result. */
 #define MM_TASK_CANCELED	((mm_result_t) -1)
 /* Unfinished task execution result. */
@@ -52,8 +77,23 @@ typedef enum {
 #define MM_TASK_WAITING			0x40
 
 /* Task flags type. */
-typedef uint8_t mm_task_flags_t;
+typedef uint8_t			mm_task_flags_t;
 
+/* Task creation attributes. */
+struct mm_task_attr
+{
+	/* Task flags. */
+	mm_task_flags_t flags;
+
+	/* Task scheduling priority. */
+	mm_priority_t priority;
+
+	/* The task stack size. */
+	uint32_t stack_size;
+
+	/* The task name. */
+	char name[MM_TASK_NAME_SIZE];
+};
 
 /* A task cleanup handler record. */
 struct mm_task_cleanup_rec
@@ -96,7 +136,8 @@ struct mm_task
 	mm_task_flags_t flags;
 
 	/* Task scheduling priority. */
-	uint8_t priority;
+	mm_priority_t priority;
+	mm_priority_t original_priority;
 
 	/* The list of task-local dynamically-allocated memory. */
 	struct mm_list chunks;
@@ -136,15 +177,32 @@ extern __thread struct mm_task *mm_running_task;
 void mm_task_init(void);
 void mm_task_term(void);
 
-struct mm_task * mm_task_create_boot(void);
+/**********************************************************************
+ * Task creation and destruction.
+ **********************************************************************/
 
-struct mm_task * mm_task_create(const char *name,
+void mm_task_attr_init(struct mm_task_attr *attr)
+	__attribute__((nonnull(1)));
+void mm_task_attr_setflags(struct mm_task_attr *attr, mm_task_flags_t flags)
+	__attribute__((nonnull(1)));
+void mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
+	__attribute__((nonnull(1)));
+void mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size)
+	__attribute__((nonnull(1)));
+void mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
+	__attribute__((nonnull(1)));
+
+struct mm_task * mm_task_create(const struct mm_task_attr *attr,
 				mm_routine_t start,
 				uintptr_t start_arg)
-	__attribute__((nonnull(1, 2)));
+	__attribute__((nonnull(2)));
 
 void mm_task_destroy(struct mm_task *task)
 	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Task utilities.
+ **********************************************************************/
 
 void mm_task_setname(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
@@ -159,6 +217,9 @@ struct mm_task * mm_task_getptr(uint32_t id);
  **********************************************************************/
 
 void mm_task_run(struct mm_task *task)
+	__attribute__((nonnull(1)));
+
+void mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 	__attribute__((nonnull(1)));
 
 void mm_task_yield(void);

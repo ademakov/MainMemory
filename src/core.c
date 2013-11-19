@@ -40,10 +40,6 @@
 #define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	256
 
-#define MM_PRIO_MASTER		1
-#define MM_PRIO_WORKER		MM_PRIO_DEFAULT
-#define MM_PRIO_DEALER		MM_PRIO_IDLE
-
 // Default dealer loop timeout - 1 second
 #define MM_DEALER_TIMEOUT ((mm_timeout_t) 1000000)
 
@@ -332,12 +328,12 @@ mm_core_worker_start(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_task *task = mm_task_create("worker",
-					      mm_core_worker,
-					      (uintptr_t) work);
-	task->priority = MM_PRIO_WORKER;
+	struct mm_task_attr attr;
+	mm_task_attr_init(&attr);
+	mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
+	mm_task_attr_setname(&attr, "worker");
+	mm_task_create(&attr, mm_core_worker, (uintptr_t) work);
 	mm_core->nworkers++;
-	mm_task_run(task);
 
 	LEAVE();
 }
@@ -508,14 +504,16 @@ mm_core_boot_init(struct mm_core *core)
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 
 	// Create the master task for this core and schedule it for execution.
-	core->master = mm_task_create("master", mm_core_master, (uintptr_t) core);
-	core->master->priority = MM_PRIO_MASTER;
-	mm_task_run(core->master);
+	struct mm_task_attr attr;
+	mm_task_attr_init(&attr);
+	mm_task_attr_setpriority(&attr, MM_PRIO_MASTER);
+	mm_task_attr_setname(&attr, "master");
+	core->master = mm_task_create(&attr, mm_core_master, (uintptr_t) core);
 
 	// Create the dealer task for this core and schedule it for execution.
-	core->dealer = mm_task_create("dealer", mm_core_dealer, (uintptr_t) core);
-	core->dealer->priority = MM_PRIO_DEALER;
-	mm_task_run(core->dealer);
+	mm_task_attr_setpriority(&attr, MM_PRIO_DEALER);
+	mm_task_attr_setname(&attr, "dealer");
+	core->dealer = mm_task_create(&attr, mm_core_dealer, (uintptr_t) core);
 
 	// Call the start hooks on the first core.
 	if (MM_CORE_IS_PRIMARY(core)) {
@@ -601,7 +599,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->master_stop = false;
 	core->master = NULL;
-	core->boot = mm_task_create_boot();
 	core->thread = NULL;
 
 	core->log_head = NULL;
@@ -610,6 +607,15 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
 	mm_ring_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE);
+
+	// Create the core bootstrap task.
+	struct mm_task_attr attr;
+	mm_task_attr_init(&attr);
+	mm_task_attr_setflags(&attr, MM_TASK_CANCEL_DISABLE);
+	mm_task_attr_setpriority(&attr, MM_PRIO_BOOT);
+	mm_task_attr_setstacksize(&attr, 0);
+	mm_task_attr_setname(&attr, "boot");
+	core->boot = mm_task_create(&attr, mm_core_boot, (uintptr_t) core);
 
 	LEAVE();
 }
@@ -670,7 +676,9 @@ mm_core_start_single(struct mm_core *core, int core_tag)
 	mm_thread_attr_setcputag(&attr, core_tag);
 
 	// Create a core thread.
-	core->thread = mm_thread_create(&attr, &mm_core_boot, (uintptr_t) core);
+	core->thread = mm_thread_create(&attr,
+					core->boot->start,
+					core->boot->start_arg);
 
 	LEAVE();
 }

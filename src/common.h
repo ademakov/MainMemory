@@ -101,12 +101,6 @@ typedef int64_t			mm_timeval_t;
 /* Timeout (in microseconds). */
 typedef uint32_t		mm_timeout_t;
 
-/* Task priorities. */
-#define MM_PRIO_BOOT		31
-#define MM_PRIO_IDLE		30
-#define MM_PRIO_DEFAULT		15
-#define MM_PRIO_HIGHEST		0
-
 /* Task execution result. */
 typedef uintptr_t mm_result_t;
 

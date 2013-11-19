@@ -31,21 +31,14 @@
 #define MM_TASK_STACK_SIZE		(32 * 1024)
 
 /* Minimal task stack size. */
-#define MM_TASK_STACK_SIZE_MIN		(12 * 1024)
-
-/* Bootstrap task stack size. */
-#if !defined(PTHREAD_STACK_MIN) || (PTHREAD_STACK_MIN < MM_TASK_STACK_SIZE_MIN)
-# define MM_TASK_BOOT_STACK_SIZE	MM_TASK_STACK_SIZE_MIN
+#if defined(PTHREAD_STACK_MIN)
+# define MM_TASK_STACK_SIZE_MIN		PTHREAD_STACK_MIN
 #else
-# define MM_TASK_BOOT_STACK_SIZE	PTHREAD_STACK_MIN
+# define MM_TASK_STACK_SIZE_MIN		(12 * 1024)
 #endif
 
 // The memory pool for tasks.
 static struct mm_pool mm_task_pool;
-
-// Special task mames.
-static char mm_task_boot_name[] = "boot";
-static char mm_task_dead_name[] = "dead";
 
 // The currently running task.
 __thread struct mm_task *mm_running_task = NULL;
@@ -73,6 +66,60 @@ mm_task_term(void)
 	// TODO: stop and destroy all tasks.
 
 	mm_pool_cleanup(&mm_task_pool);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Task creation attributes.
+ **********************************************************************/
+
+void
+mm_task_attr_init(struct mm_task_attr *attr)
+{
+	attr->flags = 0;
+	attr->priority = MM_PRIO_WORK;
+	attr->stack_size = MM_TASK_STACK_SIZE;
+	attr->name[0] = 0;
+}
+
+void
+mm_task_attr_setflags(struct mm_task_attr *attr, mm_task_flags_t flags)
+{
+	attr->flags = flags;
+}
+
+void
+mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
+{
+	ASSERT(priority <= MM_PRIO_LOWERMOST);
+	ASSERT(priority >= MM_PRIO_UPPERMOST);
+	attr->priority = priority;
+}
+
+void
+mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size)
+{
+	if (stack_size < MM_TASK_STACK_SIZE_MIN)
+		stack_size = MM_TASK_STACK_SIZE_MIN;
+
+	attr->stack_size = stack_size;
+}
+
+void
+mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
+{
+	ENTER();
+
+	size_t len = 0;
+	if (likely(name != NULL)) {
+		len = strlen(name);
+		if (len >= sizeof attr->name)
+			len = sizeof attr->name - 1;
+
+		memcpy(attr->name, name, len);
+	}
+	attr->name[len] = 0;
 
 	LEAVE();
 }
@@ -127,7 +174,7 @@ mm_task_free_chunks(struct mm_task *task)
 
 /* Create a new task. */
 static struct mm_task *
-mm_task_new(uint32_t stack_size)
+mm_task_new(void)
 {
 	// Allocate a task.
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
@@ -135,9 +182,9 @@ mm_task_new(uint32_t stack_size)
 	// Store the core that owns the task.
 	task->core = mm_core;
 
-	// Allocate a task stack.
-	task->stack_size = stack_size;
-	task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
+	// Initialize the task stack info.
+	task->stack_size = 0;
+	task->stack_base = NULL;
 
 	// Initialize the task ports list.
 	mm_list_init(&task->ports);
@@ -153,73 +200,91 @@ mm_task_new(uint32_t stack_size)
 
 /* Initialize a task. */
 static void
-mm_task_set_attr(struct mm_task *task,
-		 mm_task_flags_t flags,
-		 uint8_t priority)
+mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 {
 	task->state = MM_TASK_CREATED;
-	task->flags = flags;
-	task->priority = priority;
-
 	task->result = MM_TASK_UNRESOLVED;
+
+	if (unlikely(attr == NULL)) {	
+		task->flags = 0;
+		task->original_priority = MM_PRIO_WORK;
+		task->stack_size = MM_TASK_STACK_SIZE;
+		task->name[0] = 0;
+	} else {
+		task->flags = attr->flags;
+		task->original_priority = attr->priority;
+		task->stack_size = attr->stack_size;
+		strcpy(task->name, attr->name);
+	}
+
+	task->priority = task->original_priority;
 
 #if ENABLE_TRACE
 	task->trace_level = 0;
 #endif
 }
 
-/* Create a bootstrap task. */
-struct mm_task *
-mm_task_create_boot(void)
-{
-	ENTER();
-	ASSERT(mm_core == NULL);
-
-	// Create a new task object.
-	struct mm_task *task = mm_task_new(MM_TASK_BOOT_STACK_SIZE);
-
-	// Set the task name.
-	ASSERT(sizeof task->name > sizeof mm_task_boot_name);
-	strcpy(task->name, mm_task_boot_name);
-
-	// Initialize the task info.
-	mm_task_set_attr(task, MM_TASK_CANCEL_DISABLE, MM_PRIO_BOOT);
-	task->start = NULL;
-	task->start_arg = 0;
-
-	LEAVE();
-	return task;
-}
-
 /* Create a new task. */
 struct mm_task *
-mm_task_create(const char *name, mm_routine_t start, uintptr_t start_arg)
+mm_task_create(const struct mm_task_attr *attr,
+	       mm_routine_t start, uintptr_t start_arg)
 {
 	ENTER();
-	ASSERT(mm_core != NULL);
 
-	struct mm_task *task;
+	// Check to see if called from the bootstrap context.
+	bool boot = (mm_core == NULL);
 
-	if (mm_list_empty(&mm_core->dead_list)) {
-		// Allocate a new task.
-		task = mm_task_new(MM_TASK_STACK_SIZE);
-	} else {
-		// Resurrect a dead task.
-		struct mm_list *link = mm_list_delete_head(&mm_core->dead_list);
-		task = containerof(link, struct mm_task, queue);
+	struct mm_task *task = NULL;
+	// Try to reuse a dead task.
+	if (likely(!boot) && !mm_list_empty(&mm_core->dead_list)) {
+		// Get the last dead task.
+		struct mm_list *link = mm_list_head(&mm_core->dead_list);
+		struct mm_task *dead = containerof(link, struct mm_task, queue);
+
+		// Check it against the required stack size.
+		uint32_t stack_size = (attr != NULL
+				       ? attr->stack_size
+				       : MM_TASK_STACK_SIZE);
+		if (dead->stack_size == stack_size) {
+			// The dead task is just good.
+			mm_list_delete(link);
+			task = dead;
+		} else if (dead->stack_size != MM_TASK_STACK_SIZE) {
+			// The dead task has an unusual stack, free it.
+			mm_stack_destroy(dead->stack_base, dead->stack_size);
+			dead->stack_base = NULL;
+			// Now use that task.
+			mm_list_delete(link);
+			task = dead;
+		} else {
+			// A task with unusual stack size is requested, leave
+			// the dead task alone, it is likely to be reused the
+			// next time.
+		}
+	}
+	// Allocate a new task if needed.
+	if (task == NULL) {
+		task = mm_task_new();
 	}
 
-	// Initialize the task stack.
-	mm_stack_init(&task->stack_ctx, mm_task_entry,
-		      task->stack_base, task->stack_size);
-
-	// Set the task name.
-	mm_task_setname(task, name);
-
 	// Initialize the task info.
-	mm_task_set_attr(task, 0, MM_PRIO_DEFAULT);
+	mm_task_set_attr(task, attr);
 	task->start = start;
 	task->start_arg = start_arg;
+
+	// Allocate a new stack if needed.
+	if (task->stack_base == NULL) {
+		task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
+	}
+
+	// Setup the task entry point on its own stack and queue it for
+	// execution unless bootstrapping in which case it will be done
+	// later in a special way.
+	if (likely(!boot)) {
+		mm_stack_init(&task->stack_ctx, mm_task_entry,
+			      task->stack_base, task->stack_size);
+		mm_task_run(task);
+	}
 
 	LEAVE();
 	return task;
@@ -254,21 +319,25 @@ mm_task_destroy(struct mm_task *task)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Task utilities.
+ **********************************************************************/
+
 /* Set or change the task name. */
 void
 mm_task_setname(struct mm_task *task, const char *name)
 {
 	ENTER();
 
+	size_t len = 0;
 	if (likely(name != NULL)) {
-		size_t len = strlen(name);
+		len = strlen(name);
 		if (len >= sizeof task->name)
 			len = sizeof task->name - 1;
+
 		memcpy(task->name, name, len);
-		task->name[len] = 0;
-	} else {
-		task->name[0] = 0;
 	}
+	task->name[len] = 0;
 
 	LEAVE();
 }
@@ -295,36 +364,78 @@ mm_task_switch(mm_task_state_t state)
 {
 	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
 
+	// Move the currently running task to a new state.
 	struct mm_task *old_task = mm_running_task;
-	if (state == MM_TASK_PENDING)
-		mm_runq_put_task(&mm_core->run_queue, old_task);
-	else if (state == MM_TASK_INVALID)
-		mm_list_append(&mm_core->dead_list, &old_task->queue);
 	old_task->state = state;
+	if (unlikely(state == MM_TASK_INVALID)) {
+		// Add it to the dead task list.
+		mm_list_append(&mm_core->dead_list, &old_task->queue);
+	} else {
+		// Reset the priority that could have been temporary raised.
+		old_task->priority = old_task->original_priority;
+		if (state == MM_TASK_PENDING) {
+			// Add it to the run queue.
+			mm_runq_put_task(&mm_core->run_queue, old_task);
+		}
+	}
 
-	// As long as this function is called there is at least a boot task
-	// in the run queue. So the next task should never be NULL here.
+	// Get the next task from the run queue.  As long as this function
+	// is called there is at least a boot task in the run queue.  So
+	// there should never be a NULL value returned.
 	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
 	new_task->state = MM_TASK_RUNNING;
 	mm_running_task = new_task;
 
+	// Switch to the new task relinquishing CPU control for a while.
 	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
 
+	// Resume the task unless it has been canceled and it agrees to be
+	// canceled asynchronously. In that case it quits here.
 	mm_task_testcancel_asynchronous();
 }
 
+/* Queue a task for execution. */
 void
 mm_task_run(struct mm_task *task)
 {
 	ENTER();
+	TRACE("queue task: [%d %s], state: %d, priority: %d",
+	      mm_task_getid(task), task->name,
+	      task->state, task->priority);
 	ASSERT(task->core == mm_core);
-	TRACE("enqueue task: [%d %s] %d", mm_task_getid(task), task->name, task->state);
+	ASSERT(task->priority < MM_PRIO_BOOT);
 	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
-	ASSERT(task->priority != MM_PRIO_BOOT);
 
 	if (task->state != MM_TASK_PENDING) {
-		mm_runq_put_task(&mm_core->run_queue, task);
 		task->state = MM_TASK_PENDING;
+		mm_runq_put_task(&mm_core->run_queue, task);
+	}
+
+	LEAVE();
+}
+
+/* Queue a task for execution with temporary raised priority. */
+void
+mm_task_hoist(struct mm_task *task, mm_priority_t priority)
+{
+	ENTER();
+	TRACE("hoist task: [%d %s], state: %d, priority: %d, %d",
+	      mm_task_getid(task), task->name,
+	      task->state, task->priority, priority);
+	ASSERT(task->core == mm_core);
+	ASSERT(task->priority < MM_PRIO_BOOT);
+	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
+
+	if (task->priority > priority) {
+		if (task->state != MM_TASK_PENDING)
+			task->state = MM_TASK_PENDING;
+		else
+			mm_runq_delete_task(&mm_core->run_queue, task);
+		task->priority = priority;
+		mm_runq_put_task(&mm_core->run_queue, task);
+	} else if (task->state != MM_TASK_PENDING) {
+		task->state = MM_TASK_PENDING;
+		mm_runq_put_task(&mm_core->run_queue, task);
 	}
 
 	LEAVE();
@@ -354,7 +465,6 @@ mm_task_block(void)
 void
 mm_task_exit(mm_result_t result)
 {
-	ENTER();
 	TRACE("exiting task '%s' with status %lu",
 	      mm_running_task->name, (unsigned long) result);
 
@@ -373,18 +483,13 @@ mm_task_exit(mm_result_t result)
 	mm_task_free_chunks(mm_running_task);
 
 	// Reset the task name.
-	ASSERT(sizeof mm_running_task->name > sizeof mm_task_dead_name);
-	strcpy(mm_running_task->name, mm_task_dead_name);
-
-	// Add it to the list of dead tasks.
+	mm_task_setname(mm_running_task, "dead");
 
 	// Give the control to still running tasks.
 	mm_task_switch(MM_TASK_INVALID);
 
 	// Must never get here after the switch above.
 	ABORT();
-
-	LEAVE();
 }
 
 /**********************************************************************
