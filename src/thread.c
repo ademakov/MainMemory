@@ -102,15 +102,15 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 {
 	ENTER();
 
+	size_t len = 0;
 	if (likely(name != NULL)) {
-		size_t len = strlen(name);
+		len = strlen(name);
 		if (len >= sizeof attr->name)
 			len = sizeof attr->name - 1;
+
 		memcpy(attr->name, name, len);
-		attr->name[len] = 0;
-	} else {
-		attr->name[0] = 0;
 	}
+	attr->name[len] = 0;
 
 	LEAVE();
 }
