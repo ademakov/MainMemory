@@ -1457,7 +1457,7 @@ mc_read(struct mc_state *state, size_t required, size_t optional)
 	while (count > optional) {
 		ssize_t n = mm_net_readbuf(state->sock, &state->rbuf);
 		if (n <= 0) {
-			if (n == 0 || (errno != EAGAIN && errno != EINTR))
+			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
 				state->hangup = true;
 			break;
 		}
