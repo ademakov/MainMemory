@@ -157,7 +157,7 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, uintptr_t start_arg)
 	struct mm_timer *timer = mm_pool_alloc(&mm_core->timer_pool);
 	mm_timer_t timer_id = mm_pool_ptr2idx(&mm_core->timer_pool, timer);
 
-	// Check for timer_id overflow over the MM_TIMER_SLEEP value.
+	// Check for timer_id overflow over the MM_TIMER_BLOCK value.
 	if (unlikely(timer_id == MM_TIMER_BLOCK)) {
 		mm_pool_free(&mm_core->timer_pool, timer);
 
