@@ -94,6 +94,12 @@ mc_entry_size(uint8_t key_len, size_t value_len)
 	return sizeof(struct mc_entry) + key_len + value_len;
 }
 
+static inline size_t
+mc_entry_bytes(struct mc_entry *entry)
+{
+	return mc_entry_size(entry->key_len, entry->value_len);
+}
+
 static inline char *
 mc_entry_key(struct mc_entry *entry)
 {
@@ -240,6 +246,7 @@ struct mc_table
 
 	bool striding;
 
+	size_t nbytes;
 	size_t nentries;
 
 	struct mc_entry **table;
@@ -277,6 +284,12 @@ mc_table_is_full(void)
 	if (unlikely(mc_table.used == MC_TABLE_SIZE_MAX))
 		return false;
 	return mc_table.nentries >= (mc_table.used * 2);
+}
+
+static inline bool
+mc_table_is_outofmemory(void)
+{
+	return mc_table.nbytes > 64 * 1024 * 1024;
 }
 
 static void
@@ -417,6 +430,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 	if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
 		mm_list_delete(&entry->link);
 		mc_table.table[index] = entry->next;
+		mc_table.nbytes -= mc_entry_bytes(entry);
 		--mc_table.nentries;
 		goto leave;
 	}
@@ -433,6 +447,7 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
 			mm_list_delete(&entry->link);
 			prev_entry->next = entry->next;
+			mc_table.nbytes -= mc_entry_bytes(entry);
 			--mc_table.nentries;
 			goto leave;
 		}
@@ -441,6 +456,23 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 leave:
 	LEAVE();
 	return entry;
+}
+
+static void
+mc_table_evict(void)
+{
+	ENTER();
+
+	struct mm_list *link = mm_list_head(&mc_entry_list);
+	struct mc_entry *entry = containerof(link, struct mc_entry, link);
+
+	char *key = mc_entry_key(entry);
+	uint32_t index = mc_table_key_index(key, entry->key_len);
+	mc_table_remove(index, key, entry->key_len);
+
+	mc_entry_unref(entry);
+
+	LEAVE();
 }
 
 static void
@@ -453,7 +485,11 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 	entry->next = mc_table.table[index];
 	mc_table.table[index] = entry;
 
+	mc_table.nbytes += mc_entry_bytes(entry);
 	++mc_table.nentries;
+
+	while (mc_table_is_outofmemory())
+		mc_table_evict();
 
 	if (!mc_table.striding && mc_table_is_full()) {
 		mc_table.striding = true;
@@ -482,6 +518,7 @@ mc_table_init(void)
 	mc_table.size = 0;
 	mc_table.mask = 0;
 	mc_table.striding = false;
+	mc_table.nbytes = 0;
 	mc_table.nentries = 0;
 	mc_table.table = area;
 
@@ -949,6 +986,12 @@ mc_process_get2(uintptr_t arg, mc_result_t res_type)
 
 	uint32_t index = mc_table_key_index(key, key_len);
 	struct mc_entry *entry = mc_table_lookup(index, key, key_len);
+	// Maintain LRU order.
+	if (entry != NULL) {
+		mm_list_delete(&entry->link);
+		mm_list_append(&mc_entry_list, &entry->link);
+	}
+
 	if (entry != NULL)
 		mc_entry(command, entry, res_type);
 	else if (command->params.last)
@@ -1351,17 +1394,9 @@ mc_process_flush_all(uintptr_t arg)
 	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
 
 	// TODO: do this as a background task.
-	while (!mm_list_empty(&mc_entry_list)) {
-		struct mm_list *link = mm_list_head(&mc_entry_list);
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-
-		char *key = mc_entry_key(entry);
-		uint32_t index = mc_table_key_index(key, entry->key_len);
-		mc_table_remove(index, key, entry->key_len);
-
-		mc_entry_unref(entry);
-	}
-
+	while (!mm_list_empty(&mc_entry_list))
+		mc_table_evict();
+	
 	if (command->noreply)
 		mc_blank(command);
 	else

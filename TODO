@@ -7,7 +7,6 @@ ASAP:
 * memcache module enhancements:
 ** use socket distribution
 ** use futures for commands
-** implement eviction
 ** implement expiration
 ** polish & optimize
 
