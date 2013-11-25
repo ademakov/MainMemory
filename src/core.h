@@ -47,7 +47,7 @@ struct mm_core
 	/* Cache of free work items. */
 	struct mm_list work_cache;
 	/* Queue of tasks waiting for work items. */
-	struct mm_list wait_queue;
+	struct mm_list idle_queue;
 
 	/* Private memory arena. */
 	void *arena;

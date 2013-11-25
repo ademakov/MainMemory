@@ -150,7 +150,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 	mm_list_insert(&core->work_queue, &work->queue);
 
 	// If there is a task waiting for work then let it run now.
-	mm_task_signal(&core->wait_queue);
+	mm_task_signal(&core->idle_queue);
 
 	LEAVE();
 }
@@ -278,15 +278,12 @@ mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 }
 
 static mm_result_t
-mm_core_worker(uintptr_t arg)
+mm_core_worker(uintptr_t arg __attribute__((unused)))
 {
 	ENTER();
 
 	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
-
-	// Get initial work item.
-	struct mm_work *work = (struct mm_work *) arg;
 
 	// Cache thread-specific data. This gives a smallish speedup for
 	// the code emitted for the loop below on platforms with emulated
@@ -294,18 +291,10 @@ mm_core_worker(uintptr_t arg)
 	struct mm_core *core = mm_core;
 
 	for (;;) {
-		// Save the work routine and recycle the work item.
-		mm_routine_t routine = work->routine;
-		uintptr_t routine_arg = work->routine_arg;
-		mm_list_insert(&core->work_cache, &work->queue);
-
-		// Execute the work routine.
-		routine(routine_arg);
-
-		// Check to see if there is more work available.
+		// Check to see if there is outstanding work.
 		if (mm_list_empty(&core->work_queue)) {
-			// Wait for work standing at the front of the wait queue.
-			mm_task_waitfirst(&core->wait_queue);
+			// Wait for work standing at the front of the idle queue.
+			mm_task_waitfirst(&core->idle_queue);
 			if (mm_list_empty(&core->work_queue)) {
 				break;
 			}
@@ -313,7 +302,15 @@ mm_core_worker(uintptr_t arg)
 
 		// Take the first available work item.
 		struct mm_list *link = mm_list_delete_head(&core->work_queue);
-		work = containerof(link, struct mm_work, queue);
+		struct mm_work *work = containerof(link, struct mm_work, queue);
+
+		// Save the work routine and recycle the work item.
+		mm_routine_t routine = work->routine;
+		uintptr_t routine_arg = work->routine_arg;
+		mm_list_insert(&core->work_cache, &work->queue);
+
+		// Execute the work routine.
+		routine(routine_arg);
 	}
 
 	// Cleanup on return.
@@ -321,21 +318,6 @@ mm_core_worker(uintptr_t arg)
 
 	LEAVE();
 	return 0;
-}
-
-static void
-mm_core_worker_start(struct mm_work *work)
-{
-	ENTER();
-
-	struct mm_task_attr attr;
-	mm_task_attr_init(&attr);
-	mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
-	mm_task_attr_setname(&attr, "worker");
-	mm_task_create(&attr, mm_core_worker, (uintptr_t) work);
-	mm_core->nworkers++;
-
-	LEAVE();
 }
 
 /**********************************************************************
@@ -351,26 +333,28 @@ mm_core_master(uintptr_t arg)
 
 	while (!mm_memory_load(core->master_stop)) {
 
-		// Check to see if there are workers available.
+		// Check to see if there are enough workers.
 		if (core->nworkers >= core->nworkers_max) {
 			mm_task_block();
 			continue;
 		}
 
-		// Check to see if there is some work available.
+		// Check to see if there is outstanding work.
 		if (mm_list_empty(&core->work_queue)) {
-			// Wait for work at the back end of the wait queue.
-			// So any idle worker would take work over the master.
-			mm_task_wait(&core->wait_queue);
+			// Wait for work at the back end of the idle queue.
+			// So any idle worker would take work before the master.
+			mm_task_wait(&core->idle_queue);
 			continue;
 		}
 
-		// Take the first available work item.
-		struct mm_list *link = mm_list_delete_head(&core->work_queue);
-		struct mm_work *work = containerof(link, struct mm_work, queue);
+		// Start a new worker to handle the work.
+		struct mm_task_attr attr;
+		mm_task_attr_init(&attr);
+		mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
+		mm_task_attr_setname(&attr, "worker");
+		mm_task_create(&attr, mm_core_worker, 0);
 
-		// Pass it to a new worker.
-		mm_core_worker_start(work);
+		core->nworkers++;
 	}
 
 	LEAVE();
@@ -585,7 +569,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_runq_init(&core->run_queue);
 	mm_list_init(&core->work_queue);
 	mm_list_init(&core->work_cache);
-	mm_list_init(&core->wait_queue);
+	mm_list_init(&core->idle_queue);
 
 	core->arena = create_mspace(0, 0);
 
