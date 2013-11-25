@@ -35,7 +35,10 @@
 #include <stdlib.h>
 #include <sys/mman.h>
 
-#define MC_VERSION "VERSION MainMemory 0.0\r\n"
+#define MC_VERSION		"VERSION MainMemory 0.0\r\n"
+
+#define MC_SIZE_MAX		(64 * 1024 * 1024)
+#define MC_SIZE_RESERVE		(64 * 1024)
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
@@ -245,6 +248,7 @@ struct mc_table
 	uint32_t used;
 
 	bool striding;
+	bool evicting;
 
 	size_t nbytes;
 	size_t nentries;
@@ -287,9 +291,9 @@ mc_table_is_full(void)
 }
 
 static inline bool
-mc_table_is_outofmemory(void)
+mc_table_is_outofmemory(size_t reserve)
 {
-	return mc_table.nbytes > 64 * 1024 * 1024;
+	return (mc_table.nbytes + reserve) > MC_SIZE_MAX;
 }
 
 static void
@@ -369,6 +373,7 @@ mc_table_start_striding(void)
 {
 	ENTER();
 
+	// TODO: submit to the pertinent core.
 	mm_core_post(false, mc_table_stride_routine, 0);
 
 	LEAVE();
@@ -475,6 +480,25 @@ mc_table_evict(void)
 	LEAVE();
 }
 
+static mm_result_t
+mc_table_evict_routine(uintptr_t arg __attribute__((unused)))
+{
+	ENTER();
+	ASSERT(mc_table.evicting);
+
+	while (mc_table_is_outofmemory(MC_SIZE_RESERVE)) {
+		int count = 16;
+		while (count-- && !mm_list_empty(&mc_entry_list))
+			mc_table_evict();
+		mm_task_yield();
+	}
+
+	mc_table.evicting = false;
+
+	LEAVE();
+	return 0;
+}
+
 static void
 mc_table_insert(uint32_t index, struct mc_entry *entry)
 {
@@ -488,12 +512,13 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 	mc_table.nbytes += mc_entry_bytes(entry);
 	++mc_table.nentries;
 
-	while (mc_table_is_outofmemory())
-		mc_table_evict();
-
 	if (!mc_table.striding && mc_table_is_full()) {
 		mc_table.striding = true;
 		mc_table_start_striding();
+	}
+	if (!mc_table.evicting && mc_table_is_outofmemory(0)) {
+		mc_table.evicting = true;
+		mm_core_post(false, mc_table_evict_routine, 0);
 	}
 
 	LEAVE();
@@ -518,6 +543,7 @@ mc_table_init(void)
 	mc_table.size = 0;
 	mc_table.mask = 0;
 	mc_table.striding = false;
+	mc_table.evicting = false;
 	mc_table.nbytes = 0;
 	mc_table.nentries = 0;
 	mc_table.table = area;
