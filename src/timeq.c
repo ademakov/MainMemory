@@ -132,7 +132,7 @@ static void
 mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	struct mm_list *fe_queue_link = &timeq->fe;
-	while (mm_list_has_prev(&timeq->fe, fe_queue_link)) {
+	while (!mm_list_is_head(&timeq->fe, fe_queue_link)) {
 		struct mm_list *prev_link = fe_queue_link->prev;
 		struct mm_timeq_entry *prev_entry
 			= containerof(prev_link, struct mm_timeq_entry, queue);
@@ -250,12 +250,12 @@ restart:
 				DEBUG("entry: %p, t1 index: %d", entry, timeq->t1_index);
 
 			} else {
-				DEBUG("cleave t1 index: %d", timeq->t1_index);
+
+				DEBUG("erase t1 index: %d", timeq->t1_index);
+				mm_list_init(&timeq->t1[timeq->t1_index]);
 
 				timeq->t1_index++;
 				timeq->t1_start += timeq->t1_width;
-
-				mm_list_cleave(head, tail);
 
 				for (;;) {
 					struct mm_list *next = head->next;
@@ -318,8 +318,8 @@ restart:
 
 			struct mm_list *head = mm_list_head(&timeq->t2);
 			struct mm_list *tail = mm_list_tail(&timeq->t2);
-			mm_list_cleave(head, tail);
-			DEBUG("t2 cleave");
+			mm_list_init(&timeq->t2);
+			DEBUG("t2 erase");
 
 			for (;;) {
 				struct mm_list *next = head->next;
