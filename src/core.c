@@ -178,7 +178,7 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 	ASSERT(mm_core != NULL);
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(core,
+	struct mm_work *work = mm_core_create_work(mm_core,
 						   routine, routine_arg,
 						   true);
 
