@@ -235,6 +235,21 @@ mm_queue_empty(struct mm_queue *list)
 }
 
 static inline void
+mm_queue_splice_head(struct mm_queue *list, struct mm_link *head, struct mm_link *tail)
+{
+	tail->next = list->head.next;
+	if (list->head.next == NULL)
+		list->tail = tail;
+	list->head.next = head;
+}
+
+static inline void
+mm_queue_insert_head(struct mm_queue *list, struct mm_link *item)
+{
+	mm_queue_splice_head(list, item, item);
+}
+
+static inline void
 mm_queue_splice_tail(struct mm_queue *list, struct mm_link *head, struct mm_link *tail)
 {
 	tail->next = NULL;
@@ -249,11 +264,12 @@ mm_queue_append(struct mm_queue *list, struct mm_link *item)
 }
 
 static inline struct mm_link *
-mm_fifo_delete_head(struct mm_queue *list)
+mm_queue_delete_head(struct mm_queue *list)
 {
 	struct mm_link *head = mm_queue_head(list);
-	if (mm_queue_is_last(head))
-		mm_queue_init(list);
+	list->head.next = head->next;
+	if (head->next == NULL)
+		list->tail = &list->head;
 	return head;
 }
 
