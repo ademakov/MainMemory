@@ -340,21 +340,19 @@ mm_core_master(uintptr_t arg)
 		}
 
 		// Check to see if there is outstanding work.
-		if (mm_list_empty(&core->work_queue)) {
-			// Wait for work at the back end of the idle queue.
-			// So any idle worker would take work before the master.
-			mm_task_wait(&core->idle_queue);
-			continue;
+		if (!mm_list_empty(&core->work_queue)) {
+			// Start a new worker to handle the work.
+			struct mm_task_attr attr;
+			mm_task_attr_init(&attr);
+			mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
+			mm_task_attr_setname(&attr, "worker");
+			mm_task_create(&attr, mm_core_worker, 0);
+			core->nworkers++;
 		}
 
-		// Start a new worker to handle the work.
-		struct mm_task_attr attr;
-		mm_task_attr_init(&attr);
-		mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
-		mm_task_attr_setname(&attr, "worker");
-		mm_task_create(&attr, mm_core_worker, 0);
-
-		core->nworkers++;
+		// Wait for work at the back end of the idle queue.
+		// So any idle worker would take work before the master.
+		mm_task_wait(&core->idle_queue);
 	}
 
 	LEAVE();
