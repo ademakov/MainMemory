@@ -88,69 +88,89 @@ mm_core_wake(struct mm_core *core)
 }
 
 /**********************************************************************
- * Work queue.
+ * Idle queue.
  **********************************************************************/
 
-/* A work item. */
-struct mm_work
-{
-	/* A link in the work queue. */
-	struct mm_list queue;
-
-	/* The work is pinned to a specific core. */
-	bool pinned;
-
-	/* The work routine. */
-	mm_routine_t routine;
-	/* The work routine argument. */
-	uintptr_t routine_arg;
-};
-
-static struct mm_work *
-mm_core_create_work(struct mm_core *core,
-		    mm_routine_t routine, uintptr_t routine_arg,
-		    bool pinned)
+void
+mm_core_idle(struct mm_core *core)
 {
 	ENTER();
 
-	struct mm_work *work;
-	if (mm_list_empty(&core->work_cache)) {
-		/* Create a new work item. */
-		work = mm_alloc(sizeof(struct mm_core));
-	} else {
-		/* Reuse a cached work item. */
-		struct mm_list *link = mm_list_delete_head(&core->work_cache);
-		work = containerof(link, struct mm_work, queue);
-	}
+	struct mm_task *task = mm_running_task;
+	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
-	work->pinned = pinned;
-	work->routine = routine;
-	work->routine_arg = routine_arg;
+	// Enqueue the task.
+	ASSERT((task->flags & MM_TASK_WAITING) == 0);
+	mm_list_insert(&core->idle, &task->wait_queue);
+	task->flags |= MM_TASK_WAITING;
+	core->nidle++;
+
+	// Wait until poked.
+	mm_task_block();
+
+	// Dequeue the task.
+	ASSERT((task->flags & MM_TASK_WAITING) != 0);
+	mm_list_delete(&task->wait_queue);
+	task->flags &= ~MM_TASK_WAITING;
+	core->nidle--;
 
 	LEAVE();
-	return work;
+}
+
+void
+mm_core_idle_last(struct mm_core *core)
+{
+	ENTER();
+
+	struct mm_task *task = mm_running_task;
+	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
+
+	// Enqueue the task.
+	ASSERT((task->flags & MM_TASK_WAITING) == 0);
+	mm_list_append(&core->idle, &task->wait_queue);
+	task->flags |= MM_TASK_WAITING;
+	core->nidle++;
+
+	// Wait until poked.
+	mm_task_block();
+
+	// Dequeue the task.
+	ASSERT((task->flags & MM_TASK_WAITING) != 0);
+	mm_list_delete(&task->wait_queue);
+	task->flags &= ~MM_TASK_WAITING;
+	core->nidle--;
+
+	LEAVE();
 }
 
 static void
-mm_core_destroy_work(struct mm_work *work)
+mm_core_poke_idle(struct mm_core *core)
 {
 	ENTER();
 
-	mm_free(work);
+	if (likely(!mm_list_empty(&core->idle))) {
+		struct mm_list *link = mm_list_head(&core->idle);
+		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
+		mm_task_run(task);
+	}
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Work queue.
+ **********************************************************************/
 
 static void
 mm_core_add_work(struct mm_core *core, struct mm_work *work)
 {
 	ENTER();
 
-	// Enqueue the item in the LIFO order.
-	mm_list_insert(&core->work_queue, &work->queue);
+	// Enqueue the work item.
+	mm_work_put(&core->workq, work);
 
 	// If there is a task waiting for work then let it run now.
-	mm_task_signal(&core->idle_queue);
+	mm_core_poke_idle(core);
 
 	LEAVE();
 }
@@ -161,9 +181,8 @@ mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
 	ENTER();
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(mm_core,
-						   routine, routine_arg,
-						   pinned);
+	struct mm_work *work = mm_work_create(&mm_core->workq);
+	mm_work_set(work, pinned, routine, routine_arg);
 
 	// Enqueue it.
 	mm_core_add_work(mm_core, work);
@@ -178,9 +197,8 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 	ASSERT(mm_core != NULL);
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(mm_core,
-						   routine, routine_arg,
-						   true);
+	struct mm_work *work = mm_work_create(&mm_core->workq);
+	mm_work_set(work, true, routine, routine_arg);
 
 	if (core == mm_core) {
 		// Enqueue it directly if on the same core.
@@ -292,22 +310,21 @@ mm_core_worker(uintptr_t arg __attribute__((unused)))
 
 	for (;;) {
 		// Check to see if there is outstanding work.
-		if (mm_list_empty(&core->work_queue)) {
+		if (!mm_work_available(&core->workq)) {
 			// Wait for work standing at the front of the idle queue.
-			mm_task_waitfirst(&core->idle_queue);
-			if (mm_list_empty(&core->work_queue)) {
+			mm_core_idle(core);
+			if (!mm_work_available(&core->workq)) {
 				break;
 			}
 		}
 
 		// Take the first available work item.
-		struct mm_list *link = mm_list_delete_head(&core->work_queue);
-		struct mm_work *work = containerof(link, struct mm_work, queue);
+		struct mm_work *work = mm_work_get(&core->workq);
 
 		// Save the work routine and recycle the work item.
 		mm_routine_t routine = work->routine;
 		uintptr_t routine_arg = work->routine_arg;
-		mm_list_insert(&core->work_cache, &work->queue);
+		mm_work_destroy(&core->workq, work);
 
 		// Execute the work routine.
 		routine(routine_arg);
@@ -331,7 +348,7 @@ mm_core_master(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	while (!mm_memory_load(core->master_stop)) {
+	while (!mm_memory_load(core->stop)) {
 
 		// Check to see if there are enough workers.
 		if (core->nworkers >= core->nworkers_max) {
@@ -340,7 +357,7 @@ mm_core_master(uintptr_t arg)
 		}
 
 		// Check to see if there is outstanding work.
-		if (!mm_list_empty(&core->work_queue)) {
+		if (mm_work_available(&core->workq)) {
 			// Start a new worker to handle the work.
 			struct mm_task_attr attr;
 			mm_task_attr_init(&attr);
@@ -352,7 +369,7 @@ mm_core_master(uintptr_t arg)
 
 		// Wait for work at the back end of the idle queue.
 		// So any idle worker would take work before the master.
-		mm_task_wait(&core->idle_queue);
+		mm_core_idle_last(core);
 	}
 
 	LEAVE();
@@ -385,7 +402,7 @@ mm_core_dealer(uintptr_t arg)
 
 	struct mm_core *core = (struct mm_core *) arg;
 
-	while (!mm_memory_load(core->master_stop)) {
+	while (!mm_memory_load(core->stop)) {
 		bool halt = true;
 		if (mm_core_receive_work(core))
 			halt = false;
@@ -564,22 +581,23 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	mm_runq_init(&core->run_queue);
-	mm_list_init(&core->work_queue);
-	mm_list_init(&core->work_cache);
-	mm_list_init(&core->idle_queue);
-
 	core->arena = create_mspace(0, 0);
+
+	mm_runq_prepare(&core->runq);
+	mm_list_init(&core->idle);
+	mm_list_init(&core->dead);
+	mm_work_prepare(&core->workq);
+	mm_wait_cache_prepare(&core->wait_cache);
+
+	core->stop = false;
+	core->nidle = 0;
+	core->nworkers = 0;
+	core->nworkers_max = nworkers_max;
 
 	core->time_queue = NULL;
 	core->time_value = 0;
 	core->real_time_value = 0;
 
-	core->nworkers = 0;
-	core->nworkers_max = nworkers_max;
-	mm_list_init(&core->dead_list);
-
-	core->master_stop = false;
 	core->master = NULL;
 	core->thread = NULL;
 
@@ -603,21 +621,11 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 }
 
 static void
-mm_core_term_work_queue(struct mm_list *queue)
-{
-	while (!mm_list_empty(queue)) {
-		struct mm_list *link = mm_list_delete_head(queue);
-		struct mm_work *work = containerof(link, struct mm_work, queue);
-		mm_core_destroy_work(work);
-	}
-}
-
-static void
 mm_core_term_inbox(struct mm_core *core)
 {
 	struct mm_work *work = mm_ring_get(&core->inbox);
 	while (work != NULL) {
-		mm_core_destroy_work(work);
+		mm_work_destroy(&core->workq, work);
 		work = mm_ring_get(&core->inbox);
 	}
 }
@@ -627,9 +635,10 @@ mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
-	mm_core_term_work_queue(&core->work_queue);
-	mm_core_term_work_queue(&core->work_cache);
 	mm_core_term_inbox(core);
+
+	mm_work_cleanup(&core->workq);
+	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
@@ -701,6 +710,8 @@ mm_core_init(void)
 
 	mm_task_init();
 	mm_port_init();
+	mm_wait_init();
+	mm_work_init();
 
 	mm_core_set = mm_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (int i = 0; i < mm_core_num; i++)
@@ -723,6 +734,8 @@ mm_core_term(void)
 
 	mm_task_term();
 	mm_port_term();
+	mm_wait_term();
+	mm_work_term();
 
 	mm_thread_term();
 
@@ -775,7 +788,7 @@ mm_core_stop(void)
 
 	// Set stop flag for core threads.
 	for (int i = 0; i < mm_core_num; i++)
-		mm_memory_store(mm_core_set[i].master_stop, true);
+		mm_memory_store(mm_core_set[i].stop, true);
 
 	LEAVE();
 }

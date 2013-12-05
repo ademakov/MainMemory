@@ -273,22 +273,6 @@ void mm_task_cancel(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************
- * Task event waiting.
- **********************************************************************/
-
-void mm_task_wait(struct mm_list *queue)
-	__attribute__((nonnull(1)));
-void mm_task_waitfirst(struct mm_list *queue)
-	__attribute__((nonnull(1)));
-void mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
-	__attribute__((nonnull(1)));
-
-void mm_task_signal(struct mm_list *queue)
-	__attribute__((nonnull(1)));
-void mm_task_broadcast(struct mm_list *queue)
-	__attribute__((nonnull(1)));
-
-/**********************************************************************
  * Task-local dynamic memory.
  **********************************************************************/
 

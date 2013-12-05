@@ -27,6 +27,8 @@
 #include "ring.h"
 #include "runq.h"
 #include "task.h"
+#include "wait.h"
+#include "work.h"
 
 /* Forward declarations. */
 struct mm_timeq;
@@ -39,18 +41,31 @@ struct mm_net_server;
 /* Virtual core state. */
 struct mm_core
 {
-	/* Queue of ready to run tasks. */
-	struct mm_runq run_queue;
-
-	/* Queue of work items. */
-	struct mm_list work_queue;
-	/* Cache of free work items. */
-	struct mm_list work_cache;
-	/* Queue of tasks waiting for work items. */
-	struct mm_list idle_queue;
-
 	/* Private memory arena. */
 	void *arena;
+
+	/* Queue of ready to run tasks. */
+	struct mm_runq runq;
+
+	/* Queue of tasks waiting for work items. */
+	struct mm_list idle;
+
+	/* The list of tasks that have finished. */
+	struct mm_list dead;
+
+	/* Queue of pending work items. */
+	struct mm_workq workq;
+
+	/* Cache of free wait entries. */
+	struct mm_wait_cache wait_cache;
+
+	/* Stop flag. */
+	bool stop;
+
+	/* Current and maximum number of worker tasks. */
+	uint32_t nidle;
+	uint32_t nworkers;
+	uint32_t nworkers_max;
 
 	/* Queue of delayed tasks. */
 	struct mm_timeq *time_queue;
@@ -58,16 +73,6 @@ struct mm_core
 	/* The (almost) current time. */
 	mm_timeval_t time_value;
 	mm_timeval_t real_time_value;
-
-	/* Current and maximum number of worker tasks. */
-	uint32_t nworkers;
-	uint32_t nworkers_max;
-
-	/* The list of worker tasks that have finished. */
-	struct mm_list dead_list;
-
-	/* Stop flag. */
-	bool master_stop;
 
 	/* Master task. */
 	struct mm_task *master;

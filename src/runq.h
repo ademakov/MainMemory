@@ -40,10 +40,10 @@ struct mm_runq
 	struct mm_list bins[MM_RUNQ_BINS];
 };
 
-void mm_runq_init(struct mm_runq *runq);
+void mm_runq_prepare(struct mm_runq *runq);
 
-struct mm_task *mm_runq_get_task(struct mm_runq *runq);
-void mm_runq_put_task(struct mm_runq *runq, struct mm_task *task);
-void mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task);
+struct mm_task *mm_runq_get(struct mm_runq *runq);
+void mm_runq_put(struct mm_runq *runq, struct mm_task *task);
+void mm_runq_delete(struct mm_runq *runq, struct mm_task *task);
 
 #endif /* RUNQ_H */

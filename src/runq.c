@@ -23,7 +23,7 @@
 #include "trace.h"
 
 void
-mm_runq_init(struct mm_runq *runq)
+mm_runq_prepare(struct mm_runq *runq)
 {
 	ENTER();
 	ASSERT(MM_RUNQ_BINS <= (8 * sizeof(runq->bmap)));
@@ -37,7 +37,7 @@ mm_runq_init(struct mm_runq *runq)
 }
 
 struct mm_task *
-mm_runq_get_task(struct mm_runq *runq)
+mm_runq_get(struct mm_runq *runq)
 {
 	struct mm_task *task = NULL;
 	if (likely(runq->bmap)) {
@@ -58,7 +58,7 @@ mm_runq_get_task(struct mm_runq *runq)
 }
 
 void
-mm_runq_put_task(struct mm_runq *runq, struct mm_task *task)
+mm_runq_put(struct mm_runq *runq, struct mm_task *task)
 {
 	int priority = task->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
@@ -68,7 +68,7 @@ mm_runq_put_task(struct mm_runq *runq, struct mm_task *task)
 }
 
 void
-mm_runq_delete_task(struct mm_runq *runq, struct mm_task *task)
+mm_runq_delete(struct mm_runq *runq, struct mm_task *task)
 {
 	int priority = task->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);

@@ -236,9 +236,9 @@ mm_task_create(const struct mm_task_attr *attr,
 
 	struct mm_task *task = NULL;
 	// Try to reuse a dead task.
-	if (likely(!boot) && !mm_list_empty(&mm_core->dead_list)) {
+	if (likely(!boot) && !mm_list_empty(&mm_core->dead)) {
 		// Get the last dead task.
-		struct mm_list *link = mm_list_head(&mm_core->dead_list);
+		struct mm_list *link = mm_list_head(&mm_core->dead);
 		struct mm_task *dead = containerof(link, struct mm_task, queue);
 
 		// Check it against the required stack size.
@@ -369,20 +369,20 @@ mm_task_switch(mm_task_state_t state)
 	old_task->state = state;
 	if (unlikely(state == MM_TASK_INVALID)) {
 		// Add it to the dead task list.
-		mm_list_append(&mm_core->dead_list, &old_task->queue);
+		mm_list_append(&mm_core->dead, &old_task->queue);
 	} else {
 		// Reset the priority that could have been temporary raised.
 		old_task->priority = old_task->original_priority;
 		if (state == MM_TASK_PENDING) {
 			// Add it to the run queue.
-			mm_runq_put_task(&mm_core->run_queue, old_task);
+			mm_runq_put(&mm_core->runq, old_task);
 		}
 	}
 
 	// Get the next task from the run queue.  As long as this function
 	// is called there is at least a boot task in the run queue.  So
 	// there should never be a NULL value returned.
-	struct mm_task *new_task = mm_runq_get_task(&mm_core->run_queue);
+	struct mm_task *new_task = mm_runq_get(&mm_core->runq);
 	new_task->state = MM_TASK_RUNNING;
 	mm_running_task = new_task;
 
@@ -408,7 +408,7 @@ mm_task_run(struct mm_task *task)
 
 	if (task->state != MM_TASK_PENDING) {
 		task->state = MM_TASK_PENDING;
-		mm_runq_put_task(&mm_core->run_queue, task);
+		mm_runq_put(&mm_core->runq, task);
 	}
 
 	LEAVE();
@@ -430,12 +430,12 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 		if (task->state != MM_TASK_PENDING)
 			task->state = MM_TASK_PENDING;
 		else
-			mm_runq_delete_task(&mm_core->run_queue, task);
+			mm_runq_delete(&mm_core->runq, task);
 		task->priority = priority;
-		mm_runq_put_task(&mm_core->run_queue, task);
+		mm_runq_put(&mm_core->runq, task);
 	} else if (task->state != MM_TASK_PENDING) {
 		task->state = MM_TASK_PENDING;
-		mm_runq_put_task(&mm_core->run_queue, task);
+		mm_runq_put(&mm_core->runq, task);
 	}
 
 	LEAVE();
@@ -581,120 +581,6 @@ mm_task_cancel(struct mm_task *task)
 		ASSERT(task == mm_running_task);
 		mm_task_testcancel_asynchronous();
 	} else {
-		mm_task_run(task);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Task event waiting.
- **********************************************************************/
-
-/* Delete a task from a wait queue. */
-static void
-mm_task_wait_delete(struct mm_task *task)
-{
-	ASSERT((task->flags & MM_TASK_WAITING) != 0);
-
-	mm_list_delete(&task->wait_queue);
-	task->flags &= ~MM_TASK_WAITING;
-}
-
-/* Wait for a wakeup signal in the FIFO order. */
-void
-mm_task_wait(struct mm_list *queue)
-{
-	ENTER();
-	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
-
-	// Enqueue the task.
-	mm_running_task->flags |= MM_TASK_WAITING;
-	mm_list_append(queue, &mm_running_task->wait_queue);
-
-	// Ensure dequeuing on exit & cancel.
-	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
-
-	// Wait for a wakeup signal.
-	mm_task_block();
-
-	// Dequeue on return.
-	mm_task_cleanup_pop(true);
-
-	LEAVE();
-}
-
-/* Wait for a wakeup signal in the LIFO order. */
-void
-mm_task_waitfirst(struct mm_list *queue)
-{
-	ENTER();
-	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
-
-	// Enqueue the task.
-	mm_running_task->flags |= MM_TASK_WAITING;
-	mm_list_insert(queue, &mm_running_task->wait_queue);
-
-	// Ensure dequeuing on exit & cancel.
-	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
-
-	// Wait for a wakeup signal.
-	mm_task_block();
-
-	// Dequeue on return.
-	mm_task_cleanup_pop(true);
-
-	LEAVE();
-}
-
-/* Wait for a wakeup signal in the FIFO order with specified timeout. */
-void
-mm_task_timedwait(struct mm_list *queue, mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT((mm_running_task->flags & MM_TASK_WAITING) == 0);
-
-	// Enqueue the task.
-	mm_running_task->flags |= MM_TASK_WAITING;
-	mm_list_append(queue, &mm_running_task->wait_queue);
-
-	// Ensure dequeuing on exit & cancel.
-	mm_task_cleanup_push(mm_task_wait_delete, mm_running_task);
-
-	// Wait for a wakeup signal.
-	mm_timer_block(timeout);
-
-	// Dequeue on return.
-	mm_task_cleanup_pop(true);
-
-	LEAVE();
-}
-
-/* Wakeup a task in a wait queue. */
-void
-mm_task_signal(struct mm_list *queue)
-{
-	ENTER();
-
-	if (!mm_list_empty(queue)) {
-		struct mm_list *link = mm_list_head(queue);
-		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
-		mm_task_run(task);
-	}
-
-	LEAVE();
-}
-
-/* Wakeup all tasks in a wait queue. */
-void
-mm_task_broadcast(struct mm_list *queue)
-{
-	ENTER();
-
-	struct mm_list *link = mm_list_head(queue);
-	while (link != queue) {
-		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
-		link = link->next;
 		mm_task_run(task);
 	}
 

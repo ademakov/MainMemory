@@ -20,6 +20,7 @@
 #include "port.h"
 
 #include "alloc.h"
+#include "core.h"
 #include "pool.h"
 #include "task.h"
 #include "trace.h"
@@ -40,10 +41,11 @@ mm_port_create(struct mm_task *task)
 	ENTER();
 
 	struct mm_port *port = mm_alloc(sizeof(struct mm_port));
+	port->lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
 	port->task = task;
 	port->start = 0;
 	port->count = 0;
-	mm_list_init(&port->blocked_senders);
+	mm_waitset_prepare(&port->blocked_senders);
 
 	mm_list_append(&task->ports, &port->ports);
 
@@ -62,17 +64,29 @@ mm_port_destroy(struct mm_port *port)
 	LEAVE();
 }
 
-int
-mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
+static int
+mm_port_send_internal(struct mm_port *port,
+		      uint32_t *start, uint32_t count,
+		      bool blocking)
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
 	ASSERT(port->task != mm_running_task);
-
 	int rc = 0;
+
+again:
+	mm_core_lock(&port->lock);
+DEBUG("*** %d %d", port->count, count);
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
-		rc = -1;
-		goto leave;
+		if (blocking) {
+			mm_waitset_wait(&port->blocked_senders, &port->lock);
+			mm_task_testcancel();
+			goto again;
+		} else {
+			mm_core_unlock(&port->lock);
+			rc = -1;
+			goto leave;
+		}
 	}
 
 	uint32_t ring_end = (port->start + port->count) % MM_PORT_SIZE;
@@ -94,7 +108,8 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 		*ring_ptr++ = *start++;
 	}
 
-	mm_task_run(port->task);
+	mm_core_unlock(&port->lock);
+	mm_core_run_task(port->task);
 
 leave:
 	LEAVE();
@@ -102,16 +117,27 @@ leave:
 }
 
 int
-mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
+mm_port_receive_internal(struct mm_port *port,
+			 uint32_t *start, uint32_t count,
+			 bool blocking)
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
 	ASSERT(port->task == mm_running_task);
-
 	int rc = 0;
+
+again:
+	mm_core_lock(&port->lock);
 	if (port->count < count) {
-		rc = -1;
-		goto leave;
+		mm_core_unlock(&port->lock);
+		if (blocking) {
+			mm_task_block();
+			mm_task_testcancel();
+			goto again;
+		} else {
+			rc = -1;
+			goto leave;
+		}
 	}
 
 	uint32_t *ring_ptr = &port->ring[port->start];
@@ -134,7 +160,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 		*start++ = *ring_ptr++;
 	}
 
-	mm_task_broadcast(&port->blocked_senders);
+	mm_waitset_broadcast(&port->blocked_senders, &port->lock);
 
 leave:
 	LEAVE();
@@ -142,17 +168,36 @@ leave:
 }
 
 
+int
+mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
+{
+	ENTER();
+
+	int rc = mm_port_send_internal(port, start, count, false);
+
+	LEAVE();
+	return rc;
+}
+
 void
 mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
 
-	int cp = mm_task_enter_cancel_point();
-	while (mm_port_send(port, start, count) < 0)
-		mm_task_wait(&port->blocked_senders);
-	mm_task_leave_cancel_point(cp);
+	mm_port_send_internal(port, start, count, true);
 
 	LEAVE();
+}
+
+int
+mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
+{
+	ENTER();
+
+	int rc = mm_port_receive_internal(port, start, count, false);
+
+	LEAVE();
+	return rc;
 }
 
 void
@@ -160,10 +205,7 @@ mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
 
-	int cp = mm_task_enter_cancel_point();
-	while (mm_port_receive(port, start, count) < 0)
-		mm_task_block();
-	mm_task_leave_cancel_point(cp);
+	mm_port_receive_internal(port, start, count, true);
 
 	LEAVE();
 }

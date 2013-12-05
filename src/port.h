@@ -22,15 +22,20 @@
 
 #include "common.h"
 #include "list.h"
+#include "lock.h"
+#include "wait.h"
 
 /* Forward declaration. */
 struct mm_task;
 
-/* */
+/* The port message buffer size. */
 #define MM_PORT_SIZE	248
 
 struct mm_port
 {
+	/* The internal state lock. */
+	mm_core_lock_t lock;
+
 	/* The port owner. */
 	struct mm_task *task;
 
@@ -38,7 +43,7 @@ struct mm_port
 	struct mm_list ports;
 
 	/* The tasks blocked on the port send. */
-	struct mm_list blocked_senders;
+	struct mm_waitset blocked_senders;
 
 	/* Message buffer. */
 	uint16_t start;

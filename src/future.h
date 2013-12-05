@@ -21,9 +21,9 @@
 #define FUTURE_H
 
 #include "common.h"
-#include "list.h"
+#include "lock.h"
 #include "task.h"
-
+#include "wait.h"
 
 typedef enum {
 	MM_FUTURE_CREATED,
@@ -32,11 +32,15 @@ typedef enum {
 	MM_FUTURE_COMPLETED,
 } mm_future_status_t;
 
-
 struct mm_future
 {
+	/* The internal state lock. */
+	mm_core_lock_t lock;
+
+	/* A cancel request has been made. */
+	uint8_t cancel;
 	/* The future status. */
-	mm_future_status_t status;
+	uint8_t status;
 	/* The future result. */
 	mm_result_t result;
 
@@ -48,34 +52,40 @@ struct mm_future
 	struct mm_task *task;
 
 	/* The tasks blocked waiting for the future. */
-	struct mm_list blocked_tasks;
+	struct mm_waitset waitset;
 };
-
 
 void mm_future_init(void);
 void mm_future_term(void);
 
-struct mm_future * mm_future_create(const char *name,
-				    mm_routine_t start,
-				    uintptr_t start_arg)
-	__attribute__((nonnull(2)));
+struct mm_future *mm_future_create(mm_routine_t start, uintptr_t start_arg)
+	__attribute__((nonnull(1)));
 
-void mm_future_destroy(struct mm_future *future);
+void mm_future_destroy(struct mm_future *future)
+	__attribute__((nonnull(1)));
 
-void mm_future_start(struct mm_future *future);
+void mm_future_start(struct mm_future *future, struct mm_core *core)
+	__attribute__((nonnull(1)));
 
-void mm_future_wait(struct mm_future *future);
+void mm_future_cancel(struct mm_future *future)
+	__attribute__((nonnull(1)));
+
+mm_result_t mm_future_wait(struct mm_future *future)
+	__attribute__((nonnull(1)));
+
+mm_result_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
+	__attribute__((nonnull(1)));
 
 static inline bool
 mm_future_is_canceled(struct mm_future *future)
 {
-	return future->status == MM_FUTURE_CANCELED;
+	return mm_memory_load(future->status) == MM_FUTURE_CANCELED;
 }
 
 static inline bool
-mm_future_is_completed(struct mm_future *future)
+mm_future_is_finished(struct mm_future *future)
 {
-	return future->status == MM_FUTURE_COMPLETED;
+	return mm_memory_load(future->status) >= MM_FUTURE_CANCELED;
 }
 
 #endif /* FUTURE_H */
