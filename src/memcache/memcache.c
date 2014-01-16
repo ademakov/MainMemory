@@ -1722,7 +1722,7 @@ again:
 					// Skip space.
 					break;
 				} else if (c == '\n') {
-					// Unexpected line end.
+					DEBUG("Unexpected line end.");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -1735,7 +1735,7 @@ again:
 			case S_CMD_1:
 				// Store the second command char.
 				if (unlikely(c == '\n')) {
-					// Unexpected line end.
+					DEBUG("Unexpected line end.");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -1747,7 +1747,7 @@ again:
 			case S_CMD_2:
 				// Store the third command char.
 				if (unlikely(c == '\n')) {
-					// Unexpected line end.
+					DEBUG("Unexpected line end.");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -1865,7 +1865,7 @@ again:
 					shift = S_EOL;
 					break;
 				} else {
-					// Unrecognized command.
+					DEBUG("Unrecognized command.");
 					state = S_ERROR;
 					goto again;
 				}
@@ -1894,7 +1894,7 @@ again:
 					state = shift;
 					goto again;
 				} else {
-					// Unexpected char after the end.
+					DEBUG("Unexpected char after the end.");
 					state = S_ERROR;
 					break;
 				}
@@ -1911,6 +1911,7 @@ again:
 			case S_KEY:
 				ASSERT(c != ' ');
 				if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
+					DEBUG("Missing key.");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -1923,6 +1924,7 @@ again:
 				if (c == ' ') {
 					size_t len = s - command->key.str;
 					if (len > MC_KEY_LEN_MAX) {
+						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
 						state = S_SPACE;
@@ -1932,6 +1934,7 @@ again:
 				} else if ((c == '\r' && mc_parse_lf(parser, s)) || c == '\n') {
 					size_t len = s - command->key.str;
 					if (len > MC_KEY_LEN_MAX) {
+						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
 						state = shift;
@@ -1953,6 +1956,7 @@ again:
 					command->key.len = MC_KEY_LEN_MAX;
 					goto again;
 				} else {
+					DEBUG("Too long key.");
 					state = S_ERROR;
 					break;
 				}
@@ -1967,6 +1971,7 @@ again:
 				} else {
 					struct mc_string *key = &command->key;
 					if (key->len == MC_KEY_LEN_MAX) {
+						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
 						char *str = (char *) key->str;
@@ -2319,9 +2324,12 @@ again:
 			}
 		}
 
-		if (state == S_KEY) {
+		if (state == S_KEY_N) {
+			DEBUG("Split key.");
+
 			size_t len = e - command->key.str;
 			if (len > MC_KEY_LEN_MAX) {
+				DEBUG("Too long key.");
 				state = S_ERROR;
 			} else if (len == MC_KEY_LEN_MAX) {
 				state = S_KEY_EDGE;
@@ -2589,11 +2597,12 @@ mc_writer_routine(struct mm_net_socket *sock)
 	for (;;) {
 		struct mc_command *head = state->command_head;
 		state->command_head = head->next;
+		if (state->command_head == NULL)
+			state->command_tail = NULL;
+
 		mc_command_destroy(head);
 
 		if (head == command) {
-			if (state->command_head == NULL)
-				state->command_tail = NULL;
 			break;
 		}
 	}
