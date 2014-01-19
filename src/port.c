@@ -76,7 +76,6 @@ mm_port_send_internal(struct mm_port *port,
 
 again:
 	mm_core_lock(&port->lock);
-DEBUG("*** %d %d", port->count, count);
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
 		if (blocking) {
 			mm_waitset_wait(&port->blocked_senders, &port->lock);
