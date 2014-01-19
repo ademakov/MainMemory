@@ -37,6 +37,12 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 
+static mm_result_t mm_net_prepare(uintptr_t arg);
+static mm_result_t mm_net_cleanup(uintptr_t arg);
+static mm_result_t mm_net_reader(uintptr_t arg);
+static mm_result_t mm_net_writer(uintptr_t arg);
+static mm_result_t mm_net_closer(uintptr_t arg);
+
 /**********************************************************************
  * Address manipulation routines.
  **********************************************************************/
@@ -307,16 +313,16 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	// Allocate the socket.
 	struct mm_net_socket *sock = mm_pool_alloc(&mm_socket_pool);
 
-	// Determine default socket flags.
-	uint32_t flags = 0;
-	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
-		flags |= MM_NET_READER_PENDING;
-	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
-		flags |= MM_NET_WRITER_PENDING;
-
 	// Initialize the fields.
 	sock->fd = fd;
-	sock->flags = flags;
+	sock->closed = false;
+	sock->fd_flags = 0;
+	sock->task_flags = 0;
+	sock->lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
+	sock->read_stamp = 0;
+	sock->write_stamp = 0;
+	mm_waitset_prepare(&sock->read_waitset);
+	mm_waitset_prepare(&sock->write_waitset);
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->data = 0;
@@ -407,6 +413,28 @@ retry:
 	else
 		sock->peer.addr.sa_family = sa.ss_family;
 
+	// Bind the socket to a core.
+	// TODO: distribute among different cores
+	sock->core = mm_core;
+
+	// Request required I/O tasks.
+	if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
+		sock->task_flags |= MM_NET_READER_PENDING;
+	if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0)
+		sock->task_flags |= MM_NET_WRITER_PENDING;
+
+	// Let the protocol layer prepare the socket data if needed.
+	if (sock->server->proto->prepare != NULL) {
+		// Delay starting I/O tasks until prepared.
+		if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
+			sock->task_flags |= MM_NET_READER_SPAWNED;
+		if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0)
+			sock->task_flags |= MM_NET_WRITER_SPAWNED;
+
+		// Request protocol handler routine.
+		mm_core_submit(sock->core, mm_net_prepare, (uintptr_t) sock);
+	}
+
 	// Register the socket with the event loop.
 	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	bool input_oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
@@ -461,397 +489,308 @@ mm_net_init_acceptor(void)
 }
 
 /**********************************************************************
- * Socket I/O tasks.
+ * Socket I/O state.
  **********************************************************************/
 
-/* Net task communication codes. */
+static void
+mm_net_next_read_stamp(struct mm_net_socket *sock)
+{
+	uint32_t stamp = sock->read_stamp + 1;
+	mm_memory_store(sock->read_stamp, stamp);
+}
+
+static void
+mm_net_next_write_stamp(struct mm_net_socket *sock)
+{
+	uint32_t stamp = sock->write_stamp + 1;
+	mm_memory_store(sock->write_stamp, stamp);
+}
+
+static void
+mm_net_set_read_ready(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	mm_net_next_read_stamp(sock);
+	sock->fd_flags |= MM_NET_READ_READY;
+	mm_waitset_broadcast(&sock->read_waitset, &sock->lock);
+
+	LEAVE();
+}
+
+static void
+mm_net_set_write_ready(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	mm_net_next_write_stamp(sock);
+	sock->fd_flags |= MM_NET_WRITE_READY;
+	mm_waitset_broadcast(&sock->write_waitset, &sock->lock);
+
+	LEAVE();
+}
+
+static void
+mm_net_set_read_error(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	mm_net_next_read_stamp(sock);
+	sock->fd_flags |= MM_NET_READ_ERROR;
+	mm_waitset_broadcast(&sock->read_waitset, &sock->lock);
+
+	LEAVE();
+}
+
+static void
+mm_net_set_write_error(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	mm_net_next_write_stamp(sock);
+	sock->fd_flags |= MM_NET_WRITE_ERROR;
+	mm_waitset_broadcast(&sock->write_waitset, &sock->lock);
+
+	LEAVE();
+}
+
+static void
+mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	if (sock->read_stamp != stamp) {
+		mm_core_unlock(&sock->lock);
+	} else {
+		sock->fd_flags &= ~MM_NET_READ_READY;
+		mm_core_unlock(&sock->lock);
+#if MM_ONESHOT_HANDLERS
+		bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
+		if (oneshot) {
+			mm_event_trigger_input(sock->fd, sock->server->input_handler);
+		}
+#endif
+	}
+
+	LEAVE();
+}
+
+static void
+mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
+{
+	ENTER();
+
+	mm_core_lock(&sock->lock);
+	if (sock->write_stamp != stamp) {
+		mm_core_unlock(&sock->lock);
+	} else {
+		sock->fd_flags &= ~MM_NET_WRITE_READY;
+		mm_core_unlock(&sock->lock);
+#if MM_ONESHOT_HANDLERS
+		bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
+		if (oneshot) {
+			mm_event_trigger_output(sock->fd, sock->server->output_handler);
+		}
+#endif
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Socket control loop.
+ **********************************************************************/
+
+/* Socket control codes. */
 typedef enum {
-	MM_NET_MSG_REGISTER,
-	MM_NET_MSG_UNREGISTER,
-	MM_NET_MSG_READ_ERROR,
-	MM_NET_MSG_WRITE_ERROR,
+	MM_NET_CHECK_READER,
+	MM_NET_CHECK_WRITER,
+	MM_NET_SPAWN_READER,
+	MM_NET_SPAWN_WRITER,
+	MM_NET_YIELD_READER,
+	MM_NET_YIELD_WRITER,
+	MM_NET_CLEANUP_SOCK,
+	MM_NET_DESTROY_SOCK,
 } mm_net_msg_t;
 
-#define MM_NET_IS_READER_PENDING(flags)					\
-	(((flags) & (MM_NET_READER_SPAWNED | MM_NET_READER_PENDING))	\
-	 == MM_NET_READER_PENDING)
-#define MM_NET_IS_WRITER_PENDING(flags)					\
-	(((flags) & (MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING))	\
-	 == MM_NET_WRITER_PENDING)
-
-static mm_result_t mm_net_reader(uintptr_t arg);
-static mm_result_t mm_net_writer(uintptr_t arg);
-
 static void
-mm_net_attach_reader(struct mm_net_socket *sock)
-{
-	ASSERT(sock->reader == NULL);
-	sock->reader = mm_running_task;
-}
-
-static void
-mm_net_detach_reader(struct mm_net_socket *sock)
-{
-	ASSERT(sock->reader == mm_running_task);
-	sock->reader = NULL;
-}
-
-static void
-mm_net_attach_writer(struct mm_net_socket *sock)
-{
-	ASSERT(sock->writer == NULL);
-	sock->writer = mm_running_task;
-}
-
-static void
-mm_net_detach_writer(struct mm_net_socket *sock)
-{
-	ASSERT(sock->writer == mm_running_task);
-	sock->writer = NULL;
-}
-
-static void
-mm_net_reset_read_ready(struct mm_net_socket *sock)
-{
-	sock->flags &= ~MM_NET_READ_READY;
-
-#if MM_ONESHOT_HANDLERS
-	bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
-	if (oneshot) {
-		mm_event_trigger_input(sock->fd, sock->server->input_handler);
-	}
-#endif
-}
-
-static void
-mm_net_reset_write_ready(struct mm_net_socket *sock)
-{
-	sock->flags &= ~MM_NET_WRITE_READY;
-
-#if MM_ONESHOT_HANDLERS
-	bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
-	if (oneshot) {
-		mm_event_trigger_output(sock->fd, sock->server->output_handler);
-	}
-#endif
-}
-
-static mm_result_t
-mm_net_closer(uintptr_t arg)
+mm_net_handle_check_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->core == mm_core);
-
-	if (sock->server->proto->closer != NULL) {
-		// Run the protocol handler routine.
-		(sock->server->proto->closer)(sock);
-	} else {
-		// Close the socket by default.
-		mm_net_close(sock);
-	}
-
-	LEAVE();
-	return 0;
-}
-
-static void
-mm_net_yield_reader(struct mm_net_socket *sock)
-{
-	ENTER();
-	ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
-
-	if (mm_net_is_closed(sock)) {
-		sock->flags &= ~MM_NET_READER_SPAWNED;
-		goto leave;
-	}
 
 	// Check if a reader should be spawned as soon as the socket becomes
-	// read-ready (otherwise a mm_net_spawn_reader() call is needed).
-	if ((sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR | MM_NET_READER_PENDING))
-	    == (MM_NET_READ_READY | MM_NET_READER_PENDING)) {
+	// read ready (otherwise a mm_net_spawn_reader() call is needed).
+	uint8_t task_flags = sock->task_flags;
+	task_flags &= MM_NET_READER_SPAWNED | MM_NET_READER_PENDING;
+	if (task_flags == MM_NET_READER_PENDING) {
+		// Submit a writer work.
+		sock->task_flags |= MM_NET_READER_SPAWNED;
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
-			sock->flags &= ~MM_NET_READER_PENDING;
-		// Submit a reader work.
+			sock->task_flags &= ~MM_NET_READER_PENDING;
 		mm_core_post(true, mm_net_reader, (uintptr_t) sock);
-	} else {
-		sock->flags &= ~MM_NET_READER_SPAWNED;
-		if ((sock->flags & MM_NET_READ_ERROR) != 0) {
-			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
-		}
 	}
 
-leave:
 	LEAVE();
 }
 
 static void
-mm_net_yield_writer(struct mm_net_socket *sock)
+mm_net_handle_check_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
-
-	if (mm_net_is_closed(sock)) {
-		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		goto leave;
-	}
 
 	// Check if a writer should be spawned as soon as the socket becomes
-	// write-ready (otherwise a mm_net_spawn_writer() call is needed).
-	if ((sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR | MM_NET_WRITER_PENDING))
-	    == (MM_NET_WRITE_READY | MM_NET_WRITER_PENDING)) {
-		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
-			sock->flags &= ~MM_NET_WRITER_PENDING;
+	// write ready (otherwise a mm_net_spawn_writer() call is needed).
+	uint8_t task_flags = sock->task_flags;
+	task_flags &= MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING;
+	if (task_flags == MM_NET_WRITER_PENDING) {
 		// Submit a writer work.
+		sock->task_flags |= MM_NET_WRITER_SPAWNED;
+		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
+			sock->task_flags &= ~MM_NET_WRITER_PENDING;
 		mm_core_post(true, mm_net_writer, (uintptr_t) sock);
-	} else {
-		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		if ((sock->flags & MM_NET_WRITE_ERROR) != 0) {
-			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
-		}
 	}
 
-leave:
 	LEAVE();
 }
 
 static void
-mm_net_reader_cleanup(struct mm_net_socket *sock)
+mm_net_handle_spawn_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-
-	/* Enable creating new reader tasks on the socket if it was so far
-	   bound to this one. */
-	if ((mm_running_task->flags & MM_TASK_READING) != 0) {
-		// TODO: check that the socket is bound to mm_running_task?
-		mm_running_task->flags &= ~MM_TASK_READING;
-
-		mm_net_yield_reader(sock);
-	}
-
-	LEAVE();
-}
-
-static mm_result_t
-mm_net_reader(uintptr_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->core == mm_core);
-
-	// Ensure the task yields socket on exit.
-	mm_task_cleanup_push(mm_net_reader_cleanup, sock);
-	mm_running_task->flags |= MM_TASK_READING;
-
-	// Run the protocol handler routine.
-	(sock->server->proto->reader)(sock);
-
-	// Yield the socket on return.
-	mm_task_cleanup_pop(true);
-
-	LEAVE();
-	return 0;
-}
-
-static void
-mm_net_writer_cleanup(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	/* Enable creating new writer tasks on the socket if it was so far
-	   bound to this one. */
-	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
-		// TODO: check that the socket is bound to mm_running_task?
-		mm_running_task->flags &= ~MM_TASK_WRITING;
-
-		mm_net_yield_writer(sock);
-	}
-
-	LEAVE();
-}
-
-static mm_result_t
-mm_net_writer(uintptr_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->core == mm_core);
-
-	// Ensure the task yields socket on exit.
-	mm_task_cleanup_push(mm_net_writer_cleanup, sock);
-	mm_running_task->flags |= MM_TASK_WRITING;
-
-	// Run the protocol handler routine.
-	(sock->server->proto->writer)(sock);
-
-	// Yield the socket on return.
-	mm_task_cleanup_pop(true);
-
-	LEAVE();
-	return 0;
-}
-
-void
-mm_net_spawn_reader(struct mm_net_socket *sock)
-{
-	ENTER();
-	ASSERT(sock->core == mm_core);
-
-	if (mm_net_is_closed(sock))
-		goto leave;
 
 	// If a reader is already active defer another reader start.
-	if ((sock->flags & MM_NET_READER_SPAWNED) != 0) {
-		sock->flags |= MM_NET_READER_PENDING;
-		goto leave;
-	}
-
-	// Submit a reader work.
-	sock->flags |= MM_NET_READER_SPAWNED;
-	mm_core_post(true, mm_net_reader, (uintptr_t) sock);
-
-	// Let it start immediately.
-	mm_task_yield();
-
-leave:
-	LEAVE();
-}
-
-void
-mm_net_spawn_writer(struct mm_net_socket *sock)
-{
-	ENTER();
-	ASSERT(sock->core == mm_core);
-
-	if (mm_net_is_closed(sock))
-		goto leave;
-
-	// If a writer is already active defer another writer start.
-	if ((sock->flags & MM_NET_WRITER_SPAWNED) != 0) {
-		sock->flags |= MM_NET_WRITER_PENDING;
-		goto leave;
-	}
-
-	// Submit a writer work.
-	sock->flags |= MM_NET_WRITER_SPAWNED;
-	mm_core_post(true, mm_net_writer, (uintptr_t) sock);
-
-	// Let it start immediately.
-	mm_task_yield();
-
-leave:
-	LEAVE();
-}
-
-static void
-mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
-{
-	ENTER();
-
-	/* Find the pertinent socket. */
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
-	if (mm_net_is_closed(sock))
-		goto leave;
-
-	// TODO: choose a core and deal the work to it.
-	if (sock->core == NULL)
-		sock->core = mm_core;
-
-	sock->flags |= MM_NET_READ_READY;
-	if (sock->reader != NULL) {
-		mm_task_run(sock->reader);
-		goto leave;
-	}
-
-	// Check if a reader should be spawned as soon as the socket becomes
-	// read-ready (otherwise a mm_net_spawn_reader() call is needed).
-	if (MM_NET_IS_READER_PENDING(sock->flags)) {
-		/* Submit a reader work. */
-		sock->flags |= MM_NET_READER_SPAWNED;
-		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
-			sock->flags &= ~MM_NET_READER_PENDING;
+	if ((sock->task_flags & MM_NET_READER_SPAWNED) != 0) {
+		sock->task_flags |= MM_NET_READER_PENDING;
+	} else {
+		// Submit a reader work.
+		sock->task_flags |= MM_NET_READER_SPAWNED;
 		mm_core_post(true, mm_net_reader, (uintptr_t) sock);
 	}
 
-leave:
 	LEAVE();
 }
 
 static void
-mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+mm_net_handle_spawn_writer(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	/* Find the pertinent socket. */
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
-	if (mm_net_is_closed(sock))
-		goto leave;
-
-	// TODO: choose a core and deal the work to it.
-	if (sock->core == NULL)
-		sock->core = mm_core;
-
-	sock->flags |= MM_NET_WRITE_READY;
-	if (sock->writer != NULL) {
-		mm_task_run(sock->writer);
-		goto leave;
-	}
-
-	// Check if a writer should be spawned as soon as the socket becomes
-	// write-ready (otherwise a mm_net_spawn_writer() call is needed).
-	if (MM_NET_IS_WRITER_PENDING(sock->flags)) {
-		/* Submit a writer work. */
-		sock->flags |= MM_NET_WRITER_SPAWNED;
-		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
-			sock->flags &= ~MM_NET_WRITER_PENDING;
+	// If a writer is already active defer another writer start.
+	if ((sock->task_flags & MM_NET_WRITER_SPAWNED) != 0) {
+		sock->task_flags |= MM_NET_WRITER_PENDING;
+	} else {
+		// Submit a writer work.
+		sock->task_flags |= MM_NET_WRITER_SPAWNED;
 		mm_core_post(true, mm_net_writer, (uintptr_t) sock);
 	}
 
-leave:
 	LEAVE();
 }
 
 static void
-mm_net_control_handler(mm_event_t event, uint32_t data)
+mm_net_handle_yield_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT((sock->task_flags & MM_NET_READER_SPAWNED) != 0);
+
+	// Supposedly there is no active reader at this time so the read
+	// readiness flags cannot change concurrently.
+	uint8_t fd_flags = mm_memory_load(sock->fd_flags);
+	fd_flags &= MM_NET_READ_READY | MM_NET_READ_ERROR;
+
+	// Check if a reader should be spawned as soon as the socket becomes
+	// read-ready (otherwise a mm_net_spawn_reader() call is needed).
+	uint8_t task_flags = sock->task_flags;
+	task_flags &= MM_NET_READER_PENDING;
+
+	if (task_flags != 0 && fd_flags != 0) {
+		// Submit a reader work.
+		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
+			sock->task_flags &= ~MM_NET_READER_PENDING;
+		mm_core_post(true, mm_net_reader, (uintptr_t) sock);
+	} else {
+		sock->task_flags &= ~MM_NET_READER_SPAWNED;
+		if ((fd_flags & MM_NET_READ_ERROR) != 0) {
+			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
+		}
+	}
+
+	LEAVE();
+}
+
+static void
+mm_net_handle_yield_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT((sock->task_flags & MM_NET_WRITER_SPAWNED) != 0);
+
+	// Supposedly there is no active writer at this time so the write
+	// readiness flags cannot change concurrently.
+	uint8_t fd_flags = mm_memory_load(sock->fd_flags);
+	fd_flags &= MM_NET_WRITE_READY | MM_NET_WRITE_ERROR;
+
+	// Check if a writer should be spawned as soon as the socket becomes
+	// write-ready (otherwise a mm_net_spawn_writer() call is needed).
+	uint8_t task_flags = sock->task_flags;
+	task_flags &= MM_NET_WRITER_PENDING;
+
+	if (task_flags != 0 && fd_flags != 0) {
+		// Submit a writer work.
+		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
+			sock->task_flags &= ~MM_NET_WRITER_PENDING;
+		mm_core_post(true, mm_net_writer, (uintptr_t) sock);
+	} else {
+		sock->task_flags &= ~MM_NET_WRITER_SPAWNED;
+		if ((sock->fd_flags & MM_NET_WRITE_ERROR) != 0) {
+			mm_core_post(true, mm_net_closer, (uintptr_t) sock);
+		}
+	}
+
+	LEAVE();
+}
+
+static void
+mm_net_handle_cleanup_sock(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
-	struct mm_port *port = sock->server->io_port;
+	// At this time there are no and will not be any I/O control messages
+	// related to this socket in the processing pipeline. But there still
+	// may be active reader/writer tasks or pending work items for this
+	// socket. So relying on the FIFO order of the work queue submit a
+	// work item that will cleanup the socket being the last one that
+	// refers to it.
+	mm_core_submit(sock->core, mm_net_cleanup, (uintptr_t) sock);
 
-	uint32_t net_msg;
-	switch (event) {
-	case MM_EVENT_REGISTER:
-		net_msg = MM_NET_MSG_REGISTER;
-		break;
+	LEAVE();
+}
 
-	case MM_EVENT_UNREGISTER:
-		net_msg = MM_NET_MSG_UNREGISTER;
-		break;
+static void
+mm_net_handle_destroy_sock(struct mm_net_socket *sock)
+{
+	ENTER();
 
-	case MM_EVENT_INPUT_ERROR:
-		net_msg = MM_NET_MSG_READ_ERROR;
-		break;
+	// At this time there are no and will not be any reader/writer tasks
+	// bound to this socket.
 
-	case MM_EVENT_OUTPUT_ERROR:
-		net_msg = MM_NET_MSG_WRITE_ERROR;
-		break;
+	// Close the socket.
+	// TODO: set linger off and/or close concurrently to avoid stalls.
+	close(sock->fd);
+	sock->fd = -1;
 
-	default:
-		ABORT();
-	}
-
-	uint32_t msg[2] = { net_msg, data };
-	mm_port_send_blocking(port, msg, 2);
+	// Remove the socket from the server lists.
+	mm_net_destroy_socket(sock);
 
 	LEAVE();
 }
 
 static mm_result_t
-mm_net_io_loop(uintptr_t arg)
+mm_net_sock_ctl_loop(uintptr_t arg)
 {
 	ENTER();
 
@@ -868,72 +807,36 @@ mm_net_io_loop(uintptr_t arg)
 
 		// Handle the event.
 		switch (msg[0]) {
-		case MM_NET_MSG_REGISTER:
-			ASSERT((sock->flags & MM_NET_CLOSED) == 0);
-
-			// Let the protocol layer prepare the socket data.
-			if (srv->proto->prepare != NULL)
-				(srv->proto->prepare)(sock);
+		case MM_NET_CHECK_READER:
+			mm_net_handle_check_reader(sock);
 			break;
 
-		case MM_NET_MSG_UNREGISTER:
-			ASSERT((sock->flags & MM_NET_CLOSED) != 0);
-
-			// Notify a blocked reader/writer about closing.
-			// TODO: don't block here, have a queue of closed socks
-			while (sock->reader != NULL || sock->writer != NULL) {
-				mm_priority_t priority
-					= MM_PRIO_UPPER(mm_running_task->priority, 1);
-				if (sock->reader != NULL)
-					mm_task_hoist(sock->reader, priority);
-				if (sock->writer != NULL)
-					mm_task_hoist(sock->writer, priority);
-				mm_task_yield();
-			}
-
-			// Let the protocol layer cleanup the socket data.
-			if (srv->proto->cleanup != NULL)
-				(srv->proto->cleanup)(sock);
-
-			// Close the socket.
-			// TODO: set linger off and/or close concurrently to avoid stalls.
-			close(sock->fd);
-			sock->fd = -1;
-
-			// Remove the socket from the server lists.
-			mm_net_destroy_socket(sock);
+		case MM_NET_CHECK_WRITER:
+			mm_net_handle_check_writer(sock);
 			break;
 
-		case MM_NET_MSG_READ_ERROR:
-			if (mm_net_is_closed(sock))
-				break;
-
-			sock->flags |= MM_NET_READ_ERROR;
-			if (sock->reader != NULL) {
-				mm_task_run(sock->reader);
-			} else if (MM_NET_IS_READER_PENDING(sock->flags)) {
-				/* Submit a reader work. */
-				sock->flags |= MM_NET_READER_SPAWNED;
-				if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
-					sock->flags &= ~MM_NET_READER_PENDING;
-				mm_core_post(true, mm_net_reader, (uintptr_t) sock);
-			}
+		case MM_NET_SPAWN_READER:
+			mm_net_handle_spawn_reader(sock);
 			break;
 
-		case MM_NET_MSG_WRITE_ERROR:
-			if (mm_net_is_closed(sock))
-				break;
+		case MM_NET_SPAWN_WRITER:
+			mm_net_handle_spawn_writer(sock);
+			break;
 
-			sock->flags |= MM_NET_WRITE_ERROR;
-			if (sock->writer != NULL) {
-				mm_task_run(sock->writer);
-			} else if (MM_NET_IS_WRITER_PENDING(sock->flags)) {
-				/* Submit a writer work. */
-				sock->flags |= MM_NET_WRITER_SPAWNED;
-				if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
-					sock->flags &= ~MM_NET_WRITER_PENDING;
-				mm_core_post(true, mm_net_writer, (uintptr_t) sock);
-			}
+		case MM_NET_YIELD_READER:
+			mm_net_handle_yield_reader(sock);
+			break;
+
+		case MM_NET_YIELD_WRITER:
+			mm_net_handle_yield_writer(sock);
+			break;
+
+		case MM_NET_CLEANUP_SOCK:
+			mm_net_handle_cleanup_sock(sock);
+			break;
+
+		case MM_NET_DESTROY_SOCK:
+			mm_net_handle_destroy_sock(sock);
 			break;
 
 		default:
@@ -943,6 +846,295 @@ mm_net_io_loop(uintptr_t arg)
 	}
 
 	LEAVE();
+	return 0;
+}
+
+static void
+mm_net_sock_ctl_low(struct mm_net_socket *sock, uint32_t idx, mm_net_msg_t msg)
+{
+	uint32_t buf[2] = { msg, idx };
+	mm_port_send_blocking(sock->server->io_port, buf, 2);
+}
+
+static void
+mm_net_sock_ctl(struct mm_net_socket *sock, mm_net_msg_t msg)
+{
+	uint32_t idx = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	mm_net_sock_ctl_low(sock, idx, msg);
+}
+
+/**********************************************************************
+ * Socket I/O event handlers.
+ **********************************************************************/
+
+static void
+mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+{
+	ENTER();
+
+	// Find the pertinent socket.
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+	// Mark the socket as read ready.
+	mm_net_set_read_ready(sock);
+	// Spawn a reader task if needed.
+	mm_net_sock_ctl_low(sock, data, MM_NET_CHECK_READER);
+
+	LEAVE();
+}
+
+static void
+mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+{
+	ENTER();
+
+	// Find the pertinent socket.
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+	// Mark the socket as write ready.
+	mm_net_set_write_ready(sock);
+	// Spawn a writer task if needed.
+	mm_net_sock_ctl_low(sock, data, MM_NET_CHECK_WRITER);
+
+	LEAVE();
+}
+
+static void
+mm_net_control_handler(mm_event_t event, uint32_t data)
+{
+	ENTER();
+
+	// Find the pertinent socket.
+	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+
+	switch (event) {
+	case MM_EVENT_REGISTER:
+		break;
+
+	case MM_EVENT_UNREGISTER:
+		// Finish with the socket use. There still may be some
+		// unprocessed I/O control messages in the pipeline, so
+		// we should pipeline this one too.
+		mm_net_sock_ctl_low(sock, data, MM_NET_CLEANUP_SOCK);
+		break;
+
+	case MM_EVENT_INPUT_ERROR:
+		// Mark the socket as having a read error.
+		mm_net_set_read_error(sock);
+		// Spawn a reader task if needed.
+		mm_net_sock_ctl_low(sock, data, MM_NET_CHECK_READER);
+		break;
+
+	case MM_EVENT_OUTPUT_ERROR:
+		// Mark the socket as having a write error.
+		mm_net_set_write_error(sock);
+		// Spawn a writer task if needed.
+		mm_net_sock_ctl_low(sock, data, MM_NET_CHECK_WRITER);
+		break;
+
+	default:
+		mm_brief("%x", event);
+		ABORT();
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Socket I/O tasks.
+ **********************************************************************/
+
+void
+mm_net_spawn_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (!mm_net_is_closed(sock)) {
+		mm_net_sock_ctl(sock, MM_NET_SPAWN_READER);
+
+#if 0
+		// Let it start immediately.
+		mm_task_yield();
+#endif
+	}
+
+	LEAVE();
+}
+
+void
+mm_net_spawn_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (!mm_net_is_closed(sock)) {
+		mm_net_sock_ctl(sock, MM_NET_SPAWN_WRITER);
+
+#if 0
+		// Let it start immediately.
+		mm_task_yield();
+#endif
+	}
+
+	LEAVE();
+}
+
+void
+mm_net_yield_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+
+	// Unbind the current task from the socket, enable spawning a new
+	// reader task if needed.
+	if ((mm_running_task->flags & MM_TASK_READING) != 0) {
+		ASSERT(sock->reader == mm_running_task);
+		mm_running_task->flags &= ~MM_TASK_READING;
+		sock->reader = NULL;
+
+		if (!mm_net_is_closed(sock))
+			mm_net_sock_ctl(sock, MM_NET_YIELD_READER);
+	}
+
+	LEAVE();
+}
+
+void
+mm_net_yield_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+
+	// Unbind the current task from the socket, enable spawning a new
+	// writer task if needed.
+	if ((mm_running_task->flags & MM_TASK_WRITING) != 0) {
+		ASSERT(sock->writer == mm_running_task);
+		mm_running_task->flags &= ~MM_TASK_WRITING;
+		sock->writer = NULL;
+
+		if (!mm_net_is_closed(sock))
+			mm_net_sock_ctl(sock, MM_NET_YIELD_WRITER);
+	}
+
+	LEAVE();
+}
+
+static mm_result_t
+mm_net_prepare(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(!mm_net_is_closed(sock));
+	ASSERT(sock->core == mm_core);
+
+	// Run the protocol handler routine.
+	(sock->server->proto->prepare)(sock);
+
+	// Let start I/O tasks.
+	if (!mm_net_is_closed(sock)) {
+		if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
+			mm_net_sock_ctl(sock, MM_NET_YIELD_READER);
+		if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0)
+			mm_net_sock_ctl(sock, MM_NET_YIELD_WRITER);
+	}
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mm_net_cleanup(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(sock->core == mm_core);
+
+	// Notify a reader/writer about closing.
+	// TODO: don't block here, have a queue of closed socks
+	while (sock->reader != NULL || sock->writer != NULL) {
+		mm_priority_t priority = MM_PRIO_UPPER(mm_running_task->priority, 1);
+		if (sock->reader != NULL)
+			mm_task_hoist(sock->reader, priority);
+ 		if (sock->writer != NULL)
+			mm_task_hoist(sock->writer, priority);
+		mm_task_yield();
+	}
+
+	// Run the protocol handler routine.
+	if (sock->server->proto->cleanup != NULL)
+		(sock->server->proto->cleanup)(sock);
+
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mm_net_reader(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(sock->core == mm_core);
+	if (unlikely(mm_net_is_closed(sock)))
+		goto leave;
+
+	// Register the reader task.
+	mm_running_task->flags |= MM_TASK_READING;
+	sock->reader = mm_running_task;
+
+	// Ensure the task yields socket on exit.
+	mm_task_cleanup_push(mm_net_yield_reader, sock);
+
+	// Run the protocol handler routine.
+	(sock->server->proto->reader)(sock);
+
+	// Yield the socket on return.
+	mm_task_cleanup_pop(true);
+
+leave:
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mm_net_writer(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(sock->core == mm_core);
+	if (unlikely(mm_net_is_closed(sock)))
+		goto leave;
+
+	// Register the writer task.
+	mm_running_task->flags |= MM_TASK_WRITING;
+	sock->writer = mm_running_task;
+
+	// Ensure the task yields socket on exit.
+	mm_task_cleanup_push(mm_net_yield_writer, sock);
+
+	// Run the protocol handler routine.
+	(sock->server->proto->writer)(sock);
+
+	// Yield the socket on return.
+	mm_task_cleanup_pop(true);
+
+leave:
+	LEAVE();
+	return 0;
+}
+
+static mm_result_t
+mm_net_closer(uintptr_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(sock->core == mm_core);
+
+	// Close the socket.
+	mm_net_close(sock);
+
+ 	LEAVE();
 	return 0;
 }
 
@@ -1086,7 +1278,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_task_attr_init(&attr);
 	mm_task_attr_setpriority(&attr, MM_PRIO_SYSTEM);
 	mm_task_attr_setname(&attr, "net-io");
-	srv->io_task = mm_task_create(&attr, mm_net_io_loop, (intptr_t) srv);
+	srv->io_task = mm_task_create(&attr, mm_net_sock_ctl_loop, (intptr_t) srv);
 
 	// Create the event handler port.
 	srv->io_port = mm_port_create(srv->io_task);
@@ -1131,102 +1323,116 @@ mm_net_stop_server(struct mm_net_server *srv)
 
 #define MM_NET_MAXIOV	64
 
-static void
-mm_net_rblock(struct mm_net_socket *sock)
+static int
+mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 {
 	ENTER();
+	int rc = 1;
 
-	// Register the current task as reader.
-	mm_net_attach_reader(sock);
+	// Check to see if the socket is closed.
+	if (mm_net_is_closed(sock)) {
+		errno = EBADF;
+		rc = -1;
+		goto leave;
+	}
 
-	// Block the task waiting to become read ready.
-	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
-		mm_timer_block(sock->read_timeout);
-	else
-		mm_task_block();
+	// Check to see if the socket is read ready.
+	uint8_t flags = mm_memory_load(sock->fd_flags);
+	flags &= (MM_NET_READ_READY | MM_NET_READ_ERROR);
+	if (flags != 0) {
+		goto leave;
+	}
 
-	// Unregister the task as reader.
-	mm_net_detach_reader(sock);
+	// Ensure atomic access to I/O state.
+	mm_core_lock(&sock->lock);
+
+	// Check to see if the socket is read ready again.
+	flags = sock->fd_flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
+	if (flags != 0) {
+		mm_core_unlock(&sock->lock);
+		goto leave;
+	}
+
+	// Block the task waiting for the socket to become read ready.
+	if (sock->read_timeout == MM_TIMEOUT_INFINITE) {
+		mm_waitset_wait(&sock->read_waitset, &sock->lock);
+		rc = 0;
+	} else if (mm_core->time_value < deadline) {
+		mm_timeout_t timeout = deadline - mm_core->time_value;
+		mm_waitset_timedwait(&sock->read_waitset, &sock->lock, timeout);
+		rc = 0;
+	} else {
+		mm_core_unlock(&sock->lock);
+		if (sock->read_timeout != 0)
+			errno = ETIMEDOUT;
+		else
+			errno = EAGAIN;
+		rc = -1;
+		goto leave;
+	}
 
 	// Check if the task is canceled.
 	mm_task_testcancel();
 
+leave:
 	LEAVE();
+	return rc;
 }
 
-static void
-mm_net_wblock(struct mm_net_socket *sock)
+static int
+mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 {
 	ENTER();
+	int rc = 1;
 
-	// Register the current task as reader.
-	mm_net_attach_writer(sock);
+	// Check to see if the socket is closed.
+	if (mm_net_is_closed(sock)) {
+		errno = EBADF;
+		rc = -1;
+		goto leave;
+	}
 
-	// Block the task waiting to become write ready.
-	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
-		mm_timer_block(sock->write_timeout);
-	else
-		mm_task_block();
+	// Check to see if the socket is write ready.
+	uint8_t flags = mm_memory_load(sock->fd_flags);
+	flags &= (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
+	if (flags != 0) {
+		goto leave;
+	}
 
-	// Unregister the task as reader.
-	mm_net_detach_writer(sock);
+	// Ensure atomic access to I/O state.
+	mm_core_lock(&sock->lock);
+
+	// Check to see if the socket is write ready again.
+	flags = sock->fd_flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
+	if (flags != 0) {
+		mm_core_unlock(&sock->lock);
+		goto leave;
+	}
+
+	// Block the task waiting for the socket to become write ready.
+	if (sock->write_timeout == MM_TIMEOUT_INFINITE) {
+		mm_waitset_wait(&sock->write_waitset, &sock->lock);
+		rc = 0;
+	} else  if (mm_core->time_value < deadline) {
+		mm_timeout_t timeout = deadline - mm_core->time_value;
+		mm_waitset_timedwait(&sock->write_waitset, &sock->lock, timeout);
+		rc = 0;
+	} else {
+		mm_core_unlock(&sock->lock);
+		if (sock->write_timeout != 0)
+			errno = ETIMEDOUT;
+		else
+			errno = EAGAIN;
+		rc = -1;
+		goto leave;
+	}
 
 	// Check if the task is canceled.
 	mm_task_testcancel();
 
+leave:
 	LEAVE();
-}
-
-static int
-mm_net_may_rblock(struct mm_net_socket *sock, mm_timeval_t start)
-{
-	// Check to see if it is allowed to block on reading from a socket.
-	if ((sock->flags & (MM_NET_CLOSED | MM_NET_READ_ERROR)) == 0) {
-		if (sock->read_timeout == MM_TIMEOUT_INFINITE
-		    || (start + sock->read_timeout) > mm_core->time_value) {
-			// Okay to block.
-			return 1;
-		} else if (sock->read_timeout) {
-			// Cannot block as there is no time left.
-			errno = ETIMEDOUT;
-		} else {
-			// The socket is in non-blocking mode.
-			errno = EAGAIN;
-		}
-	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
-		// Cannot block as the socket is closed.
-		errno = EBADF;
-	} else {
-		// Cannot block as there was an error on the socket.
-		return 0;
-	}
-	return -1;
-}
-
-static int
-mm_net_may_wblock(struct mm_net_socket *sock, mm_timeval_t start)
-{
-	// Check to see if it is allowed to block on writing to a socket.
-	if ((sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_ERROR)) == 0) {
-		if (sock->write_timeout == MM_TIMEOUT_INFINITE
-		    || (start + sock->write_timeout) > mm_core->time_value) {
-			// Okay to block.
-			return 1;
-		} else if (sock->write_timeout) {
-			// Cannot block as there is no time left.
-			errno = ETIMEDOUT;
-		} else {
-			// The socket is in non-blocking mode.
-			errno = EAGAIN;
-		}
-	} else if ((sock->flags & MM_NET_CLOSED) != 0) {
-		// Cannot block as the socket is closed.
-		errno = EBADF;
-	} else {
-		// Cannot block as there was an error on the socket.
-		return 0;
-	}
-	return -1;
+	return rc;
 }
 
 ssize_t
@@ -1237,30 +1443,35 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	ssize_t n;
 
 	// Remember the start time.
-	mm_timeval_t start = mm_core->time_value;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_core->time_value + sock->read_timeout;
 
 retry:
 	// Check to see if the socket is ready for reading.
-	while (!mm_net_is_readable(sock)) {
-		n = mm_net_may_rblock(sock, start);
-		if (n < 0) 
+	n = mm_net_wait_readable(sock, deadline);
+	if (n <= 0) {
+		if (n < 0) {
 			goto leave;
-		if (n == 0)
-			break;
-		mm_net_rblock(sock);
+		} else {
+			goto retry;
+		}
 	}
+
+	// Save readiness stamp to detect a concurrent readiness update.
+	uint32_t stamp = mm_memory_load(sock->read_stamp);
 
 	// Try to read (nonblocking).
 	n = read(sock->fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
-			mm_net_reset_read_ready(sock);
+			mm_net_reset_read_ready(sock, stamp);
 		}
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			mm_net_reset_read_ready(sock);
+			mm_net_reset_read_ready(sock, stamp);
 			goto retry;
 		} else {
 			int saved_errno = errno;
@@ -1285,30 +1496,35 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	ssize_t n;
 
 	// Remember the start time.
-	mm_timeval_t start = mm_core->time_value;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_core->time_value + sock->write_timeout;
 
 retry:
 	// Check to see if the socket is ready for writing.
-	while (!mm_net_is_writable(sock)) {
-		n = mm_net_may_wblock(sock, start);
-		if (n < 0) 
+	n = mm_net_wait_writable(sock, deadline);
+	if (n <= 0) {
+		if (n < 0) {
 			goto leave;
-		if (n == 0)
-			break;
-		mm_net_wblock(sock);
+		} else {
+			goto retry;
+		}
 	}
+
+	// Save readiness stamp to detect a concurrent readiness update.
+	uint32_t stamp = mm_memory_load(sock->write_stamp);
 
 	// Try to write (nonblocking).
 	n = write(sock->fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
-			mm_net_reset_write_ready(sock);
+			mm_net_reset_write_ready(sock, stamp);
 		}
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			mm_net_reset_write_ready(sock);
+			mm_net_reset_write_ready(sock, stamp);
 			goto retry;
 		} else {
 			int saved_errno = errno;
@@ -1335,30 +1551,35 @@ mm_net_readv(struct mm_net_socket *sock,
 	ssize_t n;
 
 	// Remember the start time.
-	mm_timeval_t start = mm_core->time_value;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_core->time_value + sock->read_timeout;
 
 retry:
 	// Check to see if the socket is ready for reading.
-	while (!mm_net_is_readable(sock)) {
-		n = mm_net_may_rblock(sock, start);
-		if (n < 0) 
+	n = mm_net_wait_readable(sock, deadline);
+	if (n <= 0) {
+		if (n < 0) {
 			goto leave;
-		if (n == 0)
-			break;
-		mm_net_rblock(sock);
+		} else {
+			goto retry;
+		}
 	}
+
+	// Save readiness stamp to detect a concurrent readiness update.
+	uint32_t stamp = mm_memory_load(sock->read_stamp);
 
 	// Try to read (nonblocking).
 	n = readv(sock->fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
-			mm_net_reset_read_ready(sock);
+			mm_net_reset_read_ready(sock, stamp);
 		}
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			mm_net_reset_read_ready(sock);
+			mm_net_reset_read_ready(sock, stamp);
 			goto retry;
 		} else {
 			int saved_errno = errno;
@@ -1385,30 +1606,35 @@ mm_net_writev(struct mm_net_socket *sock,
 	ssize_t n;
 
 	// Remember the start time.
-	mm_timeval_t start = mm_core->time_value;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_core->time_value + sock->write_timeout;
 
 retry:
 	// Check to see if the socket is ready for writing.
-	while (!mm_net_is_writable(sock)) {
-		n = mm_net_may_wblock(sock, start);
-		if (n < 0) 
+	n = mm_net_wait_writable(sock, deadline);
+	if (n <= 0) {
+		if (n < 0) {
 			goto leave;
-		if (n == 0)
-			break;
-		mm_net_wblock(sock);
+		} else {
+			goto retry;
+		}
 	}
+
+	// Save readiness stamp to detect a concurrent readiness update.
+	uint32_t stamp = mm_memory_load(sock->write_stamp);
 
 	// Try to write (nonblocking).
 	n = writev(sock->fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
-			mm_net_reset_write_ready(sock);
+			mm_net_reset_write_ready(sock, stamp);
 		}
 	} else if (n < 0) {
 		if (errno == EINTR) {
 			goto retry;
 		} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-			mm_net_reset_write_ready(sock);
+			mm_net_reset_write_ready(sock, stamp);
 			goto retry;
 		} else {
 			int saved_errno = errno;
@@ -1530,13 +1756,11 @@ mm_net_close(struct mm_net_socket *sock)
 	if (mm_net_is_closed(sock))
 		goto leave;
 
-	sock->flags |= MM_NET_CLOSED;
+	// Mark the socket as closed.
+	mm_memory_store(sock->closed, true);
 
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(sock->fd);
-
-	// TODO: Take care of work items and tasks that might still
-	// refer to this socket.
 
 leave:
 	LEAVE();

@@ -23,6 +23,7 @@
 #include "common.h"
 #include "event.h"
 #include "list.h"
+#include "wait.h"
 
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -36,19 +37,20 @@ struct mm_port;
 struct mm_task;
 
 /* Protocol flags. */
-#define MM_NET_INBOUND		0x0001
-#define MM_NET_OUTBOUND		0x0002
+#define MM_NET_INBOUND		0x01
+#define MM_NET_OUTBOUND		0x02
 
-/* Socket flags. */
-#define MM_NET_CLOSED		0x0001
-#define MM_NET_READ_READY	0x0010
-#define MM_NET_WRITE_READY	0x0020
-#define MM_NET_READ_ERROR	0x0040
-#define MM_NET_WRITE_ERROR	0x0080
-#define MM_NET_READER_SPAWNED	0x0100
-#define MM_NET_WRITER_SPAWNED	0x0200
-#define MM_NET_READER_PENDING	0x0400
-#define MM_NET_WRITER_PENDING	0x0800
+/* Socket I/O flags. */
+#define MM_NET_READ_READY	0x01
+#define MM_NET_WRITE_READY	0x02
+#define MM_NET_READ_ERROR	0x04
+#define MM_NET_WRITE_ERROR	0x08
+
+/* Socket task flags. */
+#define MM_NET_READER_SPAWNED	0x01
+#define MM_NET_WRITER_SPAWNED	0x02
+#define MM_NET_READER_PENDING	0x04
+#define MM_NET_WRITER_PENDING	0x08
 
 /* Socket address. */
 struct mm_net_addr
@@ -108,22 +110,37 @@ struct mm_net_socket
 	/* Socket file descriptor. */
 	int fd;
 
-	/* Socket flags. */
-	uint32_t flags;
+	/* Socket close flag. */
+	bool closed;
+
+	/* Tasks bound to perform socket I/O. */
+	struct mm_task *reader;
+	struct mm_task *writer;
 
 	/* I/O timeouts. */
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;
+
+	/* Socket flags. */
+	uint8_t fd_flags;
+	uint8_t task_flags;
+
+	/* Socket I/O status lock. */
+	mm_core_lock_t lock;
+
+	/* Tasks pending on socket I/O. */
+	struct mm_waitset read_waitset;
+	struct mm_waitset write_waitset;
+
+	/* I/O readiness stamps. */
+	uint32_t read_stamp;
+	uint32_t write_stamp;
 
 	/* Protocol data. */
 	intptr_t data;
 
 	/* Pinned core. */
 	struct mm_core *core;
-
-	/* Tasks pending on the socket I/O. */
-	struct mm_task *reader;
-	struct mm_task *writer;
 
 	/* Socket server. */
 	struct mm_net_server *server;
@@ -145,7 +162,6 @@ struct mm_net_proto
 
 	void (*reader)(struct mm_net_socket *sock);
 	void (*writer)(struct mm_net_socket *sock);
-	void (*closer)(struct mm_net_socket *sock);
 };
 
 void mm_net_init(void);
@@ -196,27 +212,19 @@ void mm_net_spawn_reader(struct mm_net_socket *sock)
 void mm_net_spawn_writer(struct mm_net_socket *sock)
         __attribute__((nonnull(1)));
 
+void mm_net_yield_reader(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
+void mm_net_yield_writer(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
 void mm_net_close(struct mm_net_socket *sock)
         __attribute__((nonnull(1)));
 
 static inline bool
 mm_net_is_closed(struct mm_net_socket *sock)
 {
-	return (sock->flags & MM_NET_CLOSED) != 0;
-}
-
-static inline bool
-mm_net_is_readable(struct mm_net_socket *sock)
-{
-	return (sock->flags & (MM_NET_CLOSED | MM_NET_READ_READY))
-		== MM_NET_READ_READY;
-}
-
-static inline bool
-mm_net_is_writable(struct mm_net_socket *sock)
-{
-	return (sock->flags & (MM_NET_CLOSED | MM_NET_WRITE_READY))
-		== MM_NET_WRITE_READY;
+	return sock->closed;
 }
 
 static inline void
