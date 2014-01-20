@@ -1063,6 +1063,8 @@ mm_net_cleanup(uintptr_t arg)
 	if (sock->server->proto->cleanup != NULL)
 		(sock->server->proto->cleanup)(sock);
 
+	mm_net_sock_ctl(sock, MM_NET_DESTROY_SOCK);
+
 	LEAVE();
 	return 0;
 }
