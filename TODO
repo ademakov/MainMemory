@@ -1,19 +1,18 @@
 
 ASAP:
-* cross-core wait/signal mechanism
 * socket distribution among cores
-* let futures run on other cores
-* let ports work across cores
 * memcache module enhancements:
-** use socket distribution
 ** use futures for commands
+** split table between cores
+** use socket distribution
 ** implement expiration
-** polish & optimize
+* polish & optimize
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
 ;;; against stock memcache.
 
 Essentials:
+* fixme: posting several work items in a row pokes the same idle worker
 * configuration file parsing
 * command line argument parsing
 * support signals
@@ -25,9 +24,11 @@ Essentials:
 * statistics
 * UDP servers
 * SSL servers
-* DNS resolver
 * performance instrumentation
-* use non-blocking data structures instead of locks where possible
+* use non-blocking data structures instead of locks where possible:
+** port
+** ring (for producers)
+** pool
 * refine memcache module:
 ** statistics
 ** add UDP protocol support
@@ -45,8 +46,11 @@ Larger items:
 * extension language
 
 Enhancements:
+* DNS resolver
+* background workers
+* proper future cancellation
 * fs event notification
-* task local storage (tls)
+* core and task local storage (tls)
 * reap dead tasks pending for too long
 * try to detect clock adjustments and reset realtime timers accordingly
 * memory management:
