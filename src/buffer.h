@@ -176,4 +176,20 @@ mm_buffer_next_out(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
 	return true;
 }
 
+static inline bool
+mm_buffer_depleted(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
+{
+	// Assume that the cursor size is up to date.
+	ASSERT(cur->end == (cur->seg != buf->in_seg
+			    ? cur->seg->data + cur->seg->size
+			    : cur->seg->data + buf->in_off));
+	if (cur->ptr < cur->end)
+		return false;
+	if (cur->seg == buf->in_seg)
+		return true;
+	if (cur->seg->next == buf->in_seg && buf->in_off == 0)
+		return true;
+	return false;
+}
+
 #endif /* BUFFER_H */
