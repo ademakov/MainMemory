@@ -20,6 +20,12 @@
 #ifndef ARCH_X86_64_ATOMIC_H
 #define ARCH_X86_64_ATOMIC_H
 
+#if ENABLE_SMP
+# define MM_LOCK_PREFIX "lock;"
+#else
+# define MM_LOCK_PREFIX
+#endif
+
 /**********************************************************************
  * Atomic types.
  **********************************************************************/
@@ -32,14 +38,32 @@ typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
 typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 
 /**********************************************************************
- * Atomic arithmetics.
+ * Atomic compare-and-swap operations.
  **********************************************************************/
 
-#if ENABLE_SMP
-# define MM_LOCK_PREFIX "lock;"
-#else
-# define MM_LOCK_PREFIX
-#endif
+#define mm_atomic_cas(base, mnemonic, operand)				\
+	static inline base##_t						\
+	mm_atomic_##base##_cas(mm_atomic_##base##_t *p,			\
+			       base##_t c, base##_t v)			\
+	{								\
+		base##_t r;						\
+		asm volatile(MM_LOCK_PREFIX mnemonic " %2,%1"		\
+			     : "=a"(r), "+m"(p->value)			\
+			     : operand(v), "0"(c)			\
+			     : "memory");				\
+		return r;						\
+	}
+
+/* Define atomic compare-and-swap ops. */
+mm_atomic_cas(uint8, "cmpxchgb", "q")
+mm_atomic_cas(uint16, "cmpxchgw", "r")
+mm_atomic_cas(uint32, "cmpxchgl", "r")
+
+#undef mm_atomic_cas
+
+/**********************************************************************
+ * Atomic arithmetics.
+ **********************************************************************/
 
 #define mm_atomic_fetch(base, name, lock, mnemonic, operand)		\
 	static inline base##_t						\
@@ -48,7 +72,7 @@ typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 	{								\
 		base##_t r;						\
 		asm volatile(lock mnemonic " %0,%1"			\
-			     : operand(r), "+m"(p->value)		\
+			     : "="operand(r), "+m"(p->value)		\
 			     : "0"(v)					\
 			     : "memory");				\
 		return r;						\
@@ -65,14 +89,14 @@ typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 	}
 
 /* Define atomic fetch-and-set ops. */
-mm_atomic_fetch(uint8, set, "", "xchgb", "=q")
-mm_atomic_fetch(uint16, set, "", "xchgw", "=r")
-mm_atomic_fetch(uint32, set, "", "xchgl", "=r")
+mm_atomic_fetch(uint8, set, "", "xchgb", "q")
+mm_atomic_fetch(uint16, set, "", "xchgw", "r")
+mm_atomic_fetch(uint32, set, "", "xchgl", "r")
 
 /* Define atomic fetch-and-add ops. */
-mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "=q")
-mm_atomic_fetch(uint16, add, MM_LOCK_PREFIX, "xaddw", "=r")
-mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "=r")
+mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "q")
+mm_atomic_fetch(uint16, add, MM_LOCK_PREFIX, "xaddw", "r")
+mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "r")
 
 /* Define atomic increment ops. */
 mm_atomic_unary(uint8, inc, "incb")

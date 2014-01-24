@@ -32,10 +32,28 @@ typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
 typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 
 /**********************************************************************
+ * Atomic compare-and-swap operations.
+ **********************************************************************/
+
+#define mm_atomic_cas(base)						\
+	static inline base##_t						\
+	mm_atomic_##base##_cas(mm_atomic_##base##_t *p,			\
+			       base##_t c, base##_t v)			\
+	{								\
+		return __sync_val_compare_and_swap(&p->value, c, v);	\
+	}
+
+mm_atomic_cas(uint8)
+mm_atomic_cas(uint16)
+mm_atomic_cas(uint32)
+
+#undef mm_atomic_cas
+
+/**********************************************************************
  * Atomic arithmetics.
  **********************************************************************/
 
-#define mm_atomic_fetch(base, name, func)			\
+#define mm_atomic_fetch(base, name, func)				\
 	static inline base##_t						\
 	mm_atomic_##base##_fetch_and_##name(mm_atomic_##base##_t *p,	\
 					    base##_t v)			\
