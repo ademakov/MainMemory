@@ -230,7 +230,7 @@ mm_future_wait(struct mm_future *future)
 		mm_task_testcancel();
 	}
 
-	ENTER();
+	LEAVE();
 	return mm_memory_load(future->result);
 }
 
