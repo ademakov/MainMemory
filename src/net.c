@@ -1444,7 +1444,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	ASSERT(sock->core == mm_core);
 	ssize_t n;
 
-	// Remember the start time.
+	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_core->time_value + sock->read_timeout;
@@ -1497,7 +1497,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	ASSERT(sock->core == mm_core);
 	ssize_t n;
 
-	// Remember the start time.
+	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_core->time_value + sock->write_timeout;
