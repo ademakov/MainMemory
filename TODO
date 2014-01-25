@@ -49,6 +49,8 @@ Enhancements:
 * DNS resolver
 * background workers
 * proper future cancellation
+** let tasks to be canceled across cores
+** let catch task termination with setjmp/longjmp or libunwind mechanism
 * fs event notification
 * core and task local storage (tls)
 * reap dead tasks pending for too long
