@@ -781,6 +781,9 @@ mc_command_destroy(struct mc_command *command)
 	if (command->own_key)
 		mm_core_free((char *) command->key.str);
 
+	if (command->future != NULL)
+		mm_future_destroy(command->future);
+
 	switch (command->result_type) {
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS:
@@ -1477,6 +1480,24 @@ mc_process_quit(uintptr_t arg)
 	return 0;
 }
 
+static void
+mm_process_start(struct mc_command *command)
+{
+	if (command->result_type != MC_RESULT_NONE)
+		return;
+#if ENABLE_SMP
+	if ((command->type->flags & MC_ASYNC) != 0) {
+		command->future = mm_future_create(command->type->process,
+						   (intptr_t) command);
+		mm_future_start(command->future, NULL);
+	} else {
+		(command->type->process)((intptr_t) command);
+	}
+#else
+	(command->type->process)((intptr_t) command);
+#endif
+}
+
 static mm_result_t
 mc_process_command(struct mc_state *state, struct mc_command *command)
 {
@@ -1486,11 +1507,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	if (likely(command->type != NULL)) {
 		DEBUG("command %s", mc_command_name(command->type->tag));
 		for (;;) {
-			if (last->result_type == MC_RESULT_NONE) {
-				// TODO: create a future for async commands.
-				last->type->process((intptr_t) last);
-			}
-
+			mm_process_start(last);
 			if (last->next == NULL)
 				break;
 			last = last->next;
@@ -2566,7 +2583,11 @@ mc_writer_routine(struct mm_net_socket *sock)
 
 	// Check to see if there at least one ready result.
 	struct mc_command *command = state->command_head;
-	if (command == NULL || command->result_type == MC_RESULT_NONE)
+	if (unlikely(command == NULL))
+		goto leave;
+	if (command->future != NULL)
+		mm_future_wait(command->future);
+	if (command->result_type == MC_RESULT_NONE)
 		goto leave;
 
 	// Put the results into the transmit buffer.
@@ -2575,7 +2596,11 @@ mc_writer_routine(struct mm_net_socket *sock)
 			mc_transmit(state, command);
 
 		struct mc_command *next = command->next;
-		if (next == NULL || next->result_type == MC_RESULT_NONE)
+		if (next == NULL)
+			break;
+		if (command->future != NULL)
+			mm_future_wait(command->future);
+		if (next->result_type == MC_RESULT_NONE)
 			break;
 
 		command = next;
