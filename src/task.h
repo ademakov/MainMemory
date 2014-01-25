@@ -54,7 +54,7 @@ typedef int8_t			mm_priority_t;
 /* Canceled task execution result. */
 #define MM_TASK_CANCELED	((mm_result_t) -1)
 /* Unfinished task execution result. */
-#define MM_TASK_UNRESOLVED	((mm_result_t) 0xDEADC0DE)
+#define MM_TASK_UNRESOLVED	((mm_result_t) -2)
 
 /* Task state values. */
 typedef enum {

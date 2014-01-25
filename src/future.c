@@ -21,32 +21,43 @@
 
 #include "alloc.h"
 #include "core.h"
+#include "log.h"
 #include "pool.h"
 #include "trace.h"
+
+static void
+mm_future_finish(struct mm_future *future,
+		 mm_future_status_t status,
+		 mm_result_t result)
+{
+	ENTER();
+
+	// Synchronize with waiters.
+	mm_core_lock(&future->lock);
+
+	// Reset the task reference.
+	mm_memory_store(future->task, NULL);
+
+	// Store the result first, ensure it will be ready on the status update.
+	mm_memory_store(future->result, result);
+	mm_memory_store_fence();
+
+	// Update the future status.
+	ASSERT(mm_memory_load(future->status.value) == MM_FUTURE_STARTED);
+	mm_memory_store(future->status.value, status);
+
+	// Wakeup all the waiters.
+	mm_waitset_broadcast(&future->waitset, &future->lock);
+
+	LEAVE();
+}
 
 static void
 mm_future_cleanup(struct mm_future *future)
 {
 	ENTER();
 
-	// Reset the task reference.
-	struct mm_task *task = future->task;
-	mm_memory_store(future->task, NULL);
-
-	// Store the completion status and result.
-	if (mm_memory_load(future->status) == MM_FUTURE_STARTED) {
-		if ((task->flags & MM_TASK_CANCEL_OCCURRED) != 0) {
-			mm_memory_store(future->status, MM_FUTURE_CANCELED);
-		} else {
-			mm_memory_store(future->result, task->result);
-			mm_memory_store_fence();
-			mm_memory_store(future->status, MM_FUTURE_COMPLETED);
-		}
-	}
-
-	// Wakeup all the waiters.
-	mm_core_lock(&future->lock);
-	mm_waitset_broadcast(&future->waitset, &future->lock);
+	mm_future_finish(future, MM_FUTURE_CANCELED, MM_TASK_CANCELED);
 
 	LEAVE();
 }
@@ -57,20 +68,23 @@ mm_future_routine(uintptr_t arg)
 	ENTER();
 
 	struct mm_future *future = (struct mm_future *) arg;
-	ASSERT(mm_memory_load(future->status) == MM_FUTURE_STARTED);
+	ASSERT(mm_memory_load(future->status.value) == MM_FUTURE_STARTED);
 
-	// Ensure cleanup on exit.
+	// Ensure cleanup on task exit/cancellation.
 	mm_task_cleanup_push(mm_future_cleanup, future);
 
 	// Actually start the future unless already canceled.
-	mm_memory_store(future->task, mm_running_task);
-	if (mm_memory_load(future->cancel))
-		mm_memory_store(future->status, MM_FUTURE_CANCELED);
-	else
-		future->start(future->start_arg);
+	bool cancel = mm_memory_load(future->cancel);
+	if (cancel) {
+		mm_future_finish(future, MM_FUTURE_CANCELED, MM_TASK_CANCELED);
+	} else {
+		mm_memory_store(future->task, mm_running_task);
+		mm_result_t result = future->start(future->start_arg);
+		mm_future_finish(future, MM_FUTURE_COMPLETED, result);
+	}
 
-	// Cleanup on return.
-	mm_task_cleanup_pop(true);
+	// Cleanup on return is not needed.
+	mm_task_cleanup_pop(false);
 
 	LEAVE();
 	return 0;
@@ -105,7 +119,7 @@ mm_future_create(mm_routine_t start, uintptr_t start_arg)
 	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
 	future->lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
 	future->cancel = false;
-	future->status = MM_FUTURE_CREATED;
+	future->status.value = MM_FUTURE_CREATED;
 	future->result = MM_TASK_UNRESOLVED;
 	future->start = start;
 	future->start_arg = start_arg;
@@ -120,7 +134,7 @@ void
 mm_future_destroy(struct mm_future *future)
 {
 	ENTER();
-	ASSERT(future->status != MM_FUTURE_STARTED);
+	ASSERT(future->status.value != MM_FUTURE_STARTED);
 	ASSERT(future->waitset.size == 0);
 
 	mm_waitset_cleanup(&future->waitset);
@@ -134,13 +148,15 @@ mm_future_start(struct mm_future *future, struct mm_core *core)
 {
 	ENTER();
 
-	// TODO: use atomic CAS instead of lock.
-	mm_core_lock(&future->lock);
-	uint8_t status = future->status;
-	if (status == MM_FUTURE_CREATED)
-		future->status = MM_FUTURE_STARTED;
-	mm_core_lock(&future->lock);
+	// Check if the future has already been started.
+	uint8_t status = mm_memory_load(future->status.value);
+	if (status != MM_FUTURE_CREATED)
+		goto leave;
 
+	// Atomically set the future status as started.
+	status = mm_atomic_uint8_cas(&future->status, status, MM_FUTURE_STARTED);
+
+	// Initiate execution of the future routine.
 	if (status == MM_FUTURE_CREATED) {
 		if (core == NULL) {
 			mm_core_post(false, mm_future_routine, (uintptr_t) future);
@@ -149,6 +165,7 @@ mm_future_start(struct mm_future *future, struct mm_core *core)
 		}
 	}
 
+leave:
 	LEAVE();
 }
 
@@ -159,7 +176,22 @@ mm_future_cancel(struct mm_future *future)
 
 	mm_memory_store(future->cancel, true);
 
-	// TODO: cancel the future task if it is already running.
+	// Make a synchronized check of the future status.
+	mm_core_lock(&future->lock);
+	uint8_t status = mm_memory_load(future->status.value);
+	if (status == MM_FUTURE_STARTED) {
+		struct mm_task *task = mm_memory_load(future->task);
+		if (task != NULL) {
+			// TODO: task cancel across cores
+			// TODO: catch and stop cancel in the future routine.
+#if 0
+			mm_task_cancel(task);
+#else
+			mm_warning(0, "running future cancellation is not implemented");
+#endif
+		}
+	}
+	mm_core_unlock(&future->lock);
 
 	LEAVE();
 }
@@ -169,24 +201,37 @@ mm_future_wait(struct mm_future *future)
 {
 	ENTER();
 
-	if (mm_memory_load(future->status) == MM_FUTURE_CREATED)
-		mm_future_start(future, NULL);
+	// Start the future if it has not been started already.
+	mm_future_start(future, NULL);
 
-	int cp = mm_task_enter_cancel_point();
+	// Wait for future completion.
+	for (;;) {
+		// Get the future status.
+		uint8_t status = mm_memory_load(future->status.value);
 
-	if (mm_memory_load(future->status) == MM_FUTURE_STARTED) {
-		for (;;) {
-			mm_core_lock(&future->lock);
-			if (future->status != MM_FUTURE_STARTED)
-				break;
-			mm_waitset_wait(&future->waitset, &future->lock);
+		// Ensure that the future result will be ready to get.
+		mm_memory_load_fence();
+
+		// Exit the loop if the future has finished.
+		if (status != MM_FUTURE_STARTED)
+			break;
+
+		// Make a synchronized check of the future status.
+		mm_core_lock(&future->lock);
+		if (future->status.value != MM_FUTURE_STARTED) {
+			mm_core_unlock(&future->lock);
+			break;
 		}
+
+		// Wait for completion notification.
+		mm_waitset_wait(&future->waitset, &future->lock);
+
+		// Check if the task has been canceled.
+		mm_task_testcancel();
 	}
 
-	mm_task_leave_cancel_point(cp);
-
 	ENTER();
-	return future->result;
+	return mm_memory_load(future->result);
 }
 
 mm_result_t
@@ -194,23 +239,44 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 {
 	ENTER();
 
-	if (mm_memory_load(future->status) == MM_FUTURE_CREATED)
-		mm_future_start(future, NULL);
+	// Remember the wait time.
+	mm_timeval_t deadline = mm_core->time_value + timeout;
 
-	int cp = mm_task_enter_cancel_point();
+	// Start the future if it has not been started already.
+	mm_future_start(future, NULL);
 
-	if (mm_memory_load(future->status) == MM_FUTURE_STARTED) {
-		for (;;) {
-			mm_core_lock(&future->lock);
-			if (future->status != MM_FUTURE_STARTED)
-				break;
-			mm_waitset_timedwait(&future->waitset, &future->lock, timeout);
-			// TODO: break if timed out!!!
+	// Wait for future completion.
+	for (;;) {
+		// Get the future status.
+		uint8_t status = mm_memory_load(future->status.value);
+
+		// Ensure that the future result will be ready to get.
+		mm_memory_load_fence();
+
+		// Exit the loop if the future has finished.
+		if (status != MM_FUTURE_STARTED)
+			break;
+
+		// Check if timed out.
+		if (deadline <= mm_core->time_value) {
+			DEBUG("future timed out");
+			break;
 		}
+
+		// Make a synchronized check of the future status.
+		mm_core_lock(&future->lock);
+		if (future->status.value != MM_FUTURE_STARTED) {
+			mm_core_unlock(&future->lock);
+			break;
+		}
+
+		// Wait for completion notification.
+		mm_waitset_timedwait(&future->waitset, &future->lock, timeout);
+
+		// Check if the task has been canceled.
+		mm_task_testcancel();
 	}
 
-	mm_task_leave_cancel_point(cp);
-
 	LEAVE();
-	return future->result;
+	return mm_memory_load(future->result);
 }

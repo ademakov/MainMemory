@@ -40,7 +40,7 @@ struct mm_future
 	/* A cancel request has been made. */
 	uint8_t cancel;
 	/* The future status. */
-	uint8_t status;
+	mm_atomic_uint8_t status;
 	/* The future result. */
 	mm_result_t result;
 
@@ -77,15 +77,21 @@ mm_result_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	__attribute__((nonnull(1)));
 
 static inline bool
+mm_future_is_started(struct mm_future *future)
+{
+	return mm_memory_load(future->status.value) >= MM_FUTURE_STARTED;
+}
+
+static inline bool
 mm_future_is_canceled(struct mm_future *future)
 {
-	return mm_memory_load(future->status) == MM_FUTURE_CANCELED;
+	return mm_memory_load(future->status.value) == MM_FUTURE_CANCELED;
 }
 
 static inline bool
 mm_future_is_finished(struct mm_future *future)
 {
-	return mm_memory_load(future->status) >= MM_FUTURE_CANCELED;
+	return mm_memory_load(future->status.value) >= MM_FUTURE_CANCELED;
 }
 
 #endif /* FUTURE_H */
