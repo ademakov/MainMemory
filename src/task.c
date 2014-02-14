@@ -342,14 +342,14 @@ mm_task_setname(struct mm_task *task, const char *name)
 	LEAVE();
 }
 
-uint32_t
+mm_task_t
 mm_task_getid(struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
 }
 
 struct mm_task *
-mm_task_getptr(uint32_t id)
+mm_task_getptr(mm_task_t id)
 {
 	return mm_pool_idx2ptr(&mm_task_pool, id);
 }

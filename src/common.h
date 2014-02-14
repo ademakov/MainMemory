@@ -93,7 +93,13 @@
 #define MM_TIMEVAL_MAX		INT64_MAX
 
 /* Infinite timeout. */
-#define MM_TIMEOUT_INFINITE	((mm_timeout_t) 0xFFFFFFFF)
+#define MM_TIMEOUT_INFINITE	((mm_timeout_t) -1)
+
+/* A non-existent core. */
+#define MM_CORE_NONE		((mm_core_t) -1)
+
+/* A non-existent task. */
+#define MM_TASK_NONE		((mm_task_t) -1)
 
 /* Time value (in microseconds). */
 typedef int64_t			mm_timeval_t;
@@ -101,8 +107,14 @@ typedef int64_t			mm_timeval_t;
 /* Timeout (in microseconds). */
 typedef uint32_t		mm_timeout_t;
 
+/* Core ID. */
+typedef uint16_t		mm_core_t;
+
+/* Task ID. */
+typedef uint32_t		mm_task_t;
+
 /* Task execution result. */
-typedef uintptr_t mm_result_t;
+typedef uintptr_t		mm_result_t;
 
 /* Task execution routine. */
 typedef mm_result_t (*mm_routine_t)(uintptr_t arg);
