@@ -88,6 +88,18 @@ mm_atomic_cas(uint32, "cmpxchgl", "r")
 			     : "memory", "cc");				\
 	}
 
+#define mm_atomic_unary_test(base, name, mnemonic)			\
+	static inline base##_t						\
+	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
+	{								\
+		char r;							\
+		asm volatile(MM_LOCK_PREFIX mnemonic " %0; setnz %1"	\
+			     : "+m"(p->value), "=qm" (r)		\
+			     :						\
+			     : "memory", "cc");				\
+		return r;						\
+	}
+
 /* Define atomic fetch-and-set ops. */
 mm_atomic_fetch(uint8, set, "", "xchgb", "q")
 mm_atomic_fetch(uint16, set, "", "xchgw", "r")
@@ -102,14 +114,21 @@ mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "r")
 mm_atomic_unary(uint8, inc, "incb")
 mm_atomic_unary(uint16, inc, "incw")
 mm_atomic_unary(uint32, inc, "incl")
+mm_atomic_unary_test(uint8, inc, "incb")
+mm_atomic_unary_test(uint16, inc, "incw")
+mm_atomic_unary_test(uint32, inc, "incl")
 
 /* Define atomic decrement ops. */
 mm_atomic_unary(uint8, dec, "decb")
 mm_atomic_unary(uint16, dec, "decw")
 mm_atomic_unary(uint32, dec, "decl")
+mm_atomic_unary_test(uint8, dec, "decb")
+mm_atomic_unary_test(uint16, dec, "decw")
+mm_atomic_unary_test(uint32, dec, "decl")
 
 #undef mm_atomic_fetch
 #undef mm_atomic_unary
+#undef mm_atomic_unary_test
 
 /**********************************************************************
  * Atomic operations for spin-locks.

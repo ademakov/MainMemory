@@ -68,6 +68,13 @@ mm_atomic_cas(uint32)
 		func(&p->value, 1);					\
 	}
 
+#define mm_atomic_unary_test(base, name, func)				\
+	static inline bool						\
+	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
+	{								\
+		return !func(&p->value, 1);				\
+	}
+
 /* Define atomic fetch-and-set ops. */
 mm_atomic_fetch(uint8, set, __sync_lock_test_and_set)
 mm_atomic_fetch(uint16, set, __sync_lock_test_and_set)
@@ -82,14 +89,21 @@ mm_atomic_fetch(uint32, add, __sync_fetch_and_add)
 mm_atomic_unary(uint8, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint16, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint32, inc, __sync_fetch_and_add)
+mm_atomic_unary_test(uint8, inc, __sync_add_and_fetch_)
+mm_atomic_unary_test(uint16, inc, __sync_add_and_fetch)
+mm_atomic_unary_test(uint32, inc, __sync_add_and_fetch)
 
 /* Define atomic decrement ops. */
 mm_atomic_unary(uint8, dec, __sync_fetch_and_sub)
 mm_atomic_unary(uint16, dec, __sync_fetch_and_sub)
 mm_atomic_unary(uint32, dec, __sync_fetch_and_sub)
+mm_atomic_unary_test(uint8, dec, __sync_sub_and_fetch)
+mm_atomic_unary_test(uint16, dec, __sync_sub_and_fetch)
+mm_atomic_unary_test(uint32, dec, __sync_sub_and_fetch)
 
 #undef mm_atomic_fetch
 #undef mm_atomic_unary
+#undef mm_atomic_unary_test
 
 /**********************************************************************
  * Atomic operations for spin-locks.
