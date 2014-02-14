@@ -110,8 +110,6 @@ struct mm_core
 
 } __align(MM_CACHELINE);
 
-extern __thread struct mm_core *mm_core;
-
 void mm_core_init(void);
 void mm_core_term(void);
 
@@ -134,6 +132,42 @@ void mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routin
 
 void mm_core_run_task(struct mm_task *task)
 	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Core information.
+ **********************************************************************/
+
+extern mm_core_t mm_core_num;
+extern struct mm_core *mm_core_set;
+
+extern __thread struct mm_core *mm_core;
+
+static inline mm_core_t
+mm_core_getnum(void)
+{
+	return mm_core_num;
+}
+
+static inline mm_core_t
+mm_core_getid(struct mm_core *core)
+{
+	if (unlikely(core == NULL))
+		return MM_CORE_NONE;
+	return (mm_core_t) (mm_core - mm_core_set);
+}
+
+static inline struct mm_core *
+mm_core_getptr(mm_core_t id)
+{
+	ASSERT(id < mm_core_num);
+	return &mm_core_set[id];
+}
+
+static inline mm_core_t
+mm_core_self(void)
+{
+	return mm_core_getid(mm_core);
+}
 
 /**********************************************************************
  * Core time utilities.

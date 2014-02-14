@@ -47,8 +47,8 @@
 #define MM_TIME_QUEUE_MAX_COUNT	2000
 
 // The core set.
-static int mm_core_num;
-static struct mm_core *mm_core_set;
+mm_core_t mm_core_num;
+struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
@@ -206,6 +206,7 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 	} else {
 		// Put the item to the target core inbox.
 		while (!mm_ring_core_put(&core->inbox, work)) {
+			// TODO: backoff
 			mm_task_yield();
 		}
 
