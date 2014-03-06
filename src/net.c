@@ -1009,8 +1009,9 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		mm_running_task->flags &= ~MM_TASK_WRITING;
 		sock->writer = NULL;
 
-		if (!mm_net_is_closed(sock))
+		if (!mm_net_is_closed(sock)) {
 			mm_net_sock_ctl(sock, MM_NET_YIELD_WRITER);
+		}
 	}
 
 	LEAVE();
@@ -1104,6 +1105,7 @@ mm_net_writer(uintptr_t arg)
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 	ASSERT(sock->core == mm_core);
+
 	if (unlikely(mm_net_is_closed(sock)))
 		goto leave;
 
@@ -1759,7 +1761,7 @@ mm_net_close(struct mm_net_socket *sock)
 		goto leave;
 
 	// Mark the socket as closed.
-	mm_memory_store(sock->closed, true);
+	sock->closed = true;
 
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(sock->fd);
