@@ -1,9 +1,8 @@
 
 ASAP:
+* fix bugs and single-thread performance regression
 * socket distribution among cores
 * memcache module enhancements:
-** use futures for commands
-** split table between cores
 ** use socket distribution
 ** implement expiration
 * polish & optimize
@@ -12,7 +11,7 @@ ASAP:
 ;;; against stock memcache.
 
 Essentials:
-* fixme: posting several work items in a row pokes the same idle worker
+* fixme: posting several work items in a row pokes the same idle worker 
 * configuration file parsing
 * command line argument parsing
 * support signals
@@ -29,6 +28,7 @@ Essentials:
 ** port
 ** ring (for producers)
 ** pool
+** log chunks list
 * refine memcache module:
 ** statistics
 ** add UDP protocol support
