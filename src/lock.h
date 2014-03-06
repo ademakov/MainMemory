@@ -36,7 +36,7 @@ mm_core_trylock(mm_core_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
 #if ENABLE_SMP
-	return mm_atomic_lock_acquire(lock) != 0;
+	return !mm_atomic_lock_acquire(lock);
 #else
 	(void) lock;
 	return true;
@@ -87,7 +87,7 @@ typedef mm_atomic_lock_t mm_global_lock_t;
 static inline bool
 mm_global_trylock(mm_global_lock_t *lock)
 {
-	return mm_atomic_lock_acquire(lock) != 0;
+	return !mm_atomic_lock_acquire(lock);
 }
 
 static inline void
