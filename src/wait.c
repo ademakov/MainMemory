@@ -1,7 +1,7 @@
 /*
  * wait.c - MainMemory wait queue.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,11 +21,14 @@
 
 #include "alloc.h"
 #include "core.h"
+#include "log.h"
 #include "pool.h"
 #include "timer.h"
 #include "trace.h"
 
-#define MM_WAIT_CACHE_MAX	(256)
+/**********************************************************************
+ * Wait entries.
+ **********************************************************************/
 
 // The memory pool for waiting tasks.
 static struct mm_pool mm_wait_pool;
@@ -51,6 +54,24 @@ mm_wait_term(void)
 	LEAVE();
 }
 
+static struct mm_wait *
+mm_wait_create(void)
+{
+	return mm_pool_alloc(&mm_wait_pool);
+}
+
+static void
+mm_wait_destroy(struct mm_wait *wait)
+{
+	mm_pool_free(&mm_wait_pool, wait);
+}
+
+/**********************************************************************
+ * Cache of wait entries.
+ **********************************************************************/
+
+#define MM_WAIT_CACHE_MAX	(256)
+
 void
 mm_wait_cache_prepare(struct mm_wait_cache *cache)
 {
@@ -58,6 +79,9 @@ mm_wait_cache_prepare(struct mm_wait_cache *cache)
 
 	mm_link_init(&cache->cache);
 	cache->cache_size = 0;
+
+	mm_link_init(&cache->pending);
+	cache->pending_count = 0;
 
 	LEAVE();
 }
@@ -69,20 +93,38 @@ mm_wait_cache_cleanup(struct mm_wait_cache *cache __attribute__((unused)))
 	LEAVE();
 }
 
+static void
+mm_wait_cache_put(struct mm_wait_cache *cache, struct mm_wait *wait)
+{
+	mm_link_insert(&cache->cache, &wait->link);
+	cache->cache_size++;
+}
+
 static struct mm_wait *
-mm_wait_create(struct mm_wait_cache *cache)
+mm_wait_cache_get_low(struct mm_wait_cache *cache)
+{
+	ASSERT(cache->cache_size > 0);
+	ASSERT(!mm_link_empty(&cache->cache));
+
+	struct mm_link *link = mm_link_delete_head(&cache->cache);
+	struct mm_wait *wait = containerof(link, struct mm_wait, link);
+	cache->cache_size--;
+
+	return wait;
+}
+
+static struct mm_wait *
+mm_wait_cache_get(struct mm_wait_cache *cache)
 {
 	ENTER();
 
 	struct mm_wait *wait;
 	if (cache->cache_size > 0) {
 		// Reuse a cached wait entry.
-		struct mm_link *link = mm_link_delete_head(&cache->cache);
-		wait = containerof(link, struct mm_wait, link);
-		cache->cache_size--;
+		wait = mm_wait_cache_get_low(cache);
 	} else {
 		// Create a new work item.
-		wait = mm_pool_alloc(&mm_wait_pool);
+		wait = mm_wait_create();
 	}
 
 	LEAVE();
@@ -90,21 +132,47 @@ mm_wait_create(struct mm_wait_cache *cache)
 }
 
 static void
-mm_wait_destroy(struct mm_wait_cache *cache, struct mm_wait *wait)
+mm_wait_add_pending(struct mm_wait_cache *cache, struct mm_wait *wait)
+{
+	mm_link_insert(&cache->pending, &wait->link);
+	cache->pending_count++;
+}
+
+void
+mm_wait_cache_truncate(struct mm_wait_cache *cache)
 {
 	ENTER();
 
-	if (cache->cache_size < MM_WAIT_CACHE_MAX) {
-		// Cache the work item.
-		mm_link_insert(&cache->cache, &wait->link);
-		cache->cache_size++;
-	} else {
-		// Release the wait entry.
-		mm_pool_free(&mm_wait_pool, wait);
+	if (cache->pending_count) {
+		struct mm_link pending = cache->pending;
+		mm_link_init(&cache->pending);
+		cache->pending_count = 0;
+
+		while (!mm_link_empty(&pending)) {
+			struct mm_link *link = mm_link_delete_head(&pending);
+			struct mm_wait *wait = containerof(link, struct mm_wait, link);
+			struct mm_task *task = mm_memory_load(wait->task);
+			if (task != NULL) {
+				// Add used wait entry to the pending list.
+				mm_wait_add_pending(cache, wait);
+			} else {
+				// Return unused wait entry to the pool.
+				mm_wait_cache_put(cache, wait);
+			}
+		}
+	}
+
+	while (cache->cache_size > MM_WAIT_CACHE_MAX) {
+		struct mm_wait *wait = mm_wait_cache_get_low(cache);
+		mm_wait_destroy(wait);
 	}
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Wait-set functions.
+ **********************************************************************/
 
 void
 mm_waitset_prepare(struct mm_waitset *waitset)
@@ -132,7 +200,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_core_lock_t *lock)
 	ENTER();
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_create(&mm_core->wait_cache);
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_running_task;
 	mm_link_insert(&waitset->set, &wait->link);
 	waitset->size++;
@@ -155,7 +223,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_core_lock_t *lock, mm_timeou
 	ENTER();
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_create(&mm_core->wait_cache);
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_running_task;
 	mm_link_insert(&waitset->set, &wait->link);
 	waitset->size++;
@@ -191,12 +259,14 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_core_lock_t *lock)
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_task *task = mm_memory_load(wait->task);
 
-		// Free the entry.
-		mm_wait_destroy(&mm_core->wait_cache, wait);
-
-		// Run the task if it has not been reset.
 		if (likely(task != NULL)) {
+			// Run the task if it has not been reset.
 			mm_core_run_task(task);
+			// Add used wait entry to the pending list.
+			mm_wait_add_pending(&mm_core->wait_cache, wait);
+		} else {
+			// Return unused wait entry to the pool.
+			mm_wait_cache_put(&mm_core->wait_cache, wait);
 		}
 	}
 
