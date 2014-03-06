@@ -136,6 +136,7 @@ struct mm_work *
 mm_work_get(struct mm_workq *queue)
 {
 	ENTER();
+	ASSERT(queue->queue_size > 0);
 
 	queue->queue_size--;
 	struct mm_link *link = mm_queue_delete_head(&queue->queue);
