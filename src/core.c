@@ -99,7 +99,7 @@ mm_core_idle(struct mm_core *core)
 	struct mm_task *task = mm_running_task;
 	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
-	// Enqueue the task.
+	// Put the task to the wait queue.
 	ASSERT((task->flags & MM_TASK_WAITING) == 0);
 	mm_list_insert(&core->idle, &task->wait_queue);
 	task->flags |= MM_TASK_WAITING;
@@ -107,12 +107,6 @@ mm_core_idle(struct mm_core *core)
 
 	// Wait until poked.
 	mm_task_block();
-
-	// Dequeue the task.
-	ASSERT((task->flags & MM_TASK_WAITING) != 0);
-	mm_list_delete(&task->wait_queue);
-	task->flags &= ~MM_TASK_WAITING;
-	core->nidle--;
 
 	LEAVE();
 }
@@ -125,7 +119,7 @@ mm_core_idle_last(struct mm_core *core)
 	struct mm_task *task = mm_running_task;
 	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
-	// Enqueue the task.
+	// Put the task to the wait queue.
 	ASSERT((task->flags & MM_TASK_WAITING) == 0);
 	mm_list_append(&core->idle, &task->wait_queue);
 	task->flags |= MM_TASK_WAITING;
@@ -133,12 +127,6 @@ mm_core_idle_last(struct mm_core *core)
 
 	// Wait until poked.
 	mm_task_block();
-
-	// Dequeue the task.
-	ASSERT((task->flags & MM_TASK_WAITING) != 0);
-	mm_list_delete(&task->wait_queue);
-	task->flags &= ~MM_TASK_WAITING;
-	core->nidle--;
 
 	LEAVE();
 }
@@ -151,6 +139,14 @@ mm_core_poke_idle(struct mm_core *core)
 	if (likely(!mm_list_empty(&core->idle))) {
 		struct mm_list *link = mm_list_head(&core->idle);
 		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
+
+		// Get a task from the wait queue.
+		ASSERT((task->flags & MM_TASK_WAITING) != 0);
+		mm_list_delete(&task->wait_queue);
+		task->flags &= ~MM_TASK_WAITING;
+		core->nidle--;
+
+		// Put the task to the run queue.
 		mm_task_run(task);
 	}
 
@@ -205,13 +201,19 @@ mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg
 		mm_core_add_work(core, work);
 	} else {
 		// Put the item to the target core inbox.
-		while (!mm_ring_core_put(&core->inbox, work)) {
-			// TODO: backoff
-			mm_task_yield();
-		}
+		for (;;) {
+			bool ok = mm_ring_core_put(&core->inbox, work);
 
-		// Wakeup the target core if it is asleep.
-		mm_core_wake(core);
+			// Wakeup the target core if it is asleep.
+			mm_core_wake(core);
+
+			if (ok) {
+				break;
+			} else {
+				// TODO: backoff
+				mm_task_yield();
+			}
+		}
 	}
 
 	LEAVE();
@@ -250,12 +252,19 @@ mm_core_run_task(struct mm_task *task)
 		mm_task_run(task);
 	} else {
 		// Put the task to the target core sched ring.
-		while (!mm_ring_core_put(&task->core->sched, task)) {
-			mm_task_yield();
-		}
+		for (;;) {
+			bool ok = mm_ring_core_put(&task->core->sched, task);
 
-		// Wakeup the target core if it is asleep.
-		mm_core_wake(task->core);
+			// Wakeup the target core if it is asleep.
+			mm_core_wake(task->core);
+
+			if (ok) {
+				break;
+			} else {
+				// TODO: backoff
+				mm_task_yield();
+			}
+		}
 	}
 
 	LEAVE();
@@ -279,6 +288,66 @@ mm_core_receive_tasks(struct mm_core *core)
 #else
 # define mm_core_receive_tasks(core) ({(void) core; false;})
 #endif
+
+/**********************************************************************
+ * Chunk reclamation.
+ **********************************************************************/
+
+void
+mm_core_reclaim_chunk(struct mm_chunk *chunk)
+{
+	ENTER();
+
+	if (chunk->core == mm_core) {
+		// Destroy the chunk directly.
+		mm_chunk_destroy(chunk);
+	} else {
+		// Put the chunk to the target core chunks ring.
+		for (;;) {
+			bool ok = mm_ring_global_put(&chunk->core->chunks, chunk);
+
+			// Wakeup the target core if it is asleep.
+			mm_core_wake(chunk->core);
+
+			if (ok)
+				break;
+
+			// TODO: backoff
+			mm_thread_yield();
+		}
+	}
+
+	LEAVE();
+}
+
+void
+mm_core_reclaim_chain(struct mm_chunk *chunk)
+{
+	ENTER();
+
+	while (chunk != NULL) {
+		struct mm_chunk *next = chunk->next;
+		mm_core_reclaim_chunk(chunk);
+		chunk = next;
+	}
+
+	LEAVE();
+}
+
+static bool
+mm_core_destroy_chunks(struct mm_core *core)
+{
+	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
+	if (chunk == NULL)
+		return false;
+
+	do {
+		mm_chunk_destroy(chunk);
+		chunk = mm_ring_get(&core->chunks);
+	} while (chunk != NULL);
+
+	return true;
+}
 
 /**********************************************************************
  * Worker task.
@@ -381,21 +450,6 @@ mm_core_master(uintptr_t arg)
  * Dealer task.
  **********************************************************************/
 
-static bool
-mm_core_destroy_chunks(struct mm_core *core)
-{
-	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
-	if (chunk == NULL)
-		return false;
-
-	do {
-		mm_chunk_destroy(chunk);
-		chunk = mm_ring_get(&core->chunks);
-	} while (chunk != NULL);
-
-	return true;
-}
-
 static mm_result_t
 mm_core_dealer(uintptr_t arg)
 {
@@ -409,12 +463,17 @@ mm_core_dealer(uintptr_t arg)
 			halt = false;
 		if (mm_core_receive_tasks(core))
 			halt = false;
-		if (halt)
-			mm_core_halt(core, MM_DEALER_TIMEOUT);
 
-		mm_core_destroy_chunks(core);
+		if (halt) {
+			mm_core_halt(core, MM_DEALER_TIMEOUT);
+			mm_core_destroy_chunks(core);
+		}
+
 		mm_timer_tick();
 		mm_task_yield();
+
+		mm_wait_cache_truncate(&core->wait_cache);
+		mm_core_destroy_chunks(core);
 	}
 
 	LEAVE();

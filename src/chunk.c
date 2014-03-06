@@ -1,7 +1,7 @@
 /*
  * chunk.c - MainMemory chunks.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -44,22 +44,6 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 }
 
 void
-mm_chunk_destroy_global(struct mm_chunk *chunk)
-{
-	ENTER();
-
-	if (chunk->core == mm_core) {
-		mm_chunk_destroy(chunk);
-	} else {
-		while (!mm_ring_global_put(&chunk->core->chunks, chunk)) {
-			mm_thread_yield();
-		}
-	}
-
-	LEAVE();
-}
-
-void
 mm_chunk_destroy_chain(struct mm_chunk *chunk)
 {
 	ENTER();
@@ -67,20 +51,6 @@ mm_chunk_destroy_chain(struct mm_chunk *chunk)
 	while (chunk != NULL) {
 		struct mm_chunk *next = chunk->next;
 		mm_chunk_destroy(chunk);
-		chunk = next;
-	}
-
-	LEAVE();
-}
-
-void
-mm_chunk_destroy_chain_global(struct mm_chunk *chunk)
-{
-	ENTER();
-
-	while (chunk != NULL) {
-		struct mm_chunk *next = chunk->next;
-		mm_chunk_destroy_global(chunk);
 		chunk = next;
 	}
 

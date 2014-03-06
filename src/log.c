@@ -196,7 +196,7 @@ mm_log_write(void)
 		if (chunk->core == NULL) {
 			mm_free(chunk);
 		} else {
-			mm_chunk_destroy_global(chunk);
+			mm_core_reclaim_chunk(chunk);
 		}
 		chunk = next;
 

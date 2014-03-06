@@ -133,6 +133,9 @@ void mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routin
 void mm_core_run_task(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
+void mm_core_reclaim_chunk(struct mm_chunk *chunk);
+void mm_core_reclaim_chain(struct mm_chunk *chunk);
+
 /**********************************************************************
  * Core information.
  **********************************************************************/

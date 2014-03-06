@@ -1,7 +1,7 @@
 /*
  * chunk.h - MainMemory chunks.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -37,11 +37,7 @@ struct mm_chunk
 };
 
 struct mm_chunk * mm_chunk_create(size_t size);
-
 void mm_chunk_destroy(struct mm_chunk *chunk);
-void mm_chunk_destroy_global(struct mm_chunk *chunk);
-
 void mm_chunk_destroy_chain(struct mm_chunk *chunk);
-void mm_chunk_destroy_chain_global(struct mm_chunk *chunk);
 
 #endif /* CHUNK_H */
