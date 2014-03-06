@@ -154,7 +154,7 @@ mm_future_start(struct mm_future *future, struct mm_core *core)
 		goto leave;
 
 	// Atomically set the future status as started.
-	status = mm_atomic_uint8_cas(&future->status, status, MM_FUTURE_STARTED);
+	status = mm_atomic_uint8_cas(&future->status, MM_FUTURE_CREATED, MM_FUTURE_STARTED);
 
 	// Initiate execution of the future routine.
 	if (status == MM_FUTURE_CREATED) {
@@ -218,7 +218,8 @@ mm_future_wait(struct mm_future *future)
 
 		// Make a synchronized check of the future status.
 		mm_core_lock(&future->lock);
-		if (future->status.value != MM_FUTURE_STARTED) {
+		status = mm_memory_load(future->status.value);
+		if (status != MM_FUTURE_STARTED) {
 			mm_core_unlock(&future->lock);
 			break;
 		}
@@ -265,7 +266,8 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 		// Make a synchronized check of the future status.
 		mm_core_lock(&future->lock);
-		if (future->status.value != MM_FUTURE_STARTED) {
+		status = mm_memory_load(future->status.value);
+		if (status != MM_FUTURE_STARTED) {
 			mm_core_unlock(&future->lock);
 			break;
 		}
