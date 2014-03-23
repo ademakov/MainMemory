@@ -123,13 +123,6 @@ mc_entry_set_key(struct mc_entry *entry, const char *key)
 	memcpy(entry_key, key, entry->key_len);
 }
 
-static inline void
-mc_entry_set_value(struct mc_entry *entry, const char *value)
-{
-	char *entry_value = mc_entry_value(entry);
-	memcpy(entry_value, value, entry->value_len);
-}
-
 static struct mc_entry *
 mc_entry_create(uint8_t key_len, size_t value_len)
 {
@@ -142,6 +135,7 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	entry->value_len = value_len;
 	entry->ref_count.value = 1;
 
+	// TODO: make this thread-safe
 	static uint64_t cas = 0;
 	entry->cas = ++cas;
 
@@ -1147,7 +1141,6 @@ mc_process_set(uintptr_t arg)
 	new_entry->flags = params->flags;
 
 	mc_table_insert(index, new_entry);
-	mc_entry_ref(new_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1449,7 +1442,8 @@ mc_process_delete(uintptr_t arg)
 
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
-	mc_entry_destroy(old_entry);
+	if (old_entry != NULL)
+		mc_entry_unref(old_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -2656,7 +2650,7 @@ retry:
 		// If the socket is closed queue a quit command.
 		if (state->error && !state->quit) {
 			struct mc_command *command = mc_command_create();
-			command->result_type = MC_RESULT_QUIT;
+			command->type = &mc_desc_quit;
 			command->end_ptr = state->start_ptr;
 			mc_process_command(state, command);
 		}
