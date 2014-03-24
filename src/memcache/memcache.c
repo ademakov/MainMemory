@@ -47,6 +47,10 @@ static uint8_t mc_verbose = 0;
 static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
 
+#if ENABLE_DEBUG //|| 1
+# define ENABLE_DEBUG_INDEX 1
+#endif
+
 /**********************************************************************
  * Hash function.
  **********************************************************************/
@@ -86,6 +90,9 @@ struct mc_entry
 	uint8_t key_len;
 	uint32_t value_len;
 	mm_atomic_uint32_t ref_count;
+#if ENABLE_DEBUG_INDEX
+	uint32_t index;
+#endif
 	uint32_t flags;
 	uint64_t cas;
 	char data[];
@@ -134,6 +141,9 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	entry->key_len = key_len;
 	entry->value_len = value_len;
 	entry->ref_count.value = 1;
+#if ENABLE_DEBUG_INDEX
+	entry->index = ((uint32_t) -1);
+#endif
 
 	// TODO: make this thread-safe
 	static uint64_t cas = 0;
@@ -252,11 +262,9 @@ struct mc_tpart
 /* The table of memcache entries. */
 struct mc_table
 {
-	uint32_t size;
 	uint32_t used;
 
 	uint32_t nbytes_evict_threshold;
-	uint32_t nentries_stride_threshold;
 
 	mm_core_t nparts;
 	struct mc_tpart *parts;
@@ -270,7 +278,7 @@ static mm_result_t mc_table_evict_routine(uintptr_t);
 static mm_result_t mc_table_stride_routine(uintptr_t);
 
 static inline size_t
-mc_table_size(size_t nbuckets)
+mc_table_space(size_t nbuckets)
 {
 	return nbuckets * sizeof (struct mc_entry *);
 }
@@ -278,10 +286,12 @@ mc_table_size(size_t nbuckets)
 static inline uint32_t
 mc_table_index(uint32_t h)
 {
-	uint32_t mask = mc_table.size - 1;
+	uint32_t used = mm_memory_load(mc_table.used);
+	uint32_t half_size = 1 << (31 - mm_clz(used - 1));
+	uint32_t mask = half_size + half_size - 1;
 	uint32_t index = h & mask;
-	if (index >= mc_table.used)
-		index -= mc_table.size / 2;
+	if (index >= used)
+		index -= half_size;
 	return index;
 }
 
@@ -300,10 +310,12 @@ mc_table_part(uint32_t n)
 }
 
 static inline bool
-mc_table_is_full(struct mc_tpart *part)
+mc_table_is_overpacked(struct mc_tpart *part)
 {
 	uint32_t used = mm_memory_load(mc_table.used);
 	if (unlikely(used == MC_TABLE_SIZE_MAX))
+		return false;
+	if (part != mc_table_part(used))
 		return false;
 
 	// FIXME: what if the partitions are very unevenly filled?
@@ -338,29 +350,26 @@ mc_table_start_striding(struct mc_tpart *part)
 }
 
 static void
-mc_table_expand(size_t size)
+mc_table_expand(uint32_t old_size, uint32_t new_size)
 {
 	ENTER();
-	ASSERT(size > mc_table.size);
-	// Assert the size is a power of 2.
-	ASSERT((size & (size - 1)) == 0);
+	ASSERT(mm_is_pow2z(old_size));
+	ASSERT(mm_is_pow2(new_size));
 
-	mm_brief("Set the memcache table size: %ld", (unsigned long) size);
+	mm_brief("Set the memcache table size: %ld", (unsigned long) new_size);
 
-	size_t old_size = mc_table_size(mc_table.size);
-	size_t new_size = mc_table_size(size);
+	size_t old_space = mc_table_space(old_size);
+	size_t new_space = mc_table_space(new_size);
 
-	void *address = (char *) mc_table.table + old_size;
-	size_t nbytes = new_size - old_size;
+	void *address = (char *) mc_table.table + old_space;
+	size_t nbytes = new_space - old_space;
 
-	void *area = mmap(address, nbytes, PROT_READ | PROT_WRITE,
-			  MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
-	if (area == MAP_FAILED)
+	void *result_address = mmap(address, nbytes, PROT_READ | PROT_WRITE,
+				    MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
+	if (result_address == MAP_FAILED)
 		mm_fatal(errno, "mmap");
-	if (area != address)
+	if (result_address != address)
 		mm_fatal(0, "mmap returned wrong address");
-
-	mc_table.size = size;
 
 	LEAVE();
 }
@@ -369,13 +378,18 @@ static void
 mc_table_stride(void)
 {
 	ENTER();
-	ASSERT(mc_table.used < mc_table.size);
-	ASSERT(mc_table.used >= mc_table.size / 2);
-	ASSERT((mc_table.used + MC_TABLE_STRIDE) <= mc_table.size);
 
-	uint32_t mask = mc_table.size - 1;
-	uint32_t target = mc_table.used;
-	uint32_t source = target - mc_table.size / 2;
+	uint32_t used = mm_memory_load(mc_table.used);
+	uint32_t half_size = 1 << (31 - mm_clz(used - 1));
+
+	if (unlikely(mm_is_pow2z(used))) {
+		mc_table_expand(used, used * 2);
+		half_size *= 2;
+	}
+
+	uint32_t target = used;
+	uint32_t source = used - half_size;
+	uint32_t mask = half_size + half_size - 1;
 
 	for (uint32_t count = 0; count < MC_TABLE_STRIDE; count++) {
 		struct mc_entry *entry = mc_table.table[source];
@@ -389,10 +403,16 @@ mc_table_stride(void)
 			uint32_t index = h & mask;
 			if (index == source) {
 				entry->next = s_entries;
+#if ENABLE_DEBUG_INDEX
+				entry->index = source;
+#endif
 				s_entries = entry;
 			} else {
 				ASSERT(index == target);
 				entry->next = t_entries; 
+#if ENABLE_DEBUG_INDEX
+				entry->index = target;
+#endif
 				t_entries = entry;
 			}
 
@@ -403,7 +423,8 @@ mc_table_stride(void)
 		mc_table.table[target++] = t_entries;
 	}
 
-	mc_table.used += MC_TABLE_STRIDE;
+	used += MC_TABLE_STRIDE;
+	mm_memory_store(mc_table.used, used);
 
 	LEAVE();
 }
@@ -415,9 +436,6 @@ mc_table_stride_routine(uintptr_t arg)
 
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	ASSERT(part->striding);
-
-	if (unlikely(mc_table.used == mc_table.size))
-		mc_table_expand(mc_table.size * 2);
 
 	mc_table_stride();
 
@@ -437,6 +455,10 @@ mc_table_lookup(uint32_t index, const char *key, uint8_t key_len)
 
 	struct mc_entry *entry = mc_table.table[index];
 	while (entry != NULL) {
+#if ENABLE_DEBUG_INDEX
+		if (index != entry->index)
+			ABORT();
+#endif
 		char *entry_key = mc_entry_key(entry);
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len))
 			break;
@@ -455,9 +477,12 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 	DEBUG("index: %d", index);
 
 	struct mc_entry *entry = mc_table.table[index];
-	if (entry == NULL) {
+	if (entry == NULL)
 		goto leave;
-	}
+#if ENABLE_DEBUG_INDEX
+	if (index != entry->index)
+		ABORT();
+#endif
 
 	char *entry_key = mc_entry_key(entry);
 	if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
@@ -474,9 +499,12 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 		struct mc_entry *prev_entry = entry;
 
 		entry = entry->next;
-		if (entry == NULL) {
+		if (entry == NULL)
 			goto leave;
-		}
+#if ENABLE_DEBUG_INDEX
+		if (index != entry->index)
+			ABORT();
+#endif
 
 		entry_key = mc_entry_key(entry);
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
@@ -505,6 +533,9 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 
 	mm_list_append(&part->entries, &entry->link);
 	entry->next = mc_table.table[index];
+#if ENABLE_DEBUG_INDEX
+	entry->index = index;
+#endif
 	mc_table.table[index] = entry;
 
 	part->nbytes += mc_entry_bytes(entry);
@@ -514,7 +545,7 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 		part->evicting = true;
 		mc_table_start_evicting(part);
 	}
-	if (!part->striding && mc_table_is_full(part)) {
+	if (!part->striding && mc_table_is_overpacked(part)) {
 		part->striding = true;
 		mc_table_start_striding(part);
 	}
@@ -533,6 +564,10 @@ mc_table_evict(struct mc_tpart *part)
 	char *key = mc_entry_key(entry);
 	uint32_t hash = mc_hash(key, entry->key_len);
 	uint32_t index = mc_table_index(hash);
+#if ENABLE_DEBUG_INDEX
+	if (index != entry->index)
+		ABORT();
+#endif
 	mc_table_remove(index, key, entry->key_len);
 
 	mc_entry_unref(entry);
@@ -583,13 +618,14 @@ mc_table_init(void)
 	ENTER();
 
 	// Compute the maximal size of the table in bytes.
-	size_t nbytes = mc_table_size(MC_TABLE_SIZE_MAX);
+	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
 
 	// Reserve the address space for the table.
-	mm_brief("Reserve %ld bytes of the address apace for the memcache table.", (unsigned long) nbytes);
-	void *area = mmap(NULL, nbytes, PROT_NONE,
-			  MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-	if (area == MAP_FAILED)
+	mm_brief("Reserve %ld bytes of the address apace for the memcache table.",
+		 (unsigned long) space);
+	void *address = mmap(NULL, space, PROT_NONE,
+			     MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+	if (address == MAP_FAILED)
 		mm_fatal(errno, "mmap");
 
 	// Compute the number of table partitions. It has to be a power of 2.
@@ -604,12 +640,10 @@ mc_table_init(void)
 		size *= 2;
 
 	// Initialize the table.
-	mc_table.size = 0;
-	mc_table.used = 0;
 	mc_table.nbytes_evict_threshold = MC_SIZE_MAX / nparts;
 	mc_table.nparts = nparts;
 	mc_table.parts = mm_calloc(nparts, sizeof(struct mc_tpart));
-	mc_table.table = area;
+	mc_table.table = address;
 
 	// Initialize the table partitions.
 	for (mm_core_t i = 0; i < nparts; i++) {
@@ -622,7 +656,7 @@ mc_table_init(void)
 	}
 
 	// Allocate initial space for the table.
-	mc_table_expand(size);
+	mc_table_expand(0, size);
 	mc_table.used = size;
   
 	LEAVE();
@@ -633,6 +667,7 @@ mc_table_term(void)
 {
 	ENTER();
 
+	// Free the table entries.
 	for (uint32_t index = 0; index < mc_table.used; index++) {
 		struct mc_entry *entry = mc_table.table[index];
 		while (entry != NULL) {
@@ -642,9 +677,15 @@ mc_table_term(void)
 		}
 	}
 
+	// Free the table partitions.
 	mm_free(mc_table.parts);
 
-	munmap(mc_table.table, mc_table_size(mc_table.size));
+	// Compute the reserved address space size.
+	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
+
+	// Release the reserved address space.
+	if (munmap(mc_table.table, space) < 0)
+		mm_error(errno, "munmap");
 
 	LEAVE();
 }
@@ -771,6 +812,7 @@ union mc_params
 	struct mc_set_params set;
 	struct mc_slabs_params slabs;
 	struct mc_stats_params stats;
+	struct mm_net_socket *sock;
 	uint64_t val64;
 	uint32_t val32;
 	bool last;
@@ -954,7 +996,6 @@ struct mc_state
 	// Flags.
 	bool error;
 	bool trash;
-	bool quit;
 };
 
 static struct mc_state *
@@ -975,7 +1016,6 @@ mc_create(struct mm_net_socket *sock)
 
 	state->error = false;
 	state->trash = false;
-	state->quit = false;
 
 	LEAVE();
 	return state;
@@ -1538,8 +1578,14 @@ mc_process_verbosity(uintptr_t arg)
 }
 
 static mm_result_t
-mc_process_quit(uintptr_t arg __attribute__((unused)))
+mc_process_quit(uintptr_t arg)
 {
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+	mm_net_shutdown_reader(command->params.sock);
+
+	LEAVE();
 	return MC_RESULT_QUIT;
 }
 
@@ -1952,6 +1998,7 @@ again:
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
 					command->type = &mc_desc_quit;
+					command->params.sock = parser->state->sock;
 					state = S_SPACE;
 					shift = S_EOL;
 					break;
@@ -2568,7 +2615,6 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	}
 
 	case MC_RESULT_QUIT:
-		state->quit = true;
 		mm_net_close(state->sock);
 		break;
 
@@ -2648,9 +2694,10 @@ retry:
 	// Get out of here if there is no more input available.
 	if (n <= 0) {
 		// If the socket is closed queue a quit command.
-		if (state->error && !state->quit) {
+		if (state->error && !mm_net_is_reader_shutdown(sock)) {
 			struct mc_command *command = mc_command_create();
 			command->type = &mc_desc_quit;
+			command->params.sock = sock;
 			command->end_ptr = state->start_ptr;
 			mc_process_command(state, command);
 		}
@@ -2668,7 +2715,6 @@ parse:
 			parser.command = NULL;
 		}
 		if (state->trash) {
-			state->quit = true;
 			mm_net_close(state->sock);
 			goto leave;
 		}
@@ -2710,8 +2756,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 
 	// Put the results into the transmit buffer.
 	for (;;) {
-		if (likely(!state->quit))
-			mc_transmit(state, command);
+		mc_transmit(state, command);
 
 		struct mc_command *next = command->next;
 		if (next == NULL)
