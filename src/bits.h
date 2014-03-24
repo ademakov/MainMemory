@@ -29,4 +29,16 @@
 /* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
 #define mm_ffs(x)	__builtin_ffs(x)
 
+/* Check if a number is a power of 2. */
+#define mm_is_pow2(x) ({				\
+		typeof(x) _x = (x);			\
+		_x != 0 && (_x & (_x - 1)) == 0;	\
+	})
+
+/* Check if a number is a power of 2 or zero. */
+#define mm_is_pow2z(x) ({				\
+		typeof(x) _x = (x);			\
+		(_x & (_x - 1)) == 0;			\
+	})
+
 #endif /* BITS_H */
