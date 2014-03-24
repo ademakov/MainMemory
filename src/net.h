@@ -52,6 +52,11 @@ struct mm_task;
 #define MM_NET_READER_PENDING	0x04
 #define MM_NET_WRITER_PENDING	0x08
 
+/* Socket close flags. */
+#define MM_NET_CLOSED		0x01
+#define MM_NET_READER_SHUTDOWN	0x02
+#define MM_NET_WRITER_SHUTDOWN	0x04
+
 /* Socket address. */
 struct mm_net_addr
 {
@@ -110,9 +115,6 @@ struct mm_net_socket
 	/* Socket file descriptor. */
 	int fd;
 
-	/* Socket close flag. */
-	bool closed;
-
 	/* Tasks bound to perform socket I/O. */
 	struct mm_task *reader;
 	struct mm_task *writer;
@@ -124,6 +126,7 @@ struct mm_net_socket
 	/* Socket flags. */
 	uint8_t fd_flags;
 	uint8_t task_flags;
+	uint8_t close_flags;
 
 	/* Socket I/O status lock. */
 	mm_core_lock_t lock;
@@ -221,10 +224,27 @@ void mm_net_yield_writer(struct mm_net_socket *sock)
 void mm_net_close(struct mm_net_socket *sock)
         __attribute__((nonnull(1)));
 
+void mm_net_shutdown_reader(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
+void mm_net_shutdown_writer(struct mm_net_socket *sock)
+        __attribute__((nonnull(1)));
+
 static inline bool
 mm_net_is_closed(struct mm_net_socket *sock)
 {
-	return sock->closed;
+	return (sock->close_flags & MM_NET_CLOSED) != 0;
+}
+static inline bool
+mm_net_is_reader_shutdown(struct mm_net_socket *sock)
+{
+	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
+}
+
+static inline bool
+mm_net_is_writer_shutdown(struct mm_net_socket *sock)
+{
+	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
 }
 
 static inline void

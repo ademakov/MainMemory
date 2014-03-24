@@ -315,9 +315,9 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 
 	// Initialize the fields.
 	sock->fd = fd;
-	sock->closed = false;
 	sock->fd_flags = 0;
 	sock->task_flags = 0;
+	sock->close_flags = 0;
 	sock->lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
 	sock->read_stamp = 0;
 	sock->write_stamp = 0;
@@ -947,7 +947,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (!mm_net_is_closed(sock)) {
+	if (!mm_net_is_reader_shutdown(sock)) {
 		mm_net_sock_ctl(sock, MM_NET_SPAWN_READER);
 
 #if 0
@@ -964,7 +964,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (!mm_net_is_closed(sock)) {
+	if (!mm_net_is_writer_shutdown(sock)) {
 		mm_net_sock_ctl(sock, MM_NET_SPAWN_WRITER);
 
 #if 0
@@ -989,7 +989,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		mm_running_task->flags &= ~MM_TASK_READING;
 		sock->reader = NULL;
 
-		if (!mm_net_is_closed(sock))
+		if (!mm_net_is_reader_shutdown(sock))
 			mm_net_sock_ctl(sock, MM_NET_YIELD_READER);
 	}
 
@@ -1009,7 +1009,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		mm_running_task->flags &= ~MM_TASK_WRITING;
 		sock->writer = NULL;
 
-		if (!mm_net_is_closed(sock)) {
+		if (!mm_net_is_writer_shutdown(sock)) {
 			mm_net_sock_ctl(sock, MM_NET_YIELD_WRITER);
 		}
 	}
@@ -1077,7 +1077,7 @@ mm_net_reader(uintptr_t arg)
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 	ASSERT(sock->core == mm_core);
-	if (unlikely(mm_net_is_closed(sock)))
+	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
 	// Register the reader task.
@@ -1106,7 +1106,7 @@ mm_net_writer(uintptr_t arg)
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 	ASSERT(sock->core == mm_core);
 
-	if (unlikely(mm_net_is_closed(sock)))
+	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
 	// Register the writer task.
@@ -1334,7 +1334,7 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	int rc = 1;
 
 	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
+	if (mm_net_is_reader_shutdown(sock)) {
 		errno = EBADF;
 		rc = -1;
 		goto leave;
@@ -1390,7 +1390,7 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	int rc = 1;
 
 	// Check to see if the socket is closed.
-	if (mm_net_is_closed(sock)) {
+	if (mm_net_is_writer_shutdown(sock)) {
 		errno = EBADF;
 		rc = -1;
 		goto leave;
@@ -1761,10 +1761,50 @@ mm_net_close(struct mm_net_socket *sock)
 		goto leave;
 
 	// Mark the socket as closed.
-	sock->closed = true;
+	sock->close_flags = MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(sock->fd);
+
+leave:
+	LEAVE();
+}
+
+void
+mm_net_shutdown_reader(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+
+	if (mm_net_is_reader_shutdown(sock))
+		goto leave;
+
+	// Mark the socket as having the reader part closed.
+	sock->close_flags |= MM_NET_READER_SHUTDOWN;
+
+	// TODO: async this
+	if (shutdown(sock->fd, SHUT_RD) < 0)
+		mm_error(errno, "shutdown");
+
+leave:
+	LEAVE();
+}
+
+void
+mm_net_shutdown_writer(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT(sock->core == mm_core);
+
+	if (mm_net_is_writer_shutdown(sock))
+		goto leave;
+
+	// Mark the socket as having the writer part closed.
+	sock->close_flags |= MM_NET_WRITER_SHUTDOWN;
+
+	// TODO: async this
+	if (shutdown(sock->fd, SHUT_WR) < 0)
+		mm_error(errno, "shutdown");
 
 leave:
 	LEAVE();
