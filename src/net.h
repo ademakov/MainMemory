@@ -97,6 +97,9 @@ struct mm_net_server
 	struct mm_task *io_task;
 	struct mm_port *io_port;
 
+	/* A core the next client to be bound to. */
+	mm_core_t client_core;
+
 	/* A list of all client sockets. */
 	struct mm_list clients;
 
