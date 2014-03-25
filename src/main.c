@@ -78,6 +78,9 @@ mm_init(void)
 {
 	ENTER();
 
+	mm_enable_verbose(true);
+	mm_enable_warning(true);
+
 	// Set signal handlers.
 	mm_signal_init();
 
