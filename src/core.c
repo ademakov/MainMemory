@@ -311,7 +311,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 			if (ok) {
 				break;
 			} else if (unlikely(mm_memory_load(chunk->core->stop))) {
-				mm_warning("lost chunk as core %d is stopped",
+				mm_warning(0, "lost a chunk as core %d is stopped",
 					   mm_core_getid(chunk->core));
 				break;
 			}
