@@ -306,11 +306,18 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 		for (;;) {
 			bool ok = mm_ring_global_put(&chunk->core->chunks, chunk);
 
+			// Actual reclamation may wait a little bit so
+			// don't wakeup the core unless the ring is full.
+			if (ok) {
+				break;
+			} else if (unlikely(mm_memory_load(chunk->core->stop))) {
+				mm_warning("lost chunk as core %d is stopped",
+					   mm_core_getid(chunk->core));
+				break;
+			}
+
 			// Wakeup the target core if it is asleep.
 			mm_core_wake(chunk->core);
-
-			if (ok)
-				break;
 
 			// TODO: backoff
 			mm_thread_yield();
