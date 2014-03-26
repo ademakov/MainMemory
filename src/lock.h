@@ -60,7 +60,7 @@ mm_core_lock(mm_core_lock_t *lock)
 				}
 			}
 			count++;
-		} while (lock->locked);
+		} while (mm_memory_load(lock->locked));
 	}
 #else
 	(void) lock;
@@ -106,7 +106,7 @@ mm_global_lock(mm_global_lock_t *lock)
 				}
 			}
 			count++;
-		} while (lock->locked);
+		} while (mm_memory_load(lock->locked));
 	}
 #else
 	while (mm_atomic_lock_acquire(lock))
