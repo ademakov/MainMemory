@@ -29,9 +29,16 @@
 #include <pthread.h>
 #include <sched.h>
 
-#if HAVE_MACH_THREAD_POLICY_H
-# include <mach/mach.h>
-# include <mach/thread_policy.h>
+#if HAVE_MACH_SEMAPHORE_H || HAVE_MACH_THREAD_POLICY_H
+# include <mach/mach_init.h>
+# if HAVE_MACH_SEMAPHORE_H
+#  include <mach/semaphore.h>
+#  include <mach/task.h>
+# endif
+# if HAVE_MACH_THREAD_POLICY_H
+#  include <mach/thread_act.h>
+#  include <mach/thread_policy.h>
+# endif
 #endif
 
 struct mm_thread
@@ -49,8 +56,12 @@ struct mm_thread
 	/* Wait/signal control. */
 	uint8_t wait_flag;
 	mm_atomic_uint8_t wake_flag;
+#if HAVE_MACH_SEMAPHORE_H
+	semaphore_t wait_sem;
+#else	
 	pthread_mutex_t wait_lock;
 	pthread_cond_t wait_cond;
+#endif
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
@@ -161,11 +172,11 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	policy.affinity_tag = cpu_tag + 1;
 
 	thread_t tid = mach_thread_self();
-	int rc = thread_policy_set(tid,
-				   THREAD_AFFINITY_POLICY,
-				   (thread_policy_t) &policy,
-				   THREAD_AFFINITY_POLICY_COUNT);
-	if (rc != KERN_SUCCESS) {
+	kern_return_t kr = thread_policy_set(tid,
+					     THREAD_AFFINITY_POLICY,
+					     (thread_policy_t) &policy,
+			THREAD_AFFINITY_POLICY_COUNT);
+	if (kr != KERN_SUCCESS) {
 		mm_error(0, "failed to set thread affinity");
 	}
 }
@@ -223,6 +234,13 @@ mm_thread_create(struct mm_thread_attr *attr,
 	// Initialize wait/signal control data.
 	thread->wait_flag = 0;
 	thread->wake_flag.value = 0;
+#if HAVE_MACH_SEMAPHORE_H
+	kern_return_t kr = semaphore_create(mach_task_self(), &thread->wait_sem,
+					    SYNC_POLICY_FIFO, 0);
+	if (kr != KERN_SUCCESS) {
+		mm_error(0, "failed to create semaphore");
+	}
+#else
 	rc = pthread_mutex_init(&thread->wait_lock, NULL);
 	if (rc) {
 		mm_fatal(rc, "pthread_mutex_init");
@@ -231,6 +249,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 	if (rc) {
 		mm_fatal(rc, "pthread_cond_init");
 	}
+#endif
 
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
@@ -241,7 +260,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 
 	// Start the thread.
 	rc = pthread_create(&thread->system_thread, &pthr_attr,
-			    mm_thread_entry, thread);
+				mm_thread_entry, thread);
 	if (rc) {
 		mm_fatal(rc, "pthread_create");
 	}
@@ -258,8 +277,12 @@ mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
 
+#if HAVE_MACH_SEMAPHORE_H
+	semaphore_destroy(mach_task_self(), thread->wait_sem);
+#else
 	pthread_mutex_destroy(&thread->wait_lock);
 	pthread_cond_destroy(&thread->wait_cond);
+#endif
 
 	mm_free(thread);
 
@@ -315,9 +338,13 @@ mm_thread_wait(void)
 	mm_memory_store(mm_thread->wait_flag, 1);
 
 	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) != 0) {
+#if HAVE_MACH_SEMAPHORE_H
+		semaphore_wait(mm_thread->wait_sem);
+#else
 		pthread_mutex_lock(&mm_thread->wait_lock);
 		pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
 		pthread_mutex_unlock(&mm_thread->wait_lock);
+#endif
 	}
 
 	mm_memory_store(mm_thread->wait_flag, 0);
@@ -333,18 +360,27 @@ mm_thread_timedwait(mm_timeout_t timeout)
 	// Flush the log before possible sleep.
 	mm_flush();
 
-	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
-
+#if HAVE_MACH_SEMAPHORE_H
+	mach_timespec_t ts;
+	ts.tv_sec = (timeout / 1000000);
+	ts.tv_nsec = (timeout % 1000000) * 1000;
+#else
 	struct timespec ts;
+	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
 	ts.tv_sec = (time / 1000000);
 	ts.tv_nsec = (time % 1000000) * 1000;
+#endif
 
 	mm_memory_store(mm_thread->wait_flag, 1);
 
 	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) == 0) {
+#if HAVE_MACH_SEMAPHORE_H
+		semaphore_timedwait(mm_thread->wait_sem, ts);
+#else
 		pthread_mutex_lock(&mm_thread->wait_lock);
 		pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
 		pthread_mutex_unlock(&mm_thread->wait_lock);
+#endif
 	}
 
 	mm_memory_store(mm_thread->wait_flag, 0);
@@ -361,7 +397,12 @@ mm_thread_signal(struct mm_thread *thread)
 	mm_memory_fence();
 
 	if (mm_memory_load(thread->wait_flag)) {
+#if HAVE_MACH_SEMAPHORE_H
+		semaphore_signal(thread->wait_sem);
+#else
 		pthread_cond_signal(&thread->wait_cond);
+#endif
+
 	}
 
 	LEAVE();
