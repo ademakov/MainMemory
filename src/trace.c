@@ -31,15 +31,43 @@
 
 #if ENABLE_TRACE
 
-static int mm_trace_level;
+/* Trace nesting level. */
+static __thread int mm_trace_level;
+
+/* Trace recursion detection. */
+static __thread int mm_trace_recur;
+
+static bool
+mm_trace_enter(int level)
+{
+	if (mm_running_task != NULL) {
+		if (unlikely(mm_running_task->trace_recur))
+			return false;
+		if (level < 0)
+			mm_running_task->trace_level += level;
+		mm_running_task->trace_recur++;
+	} else {
+		if (unlikely(mm_trace_recur)) 
+			return false;
+		if (level < 0)
+			mm_trace_level += level;
+		mm_trace_recur++;
+	}
+	return true;
+}
 
 static void
-mm_trace_level_add(int level)
+mm_trace_leave(int level)
 {
-	if (mm_running_task != NULL)
-		mm_running_task->trace_level += level;
-	else
-		mm_trace_level += level;
+	if (mm_running_task != NULL) {
+		if (level > 0)
+			mm_running_task->trace_level += level;
+		mm_running_task->trace_recur--;
+	} else {
+		if (level > 0)
+			mm_trace_level += level;
+		mm_trace_recur--;
+	}
 }
 
 void
@@ -96,9 +124,8 @@ void
 mm_trace(int level, const char *file, int line, const char *func, 
 	 const char *restrict msg, ...)
 {
-	if (level < 0) {
-		mm_trace_level_add(level);
-	}
+	if (!mm_trace_enter(level))
+		return;
 
 	mm_where(file, line, func);
 
@@ -109,9 +136,7 @@ mm_trace(int level, const char *file, int line, const char *func,
 
 	mm_log_str("\n");
 
-	if (level > 0) {
-		mm_trace_level_add(level);
-	}
+	mm_trace_leave(level);
 }
 
 #endif

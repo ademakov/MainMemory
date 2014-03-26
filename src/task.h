@@ -166,7 +166,10 @@ struct mm_task
 	char name[MM_TASK_NAME_SIZE];
 
 #if ENABLE_TRACE
+	/* Trace nesting level. */
 	int trace_level;
+	/* Trace recursion detection. */
+	int trace_recur;
 #endif
 };
 
