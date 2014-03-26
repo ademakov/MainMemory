@@ -21,6 +21,7 @@
 
 #include "alloc.h"
 #include "core.h"
+#include "log.h"
 #include "pool.h"
 #include "port.h"
 #include "stack.h"
@@ -202,7 +203,7 @@ mm_task_new(void)
 static void
 mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 {
-	task->state = MM_TASK_CREATED;
+	task->state = MM_TASK_BLOCKED;
 	task->result = MM_TASK_UNRESOLVED;
 
 	if (unlikely(attr == NULL)) {	
@@ -296,7 +297,7 @@ void
 mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
-	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_CREATED);
+	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_BLOCKED);
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
 	// Destroy the ports.
@@ -404,9 +405,8 @@ mm_task_run(struct mm_task *task)
 	      task->state, task->priority);
 	ASSERT(task->core == mm_core);
 	ASSERT(task->priority < MM_PRIO_BOOT);
-	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
-	if (task->state != MM_TASK_PENDING) {
+	if (task->state == MM_TASK_BLOCKED) {
 		task->state = MM_TASK_PENDING;
 		mm_runq_put(&mm_core->runq, task);
 	}

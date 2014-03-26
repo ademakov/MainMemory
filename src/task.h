@@ -58,10 +58,9 @@ typedef int8_t			mm_priority_t;
 
 /* Task state values. */
 typedef enum {
+	MM_TASK_BLOCKED,
 	MM_TASK_PENDING,
 	MM_TASK_RUNNING,
-	MM_TASK_BLOCKED,
-	MM_TASK_CREATED,
 	MM_TASK_INVALID,
 } mm_task_state_t;
 
