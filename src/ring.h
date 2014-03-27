@@ -54,8 +54,8 @@ struct mm_ring
 	size_t tail __align(MM_CACHELINE);
 	union
 	{
-		mm_core_lock_t core;
-		mm_global_lock_t global;
+		mm_task_lock_t core;
+		mm_thread_lock_t global;
 	} tail_lock;
 
 	/* Shared read-only data. */
@@ -100,37 +100,37 @@ mm_ring_put(struct mm_ring *ring, void *new_data)
 static inline bool
 mm_ring_core_trylock(struct mm_ring *ring)
 {
-	return mm_core_trylock(&ring->tail_lock.core);
+	return mm_task_trylock(&ring->tail_lock.core);
 }
 
 static inline void
 mm_ring_core_lock(struct mm_ring *ring)
 {
-	mm_core_lock(&ring->tail_lock.core);
+	mm_task_lock(&ring->tail_lock.core);
 }
 
 static inline void
 mm_ring_core_unlock(struct mm_ring *ring)
 {
-	mm_core_unlock(&ring->tail_lock.core);
+	mm_task_unlock(&ring->tail_lock.core);
 }
 
 static inline bool
 mm_ring_global_trylock(struct mm_ring *ring)
 {
-	return mm_global_trylock(&ring->tail_lock.global);
+	return mm_thread_trylock(&ring->tail_lock.global);
 }
 
 static inline void
 mm_ring_global_lock(struct mm_ring *ring)
 {
-	mm_global_lock(&ring->tail_lock.global);
+	mm_thread_lock(&ring->tail_lock.global);
 }
 
 static inline void
 mm_ring_global_unlock(struct mm_ring *ring)
 {
-	mm_global_unlock(&ring->tail_lock.global);
+	mm_thread_unlock(&ring->tail_lock.global);
 }
 
 /* Multi-producer enqueue operation with synchronization for core threads. */

@@ -42,8 +42,8 @@ struct mm_pool
 	uint32_t block_array_size;
 
 	bool global;
-	mm_global_lock_t free_lock;
-	mm_global_lock_t grow_lock;
+	mm_thread_lock_t free_lock;
+	mm_thread_lock_t grow_lock;
 
 	const struct mm_allocator *alloc;
 

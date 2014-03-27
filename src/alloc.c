@@ -127,14 +127,14 @@ mm_core_free(void *ptr)
  * Global Memory Allocation Routines.
  **********************************************************************/
 
-static mm_global_lock_t mm_alloc_lock = MM_ATOMIC_LOCK_INIT;
+static mm_thread_lock_t mm_alloc_lock = MM_THREAD_LOCK_INIT;
 
 void *
 mm_alloc(size_t size)
 {
-	mm_global_lock(&mm_alloc_lock);
+	mm_thread_lock(&mm_alloc_lock);
 	void *ptr = dlmalloc(size);
-	mm_global_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_alloc_lock);
 
 	if (unlikely(ptr == NULL)) {
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -145,9 +145,9 @@ mm_alloc(size_t size)
 void *
 mm_alloc_aligned(size_t align, size_t size)
 {
-	mm_global_lock(&mm_alloc_lock);
+	mm_thread_lock(&mm_alloc_lock);
 	void *ptr = dlmemalign(align, size);
-	mm_global_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_alloc_lock);
 
 	if (unlikely(ptr == NULL)) {
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -158,9 +158,9 @@ mm_alloc_aligned(size_t align, size_t size)
 void *
 mm_calloc(size_t count, size_t size)
 {
-	mm_global_lock(&mm_alloc_lock);
+	mm_thread_lock(&mm_alloc_lock);
 	void *ptr = dlcalloc(count, size);
-	mm_global_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_alloc_lock);
 
 	if (unlikely(ptr == NULL)) {
 		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
@@ -171,9 +171,9 @@ mm_calloc(size_t count, size_t size)
 void *
 mm_realloc(void *ptr, size_t size)
 {
-	mm_global_lock(&mm_alloc_lock);
+	mm_thread_lock(&mm_alloc_lock);
 	ptr = dlrealloc(ptr, size);
-	mm_global_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_alloc_lock);
 
 	if (unlikely(ptr == NULL)) {
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -184,7 +184,7 @@ mm_realloc(void *ptr, size_t size)
 void
 mm_free(void *ptr)
 {
-	mm_global_lock(&mm_alloc_lock);
+	mm_thread_lock(&mm_alloc_lock);
 	dlfree(ptr);
-	mm_global_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_alloc_lock);
 }

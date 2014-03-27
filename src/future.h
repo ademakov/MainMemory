@@ -35,7 +35,7 @@ typedef enum {
 struct mm_future
 {
 	/* The internal state lock. */
-	mm_core_lock_t lock;
+	mm_task_lock_t lock;
 
 	/* A cancel request has been made. */
 	uint8_t cancel;

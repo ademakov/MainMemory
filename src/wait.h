@@ -71,13 +71,13 @@ void mm_waitset_prepare(struct mm_waitset *waitset)
 void mm_waitset_cleanup(struct mm_waitset *waitset)
 	__attribute__((nonnull(1)));
 
-void mm_waitset_wait(struct mm_waitset *waitset, mm_core_lock_t *lock)
+void mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	__attribute__((nonnull(1)));
 
-void mm_waitset_timedwait(struct mm_waitset *waitset, mm_core_lock_t *lock, mm_timeout_t timeout)
+void mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout)
 	__attribute__((nonnull(1)));
 
-void mm_waitset_broadcast(struct mm_waitset *waitset, mm_core_lock_t *lock)
+void mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	__attribute__((nonnull(1)));
 
 #endif /* WAIT_H */

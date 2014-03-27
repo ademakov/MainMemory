@@ -33,7 +33,7 @@ mm_future_finish(struct mm_future *future,
 	ENTER();
 
 	// Synchronize with waiters.
-	mm_core_lock(&future->lock);
+	mm_task_lock(&future->lock);
 
 	// Reset the task reference.
 	mm_memory_store(future->task, NULL);
@@ -117,7 +117,7 @@ mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	ENTER();
 
 	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
-	future->lock = (mm_core_lock_t) MM_ATOMIC_LOCK_INIT;
+	future->lock = MM_TASK_LOCK_INIT;
 	future->cancel = false;
 	future->status.value = MM_FUTURE_CREATED;
 	future->result = MM_TASK_UNRESOLVED;
@@ -177,7 +177,7 @@ mm_future_cancel(struct mm_future *future)
 	mm_memory_store(future->cancel, true);
 
 	// Make a synchronized check of the future status.
-	mm_core_lock(&future->lock);
+	mm_task_lock(&future->lock);
 	uint8_t status = mm_memory_load(future->status.value);
 	if (status == MM_FUTURE_STARTED) {
 		struct mm_task *task = mm_memory_load(future->task);
@@ -191,7 +191,7 @@ mm_future_cancel(struct mm_future *future)
 #endif
 		}
 	}
-	mm_core_unlock(&future->lock);
+	mm_task_unlock(&future->lock);
 
 	LEAVE();
 }
@@ -217,10 +217,10 @@ mm_future_wait(struct mm_future *future)
 			break;
 
 		// Make a synchronized check of the future status.
-		mm_core_lock(&future->lock);
+		mm_task_lock(&future->lock);
 		status = mm_memory_load(future->status.value);
 		if (status != MM_FUTURE_STARTED) {
-			mm_core_unlock(&future->lock);
+			mm_task_unlock(&future->lock);
 			break;
 		}
 
@@ -265,10 +265,10 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		}
 
 		// Make a synchronized check of the future status.
-		mm_core_lock(&future->lock);
+		mm_task_lock(&future->lock);
 		status = mm_memory_load(future->status.value);
 		if (status != MM_FUTURE_STARTED) {
-			mm_core_unlock(&future->lock);
+			mm_task_unlock(&future->lock);
 			break;
 		}
 

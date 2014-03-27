@@ -26,17 +26,19 @@
 #include "trace.h"
 
 /**********************************************************************
- * Synchronization between core threads.
+ * Synchronization between tasks running on different cores.
  **********************************************************************/
 
-typedef mm_atomic_lock_t mm_core_lock_t;
+#define MM_TASK_LOCK_INIT ((mm_task_lock_t) { MM_ATOMIC_LOCK_INIT })
+
+typedef struct { mm_atomic_lock_t lock; } mm_task_lock_t;
 
 static inline bool
-mm_core_trylock(mm_core_lock_t *lock)
+mm_task_trylock(mm_task_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
 #if ENABLE_SMP
-	return !mm_atomic_lock_acquire(lock);
+	return !mm_atomic_lock_acquire(&lock->lock);
 #else
 	(void) lock;
 	return true;
@@ -44,12 +46,12 @@ mm_core_trylock(mm_core_lock_t *lock)
 }
 
 static inline void
-mm_core_lock(mm_core_lock_t *lock)
+mm_task_lock(mm_task_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
 #if ENABLE_SMP
 	register int count = 0;
-	while (mm_atomic_lock_acquire(lock)) {
+	while (mm_atomic_lock_acquire(&lock->lock)) {
 		do {
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
@@ -60,7 +62,7 @@ mm_core_lock(mm_core_lock_t *lock)
 				}
 			}
 			count++;
-		} while (mm_memory_load(lock->locked));
+		} while (mm_memory_load(lock->lock.locked));
 	}
 #else
 	(void) lock;
@@ -68,34 +70,36 @@ mm_core_lock(mm_core_lock_t *lock)
 }
 
 static inline void
-mm_core_unlock(mm_core_lock_t *lock)
+mm_task_unlock(mm_task_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
 #if ENABLE_SMP
-	mm_atomic_lock_release(lock);
+	mm_atomic_lock_release(&lock->lock);
 #else
 	(void) lock;
 #endif
 }
 
 /**********************************************************************
- * Synchronization between core and auxiliary threads.
+ * Synchronization between different threads.
  **********************************************************************/
 
-typedef mm_atomic_lock_t mm_global_lock_t;
+#define MM_THREAD_LOCK_INIT ((mm_thread_lock_t) { MM_ATOMIC_LOCK_INIT })
+
+typedef struct { mm_atomic_lock_t lock; } mm_thread_lock_t;
 
 static inline bool
-mm_global_trylock(mm_global_lock_t *lock)
+mm_thread_trylock(mm_thread_lock_t *lock)
 {
-	return !mm_atomic_lock_acquire(lock);
+	return !mm_atomic_lock_acquire(&lock->lock);
 }
 
 static inline void
-mm_global_lock(mm_global_lock_t *lock)
+mm_thread_lock(mm_thread_lock_t *lock)
 {
 #if ENABLE_SMP
 	register int count = 0;
-	while (mm_atomic_lock_acquire(lock)) {
+	while (mm_atomic_lock_acquire(&lock->lock)) {
 		do {
 			mm_atomic_lock_pause();
 			if ((count & 0x0f) == 0x0f) {
@@ -106,18 +110,18 @@ mm_global_lock(mm_global_lock_t *lock)
 				}
 			}
 			count++;
-		} while (mm_memory_load(lock->locked));
+		} while (mm_memory_load(lock->lock.locked));
 	}
 #else
-	while (mm_atomic_lock_acquire(lock))
+	while (mm_atomic_lock_acquire(&lock->lock))
 		mm_thread_yield();
 #endif
 }
 
 static inline void
-mm_global_unlock(mm_global_lock_t *lock)
+mm_thread_unlock(mm_thread_lock_t *lock)
 {
-	mm_atomic_lock_release(lock);
+	mm_atomic_lock_release(&lock->lock);
 }
 
 #endif /* LOCK_H */

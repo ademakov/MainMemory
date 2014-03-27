@@ -40,13 +40,13 @@
 static struct mm_chunk *mm_log_head;
 static struct mm_chunk *mm_log_tail;
 
-static mm_global_lock_t mm_log_lock = MM_ATOMIC_LOCK_INIT;
+static mm_thread_lock_t mm_log_lock = MM_THREAD_LOCK_INIT;
 static bool mm_log_busy = false;
 
 static void
 mm_log_add_chain(struct mm_chunk *head, struct mm_chunk *tail)
 {
-	mm_global_lock(&mm_log_lock);
+	mm_thread_lock(&mm_log_lock);
 
 	if (mm_log_tail == NULL)
 		mm_log_head = head;
@@ -54,7 +54,7 @@ mm_log_add_chain(struct mm_chunk *head, struct mm_chunk *tail)
 		mm_log_tail->next = head;
 	mm_log_tail = tail;
 
-	mm_global_unlock(&mm_log_lock);
+	mm_thread_unlock(&mm_log_lock);
 }
 
 static void
@@ -168,10 +168,10 @@ mm_log_fmt(const char *restrict fmt, ...)
 size_t
 mm_log_write(void)
 {
-	mm_global_lock(&mm_log_lock);
+	mm_thread_lock(&mm_log_lock);
 
 	if (mm_log_busy || mm_log_head == NULL) {
-		mm_global_unlock(&mm_log_lock);
+		mm_thread_unlock(&mm_log_lock);
 		// TODO: wait for write completion.
 		return 0;
 	}
@@ -181,7 +181,7 @@ mm_log_write(void)
 	mm_log_tail = NULL;
 	mm_log_busy = true;
 
-	mm_global_unlock(&mm_log_lock);
+	mm_thread_unlock(&mm_log_lock);
 
 	// The number of written bytes.
 	size_t written = 0;

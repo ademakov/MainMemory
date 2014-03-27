@@ -34,7 +34,7 @@ struct mm_task;
 struct mm_port
 {
 	/* The internal state lock. */
-	mm_core_lock_t lock;
+	mm_task_lock_t lock;
 
 	/* The port owner. */
 	struct mm_task *task;

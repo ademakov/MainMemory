@@ -29,7 +29,7 @@ mm_ring_prepare(struct mm_ring *ring, size_t size)
 
 	ring->head = 0;
 	ring->tail = 0;
-	ring->tail_lock.core = (mm_atomic_lock_t) MM_ATOMIC_LOCK_INIT;
+	ring->tail_lock.core = MM_TASK_LOCK_INIT;
 	ring->mask = mask;
 
 	for (size_t i = 0; i < size; i++) {

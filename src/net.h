@@ -132,7 +132,7 @@ struct mm_net_socket
 	uint8_t close_flags;
 
 	/* Socket I/O status lock. */
-	mm_core_lock_t lock;
+	mm_task_lock_t lock;
 
 	/* Tasks pending on socket I/O. */
 	struct mm_waitset read_waitset;
