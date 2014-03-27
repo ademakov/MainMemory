@@ -172,7 +172,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 }
 
 void
-mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
+mm_core_post(bool pinned, mm_routine_t routine, mm_value_t routine_arg)
 {
 	ENTER();
 
@@ -187,7 +187,7 @@ mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
 }
 
 void
-mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg)
+mm_core_submit(struct mm_core *core, mm_routine_t routine, mm_value_t routine_arg)
 {
 	ENTER();
 	ASSERT(mm_core != NULL);
@@ -372,8 +372,8 @@ mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 	mm_core->nworkers--;
 }
 
-static mm_result_t
-mm_core_worker(uintptr_t arg __attribute__((unused)))
+static mm_value_t
+mm_core_worker(mm_value_t arg __attribute__((unused)))
 {
 	ENTER();
 
@@ -400,7 +400,7 @@ mm_core_worker(uintptr_t arg __attribute__((unused)))
 
 		// Save the work routine and recycle the work item.
 		mm_routine_t routine = work->routine;
-		uintptr_t routine_arg = work->routine_arg;
+		mm_value_t routine_arg = work->routine_arg;
 		mm_work_destroy(&core->workq, work);
 
 		// Execute the work routine.
@@ -418,8 +418,8 @@ mm_core_worker(uintptr_t arg __attribute__((unused)))
  * Master task.
  **********************************************************************/
 
-static mm_result_t
-mm_core_master(uintptr_t arg)
+static mm_value_t
+mm_core_master(mm_value_t arg)
 {
 	ENTER();
 
@@ -457,8 +457,8 @@ mm_core_master(uintptr_t arg)
  * Dealer task.
  **********************************************************************/
 
-static mm_result_t
-mm_core_dealer(uintptr_t arg)
+static mm_value_t
+mm_core_dealer(mm_value_t arg)
 {
 	ENTER();
 
@@ -574,12 +574,12 @@ mm_core_boot_init(struct mm_core *core)
 	mm_task_attr_init(&attr);
 	mm_task_attr_setpriority(&attr, MM_PRIO_MASTER);
 	mm_task_attr_setname(&attr, "master");
-	core->master = mm_task_create(&attr, mm_core_master, (uintptr_t) core);
+	core->master = mm_task_create(&attr, mm_core_master, (mm_value_t) core);
 
 	// Create the dealer task for this core and schedule it for execution.
 	mm_task_attr_setpriority(&attr, MM_PRIO_DEALER);
 	mm_task_attr_setname(&attr, "dealer");
-	core->dealer = mm_task_create(&attr, mm_core_dealer, (uintptr_t) core);
+	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 
 	// Call the start hooks on the first core.
 	if (MM_CORE_IS_PRIMARY(core)) {
@@ -608,8 +608,8 @@ mm_core_boot_term(struct mm_core *core)
 }
 
 /* A per-core thread entry point. */
-static mm_result_t
-mm_core_boot(uintptr_t arg)
+static mm_value_t
+mm_core_boot(mm_value_t arg)
 {
 	ENTER();
 
@@ -682,7 +682,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_task_attr_setpriority(&attr, MM_PRIO_BOOT);
 	mm_task_attr_setstacksize(&attr, 0);
 	mm_task_attr_setname(&attr, "boot");
-	core->boot = mm_task_create(&attr, mm_core_boot, (uintptr_t) core);
+	core->boot = mm_task_create(&attr, mm_core_boot, (mm_value_t) core);
 
 	LEAVE();
 }

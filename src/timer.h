@@ -39,7 +39,7 @@ mm_timeval_t mm_timer_next(void);
 
 mm_timer_t mm_timer_create(mm_clock_t clock,
 			   mm_routine_t start,
-			   uintptr_t start_arg)
+			   mm_value_t start_arg)
 	__attribute__((nonnull(2)));
 
 void mm_timer_destroy(mm_timer_t timer_id);

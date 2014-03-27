@@ -38,7 +38,7 @@ struct mm_timer
 
 	/* Task parameters. */
 	mm_routine_t start;
-	uintptr_t start_arg;
+	mm_value_t start_arg;
 
 	/* Expiration time. */
 	mm_timeval_t value;
@@ -150,7 +150,7 @@ mm_timer_next(void)
 }
 
 mm_timer_t
-mm_timer_create(mm_clock_t clock, mm_routine_t start, uintptr_t start_arg)
+mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 

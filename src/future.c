@@ -28,7 +28,7 @@
 static void
 mm_future_finish(struct mm_future *future,
 		 mm_future_status_t status,
-		 mm_result_t result)
+		 mm_value_t result)
 {
 	ENTER();
 
@@ -62,8 +62,8 @@ mm_future_cleanup(struct mm_future *future)
 	LEAVE();
 }
 
-static mm_result_t
-mm_future_routine(uintptr_t arg)
+static mm_value_t
+mm_future_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -79,7 +79,7 @@ mm_future_routine(uintptr_t arg)
 		mm_future_finish(future, MM_FUTURE_CANCELED, MM_TASK_CANCELED);
 	} else {
 		mm_memory_store(future->task, mm_running_task);
-		mm_result_t result = future->start(future->start_arg);
+		mm_value_t result = future->start(future->start_arg);
 		mm_future_finish(future, MM_FUTURE_COMPLETED, result);
 	}
 
@@ -112,7 +112,7 @@ mm_future_term(void)
 }
 
 struct mm_future *
-mm_future_create(mm_routine_t start, uintptr_t start_arg)
+mm_future_create(mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
@@ -159,9 +159,9 @@ mm_future_start(struct mm_future *future, struct mm_core *core)
 	// Initiate execution of the future routine.
 	if (status == MM_FUTURE_CREATED) {
 		if (core == NULL) {
-			mm_core_post(false, mm_future_routine, (uintptr_t) future);
+			mm_core_post(false, mm_future_routine, (mm_value_t) future);
 		} else {
-			mm_core_submit(core, mm_future_routine, (uintptr_t) future);
+			mm_core_submit(core, mm_future_routine, (mm_value_t) future);
 		}
 	}
 
@@ -196,7 +196,7 @@ mm_future_cancel(struct mm_future *future)
 	LEAVE();
 }
 
-mm_result_t
+mm_value_t
 mm_future_wait(struct mm_future *future)
 {
 	ENTER();
@@ -235,7 +235,7 @@ mm_future_wait(struct mm_future *future)
 	return mm_memory_load(future->result);
 }
 
-mm_result_t
+mm_value_t
 mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 {
 	ENTER();

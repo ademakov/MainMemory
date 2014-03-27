@@ -124,10 +124,10 @@ void mm_core_register_server(struct mm_net_server *srv)
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void mm_core_post(bool pinned, mm_routine_t routine, uintptr_t routine_arg)
+void mm_core_post(bool pinned, mm_routine_t routine, mm_value_t routine_arg)
 	__attribute__((nonnull(2)));
 
-void mm_core_submit(struct mm_core *core, mm_routine_t routine, uintptr_t routine_arg)
+void mm_core_submit(struct mm_core *core, mm_routine_t routine, mm_value_t routine_arg)
 	__attribute__((nonnull(1, 2)));
 
 void mm_core_run_task(struct mm_task *task)

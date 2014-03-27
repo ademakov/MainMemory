@@ -35,7 +35,7 @@ struct mm_work
 	/* The work routine. */
 	mm_routine_t routine;
 	/* The work routine argument. */
-	uintptr_t routine_arg;
+	mm_value_t routine_arg;
 };
 
 /* A work queue. */
@@ -77,7 +77,7 @@ mm_work_available(struct mm_workq *queue)
 
 static inline void
 mm_work_set(struct mm_work *work, bool pinned,
-	    mm_routine_t routine, uintptr_t routine_arg)
+	    mm_routine_t routine, mm_value_t routine_arg)
 {
 	work->pinned = pinned;
 	work->routine = routine;

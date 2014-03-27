@@ -69,7 +69,7 @@ void mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 	__attribute__((nonnull(1)));
 
 struct mm_thread * mm_thread_create(struct mm_thread_attr *attr,
-				    mm_routine_t start, uintptr_t start_arg)
+				    mm_routine_t start, mm_value_t start_arg)
 	__attribute__((nonnull(2)));
 
 /**********************************************************************

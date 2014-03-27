@@ -274,8 +274,8 @@ struct mc_table
 
 static struct mc_table mc_table;
 
-static mm_result_t mc_table_evict_routine(uintptr_t);
-static mm_result_t mc_table_stride_routine(uintptr_t);
+static mm_value_t mc_table_evict_routine(mm_value_t);
+static mm_value_t mc_table_stride_routine(mm_value_t);
 
 static inline size_t
 mc_table_space(size_t nbuckets)
@@ -334,7 +334,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 {
 	ENTER();
 
-	mm_core_post(true, mc_table_evict_routine, (uintptr_t) part);
+	mm_core_post(true, mc_table_evict_routine, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -344,7 +344,7 @@ mc_table_start_striding(struct mc_tpart *part)
 {
 	ENTER();
 
-	mm_core_post(true, mc_table_stride_routine, (uintptr_t) part);
+	mm_core_post(true, mc_table_stride_routine, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -429,8 +429,8 @@ mc_table_stride(void)
 	LEAVE();
 }
 
-static mm_result_t
-mc_table_stride_routine(uintptr_t arg)
+static mm_value_t
+mc_table_stride_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -575,8 +575,8 @@ mc_table_evict(struct mc_tpart *part)
 	LEAVE();
 }
 
-static mm_result_t
-mc_table_evict_routine(uintptr_t arg)
+static mm_value_t
+mc_table_evict_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -595,8 +595,8 @@ mc_table_evict_routine(uintptr_t arg)
 	return 0;
 }
 
-static mm_result_t
-mc_table_flush_routine(uintptr_t arg)
+static mm_value_t
+mc_table_flush_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -742,7 +742,7 @@ struct mc_command_type
 };
 
 #define MC_COMMAND_TYPE(cmd, process_name, value)			\
-	static mm_result_t mc_process_##process_name(uintptr_t);	\
+	static mm_value_t mc_process_##process_name(mm_value_t);	\
 	static struct mc_command_type mc_desc_##cmd = {			\
 		.tag = mc_command_##cmd,				\
 		.process = mc_process_##process_name,			\
@@ -1118,8 +1118,8 @@ mc_process_value(struct mc_entry *entry, struct mc_set_params *params, uint32_t 
 	LEAVE();
 }
 
-static mm_result_t
-mc_process_get2(uintptr_t arg, mc_result_t rc)
+static mm_value_t
+mc_process_get2(mm_value_t arg, mc_result_t rc)
 {
 	ENTER();
 
@@ -1148,20 +1148,20 @@ mc_process_get2(uintptr_t arg, mc_result_t rc)
 	return rc;
 }
 
-static mm_result_t
-mc_process_get(uintptr_t arg)
+static mm_value_t
+mc_process_get(mm_value_t arg)
 {
 	return mc_process_get2(arg, MC_RESULT_ENTRY);
 }
 
-static mm_result_t
-mc_process_gets(uintptr_t arg)
+static mm_value_t
+mc_process_gets(mm_value_t arg)
 {
 	return mc_process_get2(arg, MC_RESULT_ENTRY_CAS);
 }
 
-static mm_result_t
-mc_process_set(uintptr_t arg)
+static mm_value_t
+mc_process_set(mm_value_t arg)
 {
 	ENTER();
 
@@ -1192,8 +1192,8 @@ mc_process_set(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_add(uintptr_t arg)
+static mm_value_t
+mc_process_add(mm_value_t arg)
 {
 	ENTER();
 
@@ -1226,8 +1226,8 @@ mc_process_add(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_replace(uintptr_t arg)
+static mm_value_t
+mc_process_replace(mm_value_t arg)
 {
 	ENTER();
 
@@ -1262,8 +1262,8 @@ mc_process_replace(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_cas(uintptr_t arg)
+static mm_value_t
+mc_process_cas(mm_value_t arg)
 {
 	ENTER();
 
@@ -1302,8 +1302,8 @@ mc_process_cas(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_append(uintptr_t arg)
+static mm_value_t
+mc_process_append(mm_value_t arg)
 {
 	ENTER();
 
@@ -1343,8 +1343,8 @@ mc_process_append(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_prepend(uintptr_t arg)
+static mm_value_t
+mc_process_prepend(mm_value_t arg)
 {
 	ENTER();
 
@@ -1384,8 +1384,8 @@ mc_process_prepend(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_incr(uintptr_t arg)
+static mm_value_t
+mc_process_incr(mm_value_t arg)
 {
 	ENTER();
 
@@ -1426,8 +1426,8 @@ mc_process_incr(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_decr(uintptr_t arg)
+static mm_value_t
+mc_process_decr(mm_value_t arg)
 {
 	ENTER();
 
@@ -1471,8 +1471,8 @@ mc_process_decr(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_delete(uintptr_t arg)
+static mm_value_t
+mc_process_delete(mm_value_t arg)
 {
 	ENTER();
 
@@ -1497,20 +1497,20 @@ mc_process_delete(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_touch(uintptr_t arg __attribute__((unused)))
+static mm_value_t
+mc_process_touch(mm_value_t arg __attribute__((unused)))
 {
 	return MC_RESULT_NOT_IMPLEMENTED;
 }
 
-static mm_result_t
-mc_process_slabs(uintptr_t arg __attribute__((unused)))
+static mm_value_t
+mc_process_slabs(mm_value_t arg __attribute__((unused)))
 {
 	return MC_RESULT_NOT_IMPLEMENTED;
 }
 
-static mm_result_t
-mc_process_stats(uintptr_t arg)
+static mm_value_t
+mc_process_stats(mm_value_t arg)
 {
 	ENTER();
 
@@ -1526,8 +1526,8 @@ mc_process_stats(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_flush_all(uintptr_t arg)
+static mm_value_t
+mc_process_flush_all(mm_value_t arg)
 {
 	ENTER();
 
@@ -1551,14 +1551,14 @@ mc_process_flush_all(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_version(uintptr_t arg __attribute__((unused)))
+static mm_value_t
+mc_process_version(mm_value_t arg __attribute__((unused)))
 {
 	return MC_RESULT_VERSION;
 }
 
-static mm_result_t
-mc_process_verbosity(uintptr_t arg)
+static mm_value_t
+mc_process_verbosity(mm_value_t arg)
 {
 	ENTER();
 
@@ -1577,8 +1577,8 @@ mc_process_verbosity(uintptr_t arg)
 	return rc;
 }
 
-static mm_result_t
-mc_process_quit(uintptr_t arg)
+static mm_value_t
+mc_process_quit(mm_value_t arg)
 {
 	ENTER();
 
@@ -1604,16 +1604,16 @@ mm_process_start(struct mc_command *command)
 
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->process,
-						   (intptr_t) command);
+						   (mm_value_t) command);
 		mm_future_start(command->future, core);
 		return;
 #endif
 	}
 
-	command->result_type = (command->type->process)((intptr_t) command);
+	command->result_type = (command->type->process)((mm_value_t) command);
 }
 
-static mm_result_t
+static mm_value_t
 mc_process_command(struct mc_state *state, struct mc_command *first)
 {
 	ENTER();

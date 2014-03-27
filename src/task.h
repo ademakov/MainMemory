@@ -52,9 +52,9 @@ typedef int8_t			mm_priority_t;
 #define MM_PRIO_SYSTEM		MM_PRIO_UPPER(MM_PRIO_CORE, 1)
 
 /* Canceled task execution result. */
-#define MM_TASK_CANCELED	((mm_result_t) -1)
+#define MM_TASK_CANCELED	((mm_value_t) -1)
 /* Unfinished task execution result. */
-#define MM_TASK_UNRESOLVED	((mm_result_t) -2)
+#define MM_TASK_UNRESOLVED	((mm_value_t) -2)
 
 /* Task state values. */
 typedef enum {
@@ -148,11 +148,11 @@ struct mm_task
 	struct mm_task_cleanup_rec *cleanup;
 
 	/* The task result. */
-	mm_result_t result;
+	mm_value_t result;
 
 	/* The task start routine and its argument. */
 	mm_routine_t start;
-	uintptr_t start_arg;
+	mm_value_t start_arg;
 
 	/* The task stack. */
 	uint32_t stack_size;
@@ -196,7 +196,7 @@ void mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
 
 struct mm_task * mm_task_create(const struct mm_task_attr *attr,
 				mm_routine_t start,
-				uintptr_t start_arg)
+				mm_value_t start_arg)
 	__attribute__((nonnull(2)));
 
 void mm_task_destroy(struct mm_task *task)
@@ -227,7 +227,7 @@ void mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 void mm_task_yield(void);
 void mm_task_block(void);
 
-void mm_task_exit(mm_result_t result)
+void mm_task_exit(mm_value_t result)
 	__attribute__((noreturn));
 
 /**********************************************************************

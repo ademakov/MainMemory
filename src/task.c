@@ -136,7 +136,7 @@ mm_task_entry(void)
 	TRACE("enter task %s", mm_running_task->name);
 
 	// Execute the task routine on an empty stack.
-	mm_result_t result = mm_running_task->start(mm_running_task->start_arg);
+	mm_value_t result = mm_running_task->start(mm_running_task->start_arg);
 
 	// Finish the task making sure there is no return from this point
 	// as there is no valid stack frame above it.
@@ -228,7 +228,7 @@ mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 /* Create a new task. */
 struct mm_task *
 mm_task_create(const struct mm_task_attr *attr,
-	       mm_routine_t start, uintptr_t start_arg)
+	       mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
@@ -463,7 +463,7 @@ mm_task_block(void)
 
 /* Finish the current task. */
 void
-mm_task_exit(mm_result_t result)
+mm_task_exit(mm_value_t result)
 {
 	TRACE("exiting task '%s' with status %lu",
 	      mm_running_task->name, (unsigned long) result);

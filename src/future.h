@@ -42,11 +42,11 @@ struct mm_future
 	/* The future status. */
 	mm_atomic_uint8_t status;
 	/* The future result. */
-	mm_result_t result;
+	mm_value_t result;
 
 	/* The future task parameters. */
 	mm_routine_t start;
-	intptr_t start_arg;
+	mm_value_t start_arg;
 
 	/* The task if started. */
 	struct mm_task *task;
@@ -58,7 +58,7 @@ struct mm_future
 void mm_future_init(void);
 void mm_future_term(void);
 
-struct mm_future *mm_future_create(mm_routine_t start, uintptr_t start_arg)
+struct mm_future *mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	__attribute__((nonnull(1)));
 
 void mm_future_destroy(struct mm_future *future)
@@ -70,10 +70,10 @@ void mm_future_start(struct mm_future *future, struct mm_core *core)
 void mm_future_cancel(struct mm_future *future)
 	__attribute__((nonnull(1)));
 
-mm_result_t mm_future_wait(struct mm_future *future)
+mm_value_t mm_future_wait(struct mm_future *future)
 	__attribute__((nonnull(1)));
 
-mm_result_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
+mm_value_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	__attribute__((nonnull(1)));
 
 static inline bool

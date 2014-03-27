@@ -114,9 +114,9 @@ typedef uint16_t		mm_core_t;
 typedef uint32_t		mm_task_t;
 
 /* Task execution result. */
-typedef uintptr_t		mm_result_t;
+typedef uintptr_t		mm_value_t;
 
 /* Task execution routine. */
-typedef mm_result_t (*mm_routine_t)(uintptr_t arg);
+typedef mm_value_t (*mm_routine_t)(mm_value_t arg);
 
 #endif /* COMMON_H */

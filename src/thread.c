@@ -48,7 +48,7 @@ struct mm_thread
 
 	/* The task start routine and its argument. */
 	mm_routine_t start;
-	uintptr_t start_arg;
+	mm_value_t start_arg;
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
@@ -212,7 +212,7 @@ mm_thread_entry(void *arg)
 
 struct mm_thread *
 mm_thread_create(struct mm_thread_attr *attr,
-		 mm_routine_t start, uintptr_t start_arg)
+		 mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 	int rc;
