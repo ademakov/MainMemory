@@ -41,7 +41,7 @@ mm_port_create(struct mm_task *task)
 	ENTER();
 
 	struct mm_port *port = mm_alloc(sizeof(struct mm_port));
-	port->lock = MM_TASK_LOCK_INIT;
+	port->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	port->task = task;
 	port->start = 0;
 	port->count = 0;

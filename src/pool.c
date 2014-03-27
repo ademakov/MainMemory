@@ -54,8 +54,8 @@ mm_pool_prepare(struct mm_pool *pool,
 	pool->block_array_size = 0;
 
 	pool->global = (alloc == &mm_alloc_global);
-	pool->free_lock = MM_THREAD_LOCK_INIT;
-	pool->grow_lock = MM_THREAD_LOCK_INIT;
+	pool->free_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	pool->grow_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
 	pool->alloc = alloc;
 	pool->block_array = NULL;

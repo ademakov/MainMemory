@@ -117,7 +117,7 @@ mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	ENTER();
 
 	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
-	future->lock = MM_TASK_LOCK_INIT;
+	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	future->cancel = false;
 	future->status.value = MM_FUTURE_CREATED;
 	future->result = MM_TASK_UNRESOLVED;

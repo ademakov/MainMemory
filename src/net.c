@@ -319,7 +319,7 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	sock->fd_flags = 0;
 	sock->task_flags = 0;
 	sock->close_flags = 0;
-	sock->lock = MM_TASK_LOCK_INIT;
+	sock->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	sock->read_stamp = 0;
 	sock->write_stamp = 0;
 	mm_waitset_prepare(&sock->read_waitset);
