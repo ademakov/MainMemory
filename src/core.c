@@ -298,26 +298,27 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	if (chunk->core == mm_core) {
+	if (chunk->core == mm_core_self()) {
 		// Destroy the chunk directly.
 		mm_chunk_destroy(chunk);
 	} else {
 		// Put the chunk to the target core chunks ring.
+		struct mm_core *core = mm_core_getptr(chunk->core);
 		for (;;) {
-			bool ok = mm_ring_global_put(&chunk->core->chunks, chunk);
+			bool ok = mm_ring_global_put(&core->chunks, chunk);
 
 			// Actual reclamation may wait a little bit so
 			// don't wakeup the core unless the ring is full.
 			if (ok) {
 				break;
-			} else if (unlikely(mm_memory_load(chunk->core->stop))) {
+			} else if (unlikely(mm_memory_load(core->stop))) {
 				mm_warning(0, "lost a chunk as core %d is stopped",
-					   mm_core_getid(chunk->core));
+					   chunk->core);
 				break;
 			}
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(chunk->core);
+			mm_core_wake(core);
 		}
 	}
 

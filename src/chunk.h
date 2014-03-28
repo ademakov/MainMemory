@@ -32,7 +32,7 @@ struct mm_chunk
 	uint32_t used;
 	uint32_t size;
 	struct mm_chunk *next;
-	struct mm_core *core;
+	mm_core_t core;
 	char data[];
 };
 

@@ -30,7 +30,7 @@ mm_chunk_create(size_t size)
 	struct mm_chunk *chunk = mm_core_alloc(total_size);
 	chunk->size = size;
 	chunk->used = 0;
-	chunk->core = mm_core;
+	chunk->core = mm_core_self();
 	chunk->next = NULL;
 	return chunk;
 }
@@ -38,7 +38,7 @@ mm_chunk_create(size_t size)
 void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
-	ASSERT(chunk->core == mm_core);
+	ASSERT(chunk->core == mm_core_self());
 
 	mm_core_free(chunk);
 }

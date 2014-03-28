@@ -71,7 +71,7 @@ mm_log_create_chunk(size_t size)
 		chunk = mm_alloc(sizeof(struct mm_chunk) + size);
 		chunk->size = size;
 		chunk->used = 0;
-		chunk->core = NULL;
+		chunk->core = MM_CORE_NONE;
 		chunk->next = NULL;
 	} else {
 		if (size < MM_LOG_CHUNK_SIZE)
@@ -187,13 +187,14 @@ mm_log_write(void)
 	size_t written = 0;
 
 	do {
-		if (write(2, chunk->data, chunk->used) != chunk->used) {
+		// TODO: take care of partial writes
+		if (write(2, chunk->data, chunk->used) != chunk->used)
 			ABORT();
-		}
+
 		written += chunk->used;
 
 		struct mm_chunk *next = chunk->next;
-		if (chunk->core == NULL) {
+		if (chunk->core == MM_CORE_NONE) {
 			mm_free(chunk);
 		} else {
 			mm_core_reclaim_chunk(chunk);
