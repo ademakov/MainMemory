@@ -318,9 +318,6 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 
 			// Wakeup the target core if it is asleep.
 			mm_core_wake(chunk->core);
-
-			// TODO: backoff
-			mm_thread_yield();
 		}
 	}
 
