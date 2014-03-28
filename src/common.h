@@ -97,6 +97,8 @@
 
 /* A non-existent core. */
 #define MM_CORE_NONE		((mm_core_t) -1)
+/* A pseudo-core corresponding to the current one. */
+#define MM_CORE_SELF		((mm_core_t) -2)
 
 /* A non-existent task. */
 #define MM_TASK_NONE		((mm_task_t) -1)

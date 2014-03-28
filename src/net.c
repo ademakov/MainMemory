@@ -327,7 +327,7 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->data = 0;
-	sock->core = NULL;
+	sock->core = MM_CORE_NONE;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->server = srv;
@@ -415,13 +415,10 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Select a core for the client using round-robin discipline.
-	mm_core_t core = srv->client_core++;
+	sock->core = srv->client_core++;
 	if (srv->client_core == mm_core_num)
 		srv->client_core = 0;
-	mm_verbose("bind connection to core %d", core);
-
-	// Bind the socket to the selected core.
-	sock->core = mm_core_getptr(core);
+	mm_verbose("bind connection to core %d", sock->core);
 
 	// Request required I/O tasks.
 	if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
@@ -438,7 +435,7 @@ retry:
 			sock->task_flags |= MM_NET_WRITER_SPAWNED;
 
 		// Request protocol handler routine.
-		mm_core_submit(sock->core, mm_net_prepare, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_prepare, (mm_value_t) sock);
 	}
 
 	// Register the socket with the event loop.
@@ -638,7 +635,7 @@ mm_net_handle_check_reader(struct mm_net_socket *sock)
 		sock->task_flags |= MM_NET_READER_SPAWNED;
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->task_flags &= ~MM_NET_READER_PENDING;
-		mm_core_submit(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
 	}
 
 	LEAVE();
@@ -658,7 +655,7 @@ mm_net_handle_check_writer(struct mm_net_socket *sock)
 		sock->task_flags |= MM_NET_WRITER_SPAWNED;
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->task_flags &= ~MM_NET_WRITER_PENDING;
-		mm_core_submit(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
 	}
 
 	LEAVE();
@@ -675,7 +672,7 @@ mm_net_handle_spawn_reader(struct mm_net_socket *sock)
 	} else {
 		// Submit a reader work.
 		sock->task_flags |= MM_NET_READER_SPAWNED;
-		mm_core_submit(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
 	}
 
 	LEAVE();
@@ -692,7 +689,7 @@ mm_net_handle_spawn_writer(struct mm_net_socket *sock)
 	} else {
 		// Submit a writer work.
 		sock->task_flags |= MM_NET_WRITER_SPAWNED;
-		mm_core_submit(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
 	}
 
 	LEAVE();
@@ -718,11 +715,11 @@ mm_net_handle_yield_reader(struct mm_net_socket *sock)
 		// Submit a reader work.
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->task_flags &= ~MM_NET_READER_PENDING;
-		mm_core_submit(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
 	} else {
 		sock->task_flags &= ~MM_NET_READER_SPAWNED;
 		if ((fd_flags & MM_NET_READ_ERROR) != 0) {
-			mm_core_submit(sock->core, mm_net_closer, (mm_value_t) sock);
+			mm_core_post(sock->core, mm_net_closer, (mm_value_t) sock);
 		}
 	}
 
@@ -749,11 +746,11 @@ mm_net_handle_yield_writer(struct mm_net_socket *sock)
 		// Submit a writer work.
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->task_flags &= ~MM_NET_WRITER_PENDING;
-		mm_core_submit(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
 	} else {
 		sock->task_flags &= ~MM_NET_WRITER_SPAWNED;
 		if ((sock->fd_flags & MM_NET_WRITE_ERROR) != 0) {
-			mm_core_submit(sock->core, mm_net_closer, (mm_value_t) sock);
+			mm_core_post(sock->core, mm_net_closer, (mm_value_t) sock);
 		}
 	}
 
@@ -771,7 +768,7 @@ mm_net_handle_cleanup_sock(struct mm_net_socket *sock)
 	// socket. So relying on the FIFO order of the work queue submit a
 	// work item that will cleanup the socket being the last one that
 	// refers to it.
-	mm_core_submit(sock->core, mm_net_cleanup, (mm_value_t) sock);
+	mm_core_post(sock->core, mm_net_cleanup, (mm_value_t) sock);
 
 	LEAVE();
 }

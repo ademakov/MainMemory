@@ -144,7 +144,7 @@ mm_future_destroy(struct mm_future *future)
 }
 
 void
-mm_future_start(struct mm_future *future, struct mm_core *core)
+mm_future_start(struct mm_future *future, mm_core_t core)
 {
 	ENTER();
 
@@ -157,13 +157,8 @@ mm_future_start(struct mm_future *future, struct mm_core *core)
 	status = mm_atomic_uint8_cas(&future->status, MM_FUTURE_CREATED, MM_FUTURE_STARTED);
 
 	// Initiate execution of the future routine.
-	if (status == MM_FUTURE_CREATED) {
-		if (core == NULL) {
-			mm_core_post(false, mm_future_routine, (mm_value_t) future);
-		} else {
-			mm_core_submit(core, mm_future_routine, (mm_value_t) future);
-		}
-	}
+	if (status == MM_FUTURE_CREATED)
+		mm_core_post(core, mm_future_routine, (mm_value_t) future);
 
 leave:
 	LEAVE();
@@ -202,7 +197,7 @@ mm_future_wait(struct mm_future *future)
 	ENTER();
 
 	// Start the future if it has not been started already.
-	mm_future_start(future, NULL);
+	mm_future_start(future, MM_CORE_NONE);
 
 	// Wait for future completion.
 	for (;;) {
@@ -244,7 +239,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	mm_timeval_t deadline = mm_core->time_value + timeout;
 
 	// Start the future if it has not been started already.
-	mm_future_start(future, NULL);
+	mm_future_start(future, MM_CORE_NONE);
 
 	// Wait for future completion.
 	for (;;) {

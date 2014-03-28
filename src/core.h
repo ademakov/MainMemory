@@ -124,11 +124,8 @@ void mm_core_register_server(struct mm_net_server *srv)
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void mm_core_post(bool pinned, mm_routine_t routine, mm_value_t routine_arg)
+void mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
 	__attribute__((nonnull(2)));
-
-void mm_core_submit(struct mm_core *core, mm_routine_t routine, mm_value_t routine_arg)
-	__attribute__((nonnull(1, 2)));
 
 void mm_core_run_task(struct mm_task *task)
 	__attribute__((nonnull(1)));
@@ -160,10 +157,14 @@ mm_core_getid(struct mm_core *core)
 }
 
 static inline struct mm_core *
-mm_core_getptr(mm_core_t id)
+mm_core_getptr(mm_core_t core)
 {
-	ASSERT(id < mm_core_num);
-	return &mm_core_set[id];
+	if (core == MM_CORE_NONE)
+		return NULL;
+	if (core == MM_CORE_SELF)
+		return mm_core;
+	ASSERT(core < mm_core_num);
+	return &mm_core_set[core];
 }
 
 static inline mm_core_t

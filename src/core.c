@@ -172,40 +172,35 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 }
 
 void
-mm_core_post(bool pinned, mm_routine_t routine, mm_value_t routine_arg)
+mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
 {
 	ENTER();
 
-	// Create a work item.
-	struct mm_work *work = mm_work_create(&mm_core->workq);
-	mm_work_set(work, pinned, routine, routine_arg);
-
-	// Enqueue it.
-	mm_core_add_work(mm_core, work);
-
-	LEAVE();
-}
-
-void
-mm_core_submit(struct mm_core *core, mm_routine_t routine, mm_value_t routine_arg)
-{
-	ENTER();
-	ASSERT(mm_core != NULL);
+	// Get the destination core.
+	bool core_is_pinned;
+	struct mm_core *dest_core;
+	if (core != MM_CORE_NONE) {
+		core_is_pinned = true;
+		dest_core = mm_core_getptr(core);
+	} else {
+		core_is_pinned = false;
+		dest_core = mm_core;
+	}
 
 	// Create a work item.
 	struct mm_work *work = mm_work_create(&mm_core->workq);
-	mm_work_set(work, true, routine, routine_arg);
+	mm_work_set(work, core_is_pinned, routine, routine_arg);
 
-	if (core == mm_core) {
+	if (dest_core == mm_core) {
 		// Enqueue it directly if on the same core.
-		mm_core_add_work(core, work);
+		mm_core_add_work(dest_core, work);
 	} else {
 		// Put the item to the target core inbox.
 		for (;;) {
-			bool ok = mm_ring_core_put(&core->inbox, work);
+			bool ok = mm_ring_core_put(&dest_core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(core);
+			mm_core_wake(dest_core);
 
 			if (ok) {
 				break;

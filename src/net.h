@@ -146,7 +146,7 @@ struct mm_net_socket
 	intptr_t data;
 
 	/* Pinned core. */
-	struct mm_core *core;
+	mm_core_t core;
 
 	/* Socket server. */
 	struct mm_net_server *server;

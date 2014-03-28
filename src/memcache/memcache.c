@@ -334,7 +334,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 {
 	ENTER();
 
-	mm_core_post(true, mc_table_evict_routine, (mm_value_t) part);
+	mm_core_post(MM_CORE_SELF, mc_table_evict_routine, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -344,7 +344,7 @@ mc_table_start_striding(struct mc_tpart *part)
 {
 	ENTER();
 
-	mm_core_post(true, mc_table_stride_routine, (mm_value_t) part);
+	mm_core_post(MM_CORE_SELF, mc_table_stride_routine, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -1536,10 +1536,8 @@ mc_process_flush_all(mm_value_t arg)
 	// TODO: really use the exptime.
 	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
 
-	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
-		struct mm_core *core = mm_core_getptr(i);
-		mm_core_submit(core, mc_table_flush_routine, i);
-	}
+	for (mm_core_t i = 0; i < mc_table.nparts; i++)
+		mm_core_post(i, mc_table_flush_routine, i);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1599,9 +1597,7 @@ mm_process_start(struct mc_command *command)
 		command->key_hash = mc_hash(command->key.str, command->key.len);
 
 #if ENABLE_SMP
-		mm_core_t pi = mc_table_part_index(command->key_hash);
-		struct mm_core *core = mm_core_getptr(pi);
-
+		mm_core_t core = mc_table_part_index(command->key_hash);
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->process,
 						   (mm_value_t) command);

@@ -64,7 +64,7 @@ struct mm_future *mm_future_create(mm_routine_t start, mm_value_t start_arg)
 void mm_future_destroy(struct mm_future *future)
 	__attribute__((nonnull(1)));
 
-void mm_future_start(struct mm_future *future, struct mm_core *core)
+void mm_future_start(struct mm_future *future, mm_core_t core)
 	__attribute__((nonnull(1)));
 
 void mm_future_cancel(struct mm_future *future)
