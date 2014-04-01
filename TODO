@@ -1,17 +1,17 @@
 
 ASAP:
-* fix bugs and single-thread performance regression
-* socket distribution among cores
-* memcache module enhancements:
-** use socket distribution
-** implement expiration
+* non-blocking log
+* non-blocking pool
+* non-blocking ring (for producers)
+* improve smp performance
+* implement memcache expiration
+* thread-safe memcache CAS counter
 * polish & optimize
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
 ;;; against stock memcache.
 
 Essentials:
-* fixme: posting several work items in a row pokes the same idle worker 
 * configuration file parsing
 * command line argument parsing
 * support signals
@@ -24,11 +24,6 @@ Essentials:
 * UDP servers
 * SSL servers
 * performance instrumentation
-* use non-blocking data structures instead of locks where possible:
-** port
-** ring (for producers)
-** pool
-** log chunks list
 * refine memcache module:
 ** statistics
 ** add UDP protocol support
@@ -53,7 +48,14 @@ Enhancements:
 ** let catch task termination with setjmp/longjmp or libunwind mechanism
 * fs event notification
 * core and task local storage (tls)
+* exit idle workers pending for too long
 * reap dead tasks pending for too long
+* shrink pools on low demand
+* shrink memcache table on low demand
+* improve ports:
+** non-blocking
+** allow sending other types
+** function call marshal/dispatch mechanism on top of that
 * try to detect clock adjustments and reset realtime timers accordingly
 * memory management:
 ** use separate mspace for task local dynamic memory ?
