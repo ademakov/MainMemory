@@ -489,6 +489,7 @@ mm_core_wait(mm_timeout_t timeout)
 	LEAVE();
 }
 
+#if ENABLE_SMP
 static mm_timeout_t
 mm_core_hold(struct mm_core *core, mm_timeout_t timeout)
 {
@@ -498,20 +499,16 @@ mm_core_hold(struct mm_core *core, mm_timeout_t timeout)
 		goto leave;
 
 	mm_timeval_t halt_time = core->time_value + timeout;
-#if ENABLE_SMP
+
 	mm_timeval_t hold_time;
 	if (MM_CORE_IS_PRIMARY(core))
 		hold_time = mm_core_poll_time + MM_DEALER_HOLD_TIME_1;
 	else
 		hold_time = core->time_value + MM_DEALER_HOLD_TIME_2;
+
+	mm_timeval_t halt_time = core->time_value + timeout;
 	if (hold_time > halt_time)
 		hold_time = halt_time;
-#else
-	mm_timeval_t next_poll_time = mm_core_poll_time + MM_DEALER_HOLD_TIME_1;
-	if (halt_time > next_poll_time)
-		goto leave;
-	mm_timeval_t hold_time = halt_time;
-#endif
 
 	while (hold_time > core->time_value) {
 		if (mm_memory_load(core->wake.value)) {
@@ -534,6 +531,9 @@ leave:
 	LEAVE();
 	return timeout;
 }
+#else
+# define mm_core_hold(core, timeout) (timeout)
+#endif
 
 static void
 mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
