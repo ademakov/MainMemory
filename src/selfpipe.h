@@ -1,7 +1,7 @@
 /*
  * selfpipe.h - MainMemory concurrent self-pipe trick.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,17 +39,30 @@ struct mm_selfpipe
 	mm_atomic_uint32_t count;
 };
 
-void mm_selfpipe_prepare(struct mm_selfpipe *selfpipe);
-void mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe);
-
-void mm_selfpipe_notify(struct mm_selfpipe *selfpipe);
-bool mm_selfpipe_listen(struct mm_selfpipe *selfpipe);
-void mm_selfpipe_divert(struct mm_selfpipe *selfpipe);
-
 static inline void
 mm_selfpipe_set_ready(struct mm_selfpipe *selfpipe)
 {
 	selfpipe->ready = true;
 }
+
+void mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+void mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+void mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+bool mm_selfpipe_listen(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+void mm_selfpipe_divert(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+void mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+void mm_selfpipe_stats(void);
 
 #endif /* SELFPIPE_H */

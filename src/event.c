@@ -1,7 +1,7 @@
 /*
  * event.c - MainMemory event loop.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -672,8 +672,8 @@ mm_event_process_msg(uint32_t *msg)
 	}
 }
 
-void
-mm_event_dispatch(mm_timeout_t timeout)
+bool
+mm_event_collect(void)
 {
 	ENTER();
 
@@ -709,27 +709,30 @@ mm_event_dispatch(mm_timeout_t timeout)
 		mm_event_process_msg(msg);
 	}
 
-	// Flush the log before possible sleep.
-	mm_flush();
+	LEAVE();
+	return (mm_nkevents != 0);
+}
 
-	// Find the event wait timeout.
+void
+mm_event_poll(mm_timeout_t timeout)
+{
+	ENTER();
+
+	// Start listening the selfpipe if needed and find the event wait
+	// timeout.
 	struct timespec ts;
-	if (mm_selfpipe_listen(&mm_event_selfpipe) || mm_nkevents) {
-		// If some event system changes have been requested then it is
-		// needed to notify as soon as possible the interested parties
-		// on their completion so do not wait for any other events.
+	if (timeout == 0 || mm_selfpipe_listen(&mm_event_selfpipe)) {
 		DEBUG("timeout: 0");
 		ts.tv_sec = 0;
 		ts.tv_nsec = 0;
 	} else {
-		mm_timeval_t next_timeout = mm_timer_next();
-		if (timeout > next_timeout)
-			timeout = next_timeout;
-
 		DEBUG("timeout: %lu", (unsigned long) timeout);
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
 	}
+
+	// Flush the log before a possible sleep.
+	mm_flush();
 
 	// Poll the system for events.
 	int n = kevent(mm_kevent_kq,
@@ -737,9 +740,17 @@ mm_event_dispatch(mm_timeout_t timeout)
 		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
 		       &ts);
 
-	mm_selfpipe_divert(&mm_event_selfpipe);
+	// Stop listening the selfpipe.
+	if (timeout > 0)
+		mm_selfpipe_divert(&mm_event_selfpipe);
 
 	DEBUG("kevent changed: %d, received: %d", mm_nkevents, n);
+	if (n < 0) {
+		if (errno == EINTR)
+			mm_warning(errno, "kevent");
+		else
+			mm_error(errno, "kevent");
+	}
 
 	// Issue REG/UNREG events.
 	for (int i = 0; i < mm_kevent_nchanges; i++) {
@@ -759,12 +770,6 @@ mm_event_dispatch(mm_timeout_t timeout)
 			ev_fd->control_handler = 0;
 			ev_fd->data = 0;
 		}
-	}
-
-	if (unlikely(n < 0)) {
-		if (errno != EINTR)
-			mm_error(errno, "kevent");
-		goto leave;
 	}
 
 	// Process the received system events.
@@ -792,7 +797,10 @@ mm_event_dispatch(mm_timeout_t timeout)
 		}
 	}
 
-leave:
+	// Drain the stalled selfpipe notifications if any.
+	if (timeout != 0)
+		mm_selfpipe_drain(&mm_event_selfpipe);
+
 	LEAVE();
 }
 

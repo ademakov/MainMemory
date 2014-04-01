@@ -115,7 +115,7 @@ mm_timer_tick(void)
 {
 	ENTER();
 
-	mm_core_update_time();
+	//mm_core_update_time();
 
 	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
 	while (entry != NULL && entry->value <= mm_core->time_value) {

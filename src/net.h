@@ -45,12 +45,10 @@ struct mm_task;
 #define MM_NET_WRITE_READY	0x02
 #define MM_NET_READ_ERROR	0x04
 #define MM_NET_WRITE_ERROR	0x08
-
-/* Socket task flags. */
-#define MM_NET_READER_SPAWNED	0x01
-#define MM_NET_WRITER_SPAWNED	0x02
-#define MM_NET_READER_PENDING	0x04
-#define MM_NET_WRITER_PENDING	0x08
+#define MM_NET_READER_SPAWNED	0x10
+#define MM_NET_WRITER_SPAWNED	0x20
+#define MM_NET_READER_PENDING	0x40
+#define MM_NET_WRITER_PENDING	0x80
 
 /* Socket close flags. */
 #define MM_NET_CLOSED		0x01
@@ -93,10 +91,6 @@ struct mm_net_server
 	mm_event_hid_t output_handler;
 	mm_event_hid_t control_handler;
 
-	/* I/O event handler task. */
-	struct mm_task *io_task;
-	struct mm_port *io_port;
-
 	/* A core the next client to be bound to. */
 	mm_core_t client_core;
 
@@ -127,8 +121,7 @@ struct mm_net_socket
 	mm_timeout_t write_timeout;
 
 	/* Socket flags. */
-	uint8_t fd_flags;
-	uint8_t task_flags;
+	uint8_t flags;
 	uint8_t close_flags;
 
 	/* Socket I/O status lock. */

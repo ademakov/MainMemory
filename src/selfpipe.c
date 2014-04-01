@@ -1,7 +1,7 @@
 /*
  * selfpipe.c - MainMemory concurrent self-pipe trick.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,18 +25,8 @@
 
 #include <unistd.h>
 
-static void
-mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
-{
-	ENTER();
-
-	char dummy[64];
-	while (read(selfpipe->read_fd, dummy, sizeof dummy) == sizeof dummy) {
-		/* do nothing */
-	}
-
-	LEAVE();
-}
+static mm_atomic_uint32_t mm_selfpipe_notify_count;
+static mm_atomic_uint32_t mm_selfpipe_silent_count;
 
 void
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
@@ -107,7 +97,10 @@ mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
 	// several other poll() cycles.
 	if (mm_memory_load(selfpipe->listen)) {
 		(void) write(selfpipe->write_fd, "", 1);
+	} else {
+		mm_atomic_uint32_inc(&mm_selfpipe_silent_count);
 	}
+	mm_atomic_uint32_inc(&mm_selfpipe_notify_count);
 
 	LEAVE();
 }
@@ -122,12 +115,6 @@ bool
 mm_selfpipe_listen(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
-
-	// Drain the stalled notifications if any.
-	if (selfpipe->ready) {
-		mm_selfpipe_drain(selfpipe);
-		selfpipe->ready = false;
-	}
 
 	// Signal that the listening side is here.
 	mm_memory_store(selfpipe->listen, true);
@@ -153,4 +140,29 @@ mm_selfpipe_divert(struct mm_selfpipe *selfpipe)
 	mm_memory_store(selfpipe->listen, false);
 
 	LEAVE();
+}
+
+void
+mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
+{
+	ENTER();
+
+	if (selfpipe->ready) {
+		selfpipe->ready = false;
+
+		char dummy[64];
+		while (read(selfpipe->read_fd, dummy, sizeof dummy) == sizeof dummy) {
+			/* do nothing */
+		}
+	}
+
+	LEAVE();
+}
+
+void
+mm_selfpipe_stats(void)
+{
+	uint32_t notify = mm_memory_load(mm_selfpipe_notify_count.value);
+	uint32_t silent = mm_memory_load(mm_selfpipe_silent_count.value);
+	mm_verbose("selfpipe stats: notify = %u, silent = %u", notify, silent);
 }

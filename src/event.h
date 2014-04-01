@@ -1,7 +1,7 @@
 /*
  * event.h - MainMemory event loop.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -52,7 +52,8 @@ typedef void (*mm_event_handler_t)(mm_event_t event, uint32_t data);
 void mm_event_init(void);
 void mm_event_term(void);
 
-void mm_event_dispatch(mm_timeout_t timeout);
+bool mm_event_collect(void);
+void mm_event_poll(mm_timeout_t timeout);
 
 void mm_event_notify(void);
 

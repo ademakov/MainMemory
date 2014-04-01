@@ -26,6 +26,7 @@
 #include "log.h"
 #include "net.h"
 #include "port.h"
+#include "selfpipe.h"
 #include "task.h"
 #include "thread.h"
 #include "timeq.h"
@@ -37,14 +38,17 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#ifdef HAVE_SYS_SYSCTL_H
+# include <sys/sysctl.h>
+#endif
+
 #define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	256
 
-// Default dealer loop timeout - 1 second
-#define MM_DEALER_TIMEOUT ((mm_timeout_t) 1000000)
-
 #define MM_TIME_QUEUE_MAX_WIDTH	500
 #define MM_TIME_QUEUE_MAX_COUNT	2000
+
+#define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
 
 // The core set.
 mm_core_t mm_core_num;
@@ -53,86 +57,48 @@ struct mm_core *mm_core_set;
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
 
-#define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
-
-/**********************************************************************
- * Core sleep and wakeup routines.
- **********************************************************************/
-
-static void
-mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
-{
-	ENTER();
-
-	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_event_dispatch(timeout);
-	} else {
-		mm_thread_timedwait(timeout);
-	}
-
-	LEAVE();
-}
-
-static void
-mm_core_wake(struct mm_core *core)
-{
-	ENTER();
-
-	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_event_notify();
-	} else {
-		mm_thread_signal(core->thread);
-	}
-
-	LEAVE();
-}
+static void mm_core_wake(struct mm_core *core);
 
 /**********************************************************************
  * Idle queue.
  **********************************************************************/
 
 void
-mm_core_idle(struct mm_core *core)
+mm_core_idle(struct mm_core *core, bool tail)
 {
 	ENTER();
 
 	struct mm_task *task = mm_running_task;
 	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
-	// Put the task to the wait queue.
+	// Put the task into the wait queue.
+	if (tail)
+		mm_list_append(&core->idle, &task->wait_queue);
+	else
+		mm_list_insert(&core->idle, &task->wait_queue);
+
 	ASSERT((task->flags & MM_TASK_WAITING) == 0);
-	mm_list_insert(&core->idle, &task->wait_queue);
 	task->flags |= MM_TASK_WAITING;
 	core->nidle++;
 
 	// Wait until poked.
 	mm_task_block();
 
-	LEAVE();
-}
-
-void
-mm_core_idle_last(struct mm_core *core)
-{
-	ENTER();
-
-	struct mm_task *task = mm_running_task;
-	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
-
-	// Put the task to the wait queue.
-	ASSERT((task->flags & MM_TASK_WAITING) == 0);
-	mm_list_append(&core->idle, &task->wait_queue);
-	task->flags |= MM_TASK_WAITING;
-	core->nidle++;
-
-	// Wait until poked.
-	mm_task_block();
+	// Normally an idle task starts after being poked and
+	// in this case it should already be removed from the
+	// wait list. But if the task has started for another
+	// reason it must be removed from the wait list here.
+	if (unlikely((task->flags & MM_TASK_WAITING) != 0)) {
+		mm_list_delete(&task->wait_queue);
+		task->flags &= ~MM_TASK_WAITING;
+		core->nidle--;
+	}
 
 	LEAVE();
 }
 
 static void
-mm_core_poke_idle(struct mm_core *core)
+mm_core_poke(struct mm_core *core)
 {
 	ENTER();
 
@@ -166,41 +132,41 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 	mm_work_put(&core->workq, work);
 
 	// If there is a task waiting for work then let it run now.
-	mm_core_poke_idle(core);
+	mm_core_poke(core);
 
 	LEAVE();
 }
 
 void
-mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
+mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 {
 	ENTER();
 
 	// Get the destination core.
 	bool core_is_pinned;
-	struct mm_core *dest_core;
-	if (core != MM_CORE_NONE) {
+	struct mm_core *core;
+	if (core_id != MM_CORE_NONE) {
 		core_is_pinned = true;
-		dest_core = mm_core_getptr(core);
+		core = mm_core_getptr(core_id);
 	} else {
 		core_is_pinned = false;
-		dest_core = mm_core;
+		core = mm_core;
 	}
 
 	// Create a work item.
 	struct mm_work *work = mm_work_create(&mm_core->workq);
 	mm_work_set(work, core_is_pinned, routine, routine_arg);
 
-	if (dest_core == mm_core) {
+	if (core == mm_core) {
 		// Enqueue it directly if on the same core.
-		mm_core_add_work(dest_core, work);
+		mm_core_add_work(core, work);
 	} else {
 		// Put the item to the target core inbox.
 		for (;;) {
-			bool ok = mm_ring_core_put(&dest_core->inbox, work);
+			bool ok = mm_ring_core_put(&core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(dest_core);
+			mm_core_wake(core);
 
 			if (ok) {
 				break;
@@ -215,22 +181,21 @@ mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
 }
 
 #if ENABLE_SMP
-static bool
+static void
 mm_core_receive_work(struct mm_core *core)
 {
-	struct mm_work *work = mm_ring_get(&core->inbox);
-	if (work == NULL)
-		return false;
+	ENTER();
 
-	do {
+	struct mm_work *work = mm_ring_get(&core->inbox);
+	while (work != NULL) {
 		mm_core_add_work(core, work);
 		work = mm_ring_get(&core->inbox);
-	} while (work != NULL);
+	} 
 
-	return true;
+	LEAVE();
 }
 #else
-# define mm_core_receive_work(core) ({(void) core; false;})
+# define mm_core_receive_work(core) ((void) core)
 #endif
 
 /**********************************************************************
@@ -266,22 +231,21 @@ mm_core_run_task(struct mm_task *task)
 }
 
 #if ENABLE_SMP
-static bool
+static void
 mm_core_receive_tasks(struct mm_core *core)
 {
-	struct mm_task *task = mm_ring_get(&core->sched);
-	if (task == NULL)
-		return false;
+	ENTER();
 
-	do {
+	struct mm_task *task = mm_ring_get(&core->sched);
+	while (task != NULL) {
 		mm_task_run(task);
 		task = mm_ring_get(&core->sched);
-	} while (task != NULL);
+	}
 
-	return true;
+	LEAVE();
 }
 #else
-# define mm_core_receive_tasks(core) ({(void) core; false;})
+# define mm_core_receive_tasks(core) ((void) core)
 #endif
 
 /**********************************************************************
@@ -334,19 +298,18 @@ mm_core_reclaim_chain(struct mm_chunk *chunk)
 	LEAVE();
 }
 
-static bool
+static void
 mm_core_destroy_chunks(struct mm_core *core)
 {
-	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
-	if (chunk == NULL)
-		return false;
+	ENTER();
 
-	do {
+	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
+	while (chunk != NULL) {
 		mm_chunk_destroy(chunk);
 		chunk = mm_ring_get(&core->chunks);
-	} while (chunk != NULL);
+	}
 
-	return true;
+	LEAVE();
 }
 
 /**********************************************************************
@@ -366,7 +329,7 @@ mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 }
 
 static mm_value_t
-mm_core_worker(mm_value_t arg __attribute__((unused)))
+mm_core_worker(mm_value_t arg)
 {
 	ENTER();
 
@@ -378,26 +341,26 @@ mm_core_worker(mm_value_t arg __attribute__((unused)))
 	// thread specific data (that is on Darwin).
 	struct mm_core *core = mm_core;
 
+	// Take the work item supplied by the master.
+	struct mm_work *work = (struct mm_work *) arg;
+
 	for (;;) {
-		// Check to see if there is outstanding work.
-		if (!mm_work_available(&core->workq)) {
-			// Wait for work standing at the front of the idle queue.
-			mm_core_idle(core);
-			if (!mm_work_available(&core->workq)) {
-				break;
-			}
-		}
-
-		// Take the first available work item.
-		struct mm_work *work = mm_work_get(&core->workq);
-
-		// Save the work routine and recycle the work item.
+		// Save the work data and recycle the work item.
 		mm_routine_t routine = work->routine;
 		mm_value_t routine_arg = work->routine_arg;
 		mm_work_destroy(&core->workq, work);
 
 		// Execute the work routine.
 		routine(routine_arg);
+
+		// Check to see if there is outstanding work.
+		while (!mm_work_available(&core->workq)) {
+			// Wait for work standing at the front of the idle queue.
+			mm_core_idle(core, false);
+		}
+
+		// Take the first available work item.
+		work = mm_work_get(&core->workq);
 	}
 
 	// Cleanup on return.
@@ -428,18 +391,21 @@ mm_core_master(mm_value_t arg)
 
 		// Check to see if there is outstanding work.
 		if (mm_work_available(&core->workq)) {
+			// Take the first available work item.
+			struct mm_work *work = mm_work_get(&core->workq);
+
 			// Start a new worker to handle the work.
 			struct mm_task_attr attr;
 			mm_task_attr_init(&attr);
 			mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
 			mm_task_attr_setname(&attr, "worker");
-			mm_task_create(&attr, mm_core_worker, 0);
+			mm_task_create(&attr, mm_core_worker, (mm_value_t) work);
 			core->nworkers++;
 		}
 
 		// Wait for work at the back end of the idle queue.
 		// So any idle worker would take work before the master.
-		mm_core_idle_last(core);
+		mm_core_idle(core, true);
 	}
 
 	LEAVE();
@@ -450,6 +416,202 @@ mm_core_master(mm_value_t arg)
  * Dealer task.
  **********************************************************************/
 
+// Dealer loop sleep time - 1 second
+#define MM_DEALER_HALT_TIME	((mm_timeout_t) 1000000)
+
+// Dealer loop hang on times
+#define MM_DEALER_HOLD_TIME_1	((mm_timeout_t) 10)
+#define MM_DEALER_HOLD_TIME_2	((mm_timeout_t) 25)
+
+static mm_timeval_t mm_core_poll_time;
+
+static mm_atomic_uint32_t mm_core_deal_count;
+static mm_atomic_uint32_t mm_core_poll_count;
+static mm_atomic_uint32_t mm_core_wait_count;
+static mm_atomic_uint32_t mm_core_wake_count;
+static mm_atomic_uint32_t mm_core_wake_skip_count;
+
+static void
+mm_core_deal(struct mm_core *core)
+{
+	ENTER();
+
+	// Start current timer tasks.
+	mm_timer_tick();
+
+	// Reset the wake flag to indicate the data that has so far
+	// accumulated in the rings is to be consumed now.
+	mm_memory_store(core->wake.value, 0);
+	mm_memory_strict_fence();
+
+	// Consume the data from the communication rings.
+	mm_core_destroy_chunks(core);
+	mm_core_receive_tasks(core);
+	mm_core_receive_work(core);
+
+	// Run the pending tasks.
+	mm_task_yield();
+
+	// Cleanup the temporary data.
+	mm_wait_cache_truncate(&core->wait_cache);
+
+	mm_atomic_uint32_inc(&mm_core_deal_count);
+
+	LEAVE();
+}
+
+static void
+mm_core_poll(struct mm_core *core, mm_timeout_t timeout)
+{
+	ENTER();
+
+	mm_atomic_uint32_inc(&mm_core_poll_count);
+
+	mm_event_poll(timeout);
+
+	mm_core_update_time();
+	mm_core_poll_time = core->time_value;
+
+	LEAVE();
+}
+
+static void
+mm_core_wait(mm_timeout_t timeout)
+{
+	ENTER();
+
+	mm_atomic_uint32_inc(&mm_core_wait_count);
+
+	mm_thread_timedwait(timeout);
+
+	mm_core_update_time();
+
+	LEAVE();
+}
+
+static mm_timeout_t
+mm_core_hold(struct mm_core *core, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (timeout == 0)
+		goto leave;
+
+	mm_timeval_t halt_time = core->time_value + timeout;
+#if ENABLE_SMP
+	mm_timeval_t hold_time;
+	if (MM_CORE_IS_PRIMARY(core))
+		hold_time = mm_core_poll_time + MM_DEALER_HOLD_TIME_1;
+	else
+		hold_time = core->time_value + MM_DEALER_HOLD_TIME_2;
+	if (hold_time > halt_time)
+		hold_time = halt_time;
+#else
+	mm_timeval_t next_poll_time = mm_core_poll_time + MM_DEALER_HOLD_TIME_1;
+	if (halt_time > next_poll_time)
+		goto leave;
+	mm_timeval_t hold_time = halt_time;
+#endif
+
+	while (hold_time > core->time_value) {
+		if (mm_memory_load(core->wake.value)) {
+			timeout = 0;
+			break;
+		}
+
+		for (int i = 0; i < 10; i++)
+			mm_atomic_lock_pause();
+
+		mm_core_update_time();
+	}
+
+	if (halt_time > core->time_value)
+		timeout = halt_time - core->time_value;
+	else
+		timeout = 0;
+
+leave:
+	LEAVE();
+	return timeout;
+}
+
+static void
+mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
+{
+	ENTER();
+
+	// If some event system changes have been requested then
+	// it is needed to notify on their completion immediately.
+	if (MM_CORE_IS_PRIMARY(core) && mm_event_collect()) {
+		mm_core_poll(core, 0);
+		goto leave;
+	}
+
+	// Check the closest pending timer event.
+	mm_timeval_t next_timeout = mm_timer_next();
+	if (timeout > next_timeout)
+		timeout = next_timeout;
+
+	// Before actually halting hang on a little bit waiting for possible
+	// wake requests.
+	timeout = mm_core_hold(core, timeout);
+	if (timeout) {
+		// Advertise that the core is about to halt.
+		mm_memory_store(core->halt, true);
+
+		// Make sure it is seen by other cores before the atomic op
+		// below captures the most up-to-date wake flag value.
+		// FIXME: have a store_atomic fence.
+		mm_memory_fence();
+
+		// Check to see if there are already wake requests pending.
+		uint8_t wake = mm_atomic_uint8_fetch_and_set(&core->wake, 0);
+		if (wake == 0) {
+			// Actually halt the core for the given timeout.
+			if (MM_CORE_IS_PRIMARY(core))
+				mm_core_poll(core, timeout);
+			else 
+				mm_core_wait(timeout);
+		}
+
+		// Advertise that the core is awake.
+		mm_memory_store(core->halt, false);
+		mm_memory_store_fence();
+	}
+
+leave:
+	LEAVE();
+}
+
+static void
+mm_core_wake(struct mm_core *core)
+{
+	ENTER();
+
+	// Indicate that the core is needed awake.
+	mm_memory_store(core->wake.value, 1);
+
+	// Make sure this is seen by the core and the load below gets actual
+	// value.
+	// FIXME: have a store_load fence?
+	mm_memory_strict_fence();
+
+	// Wake up the core if it is halted (presumably, as there is always
+	// a race condition chance, the key is the race conditions should
+	// cause only extra wakeup calls rather than omitting them).
+	if (mm_memory_load(core->halt)) {
+		if (MM_CORE_IS_PRIMARY(core))
+			mm_event_notify();
+		else
+			mm_thread_signal(core->thread);
+	} else {
+		mm_atomic_uint32_inc(&mm_core_wake_skip_count);
+	}
+	mm_atomic_uint32_inc(&mm_core_wake_count);
+
+	LEAVE();
+}
+
 static mm_value_t
 mm_core_dealer(mm_value_t arg)
 {
@@ -458,26 +620,24 @@ mm_core_dealer(mm_value_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 
 	while (!mm_memory_load(core->stop)) {
-		bool halt = true;
-		if (mm_core_receive_work(core))
-			halt = false;
-		if (mm_core_receive_tasks(core))
-			halt = false;
-
-		if (halt) {
-			mm_core_halt(core, MM_DEALER_TIMEOUT);
-			mm_core_destroy_chunks(core);
-		}
-
-		mm_timer_tick();
-		mm_task_yield();
-
-		mm_wait_cache_truncate(&core->wait_cache);
-		mm_core_destroy_chunks(core);
+		mm_core_deal(core);
+		mm_core_halt(core, MM_DEALER_HALT_TIME);
 	}
 
 	LEAVE();
 	return 0;
+}
+
+void
+mm_core_stats(void)
+{
+	uint32_t deal = mm_memory_load(mm_core_deal_count.value);
+	uint32_t poll = mm_memory_load(mm_core_poll_count.value);
+	uint32_t wait = mm_memory_load(mm_core_wait_count.value);
+	uint32_t wake = mm_memory_load(mm_core_wake_count.value);
+	uint32_t skip = mm_memory_load(mm_core_wake_skip_count.value);
+	mm_verbose("core stats: deal = %u, poll = %u, wait = %u, wake = %u, skip = %u",
+		   deal, poll, wait, wake, skip);
 }
 
 /**********************************************************************
@@ -664,6 +824,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->log_head = NULL;
 	core->log_tail = NULL;
 
+	core->halt = 0;
+	core->wake.value = 0;
+
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
 	mm_ring_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE);
@@ -738,7 +901,16 @@ static int
 mm_core_get_num(void)
 {
 #if ENABLE_SMP
-# if defined(_SC_NPROCESSORS_ONLN)
+# if defined(HAVE_SYS_SYSCTL_H) && defined(HW_AVAILCPU)
+//#  define SELECTOR "hw.ncpu"
+//#  define SELECTOR "hw.activecpu"
+#  define SELECTOR "hw.physicalcpu"
+	int num;
+	size_t len = sizeof num;
+	if (sysctlbyname(SELECTOR, &num, &len, NULL, 0) < 0)
+		mm_fatal(errno, "Failed to count cores.");
+	return num;
+# elif defined(_SC_NPROCESSORS_ONLN)
 	int nproc_onln = sysconf(_SC_NPROCESSORS_ONLN);
 	if (nproc_onln < 0)
 		mm_fatal(errno, "Failed to count cores.");
@@ -829,8 +1001,13 @@ mm_core_start(void)
 	// Loop until stopped.
 	while (!mm_exit_test()) {
 		size_t logged = mm_log_write();
-		usleep(logged ? 10000 : 1000000);
+
 		DEBUG("cycle");
+		mm_core_stats();
+		mm_selfpipe_stats();
+		mm_log_write();
+
+		usleep(logged ? 30000 : 3000000);
 	}
 
 	// Wait for core threads completion.

@@ -1,7 +1,7 @@
 /*
  * thread.c - MainMemory threads.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,9 +53,6 @@ struct mm_thread
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
-	/* Wait/signal control. */
-	uint8_t wait_flag;
-	mm_atomic_uint8_t wake_flag;
 #if HAVE_MACH_SEMAPHORE_H
 	semaphore_t wait_sem;
 #else	
@@ -111,8 +108,6 @@ mm_thread_attr_setstack(struct mm_thread_attr *attr,
 void
 mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 {
-	ENTER();
-
 	size_t len = 0;
 	if (likely(name != NULL)) {
 		len = strlen(name);
@@ -122,8 +117,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 		memcpy(attr->name, name, len);
 	}
 	attr->name[len] = 0;
-
-	LEAVE();
 }
 
 /**********************************************************************
@@ -194,6 +187,11 @@ mm_thread_entry(void *arg)
 	// Set CPU affinity.
 	mm_thread_setaffinity(thread->cpu_tag);
 
+#if HAVE_PTHREAD_SETNAME_NP
+	// Let the system know the thread name.
+	pthread_setname_np(thread->name);
+#endif
+
 	// Set the thread-local pointer to the thread object.
 	mm_thread = thread;
 
@@ -232,8 +230,6 @@ mm_thread_create(struct mm_thread_attr *attr,
 	}
 
 	// Initialize wait/signal control data.
-	thread->wait_flag = 0;
-	thread->wake_flag.value = 0;
 #if HAVE_MACH_SEMAPHORE_H
 	kern_return_t kr = semaphore_create(mach_task_self(), &thread->wait_sem,
 					    SYNC_POLICY_FIFO, 0);
@@ -324,7 +320,11 @@ mm_thread_join(struct mm_thread *thread)
 void
 mm_thread_yield(void)
 {
+	ENTER();
+
 	sched_yield();
+
+	LEAVE();
 }
 
 void
@@ -332,22 +332,16 @@ mm_thread_wait(void)
 {
 	ENTER();
 
-	// Flush the log before possible sleep.
+	// Flush the log before a possible sleep.
 	mm_flush();
 
-	mm_memory_store(mm_thread->wait_flag, 1);
-
-	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) != 0) {
 #if HAVE_MACH_SEMAPHORE_H
-		semaphore_wait(mm_thread->wait_sem);
+	semaphore_wait(mm_thread->wait_sem);
 #else
-		pthread_mutex_lock(&mm_thread->wait_lock);
-		pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
-		pthread_mutex_unlock(&mm_thread->wait_lock);
+	pthread_mutex_lock(&mm_thread->wait_lock);
+	pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
+	pthread_mutex_unlock(&mm_thread->wait_lock);
 #endif
-	}
-
-	mm_memory_store(mm_thread->wait_flag, 0);
 
 	LEAVE();
 }
@@ -357,7 +351,7 @@ mm_thread_timedwait(mm_timeout_t timeout)
 {
 	ENTER();
 
-	// Flush the log before possible sleep.
+	// Flush the log before a possible sleep.
 	mm_flush();
 
 #if HAVE_MACH_SEMAPHORE_H
@@ -371,19 +365,13 @@ mm_thread_timedwait(mm_timeout_t timeout)
 	ts.tv_nsec = (time % 1000000) * 1000;
 #endif
 
-	mm_memory_store(mm_thread->wait_flag, 1);
-
-	if (mm_atomic_uint8_fetch_and_set(&mm_thread->wake_flag, 0) == 0) {
 #if HAVE_MACH_SEMAPHORE_H
-		semaphore_timedwait(mm_thread->wait_sem, ts);
+	semaphore_timedwait(mm_thread->wait_sem, ts);
 #else
-		pthread_mutex_lock(&mm_thread->wait_lock);
-		pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
-		pthread_mutex_unlock(&mm_thread->wait_lock);
+	pthread_mutex_lock(&mm_thread->wait_lock);
+	pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
+	pthread_mutex_unlock(&mm_thread->wait_lock);
 #endif
-	}
-
-	mm_memory_store(mm_thread->wait_flag, 0);
 
 	LEAVE();
 }
@@ -393,17 +381,11 @@ mm_thread_signal(struct mm_thread *thread)
 {
 	ENTER();
 
-	mm_memory_store(thread->wake_flag.value, 1);
-	mm_memory_fence();
-
-	if (mm_memory_load(thread->wait_flag)) {
 #if HAVE_MACH_SEMAPHORE_H
-		semaphore_signal(thread->wait_sem);
+	semaphore_signal(thread->wait_sem);
 #else
-		pthread_cond_signal(&thread->wait_cond);
+	pthread_cond_signal(&thread->wait_cond);
 #endif
-
-	}
 
 	LEAVE();
 }
