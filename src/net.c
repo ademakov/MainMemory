@@ -1198,9 +1198,6 @@ mm_net_stop_server(struct mm_net_server *srv)
 	// Unregister the socket.
 	mm_event_unregister_fd(srv->fd);
 
-	// TODO: Destroy the event handler task.
-	// mm_task_destroy(srv->io_task);
-
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->fd);
 	srv->fd = -1;
