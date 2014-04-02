@@ -1,7 +1,7 @@
 /*
  * util.c - MainMemory utilities.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,6 +38,17 @@ mm_set_nonblocking(int fd)
 		mm_fatal(errno, "fcntl(..., F_SETFL, ...)");
 }
 
+void
+mm_libc_call(const char *name)
+{
+	static __thread int recursion_guard = 0;
+	if (!recursion_guard) {
+		++recursion_guard;
+		mm_warning(0, "attempt to call a libc function '%s'", name);
+		--recursion_guard;
+	}
+}
+
 /**********************************************************************
  * Memory Allocation Routines.
  **********************************************************************/
@@ -45,14 +56,14 @@ mm_set_nonblocking(int fd)
 #include "alloc.h"
 
 char *
-mm_strdup(const char *s)
+mm_strdup(const struct mm_allocator *alloc, const char *s)
 {
 	size_t len = strlen(s) + 1;
-	return memcpy(mm_alloc(len), s, len);
+	return memcpy(alloc->alloc(len), s, len);
 }
 
 char *
-mm_asprintf(const char *restrict fmt, ...)
+mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
 {
 	int len;
 	va_list va;
@@ -66,7 +77,7 @@ mm_asprintf(const char *restrict fmt, ...)
 		mm_fatal(errno, "invalid format string");
 	}
 
-	char *ptr = mm_alloc(++len);
+	char *ptr = alloc->alloc(++len);
 
 	va_start(va, fmt);
 	vsnprintf(ptr, len, fmt, va);

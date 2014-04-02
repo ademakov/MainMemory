@@ -1,7 +1,7 @@
 /*
  * util.h - MainMemory utilities.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,12 +20,18 @@
 #ifndef UTIL_H
 #define UTIL_H
 
+/* Forward declaration. */
+struct mm_allocator;
+
 void mm_set_nonblocking(int fd);
 
-char * mm_strdup(const char *s);
+void mm_libc_call(const char *name);
 
-char * mm_asprintf(const char *restrict fmt, ...)
-	__attribute__((format(printf, 1, 2)))
+char * mm_strdup(const struct mm_allocator *alloc, const char *s)
 	__attribute__((nonnull(1)));
+
+char * mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(1, 2)));
 
 #endif /* UTIL_H */

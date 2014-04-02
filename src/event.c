@@ -155,7 +155,7 @@ mm_event_init_fd_table(void)
 	mm_brief("fd table size: %d", mm_event_fd_table_size);
 
 	// Allocate the table.
-	mm_event_fd_table = mm_calloc(mm_event_fd_table_size, sizeof(struct mm_event_fd));
+	mm_event_fd_table = mm_global_calloc(mm_event_fd_table_size, sizeof(struct mm_event_fd));
 
 	LEAVE();
 }
@@ -166,7 +166,7 @@ mm_event_free_fd_table(void)
 {
 	ENTER();
 
-	mm_free(mm_event_fd_table);
+	mm_global_free(mm_event_fd_table);
 
 	LEAVE();
 }

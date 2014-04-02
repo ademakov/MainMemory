@@ -37,7 +37,7 @@ int mm_exit_flag = 0;
  * Exit Handling.
  **********************************************************************/
 
-static struct mm_hook mm_exit_hook;
+static struct mm_queue MM_QUEUE_INIT(mm_exit_hook);
 
 void
 mm_atexit(void (*func)(void))
@@ -48,7 +48,7 @@ mm_atexit(void (*func)(void))
 static void
 mm_do_atexit(void)
 {
-	mm_hook_call_proc(&mm_exit_hook, true);
+	mm_hook_call(&mm_exit_hook, true);
 	if (mm_core != NULL)
 		mm_flush();
 	mm_log_write();

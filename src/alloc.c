@@ -1,7 +1,7 @@
 /*
  * alloc.c - MainMemory memory allocation.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 #include "core.h"
 #include "lock.h"
 #include "log.h"
+#include "util.h"
 
 #include "dlmalloc/malloc.h"
 
@@ -31,57 +32,53 @@ const struct mm_allocator mm_alloc_core = {
 	mm_core_free
 };
 
+const struct mm_allocator mm_alloc_shared = {
+	mm_shared_alloc,
+	mm_shared_realloc,
+	mm_shared_free
+};
+
 const struct mm_allocator mm_alloc_global = {
-	mm_alloc,
-	mm_realloc,
-	mm_free
+	mm_global_alloc,
+	mm_global_realloc,
+	mm_global_free
 };
 
 /**********************************************************************
  * Stubs for LIBC Memory Allocation Routines.
  **********************************************************************/
 
-static void
-mm_libc_call(const char *name)
-{
-	static __thread int recurrent = 0;
-	if (!recurrent) {
-		++recurrent;
-		mm_brief("attempt to call a libc function '%s'", name);
-		--recurrent;
-	}
-}
-
 void *
 malloc(size_t size)
 {
 	mm_libc_call("malloc");
-	return mm_alloc(size);
+	return mm_global_alloc(size);
 }
 
 void *
 calloc(size_t count, size_t size)
 {
 	mm_libc_call("calloc");
-	return mm_calloc(count, size);
+	return mm_global_calloc(count, size);
 }
 
 void *
 realloc(void *ptr, size_t size)
 {
 	mm_libc_call("realloc");
-	return mm_realloc(ptr, size);
+	return mm_global_realloc(ptr, size);
 }
 
 void
 free(void *ptr)
 {
-	/*mm_libc_call("free");*/
-	mm_free(ptr);
+	// This is called too often by sprintf, suppress it for now.
+	//mm_libc_call("free");
+	mm_global_free(ptr);
 }
 
 /**********************************************************************
- * Memory Allocation for Core Threads.
+ * Intra-core memory allocation routines.
  **********************************************************************/
 
 void *
@@ -89,9 +86,18 @@ mm_core_alloc(size_t size)
 {
 	void *ptr = mspace_malloc(mm_core->arena, size);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
+	return ptr;
+}
+
+void *
+mm_core_alloc_aligned(size_t align, size_t size)
+{
+	void *ptr = mspace_memalign(mm_core->arena, align, size);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
 }
 
@@ -100,9 +106,8 @@ mm_core_calloc(size_t count, size_t size)
 {
 	void *ptr = mspace_calloc(mm_core->arena, count, size);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	}
 	return ptr;
 }
 
@@ -111,9 +116,8 @@ mm_core_realloc(void *ptr, size_t size)
 {
 	ptr = mspace_realloc(mm_core->arena, ptr, size);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
 	return ptr;
 }
 
@@ -124,67 +128,172 @@ mm_core_free(void *ptr)
 }
 
 /**********************************************************************
- * Global Memory Allocation Routines.
+ * Cross-core memory allocation routines.
  **********************************************************************/
 
-static mm_thread_lock_t mm_alloc_lock = MM_THREAD_LOCK_INIT;
+static mspace mm_shared_space;
+
+static mm_task_lock_t mm_shared_alloc_lock = MM_TASK_LOCK_INIT;
+
+void
+mm_shared_init(void)
+{
+	ENTER();
+
+	mm_shared_space = create_mspace(0, 0);
+
+	LEAVE();
+}
+
+void
+mm_shared_term(void)
+{
+	ENTER();
+
+	destroy_mspace(mm_shared_space);
+
+	LEAVE();
+}
 
 void *
-mm_alloc(size_t size)
+mm_shared_alloc(size_t size)
 {
-	mm_thread_lock(&mm_alloc_lock);
-	void *ptr = dlmalloc(size);
-	mm_thread_unlock(&mm_alloc_lock);
+	mm_task_lock(&mm_shared_alloc_lock);
+	void *ptr = mspace_malloc(mm_shared_space, size);
+	mm_task_unlock(&mm_shared_alloc_lock);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
 	return ptr;
 }
 
 void *
-mm_alloc_aligned(size_t align, size_t size)
+mm_shared_alloc_aligned(size_t align, size_t size)
 {
-	mm_thread_lock(&mm_alloc_lock);
-	void *ptr = dlmemalign(align, size);
-	mm_thread_unlock(&mm_alloc_lock);
+	mm_task_lock(&mm_shared_alloc_lock);
+	void *ptr = mspace_memalign(mm_shared_space, align, size);
+	mm_task_unlock(&mm_shared_alloc_lock);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
 	return ptr;
 }
 
 void *
-mm_calloc(size_t count, size_t size)
+mm_shared_calloc(size_t count, size_t size)
 {
-	mm_thread_lock(&mm_alloc_lock);
-	void *ptr = dlcalloc(count, size);
-	mm_thread_unlock(&mm_alloc_lock);
+	mm_task_lock(&mm_shared_alloc_lock);
+	void *ptr = mspace_calloc(mm_shared_space, count, size);
+	mm_task_unlock(&mm_shared_alloc_lock);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	}
 	return ptr;
 }
 
 void *
-mm_realloc(void *ptr, size_t size)
+mm_shared_realloc(void *ptr, size_t size)
 {
-	mm_thread_lock(&mm_alloc_lock);
-	ptr = dlrealloc(ptr, size);
-	mm_thread_unlock(&mm_alloc_lock);
+	mm_task_lock(&mm_shared_alloc_lock);
+	ptr = mspace_realloc(mm_shared_space, ptr, size);
+	mm_task_unlock(&mm_shared_alloc_lock);
 
-	if (unlikely(ptr == NULL)) {
+	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	}
 	return ptr;
 }
 
 void
-mm_free(void *ptr)
+mm_shared_free(void *ptr)
 {
-	mm_thread_lock(&mm_alloc_lock);
+	mm_task_lock(&mm_shared_alloc_lock);
+	mspace_free(mm_shared_space, ptr);
+	mm_task_unlock(&mm_shared_alloc_lock);
+}
+
+/**********************************************************************
+ * Global memory allocation routines.
+ **********************************************************************/
+
+static mm_thread_lock_t mm_global_alloc_lock = MM_THREAD_LOCK_INIT;
+
+void *
+mm_global_alloc(size_t size)
+{
+	mm_thread_lock(&mm_global_alloc_lock);
+	void *ptr = dlmalloc(size);
+	mm_thread_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void *
+mm_global_alloc_aligned(size_t align, size_t size)
+{
+	mm_thread_lock(&mm_global_alloc_lock);
+	void *ptr = dlmemalign(align, size);
+	mm_thread_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void *
+mm_global_calloc(size_t count, size_t size)
+{
+	mm_thread_lock(&mm_global_alloc_lock);
+	void *ptr = dlcalloc(count, size);
+	mm_thread_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	return ptr;
+}
+
+void *
+mm_global_realloc(void *ptr, size_t size)
+{
+	mm_thread_lock(&mm_global_alloc_lock);
+	ptr = dlrealloc(ptr, size);
+	mm_thread_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void
+mm_global_free(void *ptr)
+{
+	mm_thread_lock(&mm_global_alloc_lock);
 	dlfree(ptr);
-	mm_thread_unlock(&mm_alloc_lock);
+	mm_thread_unlock(&mm_global_alloc_lock);
+}
+
+/**********************************************************************
+ * Memory.
+ **********************************************************************/
+
+void
+mm_alloc_init(void)
+{
+	ENTER();
+
+	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
+	mm_shared_init();
+
+	LEAVE();
+}
+
+void
+mm_alloc_term(void)
+{
+	ENTER();
+
+	mm_shared_term();
+
+	LEAVE();
 }

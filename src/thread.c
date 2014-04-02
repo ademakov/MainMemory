@@ -216,7 +216,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 	int rc;
 
 	// Create a thread object.
-	struct mm_thread *thread = mm_alloc(sizeof (struct mm_thread));
+	struct mm_thread *thread = mm_global_alloc(sizeof (struct mm_thread));
 	thread->start = start;
 	thread->start_arg = start_arg;
 
@@ -280,7 +280,7 @@ mm_thread_destroy(struct mm_thread *thread)
 	pthread_cond_destroy(&thread->wait_cond);
 #endif
 
-	mm_free(thread);
+	mm_global_free(thread);
 
 	LEAVE();
 }

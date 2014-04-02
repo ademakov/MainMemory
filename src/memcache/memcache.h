@@ -21,6 +21,5 @@
 #define	MEMCACHE_H
 
 void mm_memcache_init(void);
-void mm_memcache_term(void);
 
 #endif	/* MEMCACHE_H */

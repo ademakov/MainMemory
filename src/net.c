@@ -235,7 +235,7 @@ mm_net_init_server_table(void)
 	ENTER();
 
 	mm_srv_table_size = 4;
-	mm_srv_table = mm_alloc(mm_srv_table_size * sizeof(struct mm_net_server));
+	mm_srv_table = mm_global_alloc(mm_srv_table_size * sizeof(struct mm_net_server));
 	mm_srv_count = 0;
 
 	LEAVE();
@@ -247,10 +247,10 @@ mm_net_free_server_table(void)
 	ENTER();
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
-		mm_free(mm_srv_table[i].name);
+		mm_global_free(mm_srv_table[i].name);
 	}
 
-	mm_free(mm_srv_table);
+	mm_global_free(mm_srv_table);
 
 	LEAVE();
 }
@@ -262,7 +262,7 @@ mm_net_alloc_server(void)
 
 	if (mm_srv_table_size == mm_srv_count) {
 		mm_srv_table_size += 4;
-		mm_srv_table = mm_realloc(
+		mm_srv_table = mm_global_realloc(
 			mm_srv_table,
 			mm_srv_table_size * sizeof(struct mm_net_server));
 	}
@@ -291,7 +291,7 @@ mm_net_init_socket_table(void)
 	ENTER();
 
 	mm_pool_prepare(&mm_socket_pool, "net-socket",
-			&mm_alloc_global, sizeof (struct mm_net_socket));
+			&mm_alloc_shared, sizeof (struct mm_net_socket));
 
 	LEAVE();
 }
@@ -300,6 +300,9 @@ static void
 mm_net_free_socket_table(void)
 {
 	ENTER();
+	
+	mm_flush();
+	mm_log_write();
 
 	mm_pool_cleanup(&mm_socket_pool);
 
@@ -1071,8 +1074,10 @@ mm_net_init(void)
 
 	mm_atexit(mm_net_exit_cleanup);
 
+	mm_core_hook_start(mm_net_init_socket_table);
+	mm_core_hook_stop(mm_net_free_socket_table);
+
 	mm_net_init_server_table();
-	mm_net_init_socket_table();
 	mm_net_init_acceptor();
 
 	mm_net_initialized = 1;
@@ -1096,7 +1101,6 @@ mm_net_term(void)
 		// TODO: close client sockets
 	}
 
-	mm_net_free_socket_table();
 	mm_net_free_server_table();
 
 	LEAVE();
@@ -1114,7 +1118,7 @@ mm_net_create_unix_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf("%s (%s)", name, path);
+	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s)", name, path);
 	srv->proto = proto;
 
 	if (mm_net_set_un_addr(&srv->addr, path) < 0)
@@ -1133,7 +1137,7 @@ mm_net_create_inet_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
 	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
@@ -1152,7 +1156,7 @@ mm_net_create_inet6_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf("%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
 	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)

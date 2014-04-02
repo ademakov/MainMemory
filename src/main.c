@@ -74,38 +74,6 @@ mm_signal_init(void)
 }
 
 static void
-mm_init(void)
-{
-	ENTER();
-
-	mm_enable_verbose(true);
-	mm_enable_warning(true);
-
-	// Set signal handlers.
-	mm_signal_init();
-
-	// Initialize subsystems.
-	mm_core_init();
-	mm_event_init();
-	mm_net_init();
-
-	LEAVE();
-}
-
-static void
-mm_term(void)
-{
-	ENTER();
-
-	// Terminate subsystems.
-	mm_net_term();
-	mm_event_term();
-	mm_core_term();
-
-	LEAVE();
-}
-
-static void
 mm_cmd_reader(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -125,7 +93,7 @@ mm_cmd_reader(struct mm_net_socket *sock)
 }
 
 static void
-mm_server_open(void)
+mm_server_init(void)
 {
 	ENTER();
 
@@ -150,35 +118,29 @@ mm_server_open(void)
 	LEAVE();
 }
 
-static void
-mm_server_close(void)
-{
-	ENTER();
-
-	mm_memcache_term();
-
-	LEAVE();
-}
-
 int
 main(/*int ac, char *av[]*/)
 {
 	ENTER();
 
-	/* Initialize. */
-	mm_init();
+	/* Set options. */
+	mm_enable_verbose(true);
+	mm_enable_warning(true);
 
-	/* Start server. */
-	mm_server_open();
+	// Set signal handlers.
+	mm_signal_init();
+
+	// Initialize subsystems.
+	mm_core_init();
+
+	/* Initialize servers. */
+	mm_server_init();
 
 	/* Execute main loop. */
 	mm_core_start();
 
-	/* Shutdown server. */
-	mm_server_close(); 
-
-	/* Terminate. */
-	mm_term();
+	// Terminate subsystems.
+	mm_core_term();
 
 	LEAVE();
 	return EXIT_SUCCESS;

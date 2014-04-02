@@ -137,7 +137,7 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
 
 	size_t size = mc_entry_size(key_len, value_len);
-	struct mc_entry *entry = mm_alloc(size);
+	struct mc_entry *entry = mm_shared_alloc(size);
 	entry->key_len = key_len;
 	entry->value_len = value_len;
 	entry->ref_count.value = 1;
@@ -158,7 +158,7 @@ mc_entry_destroy(struct mc_entry *entry)
 {
 	ENTER();
 
-	mm_free(entry);
+	mm_shared_free(entry);
 
 	LEAVE();
 }
@@ -642,7 +642,7 @@ mc_table_init(void)
 	// Initialize the table.
 	mc_table.nbytes_evict_threshold = MC_SIZE_MAX / nparts;
 	mc_table.nparts = nparts;
-	mc_table.parts = mm_calloc(nparts, sizeof(struct mc_tpart));
+	mc_table.parts = mm_shared_calloc(nparts, sizeof(struct mc_tpart));
 	mc_table.table = address;
 
 	// Initialize the table partitions.
@@ -672,13 +672,13 @@ mc_table_term(void)
 		struct mc_entry *entry = mc_table.table[index];
 		while (entry != NULL) {
 			struct mc_entry *next = entry->next;
-			mm_free(entry);
+			mm_shared_free(entry);
 			entry = next;
 		}
 	}
 
 	// Free the table partitions.
-	mm_free(mc_table.parts);
+	mm_shared_free(mc_table.parts);
 
 	// Compute the reserved address space size.
 	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
@@ -870,7 +870,7 @@ mc_command_init(void)
 	ENTER();
 
 	mm_pool_prepare(&mc_command_pool, "memcache command",
-			&mm_alloc_global, sizeof(struct mc_command));
+			&mm_alloc_shared, sizeof(struct mc_command));
 
 	LEAVE();
 }
@@ -1003,7 +1003,7 @@ mc_create(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	struct mc_state *state = mm_alloc(sizeof(struct mc_state));
+	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
 
 	state->start_ptr = NULL;
 
@@ -1034,7 +1034,7 @@ mc_destroy(struct mc_state *state)
 
 	mm_buffer_cleanup(&state->rbuf);
 	mm_buffer_cleanup(&state->tbuf);
-	mm_free(state);
+	mm_shared_free(state);
 
 	LEAVE();
 }
@@ -2792,13 +2792,34 @@ leave:
 // TCP memcache server.
 static struct mm_net_server *mc_tcp_server;
 
-void
-mm_memcache_init(void)
+static void
+mc_memcache_start(void)
 {
 	ENTER();
 
 	mc_table_init();
 	mc_command_init();
+	mm_net_start_server(mc_tcp_server);
+
+	LEAVE();
+}
+
+static void
+mc_memcache_stop(void)
+{
+	ENTER();
+
+	mm_net_stop_server(mc_tcp_server);
+	mc_command_term();
+	mc_table_term();
+
+	LEAVE();
+}
+
+void
+mm_memcache_init(void)
+{
+	ENTER();
 
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
@@ -2810,18 +2831,9 @@ mm_memcache_init(void)
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
 						  "127.0.0.1", 11211);
-	mm_core_register_server(mc_tcp_server);
 
-	LEAVE();
-}
-
-void
-mm_memcache_term(void)
-{
-	ENTER();
-
-	mc_command_term();
-	mc_table_term();
+	mm_core_hook_start(mc_memcache_start);
+	mm_core_hook_stop(mc_memcache_stop);
 
 	LEAVE();
 }

@@ -21,25 +21,27 @@
 #define HOOK_H
 
 #include "common.h"
-
-struct mm_hook
-{
-	struct mm_hook_link *head;
-	struct mm_hook_link *tail;
-};
+#include "list.h"
 
 typedef void (*mm_hook_rtn0)(void);
 typedef void (*mm_hook_rtn1)(void *);
 
-void mm_hook_init(struct mm_hook *hook);
-void mm_hook_free(struct mm_hook *hook);
+void mm_hook_free(struct mm_queue *hook)
+	__attribute__((nonnull(1)));
 
-void mm_hook_head_proc(struct mm_hook *hook, mm_hook_rtn0 proc);
-void mm_hook_tail_proc(struct mm_hook *hook, mm_hook_rtn0 proc);
-void mm_hook_call_proc(struct mm_hook *hook, bool free);
+void mm_hook_call(struct mm_queue *hook, bool free)
+	__attribute__((nonnull(1)));
 
-void mm_hook_head_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data);
-void mm_hook_tail_data_proc(struct mm_hook *hook, mm_hook_rtn1 proc, void *data);
-void mm_hook_call_data_proc(struct mm_hook *hook, bool free);
+void mm_hook_head_proc(struct mm_queue *hook, mm_hook_rtn0 proc)
+	__attribute__((nonnull(1, 2)));
+
+void mm_hook_tail_proc(struct mm_queue *hook, mm_hook_rtn0 proc)
+	__attribute__((nonnull(1, 2)));
+
+void mm_hook_head_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
+	__attribute__((nonnull(1, 2)));
+
+void mm_hook_tail_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
+	__attribute__((nonnull(1, 2)));
 
 #endif /* HOOK_H */

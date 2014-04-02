@@ -31,6 +31,42 @@ struct mm_pool_free_item
 	struct mm_pool_free_item *next;
 };
 
+static void
+mm_pool_grow_lock(struct mm_pool *pool)
+{
+	if (pool->shared)
+		mm_task_lock(&pool->grow_lock.shared);
+	else if (pool->global)
+		mm_thread_lock(&pool->grow_lock.global);
+}
+
+static void
+mm_pool_grow_unlock(struct mm_pool *pool)
+{
+	if (pool->shared)
+		mm_task_unlock(&pool->grow_lock.shared);
+	else if (pool->global)
+		mm_thread_unlock(&pool->grow_lock.global);
+}
+
+static void
+mm_pool_free_lock(struct mm_pool *pool)
+{
+	if (pool->shared)
+		mm_task_lock(&pool->free_lock.shared);
+	else if (pool->global)
+		mm_thread_lock(&pool->free_lock.global);
+}
+
+static void
+mm_pool_free_unlock(struct mm_pool *pool)
+{
+	if (pool->shared)
+		mm_task_unlock(&pool->free_lock.shared);
+	else if (pool->global)
+		mm_thread_unlock(&pool->free_lock.global);
+}
+
 void
 mm_pool_prepare(struct mm_pool *pool,
 		const char *pool_name,
@@ -53,9 +89,10 @@ mm_pool_prepare(struct mm_pool *pool,
 	pool->block_array_used = 0;
 	pool->block_array_size = 0;
 
+	pool->shared = (alloc == &mm_alloc_shared);
 	pool->global = (alloc == &mm_alloc_global);
-	pool->free_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
-	pool->grow_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	pool->free_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	pool->grow_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
 	pool->alloc = alloc;
 	pool->block_array = NULL;
@@ -63,7 +100,7 @@ mm_pool_prepare(struct mm_pool *pool,
 	pool->block_end_ptr = NULL;
 
 	pool->free_list = NULL;
-	pool->pool_name = mm_strdup(pool_name);
+	pool->pool_name = mm_strdup(&mm_alloc_global, pool_name);
 
 	LEAVE();
 }
@@ -77,7 +114,7 @@ mm_pool_cleanup(struct mm_pool *pool)
 		pool->alloc->free(pool->block_array[i]);
 	pool->alloc->free(pool->block_array);
 
-	mm_free(pool->pool_name);
+	mm_global_free(pool->pool_name);
 
 	LEAVE();
 }
@@ -88,8 +125,7 @@ mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 	uint32_t block = item_idx / pool->block_capacity;
 	uint32_t index = item_idx % pool->block_capacity;
 
-	if (pool->global)
-		mm_thread_lock(&pool->grow_lock);
+	mm_pool_grow_lock(pool);
 
 	void *item_ptr;
 	if (unlikely(item_idx >= pool->item_last))
@@ -97,8 +133,7 @@ mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 	else
 		item_ptr = pool->block_array[block] + index * pool->item_size;
 
-	if (pool->global)
-		mm_thread_unlock(&pool->grow_lock);
+	mm_pool_grow_unlock(pool);
 
 	return item_ptr;
 }
@@ -109,8 +144,7 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 	char *start = NULL;
 	uint32_t block = 0;
 
-	if (pool->global)
-		mm_thread_lock(&pool->grow_lock);
+	mm_pool_grow_lock(pool);
 
 	while (block < pool->block_array_used) {
 		char *s_ptr = pool->block_array[block];
@@ -122,8 +156,7 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 		++block;
 	}
 
-	if (pool->global)
-		mm_thread_unlock(&pool->grow_lock);
+	mm_pool_grow_unlock(pool);
 
 	if (unlikely(start == NULL))
 		return MM_POOL_INDEX_INVALID;
@@ -176,22 +209,17 @@ mm_pool_alloc(struct mm_pool *pool)
 {
 	ENTER();
 
-	if (pool->global)
-		mm_thread_lock(&pool->free_lock);
+	mm_pool_free_lock(pool);
 
 	void *item;
 	if (pool->free_list != NULL) {
 		item = pool->free_list;
 		pool->free_list = pool->free_list->next;
 
-		if (pool->global)
-			mm_thread_unlock(&pool->free_lock);
-
+		mm_pool_free_unlock(pool);
 	} else {
-		if (pool->global) {
-			mm_thread_lock(&pool->grow_lock);
-			mm_thread_unlock(&pool->free_lock);
-		}
+		mm_pool_grow_lock(pool);
+		mm_pool_free_unlock(pool);
 
 		if (unlikely(pool->block_cur_ptr == pool->block_end_ptr))
 			mm_pool_grow(pool);
@@ -200,8 +228,7 @@ mm_pool_alloc(struct mm_pool *pool)
 		pool->block_cur_ptr += pool->item_size;
 		pool->item_last++;
 
-		if (pool->global)
-			mm_thread_unlock(&pool->grow_lock);
+		mm_pool_grow_unlock(pool);
 	}
 
 	LEAVE();
@@ -213,15 +240,13 @@ mm_pool_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
 
-	if (pool->global)
-		mm_thread_lock(&pool->free_lock);
+	mm_pool_free_lock(pool);
 
 	struct mm_pool_free_item *free_item = item;
 	free_item->next = pool->free_list;
 	pool->free_list = free_item;
 
-	if (pool->global)
-		mm_thread_unlock(&pool->free_lock);
+	mm_pool_free_unlock(pool);
 
 	LEAVE();
 }

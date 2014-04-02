@@ -33,13 +33,34 @@
 // The memory pool for waiting tasks.
 static struct mm_pool mm_wait_pool;
 
+static void
+mm_wait_start(void)
+{
+	ENTER();
+
+	mm_pool_prepare(&mm_wait_pool, "wait", &mm_alloc_shared,
+			sizeof(struct mm_wait));
+
+	LEAVE();
+}
+
+static void
+mm_wait_stop(void)
+{
+	ENTER();
+
+	mm_pool_cleanup(&mm_wait_pool);
+
+	LEAVE();
+}
+
 void
 mm_wait_init(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_wait_pool, "wait", &mm_alloc_global,
-			sizeof(struct mm_wait));
+	mm_core_hook_start(mm_wait_start);
+	mm_core_hook_stop(mm_wait_stop);
 
 	LEAVE();
 }
@@ -48,8 +69,6 @@ void
 mm_wait_term(void)
 {
 	ENTER();
-
-	mm_pool_cleanup(&mm_wait_pool);
 
 	LEAVE();
 }

@@ -68,7 +68,7 @@ mm_log_create_chunk(size_t size)
 {
 	struct mm_chunk *chunk;
 	if (mm_core == NULL) {
-		chunk = mm_alloc(sizeof(struct mm_chunk) + size);
+		chunk = mm_global_alloc(sizeof(struct mm_chunk) + size);
 		chunk->size = size;
 		chunk->used = 0;
 		chunk->core = MM_CORE_NONE;
@@ -195,7 +195,7 @@ mm_log_write(void)
 
 		struct mm_chunk *next = chunk->next;
 		if (chunk->core == MM_CORE_NONE) {
-			mm_free(chunk);
+			mm_global_free(chunk);
 		} else {
 			mm_core_reclaim_chunk(chunk);
 		}

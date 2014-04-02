@@ -20,6 +20,7 @@
 #include "work.h"
 
 #include "alloc.h"
+#include "core.h"
 #include "pool.h"
 #include "trace.h"
 
@@ -28,13 +29,34 @@
 // The memory pool for work items.
 static struct mm_pool mm_work_pool;
 
+static void
+mm_work_start(void)
+{
+	ENTER();
+
+	mm_pool_prepare(&mm_work_pool, "work", &mm_alloc_shared,
+			sizeof(struct mm_work));
+
+	LEAVE();
+}
+
+static void
+mm_work_stop(void)
+{
+	ENTER();
+
+	mm_pool_cleanup(&mm_work_pool);
+
+	LEAVE();
+}
+
 void
 mm_work_init(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_work_pool, "work", &mm_alloc_global,
-			sizeof(struct mm_work));
+	mm_core_hook_start(mm_work_start);
+	mm_core_hook_stop(mm_work_stop);
 
 	LEAVE();
 }
@@ -43,8 +65,6 @@ void
 mm_work_term(void)
 {
 	ENTER();
-
-	mm_pool_cleanup(&mm_work_pool);
 
 	LEAVE();
 }

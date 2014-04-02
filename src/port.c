@@ -40,7 +40,7 @@ mm_port_create(struct mm_task *task)
 {
 	ENTER();
 
-	struct mm_port *port = mm_alloc(sizeof(struct mm_port));
+	struct mm_port *port = mm_global_alloc(sizeof(struct mm_port));
 	port->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	port->task = task;
 	port->start = 0;
@@ -59,7 +59,7 @@ mm_port_destroy(struct mm_port *port)
 	ENTER();
 
 	mm_list_delete(&port->ports);
-	mm_free(port);
+	mm_global_free(port);
 
 	LEAVE();
 }

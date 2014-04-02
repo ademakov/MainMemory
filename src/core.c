@@ -48,7 +48,11 @@
 #define MM_TIME_QUEUE_MAX_WIDTH	500
 #define MM_TIME_QUEUE_MAX_COUNT	2000
 
-#define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
+#if ENABLE_SMP
+# define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
+#else
+# define MM_CORE_IS_PRIMARY(core)	(true)
+#endif
 
 // The core set.
 mm_core_t mm_core_num;
@@ -627,11 +631,8 @@ mm_core_stats(void)
  * Core start and stop hooks.
  **********************************************************************/
 
-static struct mm_hook mm_core_start_hook;
-static struct mm_hook mm_core_param_start_hook;
-
-static struct mm_hook mm_core_stop_hook;
-static struct mm_hook mm_core_param_stop_hook;
+static struct mm_queue MM_QUEUE_INIT(mm_core_start_hook);
+static struct mm_queue MM_QUEUE_INIT(mm_core_stop_hook);
 
 static void
 mm_core_free_hooks(void)
@@ -639,9 +640,7 @@ mm_core_free_hooks(void)
 	ENTER();
 
 	mm_hook_free(&mm_core_start_hook);
-	mm_hook_free(&mm_core_param_start_hook);
 	mm_hook_free(&mm_core_stop_hook);
-	mm_hook_free(&mm_core_param_stop_hook);
 
 	LEAVE();
 }
@@ -661,7 +660,7 @@ mm_core_hook_param_start(void (*proc)(void *), void *data)
 {
 	ENTER();
 
-	mm_hook_tail_data_proc(&mm_core_param_start_hook, proc, data);
+	mm_hook_tail_data_proc(&mm_core_start_hook, proc, data);
 
 	LEAVE();
 }
@@ -681,7 +680,7 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
 {
 	ENTER();
 
-	mm_hook_tail_data_proc(&mm_core_param_stop_hook, proc, data);
+	mm_hook_tail_data_proc(&mm_core_stop_hook, proc, data);
 
 	LEAVE();
 }
@@ -691,8 +690,43 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
  **********************************************************************/
 
 static void
+mm_core_boot_signal(void)
+{
+#if ENABLE_SMP
+	for (mm_core_t i = 1; i < mm_core_num; i++) {
+		struct mm_thread *thread = NULL;
+		do
+			thread = mm_memory_load(mm_core_set[i].thread);
+		while (thread == NULL);
+
+		mm_thread_signal(thread);
+	}
+#endif
+}
+
+static void
+mm_core_term_wait(void)
+{
+#if ENABLE_SMP
+	for (mm_core_t i = 1; i < mm_core_num; i++) {
+		struct mm_thread *thread = NULL;
+		do
+			thread = mm_memory_load(mm_core_set[i].thread);
+		while (thread == NULL);
+
+		mm_thread_join(thread);
+	}
+#endif
+}
+
+static void
 mm_core_boot_init(struct mm_core *core)
 {
+	// Secondary cores have to wait until the primary core runs
+	// the start hooks that initialize shared resources.
+	if (!MM_CORE_IS_PRIMARY(core))
+		mm_thread_wait();
+
 	mm_timer_init();
 	mm_future_init();
 
@@ -717,20 +751,20 @@ mm_core_boot_init(struct mm_core *core)
 	mm_task_attr_setname(&attr, "dealer");
 	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 
-	// Call the start hooks on the first core.
+	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_hook_call_proc(&mm_core_start_hook, false);
-		mm_hook_call_data_proc(&mm_core_param_start_hook, false);
+		mm_hook_call(&mm_core_start_hook, false);
+		mm_core_boot_signal();
 	}
 }
 
 static void
 mm_core_boot_term(struct mm_core *core)
 {
-	// Call the stop hooks on the first core.
+	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_hook_call_data_proc(&mm_core_param_stop_hook, false);
-		mm_hook_call_proc(&mm_core_stop_hook, false);
+		mm_core_term_wait();
+		mm_hook_call(&mm_core_stop_hook, false);
 	}
 
 	mm_timeq_destroy(core->time_queue);
@@ -911,8 +945,6 @@ mm_core_init(void)
 	ENTER();
 	ASSERT(mm_core_num == 0);
 
-	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
-
 	mm_core_num = mm_core_get_num();
 	ASSERT(mm_core_num > 0);
 	if (mm_core_num == 1)
@@ -920,16 +952,19 @@ mm_core_init(void)
 	else
 		mm_brief("Running on %d cores.", mm_core_num);
 
+	mm_alloc_init();
 	mm_clock_init();
 	mm_thread_init();
+	mm_event_init();
+	mm_net_init();
 
 	mm_task_init();
 	mm_port_init();
 	mm_wait_init();
 	mm_work_init();
 
-	mm_core_set = mm_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
-	for (int i = 0; i < mm_core_num; i++)
+	mm_core_set = mm_global_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
+	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
 
 	LEAVE();
@@ -941,9 +976,9 @@ mm_core_term(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	for (int i = 0; i < mm_core_num; i++)
+	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
-	mm_free(mm_core_set);
+	mm_global_free(mm_core_set);
 
 	mm_core_free_hooks();
 
@@ -952,7 +987,10 @@ mm_core_term(void)
 	mm_wait_term();
 	mm_work_term();
 
+	mm_net_term();
+	mm_event_term();
 	mm_thread_term();
+	mm_alloc_term();
 
 	LEAVE();
 }
@@ -978,7 +1016,7 @@ mm_core_start(void)
 	ASSERT(mm_core_num > 0);
 
 	// Start core threads.
-	for (int i = 0; i < mm_core_num; i++)
+	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_start_single(&mm_core_set[i], i);
 
 	// Loop until stopped.
@@ -1007,7 +1045,7 @@ mm_core_stop(void)
 	ASSERT(mm_core_num > 0);
 
 	// Set stop flag for core threads.
-	for (int i = 0; i < mm_core_num; i++)
+	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_memory_store(mm_core_set[i].stop, true);
 
 	LEAVE();

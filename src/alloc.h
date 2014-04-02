@@ -1,7 +1,7 @@
 /*
  * alloc.h - MainMemory memory allocation.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,13 +45,20 @@ struct mm_allocator
 };
 
 extern const struct mm_allocator mm_alloc_core;
+extern const struct mm_allocator mm_alloc_shared;
 extern const struct mm_allocator mm_alloc_global;
 
+void mm_alloc_init(void);
+void mm_alloc_term(void);
+
 /**********************************************************************
- * Memory Allocation for Core Threads.
+ * Intra-core memory allocation routines.
  **********************************************************************/
 
 void * mm_core_alloc(size_t size)
+	__attribute__((malloc));
+
+void * mm_core_alloc_aligned(size_t align, size_t size)
 	__attribute__((malloc));
 
 void * mm_core_calloc(size_t count, size_t size)
@@ -62,20 +69,37 @@ void * mm_core_realloc(void *ptr, size_t size);
 void mm_core_free(void *ptr);
 
 /**********************************************************************
- * Global Memory Allocation Routines.
+ * Cross-core memory allocation routines.
  **********************************************************************/
 
-void * mm_alloc(size_t size)
+void * mm_shared_alloc(size_t size)
 	__attribute__((malloc));
 
-void * mm_alloc_aligned(size_t align, size_t size)
+void * mm_shared_alloc_aligned(size_t align, size_t size)
 	__attribute__((malloc));
 
-void * mm_calloc(size_t count, size_t size)
+void * mm_shared_calloc(size_t count, size_t size)
 	__attribute__((malloc));
 
-void * mm_realloc(void *ptr, size_t size);
+void * mm_shared_realloc(void *ptr, size_t size);
 
-void mm_free(void *ptr);
+void mm_shared_free(void *ptr);
+
+/**********************************************************************
+ * Global memory allocation routines.
+ **********************************************************************/
+
+void * mm_global_alloc(size_t size)
+	__attribute__((malloc));
+
+void * mm_global_alloc_aligned(size_t align, size_t size)
+	__attribute__((malloc));
+
+void * mm_global_calloc(size_t count, size_t size)
+	__attribute__((malloc));
+
+void * mm_global_realloc(void *ptr, size_t size);
+
+void mm_global_free(void *ptr);
 
 #endif /* ALLOC_H */
