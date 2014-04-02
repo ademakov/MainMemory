@@ -21,8 +21,10 @@
 #define ARCH_GENERIC_COMMON_H
 
 /* General purpose register width. */
+/*#define MM_WORD_32BIT		0*/
+/*#define MM_WORD_64BIT		1*/
 #if !defined(MM_WORD_32BIT) && !defined(MM_WORD_64BIT)
-# define MM_WORD_32BIT		1
+# warning "Neither MM_WORD_32BIT nor MM_WORD_64BIT is defined."
 #endif
 
 /* Cache line size. */

@@ -21,9 +21,10 @@
 #define CHUNK_H
 
 #include "common.h"
+#include "alloc.h"
 #include "list.h"
 
-#define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + 16)
+#define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + MM_ALLOC_OVERHEAD)
 
 /* A chunk of memory that could be chained together with other chunks and
    passed from one thread to another. Useful for I/O buffers and such. */

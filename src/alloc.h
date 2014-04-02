@@ -22,6 +22,21 @@
 
 #include "common.h"
 
+/* DLMalloc overhead. */
+#if MM_WORD_32BIT
+# ifdef FOOTERS
+#  define MM_ALLOC_OVERHEAD (4)
+# else
+#  define MM_ALLOC_OVERHEAD (8)
+# endif
+#else
+# ifdef FOOTERS
+#  define MM_ALLOC_OVERHEAD (8)
+# else
+#  define MM_ALLOC_OVERHEAD (16)
+# endif
+#endif
+
 struct mm_allocator
 {
 	void * (*alloc)(size_t size);
