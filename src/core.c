@@ -417,11 +417,11 @@ mm_core_master(mm_value_t arg)
  **********************************************************************/
 
 // Dealer loop sleep time - 1 second
-#define MM_DEALER_HALT_TIME	((mm_timeout_t) 1000000)
+#define MM_DEALER_HALT_TIMEOUT	((mm_timeout_t) 1000000)
 
 // Dealer loop hang on times
-#define MM_DEALER_HOLD_TIME_1	((mm_timeout_t) 10)
-#define MM_DEALER_HOLD_TIME_2	((mm_timeout_t) 25)
+#define MM_DEALER_POLL_TIMEOUT	((mm_timeout_t) 10)
+#define MM_DEALER_HOLD_TIMEOUT	((mm_timeout_t) 25)
 
 static mm_timeval_t mm_core_poll_time;
 
@@ -489,95 +489,78 @@ mm_core_wait(mm_timeout_t timeout)
 	LEAVE();
 }
 
-#if ENABLE_SMP
-static mm_timeout_t
-mm_core_hold(struct mm_core *core, mm_timeout_t timeout)
-{
-	ENTER();
-
-	if (timeout == 0)
-		goto leave;
-
-	mm_timeval_t halt_time = core->time_value + timeout;
-
-	mm_timeval_t hold_time;
-	if (MM_CORE_IS_PRIMARY(core))
-		hold_time = mm_core_poll_time + MM_DEALER_HOLD_TIME_1;
-	else
-		hold_time = core->time_value + MM_DEALER_HOLD_TIME_2;
-
-	mm_timeval_t halt_time = core->time_value + timeout;
-	if (hold_time > halt_time)
-		hold_time = halt_time;
-
-	while (hold_time > core->time_value) {
-		if (mm_memory_load(core->wake.value)) {
-			timeout = 0;
-			break;
-		}
-
-		for (int i = 0; i < 10; i++)
-			mm_atomic_lock_pause();
-
-		mm_core_update_time();
-	}
-
-	if (halt_time > core->time_value)
-		timeout = halt_time - core->time_value;
-	else
-		timeout = 0;
-
-leave:
-	LEAVE();
-	return timeout;
-}
-#else
-# define mm_core_hold(core, timeout) (timeout)
-#endif
-
 static void
 mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 {
 	ENTER();
 
-	// If some event system changes have been requested then
-	// it is needed to notify on their completion immediately.
-	if (MM_CORE_IS_PRIMARY(core) && mm_event_collect()) {
-		mm_core_poll(core, 0);
+	// Get the current time value.
+	mm_core_update_time();
+
+	// Get the closest pending timer.
+	mm_timeval_t wait_time = mm_timer_next();
+
+	// Consider the time until the next required event poll.
+	mm_timeval_t poll_time, hold_time;
+	if (MM_CORE_IS_PRIMARY(core)) {
+		// If any event system changes have been requested then it is
+		// required to notify on their completion immediately.
+		if (mm_event_collect())
+			poll_time = wait_time = core->time_value;
+		else
+			poll_time = mm_core_poll_time + MM_DEALER_POLL_TIMEOUT;
+		hold_time = min(wait_time, poll_time);
+	} else {
+		poll_time = MM_TIMEVAL_MAX;
+		hold_time = min(wait_time, core->time_value + MM_DEALER_HOLD_TIMEOUT);
+	}
+
+	// Limit the halt time with respect to this.
+	mm_timeval_t halt_time = min(wait_time, core->time_value + timeout);
+
+	// Before actually halting hang around a little bit waiting for
+	// possible wake requests.
+	while (hold_time > core->time_value) {
+		for (int i = 0; i < 10; i++) {
+			if (mm_memory_load(core->wake.value)) {
+				hold_time = halt_time = core->time_value;
+				break;
+			}
+			mm_atomic_lock_pause();
+		}
+		mm_core_update_time();
+	}
+
+	// If it is the time to wake up already.
+	if (core->time_value >= halt_time) {
+		// And if it is the time to poll the event system.
+		if (core->time_value >= poll_time)
+			mm_core_poll(core, 0);
 		goto leave;
 	}
 
-	// Check the closest pending timer event.
-	mm_timeval_t next_timeout = mm_timer_next();
-	if (timeout > next_timeout)
-		timeout = next_timeout;
+	// Advertise that the core is about to halt.
+	mm_memory_store(core->halt, true);
 
-	// Before actually halting hang on a little bit waiting for possible
-	// wake requests.
-	timeout = mm_core_hold(core, timeout);
-	if (timeout) {
-		// Advertise that the core is about to halt.
-		mm_memory_store(core->halt, true);
+	// Make sure it is seen by other cores before the atomic op
+	// below captures the most up-to-date wake flag value.
+	// FIXME: have a store_atomic fence.
+	mm_memory_fence();
 
-		// Make sure it is seen by other cores before the atomic op
-		// below captures the most up-to-date wake flag value.
-		// FIXME: have a store_atomic fence.
-		mm_memory_fence();
-
-		// Check to see if there are already wake requests pending.
-		uint8_t wake = mm_atomic_uint8_fetch_and_set(&core->wake, 0);
-		if (wake == 0) {
-			// Actually halt the core for the given timeout.
-			if (MM_CORE_IS_PRIMARY(core))
-				mm_core_poll(core, timeout);
-			else 
-				mm_core_wait(timeout);
-		}
-
-		// Advertise that the core is awake.
-		mm_memory_store(core->halt, false);
-		mm_memory_store_fence();
+	// Check to see if there are already wake requests pending.
+	uint8_t wake = mm_atomic_uint8_fetch_and_set(&core->wake, 0);
+	if (wake == 0) {
+		// Actually halt the core for the given timeout.
+		timeout = halt_time - core->time_value;
+		if (MM_CORE_IS_PRIMARY(core))
+			mm_core_poll(core, timeout);
+		else 
+			mm_core_wait(timeout);
 	}
+
+	// Advertise that the core is awake.
+	mm_memory_store(core->halt, false);
+	mm_memory_store_fence();
 
 leave:
 	LEAVE();
@@ -621,7 +604,7 @@ mm_core_dealer(mm_value_t arg)
 
 	while (!mm_memory_load(core->stop)) {
 		mm_core_deal(core);
-		mm_core_halt(core, MM_DEALER_HALT_TIME);
+		mm_core_halt(core, MM_DEALER_HALT_TIMEOUT);
 	}
 
 	LEAVE();

@@ -115,8 +115,6 @@ mm_timer_tick(void)
 {
 	ENTER();
 
-	//mm_core_update_time();
-
 	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
 	while (entry != NULL && entry->value <= mm_core->time_value) {
 		mm_timeq_delete(mm_core->time_queue, entry);
@@ -134,16 +132,9 @@ mm_timer_next(void)
 	ENTER();
 
 	mm_timeval_t value = MM_TIMEVAL_MAX;
-
 	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
-	if (entry != NULL) {
-		mm_core_update_time();
-
-		value = entry->value - mm_core->time_value;
-		if (value < 0) {
-			value = 0;
-		}
-	}
+	if (entry != NULL)
+		value = entry->value;
 
 	LEAVE();
 	return value;
