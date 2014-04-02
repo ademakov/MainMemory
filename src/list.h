@@ -1,7 +1,7 @@
 /*
  * list.h - MainMemory lists.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -202,6 +202,8 @@ mm_link_delete_head(struct mm_link *list)
 /**********************************************************************
  * Single-linked list with FIFO support.
  **********************************************************************/
+
+#define MM_QUEUE_INIT(queue) queue = { { NULL }, &queue.head };
 
 struct mm_queue
 {
