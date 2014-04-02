@@ -25,8 +25,8 @@
 
 #include <unistd.h>
 
-static mm_atomic_uint32_t mm_selfpipe_notify_count;
-static mm_atomic_uint32_t mm_selfpipe_silent_count;
+static mm_atomic_uint32_t mm_selfpipe_write_count;
+static mm_atomic_uint32_t mm_selfpipe_write_skip_count;
 
 void
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
@@ -46,8 +46,8 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	selfpipe->write_fd = fds[1];
 
 	selfpipe->ready = false;
-	selfpipe->listen = false;
-	selfpipe->count.value = 0;
+	selfpipe->listen_flag = false;
+	selfpipe->notify_flag.value = false;
 
 	LEAVE();
 }
@@ -64,6 +64,37 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 }
 
 void
+mm_selfpipe_write(struct mm_selfpipe *selfpipe)
+{
+	ENTER();
+
+	mm_atomic_uint32_inc(&mm_selfpipe_write_count);
+
+	(void) write(selfpipe->write_fd, "", 1);
+
+	LEAVE();
+}
+
+bool
+mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
+{
+	ENTER();
+
+	bool ready = selfpipe->ready;
+	if (ready) {
+		selfpipe->ready = false;
+
+		char dummy[64];
+		while (read(selfpipe->read_fd, dummy, sizeof dummy) == sizeof dummy) {
+			/* do nothing */
+		}
+	}
+
+	LEAVE();
+	return ready;
+}
+
+void
 mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
@@ -71,9 +102,8 @@ mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
 	// Take the notification into account. But it will be really
 	// delivered to the listening side only when it makes a next
 	// mm_selfpipe_listen() call.
-	mm_atomic_uint32_inc(&selfpipe->count);
-
-	mm_memory_fence();
+	mm_memory_store(selfpipe->notify_flag.value, true);
+	mm_memory_strict_fence();
 
 	// Make a write() call to the pipe if the listening side of the
 	// self-pipe is currently indeed listening. The objective here is
@@ -95,20 +125,19 @@ mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
 	// overlaps the time span of the corresponding listening side poll().
 	// Even if the error, as in the example above, might be as large as
 	// several other poll() cycles.
-	if (mm_memory_load(selfpipe->listen)) {
-		(void) write(selfpipe->write_fd, "", 1);
+	if (mm_memory_load(selfpipe->listen_flag)) {
+		mm_selfpipe_write(selfpipe);
 	} else {
-		mm_atomic_uint32_inc(&mm_selfpipe_silent_count);
+		mm_atomic_uint32_inc(&mm_selfpipe_write_skip_count);
 	}
-	mm_atomic_uint32_inc(&mm_selfpipe_notify_count);
 
 	LEAVE();
 }
 
 /*
- * Signal that the listening side of the self-pipe is really going into
- * the listening mode and thus it will be needed to notify it thru the
- * pipe write() calls. The return value indicates if there were any
+ * Advertise that the listening side of the self-pipe is really going
+ * into the listening mode and thus it will be needed to notify it thru
+ * the pipe write() calls. The return value indicates if there were any
  * notifications while the listening side was not really listening.
  */
 bool
@@ -116,20 +145,20 @@ mm_selfpipe_listen(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	// Signal that the listening side is here.
-	mm_memory_store(selfpipe->listen, true);
+	// Advertise that the listening side is here.
+	mm_memory_store(selfpipe->listen_flag, true);
 
 	mm_memory_fence();
 
 	// See if there were some unseen notifications pending.
-	uint32_t n = mm_atomic_uint32_fetch_and_set(&selfpipe->count, 0);
+	uint8_t flag = mm_atomic_uint8_fetch_and_set(&selfpipe->notify_flag, false);
 
 	LEAVE();
-	return (n != 0);
+	return flag;
 }
 
 /*
- * Signal that the listening side of the self-pipe is going to be busy
+ * Advertise that the listening side of the self-pipe is going to be busy
  * with something else so there is no point to make pipe write() calls.
  */
 void
@@ -137,24 +166,7 @@ mm_selfpipe_divert(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	mm_memory_store(selfpipe->listen, false);
-
-	LEAVE();
-}
-
-void
-mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
-{
-	ENTER();
-
-	if (selfpipe->ready) {
-		selfpipe->ready = false;
-
-		char dummy[64];
-		while (read(selfpipe->read_fd, dummy, sizeof dummy) == sizeof dummy) {
-			/* do nothing */
-		}
-	}
+	mm_memory_store(selfpipe->listen_flag, false);
 
 	LEAVE();
 }
@@ -162,7 +174,7 @@ mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 void
 mm_selfpipe_stats(void)
 {
-	uint32_t notify = mm_memory_load(mm_selfpipe_notify_count.value);
-	uint32_t silent = mm_memory_load(mm_selfpipe_silent_count.value);
-	mm_verbose("selfpipe stats: notify = %u, silent = %u", notify, silent);
+	uint32_t write = mm_memory_load(mm_selfpipe_write_count.value);
+	uint32_t write_skip = mm_memory_load(mm_selfpipe_write_skip_count.value);
+	mm_verbose("selfpipe stats: write = %u, skip write = %u", write, write_skip);
 }

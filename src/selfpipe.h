@@ -31,12 +31,10 @@ struct mm_selfpipe
 	bool ready;
 
 	/* Read end is listening. */
-	bool listen;
+	bool listen_flag;
 
-	char padding[MM_CACHELINE - 2 * sizeof(int) - 2 * sizeof(bool)];
-
-	/* Notification count. */
-	mm_atomic_uint32_t count;
+	/* Notification has been made. */
+	mm_atomic_uint8_t notify_flag __align(MM_CACHELINE);
 };
 
 static inline void
@@ -51,6 +49,12 @@ void mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 void mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 	__attribute__((nonnull(1)));
 
+void mm_selfpipe_write(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
+bool mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
+	__attribute__((nonnull(1)));
+
 void mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
 	__attribute__((nonnull(1)));
 
@@ -58,9 +62,6 @@ bool mm_selfpipe_listen(struct mm_selfpipe *selfpipe)
 	__attribute__((nonnull(1)));
 
 void mm_selfpipe_divert(struct mm_selfpipe *selfpipe)
-	__attribute__((nonnull(1)));
-
-void mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 	__attribute__((nonnull(1)));
 
 void mm_selfpipe_stats(void);
