@@ -464,19 +464,20 @@ mm_core_deal(struct mm_core *core)
 	LEAVE();
 }
 
-static void
+static bool
 mm_core_poll(struct mm_core *core, mm_timeout_t timeout)
 {
 	ENTER();
 
 	mm_atomic_uint32_inc(&mm_core_poll_count);
 
-	mm_event_poll(timeout);
+	bool rc = mm_event_poll(timeout);
 
 	mm_core_update_time();
 	mm_core_poll_time = core->time_value;
 
 	LEAVE();
+	return rc;
 }
 
 static void
@@ -522,6 +523,10 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 	// Limit the halt time with respect to this.
 	mm_timeval_t halt_time = min(wait_time, core->time_value + timeout);
 
+	// Cleanup stale event signals if .
+	if (MM_CORE_IS_PRIMARY(core) && mm_event_dampen())
+		mm_core_update_time();
+
 	// Before actually halting hang around a little bit waiting for
 	// possible wake requests.
 	while (hold_time > core->time_value) {
@@ -539,9 +544,12 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 	if (core->time_value >= halt_time) {
 		// And if it is the time to poll the event system.
 		if (core->time_value >= poll_time)
-			mm_core_poll(core, 0);
+			if (mm_core_poll(core, 0))
+				mm_event_dispatch();
 		goto leave;
 	}
+
+	bool dispatch = false;
 
 	// Advertise that the core is about to halt.
 	mm_memory_store(core->halt, true);
@@ -557,7 +565,7 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		// Actually halt the core for the given timeout.
 		timeout = halt_time - core->time_value;
 		if (MM_CORE_IS_PRIMARY(core))
-			mm_core_poll(core, timeout);
+			dispatch = mm_core_poll(core, timeout);
 		else 
 			mm_core_wait(timeout);
 	}
@@ -565,6 +573,9 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 	// Advertise that the core is awake.
 	mm_memory_store(core->halt, false);
 	mm_memory_store_fence();
+
+	if (dispatch)
+		mm_event_dispatch();
 
 leave:
 	LEAVE();

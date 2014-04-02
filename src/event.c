@@ -297,9 +297,21 @@ mm_event_notify(void)
 {
 	ENTER();
 
-	mm_selfpipe_notify(&mm_event_selfpipe);
+	mm_selfpipe_write(&mm_event_selfpipe);
 
 	LEAVE();
+}
+
+bool
+mm_event_dampen(void)
+{
+	ENTER();
+
+	// Drain the stale selfpipe notifications if any.
+	bool rc = mm_selfpipe_drain(&mm_event_selfpipe);
+
+	LEAVE();
+	return rc;
 }
 
 /**********************************************************************
@@ -713,26 +725,20 @@ mm_event_collect(void)
 	return (mm_nkevents != 0);
 }
 
-void
+bool
 mm_event_poll(mm_timeout_t timeout)
 {
 	ENTER();
 
+	// Flush the log before a possible sleep.
+	mm_flush();
+
 	// Start listening the selfpipe if needed and find the event wait
 	// timeout.
 	struct timespec ts;
-	if (timeout == 0 || mm_selfpipe_listen(&mm_event_selfpipe)) {
-		DEBUG("timeout: 0");
-		ts.tv_sec = 0;
-		ts.tv_nsec = 0;
-	} else {
-		DEBUG("timeout: %lu", (unsigned long) timeout);
-		ts.tv_sec = timeout / 1000000;
-		ts.tv_nsec = (timeout % 1000000) * 1000;
-	}
-
-	// Flush the log before a possible sleep.
-	mm_flush();
+	DEBUG("timeout: %lu", (unsigned long) timeout);
+	ts.tv_sec = timeout / 1000000;
+	ts.tv_nsec = (timeout % 1000000) * 1000;
 
 	// Poll the system for events.
 	int n = kevent(mm_kevent_kq,
@@ -740,17 +746,25 @@ mm_event_poll(mm_timeout_t timeout)
 		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
 		       &ts);
 
-	// Stop listening the selfpipe.
-	if (timeout > 0)
-		mm_selfpipe_divert(&mm_event_selfpipe);
-
 	DEBUG("kevent changed: %d, received: %d", mm_nkevents, n);
 	if (n < 0) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
 		else
 			mm_error(errno, "kevent");
+		mm_nkevents = 0;
+	} else {
+		mm_nkevents = n;
 	}
+
+	LEAVE();
+	return mm_kevent_nchanges || mm_nkevents;
+}
+
+void
+mm_event_dispatch(void)
+{
+	ENTER();
 
 	// Issue REG/UNREG events.
 	for (int i = 0; i < mm_kevent_nchanges; i++) {
@@ -773,7 +787,7 @@ mm_event_poll(mm_timeout_t timeout)
 	}
 
 	// Process the received system events.
-	for (int i = 0; i < n; i++) {
+	for (int i = 0; i < mm_nkevents; i++) {
 		if (mm_kevents[i].filter == EVFILT_READ) {
 			int fd = mm_kevents[i].ident;
 			DEBUG("input event on fd %d", fd);
@@ -796,10 +810,6 @@ mm_event_poll(mm_timeout_t timeout)
 			}
 		}
 	}
-
-	// Drain the stalled selfpipe notifications if any.
-	if (timeout != 0)
-		mm_selfpipe_drain(&mm_event_selfpipe);
 
 	LEAVE();
 }

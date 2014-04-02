@@ -53,9 +53,11 @@ void mm_event_init(void);
 void mm_event_term(void);
 
 bool mm_event_collect(void);
-void mm_event_poll(mm_timeout_t timeout);
+bool mm_event_poll(mm_timeout_t timeout);
+void mm_event_dispatch(void);
 
 void mm_event_notify(void);
+bool mm_event_dampen(void);
 
 mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 
