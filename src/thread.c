@@ -377,7 +377,7 @@ mm_thread_timedwait(mm_timeout_t timeout)
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, &ts, NULL, NULL, 0);
+	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, 0, &ts, NULL, 0);
 #elif HAVE_MACH_SEMAPHORE_H
 	mach_timespec_t ts;
 	ts.tv_sec = (timeout / 1000000);
