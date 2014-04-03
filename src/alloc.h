@@ -48,6 +48,10 @@ extern const struct mm_allocator mm_alloc_core;
 extern const struct mm_allocator mm_alloc_shared;
 extern const struct mm_allocator mm_alloc_global;
 
+/**********************************************************************
+ * Memory subsystem initialization and termination.
+ **********************************************************************/
+
 void mm_alloc_init(void);
 void mm_alloc_term(void);
 

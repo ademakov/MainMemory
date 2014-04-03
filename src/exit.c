@@ -1,7 +1,7 @@
 /*
  * exit.c - MainMemory exit handling.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,8 +49,7 @@ static void
 mm_do_atexit(void)
 {
 	mm_hook_call(&mm_exit_hook, true);
-	if (mm_core != NULL)
-		mm_flush();
+	mm_flush();
 	mm_log_write();
 }
 
