@@ -66,6 +66,7 @@ struct mm_thread
 #else
 	pthread_mutex_t wait_lock;
 	pthread_cond_t wait_cond;
+	bool wait_flag;
 #endif
 
 	/* The thread name. */
@@ -138,16 +139,14 @@ mm_thread_setstack_attr(pthread_attr_t *pthr_attr, struct mm_thread_attr *attr)
 		// no-op
 	} else if (attr->stack_base == NULL) {
 		int rc = pthread_attr_setstacksize(pthr_attr, attr->stack_size);
-		if (rc) {
+		if (rc)
 			mm_fatal(rc, "pthread_attr_setstacksize");
-		}
 	} else {
 		int rc = pthread_attr_setstack(pthr_attr,
 					       attr->stack_base,
 					       attr->stack_size);
-		if (rc) {
+		if (rc)
 			mm_fatal(rc, "pthread_attr_setstack");
-		}
 	}
 }
 
@@ -161,9 +160,8 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 
 	pthread_t tid = pthread_self();
 	int rc = pthread_setaffinity_np(tid, sizeof cpu_set, &cpu_set);
-	if (rc) {
+	if (rc)
 		mm_error(rc, "failed to set thread affinity");
-	}
 }
 #elif ENABLE_SMP && HAVE_MACH_THREAD_POLICY_H
 static void
@@ -177,9 +175,8 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 					     THREAD_AFFINITY_POLICY,
 					     (thread_policy_t) &policy,
 			THREAD_AFFINITY_POLICY_COUNT);
-	if (kr != KERN_SUCCESS) {
+	if (kr != KERN_SUCCESS)
 		mm_error(0, "failed to set thread affinity");
-	}
 }
 #else
 # define mm_thread_setaffinity(cpu_tag) ((void) cpu_tag)
@@ -247,33 +244,29 @@ mm_thread_create(struct mm_thread_attr *attr,
 #elif HAVE_MACH_SEMAPHORE_H
 	kern_return_t kr = semaphore_create(mach_task_self(), &thread->wait_sem,
 					    SYNC_POLICY_FIFO, 0);
-	if (kr != KERN_SUCCESS) {
+	if (kr != KERN_SUCCESS)
 		mm_error(0, "failed to create semaphore");
-	}
 #else
 	rc = pthread_mutex_init(&thread->wait_lock, NULL);
-	if (rc) {
+	if (rc)
 		mm_fatal(rc, "pthread_mutex_init");
-	}
 	rc = pthread_cond_init(&thread->wait_cond, NULL);
-	if (rc) {
+	if (rc)
 		mm_fatal(rc, "pthread_cond_init");
-	}
+	thread->wait_flag = true;
 #endif
 
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
 	pthread_attr_init(&pthr_attr);
-	if (attr != NULL) {
+	if (attr != NULL)
 		mm_thread_setstack_attr(&pthr_attr, attr);
-	}
 
 	// Start the thread.
 	rc = pthread_create(&thread->system_thread, &pthr_attr,
 				mm_thread_entry, thread);
-	if (rc) {
+	if (rc)
 		mm_fatal(rc, "pthread_create");
-	}
 	pthread_attr_destroy(&pthr_attr);
 
 	LEAVE();
@@ -312,9 +305,8 @@ mm_thread_cancel(struct mm_thread *thread)
 	ENTER();
 
 	int rc = pthread_cancel(thread->system_thread);
-	if (rc) {
+	if (rc)
 		mm_error(rc, "pthread_cancel");
-	}
 
 	LEAVE();
 }
@@ -326,9 +318,8 @@ mm_thread_join(struct mm_thread *thread)
 	ENTER();
 
 	int rc = pthread_join(thread->system_thread, NULL);
-	if (rc) {
+	if (rc)
 		mm_error(rc, "pthread_join");
-	}
 
 	LEAVE();
 }
@@ -357,7 +348,9 @@ mm_thread_wait(void)
 	semaphore_wait(mm_thread->wait_sem);
 #else
 	pthread_mutex_lock(&mm_thread->wait_lock);
-	pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
+	while (mm_thread->wait_flag)
+		pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
+	mm_thread->wait_flag = true;
 	pthread_mutex_unlock(&mm_thread->wait_lock);
 #endif
 
@@ -391,7 +384,12 @@ mm_thread_timedwait(mm_timeout_t timeout)
 	ts.tv_nsec = (time % 1000000) * 1000;
 
 	pthread_mutex_lock(&mm_thread->wait_lock);
-	pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
+	while (mm_thread->wait_flag) {
+		int rc = pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
+		if (rc == ETIMEDOUT)
+			break;
+	}
+	mm_thread->wait_flag = true;
 	pthread_mutex_unlock(&mm_thread->wait_lock);
 #endif
 
@@ -408,7 +406,10 @@ mm_thread_signal(struct mm_thread *thread)
 #elif HAVE_MACH_SEMAPHORE_H
 	semaphore_signal(thread->wait_sem);
 #else
+	pthread_mutex_lock(&thread->wait_lock);
+	thread->wait_flag = false;
 	pthread_cond_signal(&thread->wait_cond);
+	pthread_mutex_unlock(&thread->wait_lock);
 #endif
 
 	LEAVE();
