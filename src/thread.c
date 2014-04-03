@@ -29,6 +29,12 @@
 #include <pthread.h>
 #include <sched.h>
 
+#if HAVE_LINUX_FUTEX_H
+# include <unistd.h>
+# include <linux/futex.h>
+# include <sys/syscall.h>
+#endif
+
 #if HAVE_MACH_SEMAPHORE_H || HAVE_MACH_THREAD_POLICY_H
 # include <mach/mach_init.h>
 # if HAVE_MACH_SEMAPHORE_H
@@ -53,9 +59,11 @@ struct mm_thread
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	int wait_futex;
+#elif HAVE_MACH_SEMAPHORE_H
 	semaphore_t wait_sem;
-#else	
+#else
 	pthread_mutex_t wait_lock;
 	pthread_cond_t wait_cond;
 #endif
@@ -234,7 +242,9 @@ mm_thread_create(struct mm_thread_attr *attr,
 	}
 
 	// Initialize wait/signal control data.
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	thread->wait_futex = 0;
+#elif HAVE_MACH_SEMAPHORE_H
 	kern_return_t kr = semaphore_create(mach_task_self(), &thread->wait_sem,
 					    SYNC_POLICY_FIFO, 0);
 	if (kr != KERN_SUCCESS) {
@@ -277,7 +287,9 @@ mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
 
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	// nothing to destroy
+#elif HAVE_MACH_SEMAPHORE_H
 	semaphore_destroy(mach_task_self(), thread->wait_sem);
 #else
 	pthread_mutex_destroy(&thread->wait_lock);
@@ -339,7 +351,9 @@ mm_thread_wait(void)
 	// Flush the log before a possible sleep.
 	mm_flush();
 
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, 0, NULL, NULL, 0);
+#elif HAVE_MACH_SEMAPHORE_H
 	semaphore_wait(mm_thread->wait_sem);
 #else
 	pthread_mutex_lock(&mm_thread->wait_lock);
@@ -358,20 +372,24 @@ mm_thread_timedwait(mm_timeout_t timeout)
 	// Flush the log before a possible sleep.
 	mm_flush();
 
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	struct timespec ts;
+	ts.tv_sec = (timeout / 1000000);
+	ts.tv_nsec = (timeout % 1000000) * 1000;
+
+	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, &ts, NULL, NULL, 0);
+#elif HAVE_MACH_SEMAPHORE_H
 	mach_timespec_t ts;
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
+
+	semaphore_timedwait(mm_thread->wait_sem, ts);
 #else
 	struct timespec ts;
 	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
 	ts.tv_sec = (time / 1000000);
 	ts.tv_nsec = (time % 1000000) * 1000;
-#endif
 
-#if HAVE_MACH_SEMAPHORE_H
-	semaphore_timedwait(mm_thread->wait_sem, ts);
-#else
 	pthread_mutex_lock(&mm_thread->wait_lock);
 	pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
 	pthread_mutex_unlock(&mm_thread->wait_lock);
@@ -385,7 +403,9 @@ mm_thread_signal(struct mm_thread *thread)
 {
 	ENTER();
 
-#if HAVE_MACH_SEMAPHORE_H
+#if HAVE_LINUX_FUTEX_H
+	syscall(SYS_futex, &thread->wait_futex, FUTEX_WAKE, 1, NULL, NULL, 0);
+#elif HAVE_MACH_SEMAPHORE_H
 	semaphore_signal(thread->wait_sem);
 #else
 	pthread_cond_signal(&thread->wait_cond);
