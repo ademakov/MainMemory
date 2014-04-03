@@ -189,7 +189,11 @@ mm_thread_entry(void *arg)
 
 #if HAVE_PTHREAD_SETNAME_NP
 	// Let the system know the thread name.
+# ifdef __APPLE__
 	pthread_setname_np(thread->name);
+# else
+	pthread_setname_np(pthread_self(), thread->name);
+# endif
 #endif
 
 	// Set the thread-local pointer to the thread object.

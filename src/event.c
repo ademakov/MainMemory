@@ -323,6 +323,7 @@ mm_event_dampen(void)
 #define MM_EPOLL_MAX 512
 
 static int mm_epoll_fd;
+static int mm_epoll_nevents;
 
 static struct epoll_event mm_epoll_events[MM_EPOLL_MAX];
 
@@ -349,13 +350,13 @@ mm_event_free_sys(void)
 	LEAVE();
 }
 
-void
-mm_event_dispatch(mm_timeout_t timeout)
+bool
+mm_event_collect(void)
 {
 	ENTER();
 
-	// Indicate if there were any events sent before the poll call.
-	bool sent_msgs = false;
+	// Indicate if there were any control events processed.
+	bool control_events = false;
 
 	// Make changes to the fd set watched by epoll.
 	uint32_t msg[3];
@@ -432,7 +433,7 @@ mm_event_dispatch(mm_timeout_t timeout)
 		// Invoke the old handler if any.
 		if (mm_fd->control_handler) {
 			mm_event_control(mm_fd, MM_EVENT_UNREGISTER);
-			sent_msgs = true;
+			control_events = true;
 		}
 
 		// Store the requested I/O handler.
@@ -444,39 +445,49 @@ mm_event_dispatch(mm_timeout_t timeout)
 		// Invoke the new handler if any.
 		if (mm_fd->control_handler) {
 			mm_event_control(mm_fd, MM_EVENT_REGISTER);
-			sent_msgs = true;
+			control_events = true;
 		}
 	}
+
+	LEAVE();
+	return control_events;
+}
+
+bool
+mm_event_poll(mm_timeout_t timeout)
+{
+	ENTER();
 
 	// Flush the log before possible sleep.
 	mm_flush();
 
 	// Find the event wait timeout.
-	if (mm_selfpipe_listen(&mm_event_selfpipe) || sent_msgs) {
-		// If some event system changes have been requested then it is
-		// needed to notify as soon as possible the interested parties
-		// on their completion so do not wait for any other events.
-		timeout = 0;
-	} else {
-		mm_timeval_t next_timeout = mm_timer_next();
-		if (timeout > next_timeout)
-			timeout = next_timeout;
-		timeout /= 1000;
-	}
+	timeout /= 1000;
 
 	// Poll the system for events.
-	int nevents = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX,
-				 timeout);
+	int n = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX, timeout);
 
-	mm_selfpipe_divert(&mm_event_selfpipe);
-
-	if (unlikely(nevents < 0)) {
-		mm_error(errno, "epoll_wait");
-		goto leave;
+	if (unlikely(n < 0)) {
+		if (errno == EINTR)
+			mm_warning(errno, "epoll_wait");
+		else
+			mm_error(errno, "epoll_wait");
+		mm_epoll_nevents = 0;
+	} else {
+		mm_epoll_nevents = n;
 	}
 
+	LEAVE();
+	return (mm_epoll_nevents != 0);
+}
+
+void
+mm_event_dispatch(void)
+{
+	ENTER();
+
 	// Process the received system events.
-	for (int i = 0; i < nevents; i++) {
+	for (int i = 0; i < mm_epoll_nevents; i++) {
 		int fd = mm_epoll_events[i].data.fd;
 		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
 			DEBUG("input event on fd %d", fd);
@@ -497,7 +508,6 @@ mm_event_dispatch(mm_timeout_t timeout)
 		}
 	}
 
-leave:
 	LEAVE();
 }
 
