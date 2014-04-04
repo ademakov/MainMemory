@@ -22,25 +22,14 @@
 #include "thread.h"
 
 #include "alloc.h"
-#include "clock.h"
 #include "log.h"
 #include "trace.h"
 
 #include <pthread.h>
 #include <sched.h>
 
-#if HAVE_LINUX_FUTEX_H
-# include <unistd.h>
-# include <linux/futex.h>
-# include <sys/syscall.h>
-#endif
-
 #if HAVE_MACH_SEMAPHORE_H || HAVE_MACH_THREAD_POLICY_H
 # include <mach/mach_init.h>
-# if HAVE_MACH_SEMAPHORE_H
-#  include <mach/semaphore.h>
-#  include <mach/task.h>
-# endif
 # if HAVE_MACH_THREAD_POLICY_H
 #  include <mach/thread_act.h>
 #  include <mach/thread_policy.h>
@@ -59,21 +48,11 @@ struct mm_thread
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
-#if HAVE_LINUX_FUTEX_H
-	int wait_futex;
-#elif HAVE_MACH_SEMAPHORE_H
-	semaphore_t wait_sem;
-#else
-	pthread_mutex_t wait_lock;
-	pthread_cond_t wait_cond;
-	bool wait_flag;
-#endif
-
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
 };
 
-__thread struct mm_thread *mm_thread = NULL;
+static __thread struct mm_thread *mm_thread = NULL;
 
 /**********************************************************************
  * Global thread data initialization and termination.
@@ -205,9 +184,9 @@ mm_thread_entry(void *arg)
 	mm_thread = thread;
 
 	// Run the required routine.
-	mm_brief("start thread '%s'", mm_thread_name());
+	mm_brief("start thread '%s'", mm_thread_name(thread));
 	thread->start(thread->start_arg);
-	mm_brief("end thread '%s'", mm_thread_name());
+	mm_brief("end thread '%s'", mm_thread_name(thread));
 	mm_flush();
 
 	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
@@ -238,24 +217,6 @@ mm_thread_create(struct mm_thread_attr *attr,
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
 
-	// Initialize wait/signal control data.
-#if HAVE_LINUX_FUTEX_H
-	thread->wait_futex = 0;
-#elif HAVE_MACH_SEMAPHORE_H
-	kern_return_t kr = semaphore_create(mach_task_self(), &thread->wait_sem,
-					    SYNC_POLICY_FIFO, 0);
-	if (kr != KERN_SUCCESS)
-		mm_error(0, "failed to create semaphore");
-#else
-	rc = pthread_mutex_init(&thread->wait_lock, NULL);
-	if (rc)
-		mm_fatal(rc, "pthread_mutex_init");
-	rc = pthread_cond_init(&thread->wait_cond, NULL);
-	if (rc)
-		mm_fatal(rc, "pthread_cond_init");
-	thread->wait_flag = true;
-#endif
-
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
 	pthread_attr_init(&pthr_attr);
@@ -280,18 +241,29 @@ mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
 
-#if HAVE_LINUX_FUTEX_H
-	// nothing to destroy
-#elif HAVE_MACH_SEMAPHORE_H
-	semaphore_destroy(mach_task_self(), thread->wait_sem);
-#else
-	pthread_mutex_destroy(&thread->wait_lock);
-	pthread_cond_destroy(&thread->wait_cond);
-#endif
-
 	mm_global_free(thread);
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Thread information.
+ **********************************************************************/
+
+struct mm_thread *
+mm_thread_self(void)
+{
+	return mm_thread;
+}
+
+const char *
+mm_thread_name(struct mm_thread *thread)
+{
+	if (thread == NULL)
+		return "main";
+	if (thread->name[0] == 0)
+		return "unnamed";
+	return thread->name;
 }
 
 /**********************************************************************
@@ -332,99 +304,4 @@ mm_thread_yield(void)
 	sched_yield();
 
 	LEAVE();
-}
-
-void
-mm_thread_wait(void)
-{
-	ENTER();
-
-	// Flush the log before a possible sleep.
-	mm_flush();
-
-#if HAVE_LINUX_FUTEX_H
-	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, 0, NULL, NULL, 0);
-#elif HAVE_MACH_SEMAPHORE_H
-	semaphore_wait(mm_thread->wait_sem);
-#else
-	pthread_mutex_lock(&mm_thread->wait_lock);
-	while (mm_thread->wait_flag)
-		pthread_cond_wait(&mm_thread->wait_cond, &mm_thread->wait_lock);
-	mm_thread->wait_flag = true;
-	pthread_mutex_unlock(&mm_thread->wait_lock);
-#endif
-
-	LEAVE();
-}
-
-void
-mm_thread_timedwait(mm_timeout_t timeout)
-{
-	ENTER();
-
-	// Flush the log before a possible sleep.
-	mm_flush();
-
-#if HAVE_LINUX_FUTEX_H
-	struct timespec ts;
-	ts.tv_sec = (timeout / 1000000);
-	ts.tv_nsec = (timeout % 1000000) * 1000;
-
-	syscall(SYS_futex, mm_thread->wait_futex, FUTEX_WAIT, 0, &ts, NULL, 0);
-#elif HAVE_MACH_SEMAPHORE_H
-	mach_timespec_t ts;
-	ts.tv_sec = (timeout / 1000000);
-	ts.tv_nsec = (timeout % 1000000) * 1000;
-
-	semaphore_timedwait(mm_thread->wait_sem, ts);
-#else
-	struct timespec ts;
-	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
-	ts.tv_sec = (time / 1000000);
-	ts.tv_nsec = (time % 1000000) * 1000;
-
-	pthread_mutex_lock(&mm_thread->wait_lock);
-	while (mm_thread->wait_flag) {
-		int rc = pthread_cond_timedwait(&mm_thread->wait_cond, &mm_thread->wait_lock, &ts);
-		if (rc == ETIMEDOUT)
-			break;
-	}
-	mm_thread->wait_flag = true;
-	pthread_mutex_unlock(&mm_thread->wait_lock);
-#endif
-
-	LEAVE();
-}
-
-void
-mm_thread_signal(struct mm_thread *thread)
-{
-	ENTER();
-
-#if HAVE_LINUX_FUTEX_H
-	syscall(SYS_futex, &thread->wait_futex, FUTEX_WAKE, 1, NULL, NULL, 0);
-#elif HAVE_MACH_SEMAPHORE_H
-	semaphore_signal(thread->wait_sem);
-#else
-	pthread_mutex_lock(&thread->wait_lock);
-	thread->wait_flag = false;
-	pthread_cond_signal(&thread->wait_cond);
-	pthread_mutex_unlock(&thread->wait_lock);
-#endif
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Thread information.
- **********************************************************************/
-
-const char *
-mm_thread_name(void)
-{
-	if (mm_thread == NULL)
-		return "main";
-	if (mm_thread->name[0] == 0)
-		return "unnamed";
-	return mm_thread->name;
 }

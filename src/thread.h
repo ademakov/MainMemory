@@ -42,8 +42,6 @@ struct mm_thread_attr
 	char name[MM_THREAD_NAME_SIZE];
 };
 
-extern __thread struct mm_thread *mm_thread;
-
 /**********************************************************************
  * Thread subsystem initialization and termination.
  **********************************************************************/
@@ -72,12 +70,20 @@ struct mm_thread * mm_thread_create(struct mm_thread_attr *attr,
 				    mm_routine_t start, mm_value_t start_arg)
 	__attribute__((nonnull(2)));
 
+void mm_thread_destroy(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Thread information.
+ **********************************************************************/
+
+struct mm_thread *mm_thread_self(void);
+
+const char * mm_thread_name(struct mm_thread *thread);
+
 /**********************************************************************
  * Thread control routines.
  **********************************************************************/
-
-void mm_thread_destroy(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
 
 void mm_thread_cancel(struct mm_thread *thread)
 	__attribute__((nonnull(1)));
@@ -86,18 +92,5 @@ void mm_thread_join(struct mm_thread *thread)
 	__attribute__((nonnull(1)));
 
 void mm_thread_yield(void);
-
-void mm_thread_wait(void);
-
-void mm_thread_timedwait(mm_timeout_t timeout);
-
-void mm_thread_signal(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
-
-/**********************************************************************
- * Thread information.
- **********************************************************************/
-
-const char * mm_thread_name(void);
 
 #endif /* THREAD_H */

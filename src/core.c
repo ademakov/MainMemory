@@ -27,6 +27,7 @@
 #include "net.h"
 #include "port.h"
 #include "selfpipe.h"
+#include "synch.h"
 #include "task.h"
 #include "thread.h"
 #include "timeq.h"
@@ -60,8 +61,6 @@ struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
-
-static void mm_core_wake(struct mm_core *core);
 
 /**********************************************************************
  * Idle queue.
@@ -170,7 +169,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 			bool ok = mm_ring_core_put(&core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(core);
+			mm_synch_signal(core->synch);
 
 			if (ok) {
 				break;
@@ -220,7 +219,7 @@ mm_core_run_task(struct mm_task *task)
 			bool ok = mm_ring_core_put(&task->core->sched, task);
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(task->core);
+			mm_synch_signal(task->core->synch);
 
 			if (ok) {
 				break;
@@ -281,7 +280,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 			}
 
 			// Wakeup the target core if it is asleep.
-			mm_core_wake(core);
+			mm_synch_signal(core->synch);
 		}
 	}
 
@@ -430,10 +429,10 @@ mm_core_master(mm_value_t arg)
 static mm_timeval_t mm_core_poll_time;
 
 static mm_atomic_uint32_t mm_core_deal_count;
-static mm_atomic_uint32_t mm_core_poll_count;
-static mm_atomic_uint32_t mm_core_wait_count;
-static mm_atomic_uint32_t mm_core_wake_count;
-static mm_atomic_uint32_t mm_core_wake_skip_count;
+//static mm_atomic_uint32_t mm_core_poll_count;
+//static mm_atomic_uint32_t mm_core_wait_count;
+//static mm_atomic_uint32_t mm_core_wake_count;
+//static mm_atomic_uint32_t mm_core_wake_skip_count;
 
 static void
 mm_core_deal(struct mm_core *core)
@@ -443,10 +442,9 @@ mm_core_deal(struct mm_core *core)
 	// Start current timer tasks.
 	mm_timer_tick();
 
-	// Reset the wake flag to indicate the data that has so far
-	// accumulated in the rings is to be consumed now.
-	mm_memory_store(core->wake.value, 0);
-	mm_memory_strict_fence();
+	// Indicate that the data that has so far been put to the rings
+	// is to be consumed now.
+	mm_synch_clear(core->synch);
 
 	// Consume the data from the communication rings.
 	mm_core_destroy_chunks(core);
@@ -460,36 +458,6 @@ mm_core_deal(struct mm_core *core)
 	mm_wait_cache_truncate(&core->wait_cache);
 
 	mm_atomic_uint32_inc(&mm_core_deal_count);
-
-	LEAVE();
-}
-
-static bool
-mm_core_poll(struct mm_core *core, mm_timeout_t timeout)
-{
-	ENTER();
-
-	mm_atomic_uint32_inc(&mm_core_poll_count);
-
-	bool rc = mm_event_poll(timeout);
-
-	mm_core_update_time();
-	mm_core_poll_time = core->time_value;
-
-	LEAVE();
-	return rc;
-}
-
-static void
-mm_core_wait(mm_timeout_t timeout)
-{
-	ENTER();
-
-	mm_atomic_uint32_inc(&mm_core_wait_count);
-
-	mm_thread_timedwait(timeout);
-
-	mm_core_update_time();
 
 	LEAVE();
 }
@@ -523,15 +491,11 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 	// Limit the halt time with respect to this.
 	mm_timeval_t halt_time = min(wait_time, core->time_value + timeout);
 
-	// Cleanup stale event signals if .
-	if (MM_CORE_IS_PRIMARY(core) && mm_event_dampen())
-		mm_core_update_time();
-
 	// Before actually halting hang around a little bit waiting for
 	// possible wake requests.
 	while (hold_time > core->time_value) {
 		for (int i = 0; i < 10; i++) {
-			if (mm_memory_load(core->wake.value)) {
+			if (mm_synch_test(core->synch)) {
 				hold_time = halt_time = core->time_value;
 				break;
 			}
@@ -540,72 +504,24 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		mm_core_update_time();
 	}
 
-	// If it is the time to wake up already.
-	if (core->time_value >= halt_time) {
-		// And if it is the time to poll the event system.
-		if (core->time_value >= poll_time)
-			if (mm_core_poll(core, 0))
-				mm_event_dispatch();
-		goto leave;
-	}
-
 	bool dispatch = false;
 
-	// Advertise that the core is about to halt.
-	mm_memory_store(core->halt, true);
-
-	// Make sure it is seen by other cores before the atomic op
-	// below captures the most up-to-date wake flag value.
-	// FIXME: have a store_atomic fence.
-	mm_memory_fence();
-
-	// Check to see if there are already wake requests pending.
-	uint8_t wake = mm_atomic_uint8_fetch_and_set(&core->wake, 0);
-	if (wake == 0) {
-		// Actually halt the core for the given timeout.
+	if (halt_time > core->time_value)
 		timeout = halt_time - core->time_value;
-		if (MM_CORE_IS_PRIMARY(core))
-			dispatch = mm_core_poll(core, timeout);
-		else 
-			mm_core_wait(timeout);
+	else
+		timeout = 0;
+
+	if (timeout || poll_time >= core->time_value) {
+		dispatch = mm_synch_timedwait(core->synch, timeout);
+		mm_core_update_time();
 	}
 
-	// Advertise that the core is awake.
-	mm_memory_store(core->halt, false);
-	mm_memory_store_fence();
+	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_core_poll_time = core->time_value;
 
-	if (dispatch)
-		mm_event_dispatch();
-
-leave:
-	LEAVE();
-}
-
-static void
-mm_core_wake(struct mm_core *core)
-{
-	ENTER();
-
-	// Indicate that the core is needed awake.
-	mm_memory_store(core->wake.value, 1);
-
-	// Make sure this is seen by the core and the load below gets actual
-	// value.
-	// FIXME: have a store_load fence?
-	mm_memory_strict_fence();
-
-	// Wake up the core if it is halted (presumably, as there is always
-	// a race condition chance, the key is the race conditions should
-	// cause only extra wakeup calls rather than omitting them).
-	if (mm_memory_load(core->halt)) {
-		if (MM_CORE_IS_PRIMARY(core))
-			mm_event_notify();
-		else
-			mm_thread_signal(core->thread);
-	} else {
-		mm_atomic_uint32_inc(&mm_core_wake_skip_count);
+		if (dispatch)
+			mm_event_dispatch();
 	}
-	mm_atomic_uint32_inc(&mm_core_wake_count);
 
 	LEAVE();
 }
@@ -630,12 +546,8 @@ void
 mm_core_stats(void)
 {
 	uint32_t deal = mm_memory_load(mm_core_deal_count.value);
-	uint32_t poll = mm_memory_load(mm_core_poll_count.value);
-	uint32_t wait = mm_memory_load(mm_core_wait_count.value);
-	uint32_t wake = mm_memory_load(mm_core_wake_count.value);
-	uint32_t skip = mm_memory_load(mm_core_wake_skip_count.value);
-	mm_verbose("core stats: deal = %u, poll = %u, wait = %u, wake = %u, skip = %u",
-		   deal, poll, wait, wake, skip);
+	mm_verbose("core stats: deal = %u", deal);
+	mm_selfpipe_stats();
 }
 
 /**********************************************************************
@@ -705,12 +617,7 @@ mm_core_boot_signal(void)
 {
 #if ENABLE_SMP
 	for (mm_core_t i = 1; i < mm_core_num; i++) {
-		struct mm_thread *thread = NULL;
-		do
-			thread = mm_memory_load(mm_core_set[i].thread);
-		while (thread == NULL);
-
-		mm_thread_signal(thread);
+		mm_synch_signal(mm_core_set[i].synch);
 	}
 #endif
 }
@@ -736,7 +643,7 @@ mm_core_boot_init(struct mm_core *core)
 	// Secondary cores have to wait until the primary core runs
 	// the start hooks that initialize shared resources.
 	if (!MM_CORE_IS_PRIMARY(core))
-		mm_thread_wait();
+		mm_synch_wait(core->synch);
 
 	mm_timer_init();
 	mm_future_init();
@@ -798,7 +705,7 @@ mm_core_boot(mm_value_t arg)
 
 	// Set the thread-local pointer to the core object.
 	mm_core = core;
-	mm_core->thread = mm_thread;
+	mm_core->thread = mm_thread_self();
 
 	// Set the thread-local pointer to the running task.
 	mm_running_task = mm_core->boot;
@@ -852,8 +759,10 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->log_head = NULL;
 	core->log_tail = NULL;
 
-	core->halt = 0;
-	core->wake.value = 0;
+	if (MM_CORE_IS_PRIMARY(core))
+		core->synch = mm_synch_create_event_poll();
+	else
+		core->synch = mm_synch_create();
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
@@ -891,6 +800,7 @@ mm_core_term_single(struct mm_core *core)
 	mm_work_cleanup(&core->workq);
 	mm_wait_cache_cleanup(&core->wait_cache);
 
+	mm_synch_destroy(core->synch);
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
@@ -1036,7 +946,6 @@ mm_core_start(void)
 
 		DEBUG("cycle");
 		mm_core_stats();
-		mm_selfpipe_stats();
 		mm_log_write();
 
 		usleep(logged ? 30000 : 3000000);

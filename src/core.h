@@ -99,13 +99,7 @@ struct mm_core
 	 * The fields below engage in cross-core communication.
 	 */
 
-	/* The flag indicating that the core is halted. Other
-	   cores are only allowed to read it. */
-	bool halt;
-
-	/* The flag indicating that another core has just put
-	   something into one of the rings below. */
-	mm_atomic_uint8_t wake __align(MM_CACHELINE);
+	struct mm_synch *synch;
 
 	/* Tasks to be scheduled. */
 	MM_RING(sched, MM_CORE_SCHED_RING_SIZE);
