@@ -27,20 +27,13 @@ struct mm_selfpipe
 	int read_fd;
 	int write_fd;
 
-	/* Read fd is ready. */
-	bool ready;
-
-	/* Read end is listening. */
-	bool listen_flag;
-
-	/* Notification has been made. */
-	mm_atomic_uint8_t notify_flag __align(MM_CACHELINE);
+	bool read_ready;
 };
 
 static inline void
 mm_selfpipe_set_ready(struct mm_selfpipe *selfpipe)
 {
-	selfpipe->ready = true;
+	selfpipe->read_ready = true;
 }
 
 void mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
