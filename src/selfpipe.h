@@ -48,15 +48,6 @@ void mm_selfpipe_write(struct mm_selfpipe *selfpipe)
 bool mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 	__attribute__((nonnull(1)));
 
-void mm_selfpipe_notify(struct mm_selfpipe *selfpipe)
-	__attribute__((nonnull(1)));
-
-bool mm_selfpipe_listen(struct mm_selfpipe *selfpipe)
-	__attribute__((nonnull(1)));
-
-void mm_selfpipe_divert(struct mm_selfpipe *selfpipe)
-	__attribute__((nonnull(1)));
-
 void mm_selfpipe_stats(void);
 
 #endif /* SELFPIPE_H */
