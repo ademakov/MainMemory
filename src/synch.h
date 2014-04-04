@@ -22,6 +22,10 @@
 
 #include "common.h"
 
+/*
+ * NB: Currently only one thread is allowed to wait on the synch object.
+ */
+
 /* An actual object might contain additional hidden fields. So it is not
    allowed to have it as a static nor embedded in another structure. */
 struct mm_synch
@@ -58,7 +62,7 @@ void mm_synch_destroy(struct mm_synch *synch)
 void mm_synch_wait(struct mm_synch *synch)
 	__attribute__((nonnull(1)));
 
-void mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout);
+bool mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout);
 
 void mm_synch_signal(struct mm_synch *synch)
 	__attribute__((nonnull(1)));

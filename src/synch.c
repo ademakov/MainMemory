@@ -104,16 +104,22 @@ mm_synch_wait_cond(struct mm_synch *synch)
 
 	pthread_mutex_lock(&cond->lock);
 
-	while (cond->base.value.value == 0)
-		pthread_cond_wait(&cond->cond, &cond->lock);
+	while (cond->base.value.value == 0) {
+		int err = pthread_cond_wait(&cond->cond, &cond->lock);
+		if (err)
+			mm_fatal(err, "pthread_cond_wait");
+	}
+
 	cond->base.value.value = 0;
 
 	pthread_mutex_unlock(&cond->lock);
 }
 
-static void
+static bool
 mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 {
+	bool rc = true;
+
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
 	struct timespec ts;
@@ -124,13 +130,19 @@ mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 	pthread_mutex_lock(&cond->lock);
 
 	while (cond->base.value.value == 0) {
-		int rc = pthread_cond_timedwait(&cond->cond, &cond->lock, &ts);
-		if (rc == ETIMEDOUT)
+		int err = pthread_cond_timedwait(&cond->cond, &cond->lock, &ts);
+		if (err) {
+			if (err != ETIMEDOUT)
+				mm_fatal(err, "pthread_cond_timedwait");
+			rc = false;
 			break;
+		}
 	}
+
 	cond->base.value.value = 0;
 
 	pthread_mutex_unlock(&cond->lock);
+	return rc;
 }
 
 static void
@@ -141,27 +153,46 @@ mm_synch_signal_cond(struct mm_synch *synch)
 	pthread_mutex_lock(&cond->lock);
 
 	cond->base.value.value = 1;
-
 	pthread_cond_signal(&cond->cond);
+
 	pthread_mutex_unlock(&cond->lock);
+}
+
+static void
+mm_synch_clear_cond(struct mm_synch *synch)
+{
+	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
+
+	mm_memory_store(cond->base.value.value, 0);
+	mm_memory_strict_fence();
 }
 
 /**********************************************************************
  * Synchronization based on event loop poll.
  **********************************************************************/
 
+#define POLL_GUARD 0
+
+struct mm_synch_poll
+{
+	struct mm_synch base;
+
+	bool waiting;
+};
+
 struct mm_synch *
 mm_synch_create_event_poll(void)
 {
 	ENTER();
 
-	struct mm_synch *poll = mm_global_alloc(sizeof(struct mm_synch));
+	struct mm_synch_poll *poll = mm_global_alloc(sizeof(struct mm_synch_poll));
 
-	poll->value.value = 0;
-	poll->magic = MM_THREAD_SYNCH_POLL;
+	poll->base.value.value = 0;
+	poll->base.magic = MM_THREAD_SYNCH_POLL;
+	poll->waiting = false;
 
 	LEAVE();
-	return poll;
+	return &poll->base;
 }
 
 static void
@@ -171,21 +202,91 @@ mm_synch_destroy_poll(struct mm_synch *synch)
 }
 
 static void
-mm_synch_wait_poll(struct mm_synch *synch __attribute__((unused)))
+mm_synch_wait_poll(struct mm_synch *synch)
 {
-	mm_event_poll(MM_TIMEOUT_INFINITE);
+	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
+
+#if POLL_GUARD
+	// Advertise that the thread is about to sleep.
+	mm_memory_store(poll->waiting, true);
+
+	// FIXME: have a store-atomic fence.
+	mm_memory_fence();
+
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
+	if (value == 0)
+		mm_event_poll(MM_TIMEOUT_INFINITE);
+
+	// Advertise that the thread has woken up.
+	mm_memory_store(poll->waiting, false);
+#else
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
+	if (value == 0)
+		mm_event_poll(MM_TIMEOUT_INFINITE);
+#endif
+}
+
+static bool
+mm_synch_timedwait_poll(struct mm_synch *synch, mm_timeout_t timeout)
+{
+	bool rc = true;
+
+	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
+
+#if POLL_GUARD
+	// Advertise that the thread is about to sleep.
+	mm_memory_store(poll->waiting, true);
+
+	// FIXME: have a store-atomic fence.
+	mm_memory_fence();
+
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
+	if (value == 0)
+		rc = mm_event_poll(timeout);
+
+	// Advertise that the thread has woken up.
+	mm_memory_store(poll->waiting, false);
+#else
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
+	if (value == 0)
+		rc = mm_event_poll(timeout);
+#endif
+
+	return rc;
 }
 
 static void
-mm_synch_timedwait_poll(struct mm_synch *synch __attribute__((unused)), mm_timeout_t timeout)
+mm_synch_signal_poll(struct mm_synch *synch)
 {
-	mm_event_poll(timeout);
-}
+	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
 
-static void
-mm_synch_signal_poll(struct mm_synch *synch __attribute__((unused)))
-{
+	mm_memory_store(poll->base.value.value, 1);
+
+#if POLL_GUARD
+	// FIXME: have a store-load fence.
+	mm_memory_strict_fence();
+
+	if (mm_memory_load(poll->waiting))
+		mm_event_notify();
+#else
 	mm_event_notify();
+#endif
+}
+
+static void
+mm_synch_clear_poll(struct mm_synch *synch)
+{
+	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
+
+	// Cleanup stale event signals.
+	mm_event_dampen();
+
+	mm_memory_store(poll->base.value.value, 0);
+	mm_memory_strict_fence();
 }
 
 /**********************************************************************
@@ -194,7 +295,7 @@ mm_synch_signal_poll(struct mm_synch *synch __attribute__((unused)))
 
 #if MM_THREAD_SYNCH_FAST
 
-static static struct mm_synch *
+static struct mm_synch *
 mm_synch_create_fast(void)
 {
 	ENTER();
@@ -220,7 +321,7 @@ mm_synch_wait_fast(struct mm_synch *synch)
 	syscall(SYS_futex, &synch->value.value, FUTEX_WAIT, 0, NULL, NULL, 0);
 }
 
-static void
+static bool
 mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 {
 	struct timespec ts;
@@ -228,12 +329,20 @@ mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
 	syscall(SYS_futex, &synch->value.value, FUTEX_WAIT, 0, &ts, NULL, 0);
+	return true;
 }
 
 static void
 mm_synch_signal_fast(struct mm_synch *synch)
 {
 	syscall(SYS_futex, &synch->value.value, FUTEX_WAKE, 1, NULL, NULL, 0);
+}
+
+static void
+mm_synch_clear_fast(struct mm_synch *synch)
+{
+	mm_memory_store(synch->value.value, 0);
+	mm_memory_strict_fence();
 }
 
 #endif
@@ -249,6 +358,8 @@ struct mm_synch_mach
 	struct mm_synch base;
 
 	semaphore_t sem;
+
+	bool waiting;
 };
 
 static struct mm_synch *
@@ -260,11 +371,12 @@ mm_synch_create_mach(void)
 
 	mach->base.value.value = 0;
 	mach->base.magic = MM_THREAD_SYNCH_MACH;
+	mach->waiting = false;
 
-	kern_return_t kr = semaphore_create(mach_task_self(), &mach->sem,
-					    SYNC_POLICY_FIFO, 0);
-	if (kr != KERN_SUCCESS)
-		mm_fatal(0, "failed to create semaphore");
+	kern_return_t r = semaphore_create(mach_task_self(), &mach->sem,
+					   SYNC_POLICY_FIFO, 0);
+	if (r != KERN_SUCCESS)
+		mm_fatal(0, "semaphore_create");
 
 	LEAVE();
 	return &mach->base;
@@ -285,20 +397,56 @@ mm_synch_wait_mach(struct mm_synch *synch)
 {
 	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
 
-	semaphore_wait(mach->sem);
+	// Advertise that the thread is about to sleep.
+	mm_memory_store(mach->waiting, true);
+
+	// FIXME: have an atomic-atomic fence.
+	mm_memory_fence();
+
+	// FIXME: protect against spurious wakeups.
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&mach->base.value, 0);
+	if (value == 0) {
+		semaphore_wait(mach->sem);
+	}
+
+	// Advertise that the thread has woken up.
+	mm_memory_store(mach->waiting, false);
 }
 
-static void
+static bool
 mm_synch_timedwait_mach(struct mm_synch *synch, mm_timeout_t timeout)
 {
+	bool rc = true;
+
 	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
 
 	mach_timespec_t ts;
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	semaphore_timedwait(mach->sem, ts);
+	// Advertise that the thread is about to sleep.
+	mm_memory_store(mach->waiting, true);
 
+	// FIXME: have a store-atomic fence.
+	mm_memory_fence();
+
+	// FIXME: protect against spurious wakeups.
+	// Check to see if there are already some wake signals pending.
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&mach->base.value, 0);
+	if (value == 0) {
+		kern_return_t r = semaphore_timedwait(mach->sem, ts);
+		if (r != KERN_SUCCESS) {
+			if (r != KERN_OPERATION_TIMED_OUT)
+				mm_fatal(0, "semaphore_timedwait");
+			rc = false;
+		}
+	}
+
+	// Advertise that the thread has woken up.
+	mm_memory_store(mach->waiting, false);
+
+	return rc;
 }
 
 static void
@@ -306,7 +454,22 @@ mm_synch_signal_mach(struct mm_synch *synch)
 {
 	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
 
-	semaphore_signal(mach->sem);
+	mm_memory_store(mach->base.value.value, 1);
+
+	// FIXME: have a store-load fence.
+	mm_memory_strict_fence();
+
+	if (mm_memory_load(mach->waiting))
+		semaphore_signal(mach->sem);
+}
+
+static void
+mm_synch_clear_mach(struct mm_synch *synch)
+{
+	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
+
+	mm_memory_store(mach->base.value.value, 0);
+	mm_memory_strict_fence();
 }
 
 #endif
@@ -319,7 +482,7 @@ struct mm_synch *
 mm_synch_create(void)
 {
 #if MM_THREAD_SYNCH_FAST
-	return mm_thread_synch_create_fast();
+	return mm_synch_create_fast();
 #elif MM_THREAD_SYNCH_MACH
 	return mm_synch_create_mach();
 #else
@@ -339,7 +502,6 @@ mm_synch_destroy(struct mm_synch *synch)
 
 	case MM_THREAD_SYNCH_POLL:
 		mm_synch_destroy_poll(synch);
-		mm_global_free(synch);
 		break;
 
 #if MM_THREAD_SYNCH_FAST
@@ -376,7 +538,6 @@ mm_synch_wait(struct mm_synch *synch)
 
 	case MM_THREAD_SYNCH_POLL:
 		mm_synch_wait_poll(synch);
-		mm_global_free(synch);
 		break;
 
 #if MM_THREAD_SYNCH_FAST
@@ -398,33 +559,33 @@ mm_synch_wait(struct mm_synch *synch)
 	LEAVE();
 }
 
-void
+bool
 mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout)
 {
 	ENTER();
+	bool rc;
 
 	// Flush the log before a possible sleep.
 	mm_flush();
 
 	switch (synch->magic) {
 	case MM_THREAD_SYNCH_COND:
-		mm_synch_timedwait_cond(synch, timeout);
+		rc = mm_synch_timedwait_cond(synch, timeout);
 		break;
 
 	case MM_THREAD_SYNCH_POLL:
-		mm_synch_timedwait_poll(synch, timeout);
-		mm_global_free(synch);
+		rc = mm_synch_timedwait_poll(synch, timeout);
 		break;
 
 #if MM_THREAD_SYNCH_FAST
 	case MM_THREAD_SYNCH_FAST:
-		mm_synch_timedwait_fast(synch, timeout);
+		rc = mm_synch_timedwait_fast(synch, timeout);
 		break;
 #endif
 
 #if MM_THREAD_SYNCH_MACH
 	case MM_THREAD_SYNCH_MACH:
-		mm_synch_timedwait_mach(synch, timeout);
+		rc = mm_synch_timedwait_mach(synch, timeout);
 		break;
 #endif
 
@@ -433,6 +594,7 @@ mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout)
 	}
 
 	LEAVE();
+	return rc;
 }
 
 void
@@ -473,9 +635,30 @@ mm_synch_clear(struct mm_synch *synch)
 {
 	ENTER();
 
-	if (synch->magic == MM_THREAD_SYNCH_POLL)
-		mm_event_dampen();
+	switch (synch->magic) {
+	case MM_THREAD_SYNCH_COND:
+		mm_synch_clear_cond(synch);
+		break;
 
-	mm_memory_store(synch->value.value, 0);
-	mm_memory_strict_fence();
+	case MM_THREAD_SYNCH_POLL:
+		mm_synch_clear_poll(synch);
+		break;
+
+#if MM_THREAD_SYNCH_FAST
+	case MM_THREAD_SYNCH_FAST:
+		mm_synch_clear_fast(synch);
+		break;
+#endif
+
+#if MM_THREAD_SYNCH_MACH
+	case MM_THREAD_SYNCH_MACH:
+		mm_synch_clear_mach(synch);
+		break;
+#endif
+
+	default:
+		ABORT();
+	}
+
+	LEAVE();
 }
