@@ -166,6 +166,29 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 	return block * pool->block_capacity + index;
 }
 
+bool
+mm_pool_contains(struct mm_pool *pool, void *item)
+{
+	bool rc = false;
+	uint32_t block = 0;
+
+	mm_pool_grow_lock(pool);
+
+	while (block < pool->block_array_used) {
+		char *s_ptr = pool->block_array[block];
+		char *e_ptr = s_ptr + MM_POOL_BLOCK_SIZE;
+		if((char *) item >= s_ptr && (char *) item < e_ptr) {
+			rc = true;
+			break;
+		}
+		++block;
+	}
+
+	mm_pool_grow_unlock(pool);
+
+	return rc;
+}
+
 static void
 mm_pool_grow(struct mm_pool *pool)
 {
@@ -239,6 +262,7 @@ void
 mm_pool_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
+	ASSERT(mm_pool_contains(pool, item));
 
 	mm_pool_free_lock(pool);
 

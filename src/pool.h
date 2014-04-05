@@ -72,6 +72,8 @@ void * mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)
 uint32_t mm_pool_ptr2idx(struct mm_pool *pool, void *item)
 	__attribute__((nonnull(1, 2)));
 
+bool mm_pool_contains(struct mm_pool *pool, void *item);
+
 void * mm_pool_alloc(struct mm_pool *pool)
 	__attribute__((nonnull(1)));
 
