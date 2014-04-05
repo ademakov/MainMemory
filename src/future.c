@@ -35,9 +35,6 @@ mm_future_finish(struct mm_future *future,
 	// Synchronize with waiters.
 	mm_task_lock(&future->lock);
 
-	// Reset the task reference.
-	mm_memory_store(future->task, NULL);
-
 	// Store the result first, ensure it will be ready on the status update.
 	mm_memory_store(future->result, result);
 	mm_memory_store_fence();
@@ -48,6 +45,11 @@ mm_future_finish(struct mm_future *future,
 
 	// Wakeup all the waiters.
 	mm_waitset_broadcast(&future->waitset, &future->lock);
+
+	// Advertise the future task has finished. This must be the last
+	// access to the future structure performed by the task.
+	mm_memory_store_fence();
+	mm_memory_store(future->task, NULL);
 
 	LEAVE();
 }
@@ -73,12 +75,15 @@ mm_future_routine(mm_value_t arg)
 	// Ensure cleanup on task exit/cancellation.
 	mm_task_cleanup_push(mm_future_cleanup, future);
 
+	// Advertise that the future task is running.
+	mm_memory_store(future->task, mm_running_task);
+	mm_memory_store_fence();
+
 	// Actually start the future unless already canceled.
 	bool cancel = mm_memory_load(future->cancel);
 	if (cancel) {
 		mm_future_finish(future, MM_FUTURE_CANCELED, MM_TASK_CANCELED);
 	} else {
-		mm_memory_store(future->task, mm_running_task);
 		mm_value_t result = future->start(future->start_arg);
 		mm_future_finish(future, MM_FUTURE_COMPLETED, result);
 	}
@@ -134,10 +139,23 @@ void
 mm_future_destroy(struct mm_future *future)
 {
 	ENTER();
-	ASSERT(future->status.value != MM_FUTURE_STARTED);
-	ASSERT(future->waitset.size == 0);
 
+	uint8_t status = mm_memory_load(future->status.value);
+	if (status != MM_FUTURE_CREATED) {
+		if (status == MM_FUTURE_STARTED)
+			mm_fatal(0, "Destroying a running future object.");
+
+		// There is a chance that the future task is still running
+		// at this point. It is required to wait until it cannot
+		// access the future structure anymore.
+		uint32_t count = 0;
+		while (mm_memory_load(future->task) != NULL)
+			count = mm_task_backoff(count);
+	}
+
+	ASSERT(future->waitset.size == 0);
 	mm_waitset_cleanup(&future->waitset);
+
 	mm_pool_free(&mm_core->future_pool, future);
 
 	LEAVE();
