@@ -142,7 +142,7 @@ mm_future_destroy(struct mm_future *future)
 
 	uint8_t status = mm_memory_load(future->status.value);
 	if (status != MM_FUTURE_CREATED) {
-		if (status == MM_FUTURE_STARTED)
+		if (unlikely(status == MM_FUTURE_STARTED))
 			mm_fatal(0, "Destroying a running future object.");
 
 		// There is a chance that the future task is still running
