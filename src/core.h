@@ -183,14 +183,14 @@ static inline void
 mm_core_update_time(void)
 {
 	mm_core->time_value = mm_clock_gettime_monotonic();
-	DEBUG("%lld", (long long) mm_core->time_value);
+	TRACE("%lld", (long long) mm_core->time_value);
 }
 
 static inline void
 mm_core_update_real_time(void)
 {
 	mm_core->real_time_value = mm_clock_gettime_realtime();
-	DEBUG("%lld", (long long) mm_core->real_time_value);
+	TRACE("%lld", (long long) mm_core->real_time_value);
 }
 
 #endif /* CORE_H */
