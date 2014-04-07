@@ -30,6 +30,7 @@
 typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
 typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
+typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
 
 /**********************************************************************
  * Atomic compare-and-swap operations.
@@ -46,6 +47,7 @@ typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 mm_atomic_cas(uint8)
 mm_atomic_cas(uint16)
 mm_atomic_cas(uint32)
+mm_atomic_cas(uintptr)
 
 #undef mm_atomic_cas
 
@@ -79,27 +81,33 @@ mm_atomic_cas(uint32)
 mm_atomic_fetch(uint8, set, __sync_lock_test_and_set)
 mm_atomic_fetch(uint16, set, __sync_lock_test_and_set)
 mm_atomic_fetch(uint32, set, __sync_lock_test_and_set)
+mm_atomic_fetch(uintptr, set, __sync_lock_test_and_set)
 
 /* Define atomic fetch-and-add ops. */
 mm_atomic_fetch(uint8, add, __sync_fetch_and_add)
 mm_atomic_fetch(uint16, add, __sync_fetch_and_add)
 mm_atomic_fetch(uint32, add, __sync_fetch_and_add)
+mm_atomic_fetch(uintptr, add, __sync_fetch_and_add)
 
 /* Define atomic increment ops. */
 mm_atomic_unary(uint8, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint16, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint32, inc, __sync_fetch_and_add)
+mm_atomic_unary(uintptr, inc, __sync_fetch_and_add)
 mm_atomic_unary_test(uint8, inc, __sync_add_and_fetch_)
 mm_atomic_unary_test(uint16, inc, __sync_add_and_fetch)
 mm_atomic_unary_test(uint32, inc, __sync_add_and_fetch)
+mm_atomic_unary_test(uintptr, inc, __sync_add_and_fetch)
 
 /* Define atomic decrement ops. */
 mm_atomic_unary(uint8, dec, __sync_fetch_and_sub)
 mm_atomic_unary(uint16, dec, __sync_fetch_and_sub)
 mm_atomic_unary(uint32, dec, __sync_fetch_and_sub)
+mm_atomic_unary(uintptr, dec, __sync_fetch_and_sub)
 mm_atomic_unary_test(uint8, dec, __sync_sub_and_fetch)
 mm_atomic_unary_test(uint16, dec, __sync_sub_and_fetch)
 mm_atomic_unary_test(uint32, dec, __sync_sub_and_fetch)
+mm_atomic_unary_test(uintptr, dec, __sync_sub_and_fetch)
 
 #undef mm_atomic_fetch
 #undef mm_atomic_unary
