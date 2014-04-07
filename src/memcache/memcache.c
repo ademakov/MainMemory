@@ -236,6 +236,8 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
  * Memcache Table.
  **********************************************************************/
 
+#define MC_TABLE_CORE_DIV	4
+
 #define MC_TABLE_STRIDE		64
 
 #define MC_TABLE_SIZE_MIN	((size_t) 4 * 1024)
@@ -250,6 +252,8 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
 struct mc_tpart
 {
 	size_t nbytes;
+
+	mm_core_t core;
 
 	bool evicting;
 	bool striding;
@@ -629,8 +633,8 @@ mc_table_init(void)
 		mm_fatal(errno, "mmap");
 
 	// Compute the number of table partitions. It has to be a power of 2.
-	mm_core_t nparts = mm_core_getnum();
-	ASSERT(nparts != 0);
+	mm_core_t ncores = mm_core_getnum();
+	mm_core_t nparts = (ncores + MC_TABLE_CORE_DIV - 1) / MC_TABLE_CORE_DIV;
 	nparts = 1 << (31 - mm_clz(nparts));
 	mm_brief("memcache table partitions: %d", nparts);
 
@@ -649,6 +653,7 @@ mc_table_init(void)
 	for (mm_core_t i = 0; i < nparts; i++) {
 		struct mc_tpart *part = &mc_table.parts[i];
 		part->nbytes = 0;
+		part->core = (i + 1) * nparts - 1;
 		part->evicting = false;
 		part->striding = false;
 		part->nentries = 0;
@@ -1536,8 +1541,10 @@ mc_process_flush_all(mm_value_t arg)
 	// TODO: really use the exptime.
 	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
 
-	for (mm_core_t i = 0; i < mc_table.nparts; i++)
-		mm_core_post(i, mc_table_flush_routine, i);
+	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
+		struct mc_tpart *part = &mc_table.parts[i];
+		mm_core_post(part->core, mc_table_flush_routine, i);
+	}
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1597,11 +1604,11 @@ mm_process_start(struct mc_command *command)
 		command->key_hash = mc_hash(command->key.str, command->key.len);
 
 #if ENABLE_SMP
-		mm_core_t core = mc_table_part_index(command->key_hash);
+		struct mc_tpart *part = mc_table_part(command->key_hash);
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->process,
 						   (mm_value_t) command);
-		mm_future_start(command->future, core);
+		mm_future_start(command->future, part->core);
 		return;
 #endif
 	}
