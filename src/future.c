@@ -218,8 +218,12 @@ mm_future_wait(struct mm_future *future)
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {
 
+		// Check if the task has been canceled.
+		mm_task_testcancel();
+
 		// Make a synchronized check of the future status.
 		mm_task_lock(&future->lock);
+
 		result = mm_memory_load(future->result.value);
 		if (result != MM_RESULT_NOTREADY) {
 			mm_task_unlock(&future->lock);
@@ -228,9 +232,6 @@ mm_future_wait(struct mm_future *future)
 
 		// Wait for completion notification.
 		mm_waitset_wait(&future->waitset, &future->lock);
-
-		// Check if the task has been canceled.
-		mm_task_testcancel();
 
 		// Update the future status.
 		result = mm_memory_load(future->result.value);
@@ -256,6 +257,9 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {
 
+		// Check if the task has been canceled.
+		mm_task_testcancel();
+
 		// Check if timed out.
 		if (deadline <= mm_core->time_value) {
 			DEBUG("future timed out");
@@ -264,6 +268,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 		// Make a synchronized check of the future status.
 		mm_task_lock(&future->lock);
+
 		result = mm_memory_load(future->result.value);
 		if (result != MM_RESULT_NOTREADY) {
 			mm_task_unlock(&future->lock);
@@ -272,9 +277,6 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 		// Wait for completion notification.
 		mm_waitset_timedwait(&future->waitset, &future->lock, timeout);
-
-		// Check if the task has been canceled.
-		mm_task_testcancel();
 
 		// Update the future status.
 		result = mm_memory_load(future->result.value);
