@@ -204,7 +204,7 @@ static void
 mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 {
 	task->state = MM_TASK_BLOCKED;
-	task->result = MM_TASK_UNRESOLVED;
+	task->result = MM_RESULT_NOTREADY;
 
 	if (unlikely(attr == NULL)) {	
 		task->flags = 0;

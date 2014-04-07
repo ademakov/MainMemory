@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "list.h"
+#include "value.h"
 
 /* Maximal task name length (including terminating zero). */
 #define MM_TASK_NAME_SIZE	40
@@ -50,11 +51,6 @@ typedef int8_t			mm_priority_t;
 #define MM_PRIO_WORKER		MM_PRIO_WORK
 #define MM_PRIO_MASTER		MM_PRIO_CORE
 #define MM_PRIO_SYSTEM		MM_PRIO_UPPER(MM_PRIO_CORE, 1)
-
-/* Canceled task execution result. */
-#define MM_TASK_CANCELED	((mm_value_t) -1)
-/* Unfinished task execution result. */
-#define MM_TASK_UNRESOLVED	((mm_value_t) -2)
 
 /* Task state values. */
 typedef enum {
@@ -252,7 +248,7 @@ mm_task_testcancel(void)
 {
 	if (unlikely(MM_TASK_CANCEL_TEST(mm_running_task->flags))) {
 		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
-		mm_task_exit(MM_TASK_CANCELED);
+		mm_task_exit(MM_RESULT_CANCELED);
 	}
 }
 
@@ -261,7 +257,7 @@ mm_task_testcancel_asynchronous(void)
 {
 	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(mm_running_task->flags))) {
 		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
-		mm_task_exit(MM_TASK_CANCELED);
+		mm_task_exit(MM_RESULT_CANCELED);
 	}
 }
 

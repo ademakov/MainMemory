@@ -25,31 +25,23 @@
 #include "task.h"
 #include "wait.h"
 
-typedef enum {
-	MM_FUTURE_CREATED,
-	MM_FUTURE_STARTED,
-	MM_FUTURE_CANCELED,
-	MM_FUTURE_COMPLETED,
-} mm_future_status_t;
-
 struct mm_future
 {
-	/* The internal state lock. */
-	mm_task_lock_t lock;
-
-	/* A cancel request has been made. */
-	uint8_t cancel;
-	/* The future status. */
-	mm_atomic_uint8_t status;
 	/* The future result. */
-	mm_value_t result;
+	mm_atomic_uintptr_t result;
+
+	/* The future task if running. */
+	struct mm_task *task;
 
 	/* The future task parameters. */
 	mm_routine_t start;
 	mm_value_t start_arg;
 
-	/* The task if started. */
-	struct mm_task *task;
+	/* A cancel request has been made. */
+	uint8_t cancel;
+
+	/* The internal state lock. */
+	mm_task_lock_t lock;
 
 	/* The tasks blocked waiting for the future. */
 	struct mm_waitset waitset;
@@ -64,7 +56,7 @@ struct mm_future *mm_future_create(mm_routine_t start, mm_value_t start_arg)
 void mm_future_destroy(struct mm_future *future)
 	__attribute__((nonnull(1)));
 
-void mm_future_start(struct mm_future *future, mm_core_t core)
+mm_value_t mm_future_start(struct mm_future *future, mm_core_t core)
 	__attribute__((nonnull(1)));
 
 void mm_future_cancel(struct mm_future *future)
@@ -79,19 +71,20 @@ mm_value_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 static inline bool
 mm_future_is_started(struct mm_future *future)
 {
-	return mm_memory_load(future->status.value) >= MM_FUTURE_STARTED;
+	return mm_memory_load(future->result.value) != MM_RESULT_DEFERRED;
 }
 
 static inline bool
 mm_future_is_canceled(struct mm_future *future)
 {
-	return mm_memory_load(future->status.value) == MM_FUTURE_CANCELED;
+	return mm_memory_load(future->result.value) == MM_RESULT_CANCELED;
 }
 
 static inline bool
 mm_future_is_finished(struct mm_future *future)
 {
-	return mm_memory_load(future->status.value) >= MM_FUTURE_CANCELED;
+	mm_value_t value = mm_memory_load(future->result.value);
+	return value != MM_RESULT_NOTREADY && value != MM_RESULT_DEFERRED;
 }
 
 #endif /* FUTURE_H */
