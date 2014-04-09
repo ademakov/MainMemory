@@ -441,11 +441,11 @@ retry:
 	}
 
 	// Register the socket with the event loop.
+	//struct mm_core *core = mm_core_getptr(sock->core);
 	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
 	bool input_oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 	bool output_oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
-	mm_event_register_fd(sock->fd,
-			     sock_index,
+	mm_event_register_fd(mm_core->events, sock->fd, sock_index,
 			     srv->input_handler, input_oneshot,
 			     srv->output_handler, output_oneshot,
 			     srv->control_handler);
@@ -625,7 +625,9 @@ mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
 #if MM_ONESHOT_HANDLERS
 		bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 		if (oneshot) {
-			mm_event_trigger_input(sock->fd, sock->server->input_handler);
+			struct mm_core *core = mm_core_getptr(sock->core);
+			mm_event_trigger_input(core->events, sock->fd,
+					       sock->server->input_handler);
 		}
 #endif
 	}
@@ -647,7 +649,9 @@ mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
 #if MM_ONESHOT_HANDLERS
 		bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 		if (oneshot) {
-			mm_event_trigger_output(sock->fd, sock->server->output_handler);
+			struct mm_core *core = mm_core_getptr(sock->core);
+			mm_event_trigger_output(core->events, sock->fd,
+						sock->server->output_handler);
 		}
 #endif
 	}
@@ -1184,7 +1188,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	srv->control_handler = mm_event_register_handler(mm_net_control_handler);
 
 	// Register the server socket with the event loop.
-	mm_event_register_fd(srv->fd,
+	mm_event_register_fd(mm_core->events, srv->fd,
 			     (uint32_t) mm_net_server_index(srv),
 			     mm_net_accept_hid, false, 0, false, 0);
 
@@ -1200,7 +1204,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	mm_event_unregister_fd(srv->fd);
+	mm_event_unregister_fd(mm_core->events, srv->fd);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->fd);
@@ -1652,7 +1656,8 @@ mm_net_close(struct mm_net_socket *sock)
 	sock->close_flags = MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
-	mm_event_unregister_fd(sock->fd);
+	struct mm_core *core = mm_core_getptr(sock->core);
+	mm_event_unregister_fd(core->events, sock->fd);
 
 leave:
 	LEAVE();

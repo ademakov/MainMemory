@@ -40,9 +40,6 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-// Event loop port.
-static struct mm_port *mm_event_port;
-
 /**********************************************************************
  * Event Handler Table.
  **********************************************************************/
@@ -240,81 +237,6 @@ mm_event_control(struct mm_event_fd *fd, mm_event_t event)
 }
 
 /**********************************************************************
- * Self-pipe support.
- **********************************************************************/
-
-// Self pipe for event loop wakeup.
-static struct mm_selfpipe mm_event_selfpipe;
-static mm_event_hid_t mm_event_selfpipe_handler;
-
-static void
-mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)),
-			uint32_t data __attribute__((unused)))
-{
-	mm_selfpipe_set_ready(&mm_event_selfpipe);
-}
-
-static void
-mm_event_init_selfpipe(void)
-{
-	ENTER();
-
-	// Open the event-loop self-pipe.
-	mm_selfpipe_prepare(&mm_event_selfpipe);
-
-	// Register the self-pipe event handler.
-	mm_event_selfpipe_handler = mm_event_register_handler(mm_event_selfpipe_ready);
-
-	LEAVE();
-}
-
-static void
-mm_event_start_selfpipe(void)
-{
-	ENTER();
-
-	// Register the self-pipe read end in the event loop.
-	mm_event_register_fd(mm_event_selfpipe.read_fd, 0,
-			     mm_event_selfpipe_handler, false,
-			     0, false, 0);
-
-	LEAVE();
-}
-
-static void
-mm_event_term_selfpipe(void)
-{
-	ENTER();
-
-	// Close the event-loop self-pipe.
-	mm_selfpipe_cleanup(&mm_event_selfpipe);
-
-	LEAVE();
-}
-
-void
-mm_event_notify(void)
-{
-	ENTER();
-
-	mm_selfpipe_write(&mm_event_selfpipe);
-
-	LEAVE();
-}
-
-bool
-mm_event_dampen(void)
-{
-	ENTER();
-
-	// Drain the stale selfpipe notifications if any.
-	bool rc = mm_selfpipe_drain(&mm_event_selfpipe);
-
-	LEAVE();
-	return rc;
-}
-
-/**********************************************************************
  * epoll support.
  **********************************************************************/
 
@@ -322,36 +244,48 @@ mm_event_dampen(void)
 
 #define MM_EPOLL_MAX 512
 
-static int mm_epoll_fd;
-static int mm_epoll_nevents;
+struct mm_event_table
+{
+	struct mm_port *port;
+	struct mm_selfpipe selfpipe;
 
-static struct epoll_event mm_epoll_events[MM_EPOLL_MAX];
+	// The epoll descriptor.
+	int epoll_fd;
+
+	// The epoll list size.
+	int nevents;
+
+	// The epoll list.
+	struct epoll_event events[MM_EPOLL_MAX];
+};
 
 static void
-mm_event_init_sys(void)
+mm_event_init_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	mm_epoll_fd = epoll_create(511);
-	if (mm_epoll_fd < 0)
+	events->epoll_fd = epoll_create(511);
+	if (events->epoll_fd < 0)
 		mm_fatal(errno, "Failed to create epoll fd");
+
+	events->nevents = 0;
 
 	LEAVE();
 }
 
 static void
-mm_event_free_sys(void)
+mm_event_free_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	if (mm_epoll_fd >= 0)
-		close(mm_epoll_fd);
+	if (events->epoll_fd >= 0)
+		close(events->epoll_fd);
 
 	LEAVE();
 }
 
 bool
-mm_event_collect(void)
+mm_event_collect(struct mm_event_table *events)
 {
 	ENTER();
 
@@ -360,7 +294,7 @@ mm_event_collect(void)
 
 	// Make changes to the fd set watched by epoll.
 	uint32_t msg[3];
-	while (mm_port_receive(mm_event_port, msg, 3) == 0) {
+	while (mm_port_receive(events->port, msg, 3) == 0) {
 		int fd = msg[0];
 		uint32_t code = msg[1];
 		uint32_t data = msg[2];
@@ -370,14 +304,14 @@ mm_event_collect(void)
 		mm_event_hid_t control_handler = (code >> 8) & 0xff;
 
 		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
-		uint32_t events = 0, new_events = 0;
+		uint32_t old_events = 0, new_events = 0;
 		int a, b;
 
 		// Check if a read event registration if needed.
 		a = (mm_fd->input_handler != 0);
 		b = (input_handler != 0);
 		if (a) {
-			events |= EPOLLIN;
+			old_events |= EPOLLIN;
 		}
 		if (b) {
 			new_events |= EPOLLIN;
@@ -396,7 +330,7 @@ mm_event_collect(void)
 		a = (mm_fd->output_handler != 0);
 		b = (output_handler != 0);
 		if (a) {
-			events |= EPOLLOUT;
+			old_events |= EPOLLOUT;
 		}
 		if (b) {
 			new_events |= EPOLLOUT;
@@ -411,11 +345,11 @@ mm_event_collect(void)
 		}
 #endif
 
-		if (likely(events != new_events)) {
+		if (likely(old_events != new_events)) {
 			int op;
 			if (new_events == 0)
 				op = EPOLL_CTL_DEL;
-			else if (events == 0)
+			else if (old_events == 0)
 				op = EPOLL_CTL_ADD;
 			else
 				op = EPOLL_CTL_MOD;
@@ -424,7 +358,7 @@ mm_event_collect(void)
 			ev.events = new_events | EPOLLET | EPOLLRDHUP;
 			ev.data.fd = fd;
 
-			int rc = epoll_ctl(mm_epoll_fd, op, fd, &ev);
+			int rc = epoll_ctl(events->epoll_fd, op, fd, &ev);
 			if (unlikely(rc < 0)) {
 				mm_error(errno, "epoll_ctl");
 			}
@@ -454,7 +388,7 @@ mm_event_collect(void)
 }
 
 bool
-mm_event_poll(mm_timeout_t timeout)
+mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -465,44 +399,44 @@ mm_event_poll(mm_timeout_t timeout)
 	timeout /= 1000;
 
 	// Poll the system for events.
-	int n = epoll_wait(mm_epoll_fd, mm_epoll_events, MM_EPOLL_MAX, timeout);
+	int n = epoll_wait(events->epoll_fd, events->events, MM_EPOLL_MAX, timeout);
 
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "epoll_wait");
 		else
 			mm_error(errno, "epoll_wait");
-		mm_epoll_nevents = 0;
+		events->nevents = 0;
 	} else {
-		mm_epoll_nevents = n;
+		events->nevents = n;
 	}
 
 	LEAVE();
-	return (mm_epoll_nevents != 0);
+	return (events->nevents != 0);
 }
 
 void
-mm_event_dispatch(void)
+mm_event_dispatch(struct mm_event_table *events)
 {
 	ENTER();
 
 	// Process the received system events.
-	for (int i = 0; i < mm_epoll_nevents; i++) {
-		int fd = mm_epoll_events[i].data.fd;
-		if ((mm_epoll_events[i].events & EPOLLIN) != 0) {
+	for (int i = 0; i < events->nevents; i++) {
+		int fd = events->events[i].data.fd;
+		if ((events->events[i].events & EPOLLIN) != 0) {
 			DEBUG("input event on fd %d", fd);
 			mm_event_input(&mm_event_fd_table[fd]);
 		}
-		if ((mm_epoll_events[i].events & EPOLLOUT) != 0) {
+		if ((events->events[i].events & EPOLLOUT) != 0) {
 			DEBUG("output event on fd %d", fd);
 			mm_event_output(&mm_event_fd_table[fd]);
 		}
 
-		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+		if ((events->events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			DEBUG("input error event on fd %d", fd);
 			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_INPUT_ERROR);
 		}
-		if ((mm_epoll_events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
+		if ((events->events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
 			DEBUG("output error event on fd %d", fd);
 			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_OUTPUT_ERROR);
 		}
@@ -529,52 +463,60 @@ struct mm_kevent_change_rec
 	mm_event_t event;
 };
 
-// The kqueue descriptor.
-static int mm_kevent_kq;
+struct mm_event_table
+{
+	struct mm_port *port;
+	struct mm_selfpipe selfpipe;
 
-// The kevent list size.
-static int mm_nkevents = 0;
+	// The kqueue descriptor.
+	int kqueue_fd;
 
-// The change list size.
-static int mm_kevent_nchanges = 0;
+	// The kevent list size.
+	int nkevents;
 
-// The kevent list.
-static struct kevent mm_kevents[MM_EVENT_NKEVENTS_MAX];
+	// The change list size.
+	int nchanges;
 
-// File descriptor change list.
-static struct mm_kevent_change_rec mm_kevent_changes[MM_EVENT_NCHANGES_MAX];
+	// The kevent list.
+	struct kevent kevents[MM_EVENT_NKEVENTS_MAX];
 
-// A delayed file descriptor change record.
-static uint32_t mm_kevent_delayed_msg[3];
-static bool mm_kevent_has_delayed_msg = false;
+	// File descriptor change list.
+	struct mm_kevent_change_rec changes[MM_EVENT_NCHANGES_MAX];
+
+	// A delayed file descriptor change record.
+	uint32_t delayed_msg[3];
+	bool has_delayed_msg;
+};
 
 static void
-mm_event_init_sys(void)
+mm_event_init_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	mm_kevent_kq = kqueue();
-	if (mm_kevent_kq == -1) {
+	events->kqueue_fd = kqueue();
+	if (events->kqueue_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
-	}
+
+	events->nkevents = 0;
+	events->nchanges = 0;
+	events->has_delayed_msg = false;
 
 	LEAVE();
 }
 
 static void
-mm_event_free_sys(void)
+mm_event_free_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	if (mm_kevent_kq >= 0) {
-		close(mm_kevent_kq);
-	}
+	if (events->kqueue_fd >= 0)
+		close(events->kqueue_fd);
 
 	LEAVE();
 }
 
 static void
-mm_event_process_msg(uint32_t *msg)
+mm_event_process_msg(struct mm_event_table *events, uint32_t *msg)
 {
 	// Parse the message.
 	int fd = msg[0];
@@ -594,7 +536,7 @@ mm_event_process_msg(uint32_t *msg)
 
 			DEBUG("unregister fd %d for read events", fd);
 			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			struct kevent *kp = &events->kevents[events->nkevents++];
 			EV_SET(kp, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
 
@@ -603,16 +545,16 @@ mm_event_process_msg(uint32_t *msg)
 
 			DEBUG("unregister fd %d for write events", fd);
 			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			struct kevent *kp = &events->kevents[events->nkevents++];
 			EV_SET(kp, fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 
 		if (ev_fd->control_handler) {
 			ev_fd->changed = 1;
 
-			mm_kevent_changes[mm_kevent_nchanges].fd = fd;
-			mm_kevent_changes[mm_kevent_nchanges].event = MM_EVENT_UNREGISTER;
-			++mm_kevent_nchanges;
+			events->changes[events->nchanges].fd = fd;
+			events->changes[events->nchanges].event = MM_EVENT_UNREGISTER;
+			events->nchanges++;
 		}
 
 	} else {
@@ -657,7 +599,7 @@ mm_event_process_msg(uint32_t *msg)
 
 			DEBUG("register fd %d for read events", fd);
 			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			struct kevent *kp = &events->kevents[events->nkevents++];
 			EV_SET(kp, fd, EVFILT_READ, ev_flags, 0, 0, 0);
 		}
 
@@ -679,7 +621,7 @@ mm_event_process_msg(uint32_t *msg)
 
 			DEBUG("register fd %d for write events", fd);
 			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &mm_kevents[mm_nkevents++];
+			struct kevent *kp = &events->kevents[events->nkevents++];
 			EV_SET(kp, fd, EVFILT_WRITE, ev_flags, 0, 0, 0);
 		}
 
@@ -687,33 +629,33 @@ mm_event_process_msg(uint32_t *msg)
 			ev_fd->changed = 1;
 			ev_fd->control_handler = control_handler;
 
-			mm_kevent_changes[mm_kevent_nchanges].fd = fd;
-			mm_kevent_changes[mm_kevent_nchanges].event = MM_EVENT_REGISTER;
-			++mm_kevent_nchanges;
+			events->changes[events->nchanges].fd = fd;
+			events->changes[events->nchanges].event = MM_EVENT_REGISTER;
+			events->nchanges++;
 		}
 	}
 }
 
 bool
-mm_event_collect(void)
+mm_event_collect(struct mm_event_table *events)
 {
 	ENTER();
 
-	mm_kevent_nchanges = 0;
-	mm_nkevents = 0;
+	events->nkevents = 0;
+	events->nchanges = 0;
 
 	// Pick a delayed change if any.
-	if (unlikely(mm_kevent_has_delayed_msg)) {
-		mm_kevent_has_delayed_msg = false;
-		mm_event_process_msg(mm_kevent_delayed_msg);
+	if (unlikely(events->has_delayed_msg)) {
+		events->has_delayed_msg = false;
+		mm_event_process_msg(events, events->delayed_msg);
 	}
 
 	// Fill the change list.
-	while (likely(mm_kevent_nchanges < MM_EVENT_NCHANGES_MAX)) {
+	while (likely(events->nchanges < MM_EVENT_NCHANGES_MAX)) {
 
 		// Get the message.
 		uint32_t msg[3];
-		if (mm_port_receive(mm_event_port, msg, 3) < 0)
+		if (mm_port_receive(events->port, msg, 3) < 0)
 			break;
 
 		// To simplify logic handle only one event related to a
@@ -721,22 +663,22 @@ mm_event_collect(void)
 		int fd = msg[0];
 		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
 		if (unlikely(ev_fd->changed)) {
-			mm_kevent_delayed_msg[0] = msg[0];
-			mm_kevent_delayed_msg[1] = msg[1];
-			mm_kevent_delayed_msg[2] = msg[2];
-			mm_kevent_has_delayed_msg = true;
+			events->delayed_msg[0] = msg[0];
+			events->delayed_msg[1] = msg[1];
+			events->delayed_msg[2] = msg[2];
+			events->has_delayed_msg = true;
 			break;
 		}
 
-		mm_event_process_msg(msg);
+		mm_event_process_msg(events, msg);
 	}
 
 	LEAVE();
-	return (mm_nkevents != 0);
+	return (events->nkevents != 0);
 }
 
 bool
-mm_event_poll(mm_timeout_t timeout)
+mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -751,34 +693,34 @@ mm_event_poll(mm_timeout_t timeout)
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
 	// Poll the system for events.
-	int n = kevent(mm_kevent_kq,
-		       mm_kevents, mm_nkevents,
-		       mm_kevents, MM_EVENT_NKEVENTS_MAX,
+	int n = kevent(events->kqueue_fd,
+		       events->kevents, events->nkevents,
+		       events->kevents, MM_EVENT_NKEVENTS_MAX,
 		       &ts);
 
-	DEBUG("kevent changed: %d, received: %d", mm_nkevents, n);
+	DEBUG("kevent changed: %d, received: %d", events->nkevents, n);
 	if (n < 0) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
 		else
 			mm_error(errno, "kevent");
-		mm_nkevents = 0;
+		events->nkevents = 0;
 	} else {
-		mm_nkevents = n;
+		events->nkevents = n;
 	}
 
 	LEAVE();
-	return mm_kevent_nchanges || mm_nkevents;
+	return events->nchanges || events->nkevents;
 }
 
 void
-mm_event_dispatch(void)
+mm_event_dispatch(struct mm_event_table *events)
 {
 	ENTER();
 
 	// Issue REG/UNREG events.
-	for (int i = 0; i < mm_kevent_nchanges; i++) {
-		int fd = mm_kevent_changes[i].fd;
+	for (int i = 0; i < events->nchanges; i++) {
+		int fd = events->changes[i].fd;
 
 		// Reset the change flag.
 		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
@@ -786,7 +728,7 @@ mm_event_dispatch(void)
 
 		// Invoke the control handler with pertinent event.
 		ASSERT(ev_fd->control_handler);
-		if (mm_kevent_changes[i].event == MM_EVENT_REGISTER) {
+		if (events->changes[i].event == MM_EVENT_REGISTER) {
 			mm_event_control(ev_fd, MM_EVENT_REGISTER);
 		} else {
 			mm_event_control(ev_fd, MM_EVENT_UNREGISTER);
@@ -797,23 +739,23 @@ mm_event_dispatch(void)
 	}
 
 	// Process the received system events.
-	for (int i = 0; i < mm_nkevents; i++) {
-		if (mm_kevents[i].filter == EVFILT_READ) {
-			int fd = mm_kevents[i].ident;
+	for (int i = 0; i < events->nkevents; i++) {
+		if (events->kevents[i].filter == EVFILT_READ) {
+			int fd = events->kevents[i].ident;
 			DEBUG("input event on fd %d", fd);
 			mm_event_input(&mm_event_fd_table[fd]);
 
-			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
+			if ((events->kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
 				DEBUG("input error event on fd %d", fd);
 				mm_event_control(&mm_event_fd_table[fd],
 						 MM_EVENT_INPUT_ERROR);
 			}
-		} else if (mm_kevents[i].filter == EVFILT_WRITE) {
-			int fd = mm_kevents[i].ident;
+		} else if (events->kevents[i].filter == EVFILT_WRITE) {
+			int fd = events->kevents[i].ident;
 			DEBUG("output event on fd %d", fd);
 			mm_event_output(&mm_event_fd_table[fd]);
 
-			if ((mm_kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
+			if ((events->kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
 				DEBUG("output error event on fd %d", fd);
 				mm_event_control(&mm_event_fd_table[fd],
 						 MM_EVENT_OUTPUT_ERROR);
@@ -827,25 +769,101 @@ mm_event_dispatch(void)
 #endif // HAVE_SYS_EVENT_H
 
 /**********************************************************************
- * Event loop control.
+ * Self-pipe support.
  **********************************************************************/
 
+// Self pipe for event loop wakeup.
+static mm_event_hid_t mm_event_selfpipe_handler;
+
 static void
-mm_event_start(void)
+mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)),
+			uint32_t data __attribute__((unused)))
+{
+	struct mm_event_table *events = mm_core->events;
+	mm_selfpipe_set_ready(&events->selfpipe);
+}
+
+static void
+mm_event_init_selfpipe(void)
 {
 	ENTER();
 
-	// Create the event loop task and port.
-	mm_event_port = mm_port_create(mm_core->dealer);
+	// Register the self-pipe event handler.
+	mm_event_selfpipe_handler = mm_event_register_handler(mm_event_selfpipe_ready);
 
-	// Start serving the event loop self-pipe.
-	mm_event_start_selfpipe();
+	LEAVE();
+}
+
+static void
+mm_event_start_selfpipe(struct mm_event_table *events)
+{
+	ENTER();
+
+	// Register the self-pipe read end in the event loop.
+	mm_event_register_fd(events, events->selfpipe.read_fd, 0,
+			     mm_event_selfpipe_handler, false,
+			     0, false, 0);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Event poll routines.
+ **********************************************************************/
+
+struct mm_event_table *
+mm_event_create_table(void)
+{
+	ENTER();
+
+	struct mm_event_table *events = mm_global_alloc(sizeof(struct mm_event_table));
+
+	events->port = NULL;
+
+	// Open the event-loop self-pipe.
+	mm_selfpipe_prepare(&events->selfpipe);
+
+	// Initialize system specific resources.
+	mm_event_init_sys(events);
+
+	LEAVE();
+	return events;
+}
+
+void
+mm_event_destroy_table(struct mm_event_table *events)
+{
+	ENTER();
+
+	// TODO: destroy event port
+
+	// Close the event-loop self-pipe.
+	mm_selfpipe_cleanup(&events->selfpipe);
+
+	// Release system specific resources.
+	mm_event_free_sys(events);
+
+	mm_global_free(events);
 
 	LEAVE();
 }
 
 void
-mm_event_send(int fd, uint32_t code, uint32_t data)
+mm_event_start(struct mm_event_table *events)
+{
+	ENTER();
+
+	// Create the event loop port.
+	events->port = mm_port_create(mm_core->dealer);
+
+	// Start serving the event loop self-pipe.
+	mm_event_start_selfpipe(events);
+
+	LEAVE();
+}
+
+void
+mm_event_send(struct mm_event_table *events, int fd, uint32_t code, uint32_t data)
 {
 	TRACE("fd: %d", fd);
 	ASSERT(fd >= 0);
@@ -856,24 +874,44 @@ mm_event_send(int fd, uint32_t code, uint32_t data)
 	msg[1] = code;
 	msg[2] = data;
 
-	mm_port_send_blocking(mm_event_port, msg, 3);
+	mm_port_send_blocking(events->port, msg, 3);
 }
+
+void
+mm_event_notify(struct mm_event_table *events)
+{
+	ENTER();
+
+	mm_selfpipe_write(&events->selfpipe);
+
+	LEAVE();
+}
+
+bool
+mm_event_dampen(struct mm_event_table *events)
+{
+	ENTER();
+
+	// Drain the stale selfpipe notifications if any.
+	bool rc = mm_selfpipe_drain(&events->selfpipe);
+
+	LEAVE();
+	return rc;
+}
+
+/**********************************************************************
+ * Event subsystem initialization and termination.
+ **********************************************************************/
 
 void
 mm_event_init(void)
 {
 	ENTER();
 
-	// Initialize system specific resources.
-	mm_event_init_sys();
-
 	// Initialize generic data.
 	mm_event_init_handlers();
 	mm_event_init_fd_table();
 	mm_event_init_selfpipe();
-
-	// Delayed event loop task start.
-	mm_core_hook_start(mm_event_start);
 
 	LEAVE();
 }
@@ -883,14 +921,8 @@ mm_event_term(void)
 {
 	ENTER();
 
-	// TODO: destroy event port
-
 	// Release generic data.
-	mm_event_term_selfpipe();
 	mm_event_free_fd_table();
-
-	// Release system specific resources.
-	mm_event_free_sys();
 
 	LEAVE();
 }

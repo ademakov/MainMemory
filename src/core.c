@@ -429,10 +429,6 @@ mm_core_master(mm_value_t arg)
 static mm_timeval_t mm_core_poll_time;
 
 static mm_atomic_uint32_t mm_core_deal_count;
-//static mm_atomic_uint32_t mm_core_poll_count;
-//static mm_atomic_uint32_t mm_core_wait_count;
-//static mm_atomic_uint32_t mm_core_wake_count;
-//static mm_atomic_uint32_t mm_core_wake_skip_count;
 
 static void
 mm_core_deal(struct mm_core *core)
@@ -475,10 +471,10 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 
 	// Consider the time until the next required event poll.
 	mm_timeval_t poll_time, hold_time;
-	if (MM_CORE_IS_PRIMARY(core)) {
+	if (core->events) {
 		// If any event system changes have been requested then it is
 		// required to notify on their completion immediately.
-		if (mm_event_collect())
+		if (mm_event_collect(core->events))
 			poll_time = wait_time = core->time_value;
 		else
 			poll_time = mm_core_poll_time + MM_DEALER_POLL_TIMEOUT;
@@ -516,11 +512,11 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		mm_core_update_time();
 	}
 
-	if (MM_CORE_IS_PRIMARY(core)) {
+	if (core->events) {
 		mm_core_poll_time = core->time_value;
 
 		if (dispatch)
-			mm_event_dispatch();
+			mm_event_dispatch(core->events);
 	}
 
 	LEAVE();
@@ -669,6 +665,9 @@ mm_core_boot_init(struct mm_core *core)
 	mm_task_attr_setname(&attr, "dealer");
 	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 
+	if (core->events != NULL)
+		mm_event_start(core->events);
+
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);
@@ -759,10 +758,13 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->log_head = NULL;
 	core->log_tail = NULL;
 
-	if (MM_CORE_IS_PRIMARY(core))
-		core->synch = mm_synch_create_event_poll();
-	else
+	if (MM_CORE_IS_PRIMARY(core)) {
+		core->events = mm_event_create_table();
+		core->synch = mm_synch_create_event_poll(core->events);
+	} else {
+		core->events = 0;
 		core->synch = mm_synch_create();
+	}
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
@@ -801,6 +803,9 @@ mm_core_term_single(struct mm_core *core)
 	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_synch_destroy(core->synch);
+	if (core->events)
+		mm_event_destroy_table(core->events);
+
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
@@ -965,8 +970,11 @@ mm_core_stop(void)
 	ASSERT(mm_core_num > 0);
 
 	// Set stop flag for core threads.
-	for (mm_core_t i = 0; i < mm_core_num; i++)
-		mm_memory_store(mm_core_set[i].stop, true);
+	for (mm_core_t i = 0; i < mm_core_num; i++) {
+		struct mm_core *core = &mm_core_set[i];
+		mm_memory_store(core->stop, true);
+		mm_synch_signal(core->synch);
+	}
 
 	LEAVE();
 }

@@ -45,24 +45,50 @@ typedef uint8_t mm_event_hid_t;
 /* Event handler routine. */
 typedef void (*mm_event_handler_t)(mm_event_t event, uint32_t data);
 
+/* Event poll data container. */
+struct mm_event_table;
+
 /**********************************************************************
- * Common event routines.
+ * Event subsystem initialization and termination.
  **********************************************************************/
 
 void mm_event_init(void);
 void mm_event_term(void);
 
-bool mm_event_collect(void);
-bool mm_event_poll(mm_timeout_t timeout);
-void mm_event_dispatch(void);
-
-void mm_event_notify(void);
-bool mm_event_dampen(void);
+/**********************************************************************
+ * Event handler registration.
+ **********************************************************************/
 
 mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 
 /**********************************************************************
- * I/O Events Support.
+ * Event poll routines.
+ **********************************************************************/
+
+struct mm_event_table * mm_event_create_table(void);
+
+void mm_event_destroy_table(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
+
+void mm_event_start(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
+
+bool mm_event_collect(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
+
+bool mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
+	__attribute__((nonnull(1)));
+
+void mm_event_dispatch(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
+
+void mm_event_notify(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
+
+bool mm_event_dampen(struct mm_event_table *events);
+
+/**********************************************************************
+ * I/O events support.
  **********************************************************************/
 
 /* Return values of mm_event_verify_fd() */
@@ -78,7 +104,7 @@ typedef enum {
 
 mm_event_verify_t mm_event_verify_fd(int fd);
 
-void mm_event_send(int fd, uint32_t code, uint32_t data);
+void mm_event_send(struct mm_event_table *events, int fd, uint32_t code, uint32_t data);
 
 /* Check to see if there is at least one regular handler provided. */
 static inline bool
@@ -96,7 +122,7 @@ mm_event_verify_handlers(mm_event_hid_t input_handler, bool input_oneshot,
 }
 
 static inline void
-mm_event_register_fd(int fd, uint32_t data,
+mm_event_register_fd(struct mm_event_table *events, int fd, uint32_t data,
 		     mm_event_hid_t input_handler, bool input_oneshot,
 		     mm_event_hid_t output_handler, bool output_oneshot,
 		     mm_event_hid_t control_handler)
@@ -119,29 +145,29 @@ mm_event_register_fd(int fd, uint32_t data,
 	(void) input_oneshot;
 	(void) output_oneshot;
 #endif
-	mm_event_send(fd, code, data);
+	mm_event_send(events, fd, code, data);
 
 	LEAVE();
 }
 
 static inline void
-mm_event_unregister_fd(int fd)
+mm_event_unregister_fd(struct mm_event_table *events, int fd)
 {
 	ENTER();
 
-	mm_event_send(fd, 0, 0);
+	mm_event_send(events, fd, 0, 0);
 
 	LEAVE();
 }
 
 #if MM_ONESHOT_HANDLERS
 static inline void
-mm_event_trigger_input(int fd, mm_event_hid_t input_handler)
+mm_event_trigger_input(struct mm_event_table *events, int fd, mm_event_hid_t input_handler)
 {
 	ENTER();
 
 	uint32_t code = (input_handler << 24) | MM_EVENT_MSG_ONESHOT_INPUT;
-	mm_event_send(fd, code, 0);
+	mm_event_send(events, fd, code, 0);
 
 	LEAVE();
 }
@@ -149,12 +175,12 @@ mm_event_trigger_input(int fd, mm_event_hid_t input_handler)
 
 #if MM_ONESHOT_HANDLERS
 static inline void
-mm_event_trigger_output(int fd, mm_event_hid_t output_handler)
+mm_event_trigger_output(struct mm_event_table *events, int fd, mm_event_hid_t output_handler)
 {
 	ENTER();
 
 	uint32_t code = (output_handler << 16) | MM_EVENT_MSG_ONESHOT_OUTPUT;
-	mm_event_send(fd, code, 0);
+	mm_event_send(events, fd, code, 0);
 
 	LEAVE();
 }

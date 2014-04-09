@@ -177,11 +177,12 @@ struct mm_synch_poll
 {
 	struct mm_synch base;
 
+	struct mm_event_table *events;
 	bool waiting;
 };
 
 struct mm_synch *
-mm_synch_create_event_poll(void)
+mm_synch_create_event_poll(struct mm_event_table *events)
 {
 	ENTER();
 
@@ -189,6 +190,7 @@ mm_synch_create_event_poll(void)
 
 	poll->base.value.value = 0;
 	poll->base.magic = MM_THREAD_SYNCH_POLL;
+	poll->events = events;
 	poll->waiting = false;
 
 	LEAVE();
@@ -216,7 +218,7 @@ mm_synch_wait_poll(struct mm_synch *synch)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
-		mm_event_poll(MM_TIMEOUT_INFINITE);
+		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
 
 	// Advertise that the thread has woken up.
 	mm_memory_store(poll->waiting, false);
@@ -224,7 +226,7 @@ mm_synch_wait_poll(struct mm_synch *synch)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
-		mm_event_poll(MM_TIMEOUT_INFINITE);
+		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
 #endif
 }
 
@@ -245,7 +247,7 @@ mm_synch_timedwait_poll(struct mm_synch *synch, mm_timeout_t timeout)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
-		rc = mm_event_poll(timeout);
+		rc = mm_event_poll(poll->events, timeout);
 
 	// Advertise that the thread has woken up.
 	mm_memory_store(poll->waiting, false);
@@ -253,7 +255,7 @@ mm_synch_timedwait_poll(struct mm_synch *synch, mm_timeout_t timeout)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
-		rc = mm_event_poll(timeout);
+		rc = mm_event_poll(poll->events, timeout);
 #endif
 
 	return rc;
@@ -271,9 +273,9 @@ mm_synch_signal_poll(struct mm_synch *synch)
 	mm_memory_strict_fence();
 
 	if (mm_memory_load(poll->waiting))
-		mm_event_notify();
+		mm_event_notify(poll->events);
 #else
-	mm_event_notify();
+	mm_event_notify(poll->events);
 #endif
 }
 
@@ -283,7 +285,7 @@ mm_synch_clear_poll(struct mm_synch *synch)
 	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
 
 	// Cleanup stale event signals.
-	mm_event_dampen();
+	mm_event_dampen(poll->events);
 
 	mm_memory_store(poll->base.value.value, 0);
 	mm_memory_strict_fence();

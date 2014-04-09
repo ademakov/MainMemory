@@ -31,6 +31,7 @@
 #include "work.h"
 
 /* Forward declarations. */
+struct mm_event_table;
 struct mm_timeq;
 struct mm_net_server;
 
@@ -94,6 +95,9 @@ struct mm_core
 	struct mm_pool timer_pool;
 	/* Memory pool for futures. */
 	struct mm_pool future_pool;
+
+	/* Event poll data. */
+	struct mm_event_table *events;
 
 	/*
 	 * The fields below engage in cross-core communication.

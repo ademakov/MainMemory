@@ -22,6 +22,9 @@
 
 #include "common.h"
 
+/* Forward declarations. */
+struct mm_event_table;
+
 /*
  * NB: Currently only one thread is allowed to wait on the synch object.
  */
@@ -54,7 +57,7 @@ mm_synch_test(struct mm_synch *synch)
 
 struct mm_synch *mm_synch_create(void);
 struct mm_synch *mm_synch_create_cond(void);
-struct mm_synch *mm_synch_create_event_poll(void);
+struct mm_synch *mm_synch_create_event_poll(struct mm_event_table *events);
 
 void mm_synch_destroy(struct mm_synch *synch)
 	__attribute__((nonnull(1)));
