@@ -653,7 +653,7 @@ mc_table_init(void)
 	for (mm_core_t i = 0; i < nparts; i++) {
 		struct mc_tpart *part = &mc_table.parts[i];
 		part->nbytes = 0;
-		part->core = (i + 1) * nparts - 1;
+		part->core = (i + 1) * MC_TABLE_CORE_DIV - 1;
 		part->evicting = false;
 		part->striding = false;
 		part->nentries = 0;
