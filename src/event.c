@@ -40,6 +40,60 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#define MM_EVENT_NEVENTS	512
+#define MM_EVENT_NENTRIES	((uint32_t) 256)
+
+typedef enum {
+	MM_EVENT_FD_REGISTER,
+	MM_EVENT_FD_UNREGISTER,
+	MM_EVENT_FD_TRIGGER_INPUT,
+	MM_EVENT_FD_TRIGGER_OUTPUT,
+} mm_event_entry_tag_t;
+
+// Event change entry.
+struct mm_event_entry
+{
+	mm_event_entry_tag_t tag;
+	int fd;
+	struct mm_event_fd *ev_fd;
+};
+
+struct mm_event_table
+{
+	// The epoll/kqueue descriptor.
+	int event_fd;
+
+	// The epoll/kevent list size.
+	int nevents;
+
+	// The change list indexes.
+	uint32_t head_entry;
+	uint32_t tail_entry;
+	uint32_t last_entry;
+
+	// The internal state lock.
+	mm_task_lock_t lock;
+
+	// The tasks blocked on send.
+	struct mm_waitset blocked_senders;
+
+	// The change list.
+	struct mm_event_entry entries[MM_EVENT_NENTRIES];
+
+	// Event-loop self-pipe.
+	struct mm_selfpipe selfpipe;
+	struct mm_event_fd selfevent;
+
+#ifdef HAVE_SYS_EPOLL_H
+	// The epoll list.
+	struct epoll_event events[MM_EVENT_NEVENTS];
+#endif
+#ifdef HAVE_SYS_EVENT_H
+	// The kevent list.
+	struct kevent events[MM_EVENT_NEVENTS];
+#endif
+};
+
 /**********************************************************************
  * Event Handler Table.
  **********************************************************************/
@@ -62,7 +116,7 @@ static int mm_event_hd_table_size;
 // A dummy event handler.
 static void
 mm_event_dummy(mm_event_t event __attribute__((unused)),
-	       uint32_t data __attribute__((unused)))
+	       void *data __attribute__((unused)))
 {
 	DEBUG("hmm, dummy event handler invoked.");
 }
@@ -101,137 +155,53 @@ mm_event_register_handler(mm_event_handler_t handler)
 }
 
 /**********************************************************************
- * File Descriptor Table.
+ * File descriptor event handling.
  **********************************************************************/
 
-// The maximum allowed number of open file descriptors.
-#define MM_EVENT_FD_MAX (1024 * 1024)
-
-// File descriptor table entry.
-struct mm_event_fd
-{
-	// client data
-	uint32_t data;
-
-	// event handers
-	mm_event_hid_t input_handler;
-	mm_event_hid_t output_handler;
-	mm_event_hid_t control_handler;
-
-	// flags
-#if MM_ONESHOT_HANDLERS
-	unsigned changed : 1;
-	unsigned oneshot_input : 1;
-	unsigned oneshot_output : 1;
-#else
-	uint8_t changed;
-#endif
-};
-
-// File descriptor table.
-static struct mm_event_fd *mm_event_fd_table;
-
-// File descriptor table size.
-static int mm_event_fd_table_size = _POSIX_OPEN_MAX;
-
-// Initialize the file descriptor table.
-static void
-mm_event_init_fd_table(void)
-{
-	ENTER();
-
-	// Determine the table size.
-	int max_fd = sysconf(_SC_OPEN_MAX);
-	if (max_fd > mm_event_fd_table_size)
-		mm_event_fd_table_size = max_fd;
-
-	if (mm_event_fd_table_size > MM_EVENT_FD_MAX) {
-		mm_brief("truncating too high fd limit: %d", mm_event_fd_table_size);
-		mm_event_fd_table_size = MM_EVENT_FD_MAX;
-	}
-	mm_brief("fd table size: %d", mm_event_fd_table_size);
-
-	// Allocate the table.
-	mm_event_fd_table = mm_global_calloc(mm_event_fd_table_size, sizeof(struct mm_event_fd));
-
-	LEAVE();
-}
-
-// Free the file descriptor table.
-static void
-mm_event_free_fd_table(void)
-{
-	ENTER();
-
-	mm_global_free(mm_event_fd_table);
-
-	LEAVE();
-}
-
-// Verify if the file descriptor fits into the table.
-int
-mm_event_verify_fd(int fd)
-{
-	if (unlikely(fd < 0)) {
-		/* The fd is invalid. */
-		return MM_EVENT_FD_INVALID;
-	} else if (likely(fd < mm_event_fd_table_size)) {
-		/* The fd is okay. */
-		return MM_EVENT_FD_VALID;
-	} else {
-		/* The fd exceeds the table capacity. */
-		return MM_EVENT_FD_TOO_BIG;
-	}
-}
-
 static inline void
-mm_event_input(struct mm_event_fd *fd)
+mm_event_input(struct mm_event_fd *ev_fd)
 {
 	ENTER();
 
-	mm_event_hid_t id = fd->input_handler;
+	mm_event_hid_t id = ev_fd->input_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
-#if MM_ONESHOT_HANDLERS
-	if (fd->oneshot_input)
-		fd->input_handler = 0;
-#endif
+	if (ev_fd->oneshot_input)
+		ev_fd->oneshot_input_trigger = 0;
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(MM_EVENT_INPUT, fd->data);
+	(hd->handler)(MM_EVENT_INPUT, ev_fd);
 
 	LEAVE();
 }
 
 static inline void
-mm_event_output(struct mm_event_fd *fd)
+mm_event_output(struct mm_event_fd *ev_fd)
 {
 	ENTER();
 
-	mm_event_hid_t id = fd->output_handler;
+	mm_event_hid_t id = ev_fd->output_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
-#if MM_ONESHOT_HANDLERS
-	if (fd->oneshot_output)
-		fd->output_handler = 0;
-#endif
+	if (ev_fd->oneshot_output)
+		ev_fd->oneshot_output_trigger = 0;
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(MM_EVENT_OUTPUT, fd->data);
+	(hd->handler)(MM_EVENT_OUTPUT, ev_fd);
 
 	LEAVE();
 }
 
 static inline void
-mm_event_control(struct mm_event_fd *fd, mm_event_t event)
+mm_event_control(struct mm_event_fd *ev_fd, mm_event_t event)
 {
 	ENTER();
 
-	mm_event_hid_t id = fd->control_handler;
+	mm_event_hid_t id = ev_fd->control_handler;
 	ASSERT(id < mm_event_hd_table_size);
 
 	struct mm_event_hd *hd = &mm_event_hd_table[id];
-	hd->handler(event, fd->data);
+	(hd->handler)(event, ev_fd);
 
 	LEAVE();
 }
@@ -242,30 +212,13 @@ mm_event_control(struct mm_event_fd *fd, mm_event_t event)
 
 #ifdef HAVE_SYS_EPOLL_H
 
-#define MM_EPOLL_MAX 512
-
-struct mm_event_table
-{
-	struct mm_port *port;
-	struct mm_selfpipe selfpipe;
-
-	// The epoll descriptor.
-	int epoll_fd;
-
-	// The epoll list size.
-	int nevents;
-
-	// The epoll list.
-	struct epoll_event events[MM_EPOLL_MAX];
-};
-
 static void
 mm_event_init_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	events->epoll_fd = epoll_create(511);
-	if (events->epoll_fd < 0)
+	events->event_fd = epoll_create(511);
+	if (events->event_fd < 0)
 		mm_fatal(errno, "Failed to create epoll fd");
 
 	events->nevents = 0;
@@ -278,10 +231,61 @@ mm_event_free_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	if (events->epoll_fd >= 0)
-		close(events->epoll_fd);
+	if (events->event_fd >= 0)
+		close(events->event_fd);
 
 	LEAVE();
+}
+
+static bool
+mm_event_process_entry(struct mm_event_table *events,
+		       struct mm_event_entry *entry)
+{
+	bool control_event = false;
+	struct mm_event_fd *ev_fd = entry->ev_fd;
+
+	int rc;
+	struct epoll_event event;
+	event.events = 0;
+	event.data.ptr = ev_fd;
+
+	switch (entry->tag) {
+	case MM_EVENT_FD_REGISTER:
+		if (ev_fd->input_handler)
+			event.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
+		if (ev_fd->output_handler)
+			event.events |= EPOLLOUT | EPOLLET;
+
+		rc = epoll_ctl(events->event_fd, EPOLL_CTL_ADD, entry->fd, &event);
+		if (unlikely(rc < 0))
+			mm_error(errno, "epoll_ctl");
+
+		if (ev_fd->control_handler) {
+			mm_event_control(ev_fd, MM_EVENT_REGISTER);
+			control_event = true;
+		}
+		break;
+
+	case MM_EVENT_FD_UNREGISTER:
+		rc = epoll_ctl(events->event_fd, EPOLL_CTL_DEL, entry->fd, &event);
+		if (unlikely(rc < 0))
+			mm_error(errno, "epoll_ctl");
+
+		if (ev_fd->control_handler) {
+			mm_event_control(ev_fd, MM_EVENT_UNREGISTER);
+			control_event = true;
+		}
+		break;
+
+	case MM_EVENT_FD_TRIGGER_INPUT:
+	case MM_EVENT_FD_TRIGGER_OUTPUT:
+		break;
+
+	default:
+		ABORT();
+	}
+
+	return control_event;
 }
 
 bool
@@ -292,95 +296,24 @@ mm_event_collect(struct mm_event_table *events)
 	// Indicate if there were any control events processed.
 	bool control_events = false;
 
-	// Make changes to the fd set watched by epoll.
-	uint32_t msg[3];
-	while (mm_port_receive(events->port, msg, 3) == 0) {
-		int fd = msg[0];
-		uint32_t code = msg[1];
-		uint32_t data = msg[2];
+	// Go through the change list.
+	uint32_t head = events->head_entry;
+	uint32_t last = events->last_entry;
+	for (; last != head; last++) {
+		uint32_t i = last % MM_EVENT_NENTRIES;
+		control_events |= mm_event_process_entry(events, &events->entries[i]);
+	}
 
-		mm_event_hid_t input_handler = (code >> 24) & 0xff;
-		mm_event_hid_t output_handler = (code >> 16) & 0xff;
-		mm_event_hid_t control_handler = (code >> 8) & 0xff;
-
-		struct mm_event_fd *mm_fd = &mm_event_fd_table[fd];
-		uint32_t old_events = 0, new_events = 0;
-		int a, b;
-
-		// Check if a read event registration if needed.
-		a = (mm_fd->input_handler != 0);
-		b = (input_handler != 0);
-		if (a) {
-			old_events |= EPOLLIN;
-		}
-		if (b) {
-			new_events |= EPOLLIN;
-		}
-#if ENABLE_DEBUG
-		if (likely(a != b)) {
-			if (b) {
-				DEBUG("register fd %d for read events", fd);
-			} else {
-				DEBUG("unregister fd %d for read events", fd);
-			}
-		}
-#endif
-
-		// Check if a write event registration if needed.
-		a = (mm_fd->output_handler != 0);
-		b = (output_handler != 0);
-		if (a) {
-			old_events |= EPOLLOUT;
-		}
-		if (b) {
-			new_events |= EPOLLOUT;
-		}
-#if ENABLE_DEBUG
-		if (likely(a != b)) {
-			if (b) {
-				DEBUG("register fd %d for write events", fd);
-			} else {
-				DEBUG("unregister fd %d for write events", fd);
-			}
-		}
-#endif
-
-		if (likely(old_events != new_events)) {
-			int op;
-			if (new_events == 0)
-				op = EPOLL_CTL_DEL;
-			else if (old_events == 0)
-				op = EPOLL_CTL_ADD;
-			else
-				op = EPOLL_CTL_MOD;
-
-			struct epoll_event ev;
-			ev.events = new_events | EPOLLET | EPOLLRDHUP;
-			ev.data.fd = fd;
-
-			int rc = epoll_ctl(events->epoll_fd, op, fd, &ev);
-			if (unlikely(rc < 0)) {
-				mm_error(errno, "epoll_ctl");
-			}
-		}
-
-		// Invoke the old handler if any.
-		if (mm_fd->control_handler) {
-			mm_event_control(mm_fd, MM_EVENT_UNREGISTER);
-			control_events = true;
-		}
-
-		// Store the requested I/O handler.
-		mm_fd->data = data;
-		mm_fd->input_handler = input_handler;
-		mm_fd->output_handler = output_handler;
-		mm_fd->control_handler = control_handler;
-
-		// Invoke the new handler if any.
-		if (mm_fd->control_handler) {
-			mm_event_control(mm_fd, MM_EVENT_REGISTER);
-			control_events = true;
-		}
+	// Remember the last seen change.
+	events->last_entry = last;
+	uint32_t tail = events->tail_entry;
+	if (tail != last) {
+		mm_task_lock(&events->lock);
+		events->tail_entry = last;
+		if ((tail + MM_EVENT_NENTRIES) == events->head_entry)
+			mm_waitset_broadcast(&events->blocked_senders, &events->lock);
+		else
+			mm_task_unlock(&events->lock);
 	}
 
 	LEAVE();
@@ -392,14 +325,16 @@ mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 {
 	ENTER();
 
-	// Flush the log before possible sleep.
-	mm_flush();
-
 	// Find the event wait timeout.
 	timeout /= 1000;
 
+	// Flush the log before possible sleep.
+	mm_flush();
+
 	// Poll the system for events.
-	int n = epoll_wait(events->epoll_fd, events->events, MM_EPOLL_MAX, timeout);
+	int n = epoll_wait(events->event_fd,
+			   events->events, MM_EVENT_NEVENTS,
+			   timeout);
 
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
@@ -422,24 +357,18 @@ mm_event_dispatch(struct mm_event_table *events)
 
 	// Process the received system events.
 	for (int i = 0; i < events->nevents; i++) {
-		int fd = events->events[i].data.fd;
-		if ((events->events[i].events & EPOLLIN) != 0) {
-			DEBUG("input event on fd %d", fd);
-			mm_event_input(&mm_event_fd_table[fd]);
-		}
-		if ((events->events[i].events & EPOLLOUT) != 0) {
-			DEBUG("output event on fd %d", fd);
-			mm_event_output(&mm_event_fd_table[fd]);
-		}
+		struct epoll_event *event = &events->events[i];
+		struct mm_event_fd *ev_fd = event->data.ptr;
 
-		if ((events->events[i].events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			DEBUG("input error event on fd %d", fd);
-			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_INPUT_ERROR);
-		}
-		if ((events->events[i].events & (EPOLLERR | EPOLLHUP)) != 0) {
-			DEBUG("output error event on fd %d", fd);
-			mm_event_control(&mm_event_fd_table[fd], MM_EVENT_OUTPUT_ERROR);
-		}
+		if ((event->events & EPOLLIN) != 0)
+			mm_event_input(ev_fd);
+		if ((event->events & EPOLLOUT) != 0)
+			mm_event_output(ev_fd);
+
+		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0)
+			mm_event_control(ev_fd, MM_EVENT_INPUT_ERROR);
+		if ((event->events & (EPOLLERR | EPOLLHUP)) != 0)
+			mm_event_control(ev_fd, MM_EVENT_OUTPUT_ERROR);
 	}
 
 	LEAVE();
@@ -453,53 +382,16 @@ mm_event_dispatch(struct mm_event_table *events)
 
 #ifdef HAVE_SYS_EVENT_H
 
-#define MM_EVENT_NKEVENTS_MAX	1024
-#define MM_EVENT_NCHANGES_MAX	512
-
-// File descriptor change record.
-struct mm_kevent_change_rec
-{
-	int fd;
-	mm_event_t event;
-};
-
-struct mm_event_table
-{
-	struct mm_port *port;
-	struct mm_selfpipe selfpipe;
-
-	// The kqueue descriptor.
-	int kqueue_fd;
-
-	// The kevent list size.
-	int nkevents;
-
-	// The change list size.
-	int nchanges;
-
-	// The kevent list.
-	struct kevent kevents[MM_EVENT_NKEVENTS_MAX];
-
-	// File descriptor change list.
-	struct mm_kevent_change_rec changes[MM_EVENT_NCHANGES_MAX];
-
-	// A delayed file descriptor change record.
-	uint32_t delayed_msg[3];
-	bool has_delayed_msg;
-};
-
 static void
 mm_event_init_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	events->kqueue_fd = kqueue();
-	if (events->kqueue_fd == -1)
+	events->event_fd = kqueue();
+	if (events->event_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
 
-	events->nkevents = 0;
-	events->nchanges = 0;
-	events->has_delayed_msg = false;
+	events->nevents = 0;
 
 	LEAVE();
 }
@@ -509,130 +401,101 @@ mm_event_free_sys(struct mm_event_table *events)
 {
 	ENTER();
 
-	if (events->kqueue_fd >= 0)
-		close(events->kqueue_fd);
+	if (events->event_fd >= 0)
+		close(events->event_fd);
 
 	LEAVE();
 }
 
 static void
-mm_event_process_msg(struct mm_event_table *events, uint32_t *msg)
+mm_event_process_entry(struct mm_event_table *events,
+		       struct mm_event_entry *entry)
 {
-	// Parse the message.
-	int fd = msg[0];
-	uint32_t code = msg[1];
-
-	// Get the requested fd.
-	struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
+	struct mm_event_fd *ev_fd = entry->ev_fd;
 	ASSERT(!ev_fd->changed);
 
-	if (code == 0) {
-		// Handle an UNREG message.
-
-		ASSERT(msg[2] == 0);
-
+	switch (entry->tag) {
+	case MM_EVENT_FD_REGISTER:
 		if (ev_fd->input_handler) {
-			ev_fd->input_handler = 0;
+			int flags;
+			if (ev_fd->oneshot_input) {
+				flags = EV_ADD | EV_ONESHOT;
+				ev_fd->oneshot_input_trigger = 1;
+			} else {
+				flags = EV_ADD | EV_CLEAR;
+			}
 
-			DEBUG("unregister fd %d for read events", fd);
-			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &events->kevents[events->nkevents++];
-			EV_SET(kp, fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_READ, flags, 0, 0, ev_fd);
 		}
-
 		if (ev_fd->output_handler) {
-			ev_fd->output_handler = 0;
-
-			DEBUG("unregister fd %d for write events", fd);
-			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &events->kevents[events->nkevents++];
-			EV_SET(kp, fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
-		}
-
-		if (ev_fd->control_handler) {
-			ev_fd->changed = 1;
-
-			events->changes[events->nchanges].fd = fd;
-			events->changes[events->nchanges].event = MM_EVENT_UNREGISTER;
-			events->nchanges++;
-		}
-
-	} else {
-		// Handle a REG or TRIGGER message.
-
-		mm_event_hid_t input_handler = (code >> 24) & 0xff;
-		mm_event_hid_t output_handler = (code >> 16) & 0xff;
-		mm_event_hid_t control_handler = (code >> 8) & 0xff;
-		ASSERT(input_handler < mm_event_hd_table_size);
-		ASSERT(output_handler < mm_event_hd_table_size);
-		ASSERT(control_handler < mm_event_hd_table_size);
-		ASSERT(input_handler || output_handler);
-
-#if MM_ONESHOT_HANDLERS
-		uint8_t flags = code & 0xff;
-		bool oneshot_input = (flags & MM_EVENT_MSG_ONESHOT_INPUT) != 0;
-		bool oneshot_output = (flags & MM_EVENT_MSG_ONESHOT_OUTPUT) != 0;
-		// Set the data field only for a REG message, not for a TRIGGER.
-		if (mm_event_verify_handlers(input_handler, oneshot_input,
-					     output_handler, oneshot_output,
-					     control_handler))
-			ev_fd->data = msg[2];
-#else
-		ev_fd->data = msg[2];
-#endif
-
-		if (input_handler) {
-			ev_fd->input_handler = input_handler;
-
-			int ev_flags;
-#if MM_ONESHOT_HANDLERS
-			if (oneshot_input) {
-				ev_fd->oneshot_input = 1;
-				ev_flags = EV_ADD | EV_ONESHOT;
+			int flags;
+			if (ev_fd->oneshot_output) {
+				flags = EV_ADD | EV_ONESHOT;
+				ev_fd->oneshot_output_trigger = 1;
 			} else {
-				ev_fd->oneshot_input = 0;
-				ev_flags = EV_ADD | EV_CLEAR;
+				flags = EV_ADD | EV_CLEAR;
 			}
-#else
-			ev_flags = EV_ADD | EV_CLEAR;
-#endif
 
-			DEBUG("register fd %d for read events", fd);
-			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &events->kevents[events->nkevents++];
-			EV_SET(kp, fd, EVFILT_READ, ev_flags, 0, 0, 0);
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_WRITE, flags, 0, 0, ev_fd);
 		}
-
-		if (output_handler) {
-			ev_fd->output_handler = output_handler;
-
-			int ev_flags;
-#if MM_ONESHOT_HANDLERS
-			if (oneshot_output) {
-				ev_fd->oneshot_output = 1;
-				ev_flags = EV_ADD | EV_ONESHOT;
-			} else {
-				ev_fd->oneshot_output = 0;
-				ev_flags = EV_ADD | EV_CLEAR;
-			}
-#else
-			ev_flags = EV_ADD | EV_CLEAR;
-#endif
-
-			DEBUG("register fd %d for write events", fd);
-			ASSERT(mm_nkevents < MM_EVENT_NKEVENTS_MAX);
-			struct kevent *kp = &events->kevents[events->nkevents++];
-			EV_SET(kp, fd, EVFILT_WRITE, ev_flags, 0, 0, 0);
-		}
-
-		if (control_handler) {
+		if (ev_fd->control_handler)
 			ev_fd->changed = 1;
-			ev_fd->control_handler = control_handler;
+		break;
 
-			events->changes[events->nchanges].fd = fd;
-			events->changes[events->nchanges].event = MM_EVENT_REGISTER;
-			events->nchanges++;
+	case MM_EVENT_FD_UNREGISTER:
+		if (ev_fd->input_handler
+		    && (!ev_fd->oneshot_input
+			|| ev_fd->oneshot_input_trigger)) {
+
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
+		if (ev_fd->output_handler
+		    && (!ev_fd->oneshot_output
+			|| ev_fd->oneshot_output_trigger)) {
+
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+		}
+		if (ev_fd->control_handler)
+			ev_fd->changed = 1;
+		break;
+
+	case MM_EVENT_FD_TRIGGER_INPUT:
+		if (ev_fd->input_handler
+		    && ev_fd->oneshot_input
+		    && !ev_fd->oneshot_input_trigger) {
+
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
+			       0, 0, ev_fd);
+
+			if (ev_fd->control_handler)
+				ev_fd->changed = 1;
+		}
+		break;
+
+	case MM_EVENT_FD_TRIGGER_OUTPUT:
+		if (ev_fd->output_handler
+		    && ev_fd->oneshot_output
+		    && !ev_fd->oneshot_output_trigger) {
+
+			ASSERT(events->nevents < MM_EVENT_NEVENTS);
+			struct kevent *kp = &events->events[events->nevents++];
+			EV_SET(kp, entry->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
+			       0, 0, ev_fd);
+		}
+		break;
+
+	default:
+		ABORT();
 	}
 }
 
@@ -640,41 +503,30 @@ bool
 mm_event_collect(struct mm_event_table *events)
 {
 	ENTER();
+	ASSERT(events->tail_entry == events->last_entry);
 
-	events->nkevents = 0;
-	events->nchanges = 0;
+	events->nevents = 0;
 
-	// Pick a delayed change if any.
-	if (unlikely(events->has_delayed_msg)) {
-		events->has_delayed_msg = false;
-		mm_event_process_msg(events, events->delayed_msg);
-	}
-
-	// Fill the change list.
-	while (likely(events->nchanges < MM_EVENT_NCHANGES_MAX)) {
-
-		// Get the message.
-		uint32_t msg[3];
-		if (mm_port_receive(events->port, msg, 3) < 0)
-			break;
+	// Go through the change list.
+	uint32_t head = events->head_entry;
+	uint32_t last = events->last_entry;
+	for (; last != head; last++) {
+		uint32_t i = last % MM_EVENT_NENTRIES;
+		struct mm_event_entry *entry = &events->entries[i];
 
 		// To simplify logic handle only one event related to a
 		// particular fd per cycle.
-		int fd = msg[0];
-		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
-		if (unlikely(ev_fd->changed)) {
-			events->delayed_msg[0] = msg[0];
-			events->delayed_msg[1] = msg[1];
-			events->delayed_msg[2] = msg[2];
-			events->has_delayed_msg = true;
+		if (unlikely(entry->ev_fd->changed))
 			break;
-		}
 
-		mm_event_process_msg(events, msg);
+		mm_event_process_entry(events, entry);
 	}
 
+	// Remember the last seen change.
+	events->last_entry = last;
+
 	LEAVE();
-	return (events->nkevents != 0);
+	return (events->nevents != 0);
 }
 
 bool
@@ -682,35 +534,34 @@ mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 {
 	ENTER();
 
-	// Flush the log before a possible sleep.
-	mm_flush();
-
-	// Start listening the selfpipe if needed and find the event wait
-	// timeout.
+	// Calculate the event wait timeout.
 	struct timespec ts;
 	DEBUG("timeout: %lu", (unsigned long) timeout);
 	ts.tv_sec = timeout / 1000000;
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
+	// Flush the log before a possible sleep.
+	mm_flush();
+
 	// Poll the system for events.
-	int n = kevent(events->kqueue_fd,
-		       events->kevents, events->nkevents,
-		       events->kevents, MM_EVENT_NKEVENTS_MAX,
+	int n = kevent(events->event_fd,
+		       events->events, events->nevents,
+		       events->events, MM_EVENT_NEVENTS,
 		       &ts);
 
-	DEBUG("kevent changed: %d, received: %d", events->nkevents, n);
+	DEBUG("kevent changed: %d, received: %d", events->nevents, n);
 	if (n < 0) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
 		else
 			mm_error(errno, "kevent");
-		events->nkevents = 0;
+		events->nevents = 0;
 	} else {
-		events->nkevents = n;
+		events->nevents = n;
 	}
 
 	LEAVE();
-	return events->nchanges || events->nkevents;
+	return (events->nevents || events->tail_entry != events->last_entry);
 }
 
 void
@@ -719,47 +570,47 @@ mm_event_dispatch(struct mm_event_table *events)
 	ENTER();
 
 	// Issue REG/UNREG events.
-	for (int i = 0; i < events->nchanges; i++) {
-		int fd = events->changes[i].fd;
+	uint32_t tail = events->tail_entry;
+	uint32_t last = events->last_entry;
+	for (uint32_t c = tail; c != last; c++) {
+		uint32_t i = c % MM_EVENT_NENTRIES;
+		struct mm_event_entry *entry = &events->entries[i];
 
 		// Reset the change flag.
-		struct mm_event_fd *ev_fd = &mm_event_fd_table[fd];
+		struct mm_event_fd *ev_fd = entry->ev_fd;
 		ev_fd->changed = 0;
 
 		// Invoke the control handler with pertinent event.
-		ASSERT(ev_fd->control_handler);
-		if (events->changes[i].event == MM_EVENT_REGISTER) {
+		if (entry->tag == MM_EVENT_FD_REGISTER)
 			mm_event_control(ev_fd, MM_EVENT_REGISTER);
-		} else {
+		else if (entry->tag == MM_EVENT_FD_UNREGISTER)
 			mm_event_control(ev_fd, MM_EVENT_UNREGISTER);
-			// Perform the final cleanup.
-			ev_fd->control_handler = 0;
-			ev_fd->data = 0;
-		}
+	}
+
+	if (tail != last) {
+		mm_task_lock(&events->lock);
+		events->tail_entry = last;
+		if ((tail + MM_EVENT_NENTRIES) == events->head_entry)
+			mm_waitset_broadcast(&events->blocked_senders, &events->lock);
+		else
+			mm_task_unlock(&events->lock);
 	}
 
 	// Process the received system events.
-	for (int i = 0; i < events->nkevents; i++) {
-		if (events->kevents[i].filter == EVFILT_READ) {
-			int fd = events->kevents[i].ident;
-			DEBUG("input event on fd %d", fd);
-			mm_event_input(&mm_event_fd_table[fd]);
+	for (int i = 0; i < events->nevents; i++) {
+		struct kevent *event = &events->events[i];
 
-			if ((events->kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
-				DEBUG("input error event on fd %d", fd);
-				mm_event_control(&mm_event_fd_table[fd],
-						 MM_EVENT_INPUT_ERROR);
-			}
-		} else if (events->kevents[i].filter == EVFILT_WRITE) {
-			int fd = events->kevents[i].ident;
-			DEBUG("output event on fd %d", fd);
-			mm_event_output(&mm_event_fd_table[fd]);
+		if (event->filter == EVFILT_READ) {
+			struct mm_event_fd *ev_fd = event->udata;
+			mm_event_input(ev_fd);
+			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
+				mm_event_control(ev_fd, MM_EVENT_INPUT_ERROR);
 
-			if ((events->kevents[i].flags & (EV_ERROR | EV_EOF)) != 0) {
-				DEBUG("output error event on fd %d", fd);
-				mm_event_control(&mm_event_fd_table[fd],
-						 MM_EVENT_OUTPUT_ERROR);
-			}
+		} else if (events->events[i].filter == EVFILT_WRITE) {
+			struct mm_event_fd *ev_fd = event->udata;
+			mm_event_output(ev_fd);
+			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
+				mm_event_control(ev_fd, MM_EVENT_OUTPUT_ERROR);
 		}
 	}
 
@@ -776,10 +627,10 @@ mm_event_dispatch(struct mm_event_table *events)
 static mm_event_hid_t mm_event_selfpipe_handler;
 
 static void
-mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)),
-			uint32_t data __attribute__((unused)))
+mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)), void *data)
 {
-	struct mm_event_table *events = mm_core->events;
+	struct mm_event_table *events
+		= containerof(data, struct mm_event_table, selfevent);
 	mm_selfpipe_set_ready(&events->selfpipe);
 }
 
@@ -800,9 +651,11 @@ mm_event_start_selfpipe(struct mm_event_table *events)
 	ENTER();
 
 	// Register the self-pipe read end in the event loop.
-	mm_event_register_fd(events, events->selfpipe.read_fd, 0,
-			     mm_event_selfpipe_handler, false,
-			     0, false, 0);
+	mm_event_prepare_fd(&events->selfevent,
+			    mm_event_selfpipe_handler, false,
+			    0, false, 0);
+	mm_event_register_fd(events, events->selfpipe.read_fd,
+			     &events->selfevent);
 
 	LEAVE();
 }
@@ -818,7 +671,11 @@ mm_event_create_table(void)
 
 	struct mm_event_table *events = mm_global_alloc(sizeof(struct mm_event_table));
 
-	events->port = NULL;
+	events->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	mm_waitset_prepare(&events->blocked_senders);
+	events->head_entry = 0;
+	events->tail_entry = 0;
+	events->last_entry = 0;
 
 	// Open the event-loop self-pipe.
 	mm_selfpipe_prepare(&events->selfpipe);
@@ -853,28 +710,10 @@ mm_event_start(struct mm_event_table *events)
 {
 	ENTER();
 
-	// Create the event loop port.
-	events->port = mm_port_create(mm_core->dealer);
-
 	// Start serving the event loop self-pipe.
 	mm_event_start_selfpipe(events);
 
 	LEAVE();
-}
-
-void
-mm_event_send(struct mm_event_table *events, int fd, uint32_t code, uint32_t data)
-{
-	TRACE("fd: %d", fd);
-	ASSERT(fd >= 0);
-	ASSERT(fd < mm_event_fd_table_size);
-
-	uint32_t msg[3];
-	msg[0] = (uint32_t) fd;
-	msg[1] = code;
-	msg[2] = data;
-
-	mm_port_send_blocking(events->port, msg, 3);
 }
 
 void
@@ -900,6 +739,107 @@ mm_event_dampen(struct mm_event_table *events)
 }
 
 /**********************************************************************
+ * I/O events support.
+ **********************************************************************/
+
+static void
+mm_event_send(struct mm_event_table *events, int fd,
+	      mm_event_entry_tag_t tag, struct mm_event_fd *ev_fd)
+{
+again:
+	mm_task_lock(&events->lock);
+
+	uint32_t head = events->head_entry;
+	uint32_t tail = events->tail_entry;
+	if (unlikely(head == (tail + MM_EVENT_NENTRIES))) {
+		mm_waitset_wait(&events->blocked_senders, &events->lock);
+		mm_task_testcancel();
+		goto again;
+	}
+
+	head %= MM_EVENT_NENTRIES;
+
+	events->entries[head].fd = fd;
+	events->entries[head].tag = tag;
+	events->entries[head].ev_fd = ev_fd;
+	events->head_entry++;
+
+	mm_task_unlock(&events->lock);
+}
+
+bool
+mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+		    mm_event_hid_t input_handler, bool input_oneshot,
+		    mm_event_hid_t output_handler, bool output_oneshot,
+		    mm_event_hid_t control_handler)
+{
+	ASSERT(input_handler || output_handler || control_handler);
+	ASSERT(input_handler < mm_event_hd_table_size);
+	ASSERT(output_handler < mm_event_hd_table_size);
+	ASSERT(control_handler < mm_event_hd_table_size);
+
+	ev_fd->input_handler = input_handler;
+	ev_fd->output_handler = output_handler;
+	ev_fd->control_handler = control_handler;
+
+	ev_fd->changed = false;
+	ev_fd->oneshot_input = input_oneshot;
+	ev_fd->oneshot_input_trigger = false;
+	ev_fd->oneshot_output = output_oneshot;
+	ev_fd->oneshot_output_trigger = false;
+
+	return true;
+}
+
+void
+mm_event_register_fd(struct mm_event_table *events, int fd,
+		     struct mm_event_fd *ev_fd)
+{
+	ENTER();
+	ASSERT(fd >= 0);
+
+	mm_event_send(events, fd, MM_EVENT_FD_REGISTER, ev_fd);
+
+	LEAVE();
+}
+
+void
+mm_event_unregister_fd(struct mm_event_table *events, int fd,
+		       struct mm_event_fd *ev_fd)
+{
+	ENTER();
+	ASSERT(fd >= 0);
+
+	mm_event_send(events, fd, MM_EVENT_FD_UNREGISTER, ev_fd);
+
+	LEAVE();
+}
+
+void
+mm_event_trigger_input(struct mm_event_table *events, int fd,
+		       struct mm_event_fd *ev_fd)
+{
+	ENTER();
+	ASSERT(fd >= 0);
+
+	mm_event_send(events, fd, MM_EVENT_FD_TRIGGER_INPUT, ev_fd);
+
+	LEAVE();
+}
+
+void
+mm_event_trigger_output(struct mm_event_table *events, int fd,
+			struct mm_event_fd *ev_fd)
+{
+	ENTER();
+	ASSERT(fd >= 0);
+
+	mm_event_send(events, fd, MM_EVENT_FD_TRIGGER_OUTPUT, ev_fd);
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Event subsystem initialization and termination.
  **********************************************************************/
 
@@ -910,7 +850,6 @@ mm_event_init(void)
 
 	// Initialize generic data.
 	mm_event_init_handlers();
-	mm_event_init_fd_table();
 	mm_event_init_selfpipe();
 
 	LEAVE();
@@ -920,9 +859,6 @@ void
 mm_event_term(void)
 {
 	ENTER();
-
-	// Release generic data.
-	mm_event_free_fd_table();
 
 	LEAVE();
 }

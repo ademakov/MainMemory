@@ -81,6 +81,9 @@ struct mm_net_peer_addr
 /* Network server data. */
 struct mm_net_server
 {
+	/* Event handling data. */
+	struct mm_event_fd event;
+
 	/* Server socket. */
 	int fd;
 	/* Server flags. */
@@ -109,6 +112,9 @@ struct mm_net_server
 /* Network client socket data. */
 struct mm_net_socket
 {
+	/* Event handling data. */
+	struct mm_event_fd event;
+
 	/* Socket file descriptor. */
 	int fd;
 

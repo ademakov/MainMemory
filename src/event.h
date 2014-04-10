@@ -21,7 +21,6 @@
 #define EVENT_H
 
 #include "common.h"
-#include "trace.h"
 
 #if defined(HAVE_SYS_EPOLL_H)
 # undef MM_ONESHOT_HANDLERS
@@ -39,11 +38,30 @@ typedef enum {
 	MM_EVENT_OUTPUT_ERROR,
 } mm_event_t;
 
+/* Event handler routine. */
+typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
+
 /* Event handler identifier. */
 typedef uint8_t mm_event_hid_t;
 
-/* Event handler routine. */
-typedef void (*mm_event_handler_t)(mm_event_t event, uint32_t data);
+/* File descriptor event entry. */
+struct mm_event_fd
+{
+	/* The file descriptor to watch. */
+	int fd;
+
+	/* Event handers. */
+	mm_event_hid_t input_handler;
+	mm_event_hid_t output_handler;
+	mm_event_hid_t control_handler;
+
+	/* Event flags */
+	unsigned changed : 1;
+	unsigned oneshot_input : 1;
+	unsigned oneshot_input_trigger : 1;
+	unsigned oneshot_output : 1;
+	unsigned oneshot_output_trigger : 1;
+};
 
 /* Event poll data container. */
 struct mm_event_table;
@@ -85,105 +103,33 @@ void mm_event_dispatch(struct mm_event_table *events)
 void mm_event_notify(struct mm_event_table *events)
 	__attribute__((nonnull(1)));
 
-bool mm_event_dampen(struct mm_event_table *events);
+bool mm_event_dampen(struct mm_event_table *events)
+	__attribute__((nonnull(1)));
 
 /**********************************************************************
  * I/O events support.
  **********************************************************************/
 
-/* Return values of mm_event_verify_fd() */
-typedef enum {
-	MM_EVENT_FD_VALID = 0,
-	MM_EVENT_FD_INVALID = -1,
-	MM_EVENT_FD_TOO_BIG = -2,
-} mm_event_verify_t;
-
-/* Event message flags. */
-#define MM_EVENT_MSG_ONESHOT_INPUT	1
-#define MM_EVENT_MSG_ONESHOT_OUTPUT	2
-
-mm_event_verify_t mm_event_verify_fd(int fd);
-
-void mm_event_send(struct mm_event_table *events, int fd, uint32_t code, uint32_t data);
-
-/* Check to see if there is at least one regular handler provided. */
-static inline bool
-mm_event_verify_handlers(mm_event_hid_t input_handler, bool input_oneshot,
+bool mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+			 mm_event_hid_t input_handler, bool input_oneshot,
 			 mm_event_hid_t output_handler, bool output_oneshot,
 			 mm_event_hid_t control_handler)
-{
-	if (input_handler && !input_oneshot)
-		return true;
-	if (output_handler && !output_oneshot)
-		return true;
-	if (control_handler)
-		return true;
-	return false;
-}
+	__attribute__((nonnull(1)));
 
-static inline void
-mm_event_register_fd(struct mm_event_table *events, int fd, uint32_t data,
-		     mm_event_hid_t input_handler, bool input_oneshot,
-		     mm_event_hid_t output_handler, bool output_oneshot,
-		     mm_event_hid_t control_handler)
-{
-	ENTER();
+void mm_event_register_fd(struct mm_event_table *events, int fd,
+			  struct mm_event_fd *ev_fd)
+	__attribute__((nonnull(1, 3)));
 
-	ASSERT(mm_event_verify_handlers(input_handler, input_oneshot,
-				        output_handler, output_oneshot,
-					control_handler));
+void mm_event_unregister_fd(struct mm_event_table *events, int fd,
+			    struct mm_event_fd *ev_fd)
+	__attribute__((nonnull(1, 3)));
 
-	uint32_t code = ((input_handler << 24)
-			 | (output_handler << 16)
-			 | (control_handler << 8));
-#if MM_ONESHOT_HANDLERS
-	if (input_handler && input_oneshot)
-		code |= MM_EVENT_MSG_ONESHOT_INPUT;
-	if (output_handler && output_oneshot)
-		code |= MM_EVENT_MSG_ONESHOT_OUTPUT;
-#else
-	(void) input_oneshot;
-	(void) output_oneshot;
-#endif
-	mm_event_send(events, fd, code, data);
+void mm_event_trigger_input(struct mm_event_table *events, int fd,
+			    struct mm_event_fd *ev_fd)
+	__attribute__((nonnull(1, 3)));
 
-	LEAVE();
-}
-
-static inline void
-mm_event_unregister_fd(struct mm_event_table *events, int fd)
-{
-	ENTER();
-
-	mm_event_send(events, fd, 0, 0);
-
-	LEAVE();
-}
-
-#if MM_ONESHOT_HANDLERS
-static inline void
-mm_event_trigger_input(struct mm_event_table *events, int fd, mm_event_hid_t input_handler)
-{
-	ENTER();
-
-	uint32_t code = (input_handler << 24) | MM_EVENT_MSG_ONESHOT_INPUT;
-	mm_event_send(events, fd, code, 0);
-
-	LEAVE();
-}
-#endif
-
-#if MM_ONESHOT_HANDLERS
-static inline void
-mm_event_trigger_output(struct mm_event_table *events, int fd, mm_event_hid_t output_handler)
-{
-	ENTER();
-
-	uint32_t code = (output_handler << 16) | MM_EVENT_MSG_ONESHOT_OUTPUT;
-	mm_event_send(events, fd, code, 0);
-
-	LEAVE();
-}
-#endif
+void mm_event_trigger_output(struct mm_event_table *events, int fd,
+			     struct mm_event_fd *ev_fd)
+	__attribute__((nonnull(1, 3)));
 
 #endif /* EVENT_H */

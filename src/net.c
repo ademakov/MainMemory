@@ -155,8 +155,6 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	int sock = socket(addr->addr.sa_family, SOCK_STREAM, 0);
 	if (sock < 0)
 		mm_fatal(errno, "socket()");
-	if (mm_event_verify_fd(sock) != MM_EVENT_FD_VALID)
-		mm_fatal(0, "server socket no is too high: %d", sock);
 
 	/* Set socket options. */
 	int val = 1;
@@ -220,14 +218,6 @@ mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 static struct mm_net_server *mm_srv_table;
 static uint32_t mm_srv_table_size;
 static uint32_t mm_srv_count;
-
-static inline size_t
-mm_net_server_index(struct mm_net_server *srv)
-{
-	ASSERT(srv < (mm_srv_table + mm_srv_count));
-	ASSERT(srv >= mm_srv_table);
-	return srv - mm_srv_table;
-}
 
 static void
 mm_net_init_server_table(void)
@@ -384,11 +374,6 @@ retry:
 			rc = false;
 		goto leave;
 	}
-	if (unlikely(mm_event_verify_fd(fd) != MM_EVENT_FD_VALID)) {
-		mm_error(0, "%s: socket no is too high: %d", srv->name, fd);
-		close(fd);
-		goto leave;
-	}
 
 	// Set the socket options.
 	int val = 1;
@@ -417,7 +402,7 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Select a core for the client using round-robin discipline.
-	sock->core = srv->client_core++;
+	sock->core = 0; //srv->client_core++;
 	if (srv->client_core == mm_core_num)
 		srv->client_core = 0;
 	mm_verbose("bind connection to core %d", sock->core);
@@ -441,14 +426,14 @@ retry:
 	}
 
 	// Register the socket with the event loop.
-	//struct mm_core *core = mm_core_getptr(sock->core);
-	uint32_t sock_index = mm_pool_ptr2idx(&mm_socket_pool, sock);
+	struct mm_core *core = mm_core_getptr(sock->core);
 	bool input_oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 	bool output_oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
-	mm_event_register_fd(mm_core->events, sock->fd, sock_index,
+	mm_event_prepare_fd(&sock->event,
 			     srv->input_handler, input_oneshot,
 			     srv->output_handler, output_oneshot,
 			     srv->control_handler);
+	mm_event_register_fd(core->events, sock->fd, &sock->event);
 
 leave:
 	LEAVE();
@@ -461,7 +446,7 @@ mm_net_acceptor(mm_value_t arg)
 	ENTER();
 
 	// Find the pertinent server.
-	struct mm_net_server *srv = &mm_srv_table[arg];
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
 
 	// Accept incoming connections.
 	while (mm_net_accept(srv)) {
@@ -473,11 +458,13 @@ mm_net_acceptor(mm_value_t arg)
 }
 
 static void
-mm_net_accept_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+mm_net_accept_handler(mm_event_t event __attribute__((unused)), void *data)
 {
 	ENTER();
 
-	mm_core_post(MM_CORE_SELF, mm_net_acceptor, data);
+	struct mm_net_server *srv
+		= containerof(data, struct mm_net_server, event);
+	mm_core_post(MM_CORE_SELF, mm_net_acceptor, (mm_value_t) srv);
 
 	LEAVE();
 }
@@ -627,7 +614,7 @@ mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
 		if (oneshot) {
 			struct mm_core *core = mm_core_getptr(sock->core);
 			mm_event_trigger_input(core->events, sock->fd,
-					       sock->server->input_handler);
+					       &sock->event);
 		}
 #endif
 	}
@@ -651,7 +638,7 @@ mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
 		if (oneshot) {
 			struct mm_core *core = mm_core_getptr(sock->core);
 			mm_event_trigger_output(core->events, sock->fd,
-						sock->server->output_handler);
+						&sock->event);
 		}
 #endif
 	}
@@ -664,12 +651,13 @@ mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
  **********************************************************************/
 
 static void
-mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+mm_net_input_handler(mm_event_t event __attribute__((unused)), void *data)
 {
 	ENTER();
 
 	// Find the pertinent socket.
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
+
 	// Mark the socket as read ready.
 	mm_net_set_read_ready(sock);
 
@@ -677,12 +665,13 @@ mm_net_input_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 }
 
 static void
-mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
+mm_net_output_handler(mm_event_t event __attribute__((unused)), void *data)
 {
 	ENTER();
 
 	// Find the pertinent socket.
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
+
 	// Mark the socket as write ready.
 	mm_net_set_write_ready(sock);
 
@@ -690,12 +679,12 @@ mm_net_output_handler(mm_event_t event __attribute__((unused)), uint32_t data)
 }
 
 static void
-mm_net_control_handler(mm_event_t event, uint32_t data)
+mm_net_control_handler(mm_event_t event, void *data)
 {
 	ENTER();
 
 	// Find the pertinent socket.
-	struct mm_net_socket *sock = mm_pool_idx2ptr(&mm_socket_pool, data);
+	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
 
 	switch (event) {
 	case MM_EVENT_REGISTER:
@@ -1188,9 +1177,8 @@ mm_net_start_server(struct mm_net_server *srv)
 	srv->control_handler = mm_event_register_handler(mm_net_control_handler);
 
 	// Register the server socket with the event loop.
-	mm_event_register_fd(mm_core->events, srv->fd,
-			     (uint32_t) mm_net_server_index(srv),
-			     mm_net_accept_hid, false, 0, false, 0);
+	mm_event_prepare_fd(&srv->event, mm_net_accept_hid, false, 0, false, 0);
+	mm_event_register_fd(mm_core->events, srv->fd, &srv->event);
 
         LEAVE();
 }
@@ -1204,7 +1192,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	mm_event_unregister_fd(mm_core->events, srv->fd);
+	mm_event_unregister_fd(mm_core->events, srv->fd, &srv->event);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->fd);
@@ -1657,7 +1645,7 @@ mm_net_close(struct mm_net_socket *sock)
 
 	// Remove the socket from the event loop.
 	struct mm_core *core = mm_core_getptr(sock->core);
-	mm_event_unregister_fd(core->events, sock->fd);
+	mm_event_unregister_fd(core->events, sock->fd, &sock->event);
 
 leave:
 	LEAVE();
