@@ -64,7 +64,7 @@ mm_future_routine(mm_value_t arg)
 	ENTER();
 
 	struct mm_future *future = (struct mm_future *) arg;
-	ASSERT(mm_memory_load(future->status.value) == MM_FUTURE_STARTED);
+	ASSERT(mm_memory_load(future->result.value) == MM_RESULT_NOTREADY);
 
 	// Ensure cleanup on task exit/cancellation.
 	mm_task_cleanup_push(mm_future_cleanup, future);

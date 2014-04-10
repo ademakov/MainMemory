@@ -75,13 +75,13 @@ mm_trace_prefix(void)
 {
 	if (likely(mm_running_task != NULL)) {
 		mm_log_fmt("[%s][%d %s] %*s",
-			   mm_thread_name(),
+			   mm_thread_name(mm_thread_self()),
 			   mm_task_getid(mm_running_task),
 			   mm_running_task->name,
 			   mm_running_task->trace_level * 2, "");
 	} else {
 		mm_log_fmt("[%s]%*s",
-			   mm_thread_name(),
+			   mm_thread_name(mm_thread_self()),
 			   mm_trace_level * 2, "");
 	}
 }
