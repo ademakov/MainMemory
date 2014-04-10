@@ -26,7 +26,6 @@
 #include "log.h"
 #include "net.h"
 #include "port.h"
-#include "selfpipe.h"
 #include "synch.h"
 #include "task.h"
 #include "thread.h"
@@ -543,7 +542,7 @@ mm_core_stats(void)
 {
 	uint32_t deal = mm_memory_load(mm_core_deal_count.value);
 	mm_verbose("core stats: deal = %u", deal);
-	mm_selfpipe_stats();
+	mm_event_stats();
 }
 
 /**********************************************************************

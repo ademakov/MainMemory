@@ -25,10 +25,10 @@
 #include "log.h"
 #include "net.h"
 #include "port.h"
-#include "selfpipe.h"
 #include "task.h"
 #include "timer.h"
 #include "trace.h"
+#include "util.h"
 
 #include <string.h>
 #if HAVE_SYS_EPOLL_H
@@ -81,8 +81,10 @@ struct mm_event_table
 	struct mm_event_entry entries[MM_EVENT_NENTRIES];
 
 	// Event-loop self-pipe.
-	struct mm_selfpipe selfpipe;
+	int selfpipe_read_fd;
+	int selfpipe_write_fd;
 	struct mm_event_fd selfevent;
+	bool selfpipe_ready;
 
 #ifdef HAVE_SYS_EPOLL_H
 	// The epoll list.
@@ -631,7 +633,7 @@ mm_event_selfpipe_ready(mm_event_t event __attribute__((unused)), void *data)
 {
 	struct mm_event_table *events
 		= containerof(data, struct mm_event_table, selfevent);
-	mm_selfpipe_set_ready(&events->selfpipe);
+	events->selfpipe_ready = true;
 }
 
 static void
@@ -645,24 +647,11 @@ mm_event_init_selfpipe(void)
 	LEAVE();
 }
 
-static void
-mm_event_start_selfpipe(struct mm_event_table *events)
-{
-	ENTER();
-
-	// Register the self-pipe read end in the event loop.
-	mm_event_prepare_fd(&events->selfevent,
-			    mm_event_selfpipe_handler, false,
-			    0, false, 0);
-	mm_event_register_fd(events, events->selfpipe.read_fd,
-			     &events->selfevent);
-
-	LEAVE();
-}
-
 /**********************************************************************
  * Event poll routines.
  **********************************************************************/
+
+static mm_atomic_uint32_t mm_selfpipe_write_count;
 
 struct mm_event_table *
 mm_event_create_table(void)
@@ -671,17 +660,26 @@ mm_event_create_table(void)
 
 	struct mm_event_table *events = mm_global_alloc(sizeof(struct mm_event_table));
 
-	events->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	mm_waitset_prepare(&events->blocked_senders);
+	// Initialize system specific resources.
+	mm_event_init_sys(events);
+
+	// Initialize generic data.
+	events->nevents = 0;
 	events->head_entry = 0;
 	events->tail_entry = 0;
 	events->last_entry = 0;
+	events->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	mm_waitset_prepare(&events->blocked_senders);
 
-	// Open the event-loop self-pipe.
-	mm_selfpipe_prepare(&events->selfpipe);
-
-	// Initialize system specific resources.
-	mm_event_init_sys(events);
+	// Open an event-loop self-pipe.
+	int fds[2];
+	if (pipe(fds) < 0)
+		mm_fatal(errno, "pipe()");
+	mm_set_nonblocking(fds[0]);
+	mm_set_nonblocking(fds[1]);
+	events->selfpipe_read_fd = fds[0];
+	events->selfpipe_write_fd = fds[1];
+	events->selfpipe_ready = false;
 
 	LEAVE();
 	return events;
@@ -692,10 +690,11 @@ mm_event_destroy_table(struct mm_event_table *events)
 {
 	ENTER();
 
-	// TODO: destroy event port
+	mm_waitset_cleanup(&events->blocked_senders);
 
 	// Close the event-loop self-pipe.
-	mm_selfpipe_cleanup(&events->selfpipe);
+	close(events->selfpipe_read_fd);
+	close(events->selfpipe_write_fd);
 
 	// Release system specific resources.
 	mm_event_free_sys(events);
@@ -711,7 +710,11 @@ mm_event_start(struct mm_event_table *events)
 	ENTER();
 
 	// Start serving the event loop self-pipe.
-	mm_event_start_selfpipe(events);
+	mm_event_prepare_fd(&events->selfevent,
+			    mm_event_selfpipe_handler, false,
+			    0, false, 0);
+	mm_event_register_fd(events, events->selfpipe_read_fd,
+			     &events->selfevent);
 
 	LEAVE();
 }
@@ -721,21 +724,29 @@ mm_event_notify(struct mm_event_table *events)
 {
 	ENTER();
 
-	mm_selfpipe_write(&events->selfpipe);
+	mm_atomic_uint32_inc(&mm_selfpipe_write_count);
+
+	(void) write(events->selfpipe_write_fd, "", 1);
 
 	LEAVE();
 }
 
-bool
+void
 mm_event_dampen(struct mm_event_table *events)
 {
 	ENTER();
 
-	// Drain the stale selfpipe notifications if any.
-	bool rc = mm_selfpipe_drain(&events->selfpipe);
+	// Drain the stale self-pipe notifications if any.
+	if (events->selfpipe_ready) {
+		events->selfpipe_ready = false;
+
+		char dummy[64];
+		while (read(events->selfpipe_read_fd, dummy, sizeof dummy) == sizeof dummy) {
+			/* do nothing */
+		}
+	}
 
 	LEAVE();
-	return rc;
 }
 
 /**********************************************************************
@@ -861,4 +872,11 @@ mm_event_term(void)
 	ENTER();
 
 	LEAVE();
+}
+
+void
+mm_event_stats(void)
+{
+	uint32_t write = mm_memory_load(mm_selfpipe_write_count.value);
+	mm_verbose("selfpipe stats: write = %u", write);
 }

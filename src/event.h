@@ -73,6 +73,8 @@ struct mm_event_table;
 void mm_event_init(void);
 void mm_event_term(void);
 
+void mm_event_stats(void);
+
 /**********************************************************************
  * Event handler registration.
  **********************************************************************/
@@ -103,7 +105,7 @@ void mm_event_dispatch(struct mm_event_table *events)
 void mm_event_notify(struct mm_event_table *events)
 	__attribute__((nonnull(1)));
 
-bool mm_event_dampen(struct mm_event_table *events)
+void mm_event_dampen(struct mm_event_table *events)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************

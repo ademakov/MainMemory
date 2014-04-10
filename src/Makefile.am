@@ -10,11 +10,11 @@ mmem_SOURCES = \
 	alloc.c alloc.h bits.h buffer.c buffer.h chunk.c chunk.h \
 	clock.c clock.h common.h core.c core.h event.c event.h \
 	exit.c exit.h future.c future.h hook.c hook.h list.h lock.h \
-	log.c log.h main.c net.c net.h pool.c pool.h \ port.c port.h \
-	ring.c ring.h runq.c runq.h selfpipe.c selfpipe.h stack.c stack.h \
-	synch.c synch.h task.c task.h thread.c thread.h timeq.c timeq.h \
-	timer.c timer.h trace.c trace.h util.c util.h value.h \
-	wait.c wait.h work.c work.h dlmalloc/malloc.c dlmalloc/malloc.h
+	log.c log.h main.c net.c net.h pool.c pool.h port.c port.h \
+	ring.c ring.h runq.c runq.h stack.c stack.h synch.c synch.h \
+	task.c task.h thread.c thread.h timeq.c timeq.h timer.c timer.h \
+	trace.c trace.h util.c util.h value.h wait.c wait.h work.c work.h \
+	dlmalloc/malloc.c dlmalloc/malloc.h
 
 mmem_LDADD = memcache/libmemcache.a
 
