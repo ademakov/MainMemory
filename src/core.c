@@ -664,9 +664,6 @@ mm_core_boot_init(struct mm_core *core)
 	mm_task_attr_setname(&attr, "dealer");
 	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 
-	if (core->events != NULL)
-		mm_event_start(core->events);
-
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);

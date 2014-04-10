@@ -90,9 +90,6 @@ struct mm_event_table * mm_event_create_table(void);
 void mm_event_destroy_table(struct mm_event_table *events)
 	__attribute__((nonnull(1)));
 
-void mm_event_start(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
 bool mm_event_collect(struct mm_event_table *events)
 	__attribute__((nonnull(1)));
 

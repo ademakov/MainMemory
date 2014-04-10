@@ -681,6 +681,13 @@ mm_event_create_table(void)
 	events->selfpipe_write_fd = fds[1];
 	events->selfpipe_ready = false;
 
+	// Start serving the event loop self-pipe.
+	mm_event_prepare_fd(&events->selfevent,
+			    mm_event_selfpipe_handler, false,
+			    0, false, 0);
+	mm_event_register_fd(events, events->selfpipe_read_fd,
+			     &events->selfevent);
+
 	LEAVE();
 	return events;
 }
@@ -700,21 +707,6 @@ mm_event_destroy_table(struct mm_event_table *events)
 	mm_event_free_sys(events);
 
 	mm_global_free(events);
-
-	LEAVE();
-}
-
-void
-mm_event_start(struct mm_event_table *events)
-{
-	ENTER();
-
-	// Start serving the event loop self-pipe.
-	mm_event_prepare_fd(&events->selfevent,
-			    mm_event_selfpipe_handler, false,
-			    0, false, 0);
-	mm_event_register_fd(events, events->selfpipe_read_fd,
-			     &events->selfevent);
 
 	LEAVE();
 }
