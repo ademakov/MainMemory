@@ -28,18 +28,21 @@
 
 const struct mm_allocator mm_alloc_core = {
 	mm_core_alloc,
+	mm_core_calloc,
 	mm_core_realloc,
 	mm_core_free
 };
 
 const struct mm_allocator mm_alloc_shared = {
 	mm_shared_alloc,
+	mm_shared_calloc,
 	mm_shared_realloc,
 	mm_shared_free
 };
 
 const struct mm_allocator mm_alloc_global = {
 	mm_global_alloc,
+	mm_global_calloc,
 	mm_global_realloc,
 	mm_global_free
 };
