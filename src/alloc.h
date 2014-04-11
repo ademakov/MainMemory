@@ -24,13 +24,13 @@
 
 /* DLMalloc overhead. */
 #if MM_WORD_32BIT
-# ifdef FOOTERS
+# ifndef FOOTERS
 #  define MM_ALLOC_OVERHEAD (4)
 # else
 #  define MM_ALLOC_OVERHEAD (8)
 # endif
 #else
-# ifdef FOOTERS
+# ifndef FOOTERS
 #  define MM_ALLOC_OVERHEAD (8)
 # else
 #  define MM_ALLOC_OVERHEAD (16)
