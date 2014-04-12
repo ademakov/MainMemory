@@ -36,64 +36,99 @@ struct mm_bitset
 	};
 };
 
-void mm_bitset_prepare(struct mm_bitset *bitset, struct mm_allocator *alloc, size_t size)
-        __attribute__((nonnull(1)));
+void mm_bitset_prepare(struct mm_bitset *set, struct mm_allocator *alloc, size_t size)
+	__attribute__((nonnull(1)));
 
-void mm_bitset_cleanup(struct mm_bitset *bitset, struct mm_allocator *alloc)
-        __attribute__((nonnull(1)));
+void mm_bitset_cleanup(struct mm_bitset *set, struct mm_allocator *alloc)
+	__attribute__((nonnull(1)));
 
 static inline bool
-mm_bitset_is_small(struct mm_bitset *bitset)
+mm_bitset_is_small(const struct mm_bitset *set)
 {
-	return bitset->size <= MM_BITSET_UNIT;
+	return set->size <= MM_BITSET_UNIT;
 }
 
 static inline size_t
-mm_bitset_size(struct mm_bitset *bitset)
+mm_bitset_size(const struct mm_bitset *set)
 {
-	return bitset->size;
-}
-
-static inline void
-mm_bitset_set(struct mm_bitset *bitset, size_t bit)
-{
-	ASSERT(bit < bitset->size);
-	if (mm_bitset_is_small(bitset)) {
-		uintptr_t mask = 1 << bit;
-		bitset->small_set |= mask;
-	} else {
-		size_t word = bit / MM_BITSET_UNIT;
-		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
-		bitset->large_set[word] |= mask;
-	}
-}
-
-static inline void
-mm_bitset_clear(struct mm_bitset *bitset, size_t bit)
-{
-	ASSERT(bit < bitset->size);
-	if (mm_bitset_is_small(bitset)) {
-		uintptr_t mask = 1 << bit;
-		bitset->small_set &= ~mask;
-	} else {
-		size_t word = bit / MM_BITSET_UNIT;
-		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
-		bitset->large_set[word] &= ~mask;
-	}
+	return set->size;
 }
 
 static inline bool
-mm_bitset_test(struct mm_bitset *bitset, size_t bit)
+mm_bitset_test(const struct mm_bitset *set, size_t bit)
 {
-	ASSERT(bit < bitset->size);
-	if (mm_bitset_is_small(bitset)) {
+	ASSERT(bit < set->size);
+	if (mm_bitset_is_small(set)) {
 		uintptr_t mask = 1 << bit;
-		return (bitset->small_set & mask) != 0;
+		return (set->small_set & mask) != 0;
 	} else {
 		size_t word = bit / MM_BITSET_UNIT;
 		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
-		return (bitset->large_set[word] & mask) != 0;
+		return (set->large_set[word] & mask) != 0;
 	}
 }
+
+static inline void
+mm_bitset_set(struct mm_bitset *set, size_t bit)
+{
+	ASSERT(bit < set->size);
+	if (mm_bitset_is_small(set)) {
+		uintptr_t mask = 1 << bit;
+		set->small_set |= mask;
+	} else {
+		size_t word = bit / MM_BITSET_UNIT;
+		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
+		set->large_set[word] |= mask;
+	}
+}
+
+static inline void
+mm_bitset_flip(struct mm_bitset *set, size_t bit)
+{
+	ASSERT(bit < set->size);
+	if (mm_bitset_is_small(set)) {
+		uintptr_t mask = 1 << bit;
+		set->small_set ^= mask;
+	} else {
+		size_t word = bit / MM_BITSET_UNIT;
+		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
+		set->large_set[word] ^= mask;
+	}
+}
+
+static inline void
+mm_bitset_clear(struct mm_bitset *set, size_t bit)
+{
+	ASSERT(bit < set->size);
+	if (mm_bitset_is_small(set)) {
+		uintptr_t mask = 1 << bit;
+		set->small_set &= ~mask;
+	} else {
+		size_t word = bit / MM_BITSET_UNIT;
+		uintptr_t mask = 1 << (bit % MM_BITSET_UNIT);
+		set->large_set[word] &= ~mask;
+	}
+}
+
+void mm_bitset_set_all(struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+void mm_bitset_flip_all(struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+void mm_bitset_clear_all(struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+bool mm_bitset_any(const struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+bool mm_bitset_all(const struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+void mm_bitset_or(struct mm_bitset *set, const struct mm_bitset *set2)
+	__attribute__((nonnull(1, 2)));
+
+void mm_bitset_and(struct mm_bitset *set, const struct mm_bitset *set2)
+	__attribute__((nonnull(1, 2)));
 
 #endif /* BITSET_H */
