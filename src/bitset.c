@@ -20,7 +20,8 @@
 #include "bitset.h"
 
 void
-mm_bitset_prepare(struct mm_bitset *set, struct mm_allocator *alloc, size_t size)
+mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
+		  size_t size)
 {
 	set->size = size;
 	if (mm_bitset_is_small(set)) {
@@ -32,7 +33,7 @@ mm_bitset_prepare(struct mm_bitset *set, struct mm_allocator *alloc, size_t size
 }
 
 void
-mm_bitset_cleanup(struct mm_bitset *set, struct mm_allocator *alloc)
+mm_bitset_cleanup(struct mm_bitset *set, const struct mm_allocator *alloc)
 {
 	if (mm_bitset_is_small(set)) {
 		// Nothing to do.

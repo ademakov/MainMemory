@@ -36,10 +36,11 @@ struct mm_bitset
 	};
 };
 
-void mm_bitset_prepare(struct mm_bitset *set, struct mm_allocator *alloc, size_t size)
+void mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
+		       size_t size)
 	__attribute__((nonnull(1)));
 
-void mm_bitset_cleanup(struct mm_bitset *set, struct mm_allocator *alloc)
+void mm_bitset_cleanup(struct mm_bitset *set, const struct mm_allocator *alloc)
 	__attribute__((nonnull(1)));
 
 static inline bool
