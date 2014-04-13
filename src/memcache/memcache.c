@@ -1603,7 +1603,7 @@ mc_process_quit(mm_value_t arg)
 }
 
 static void
-mm_process_start(struct mc_command *command)
+mc_process_start(struct mc_command *command)
 {
 	if (command->result_type != MC_RESULT_NONE)
 		return;
@@ -1633,7 +1633,7 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 	if (likely(first->type != NULL)) {
 		DEBUG("command %s", mc_command_name(first->type->tag));
 		for (;;) {
-			mm_process_start(last);
+			mc_process_start(last);
 			if (last->next == NULL)
 				break;
 			last = last->next;
