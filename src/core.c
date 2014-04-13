@@ -20,6 +20,7 @@
 #include "core.h"
 
 #include "alloc.h"
+#include "bitset.h"
 #include "chunk.h"
 #include "future.h"
 #include "hook.h"
@@ -60,6 +61,9 @@ struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
+
+// The set of cores with event loops.
+struct mm_bitset mm_core_event_affinity;
 
 /**********************************************************************
  * Idle queue.
@@ -754,13 +758,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->log_head = NULL;
 	core->log_tail = NULL;
 
-	if (MM_CORE_IS_PRIMARY(core)) {
-		core->events = mm_event_create_table();
-		core->synch = mm_synch_create_event_poll(core->events);
-	} else {
-		core->events = 0;
-		core->synch = mm_synch_create();
-	}
+	core->events = NULL;
+	core->synch = NULL;
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
 	mm_ring_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE);
@@ -837,7 +836,7 @@ mm_core_start_single(struct mm_core *core, int core_tag)
 }
 
 static int
-mm_core_get_num(void)
+mm_core_get_ncpu(void)
 {
 #if ENABLE_SMP
 # if defined(HAVE_SYS_SYSCTL_H) && defined(HW_AVAILCPU)
@@ -867,12 +866,14 @@ mm_core_init(void)
 	ENTER();
 	ASSERT(mm_core_num == 0);
 
-	mm_core_num = mm_core_get_num();
+	// Find the number of CPU cores.
+	mm_core_num = mm_core_get_ncpu();
 	ASSERT(mm_core_num > 0);
 	if (mm_core_num == 1)
 		mm_brief("Running on 1 core.");
 	else
 		mm_brief("Running on %d cores.", mm_core_num);
+	mm_bitset_prepare(&mm_core_event_affinity, &mm_alloc_global, mm_core_num);
 
 	mm_alloc_init();
 	mm_clock_init();
@@ -897,6 +898,8 @@ mm_core_term(void)
 {
 	ENTER();
 	ASSERT(mm_core_num > 0);
+
+	mm_bitset_cleanup(&mm_core_event_affinity, &mm_alloc_global);
 
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
@@ -932,10 +935,35 @@ mm_core_register_server(struct mm_net_server *srv)
 }
 
 void
+mm_core_set_event_affinity(const struct mm_bitset *mask)
+{
+	ENTER();
+
+	mm_bitset_clear_all(&mm_core_event_affinity);
+	mm_bitset_or(&mm_core_event_affinity, mask);
+
+	LEAVE();
+}
+
+void
 mm_core_start(void)
 {
 	ENTER();
 	ASSERT(mm_core_num > 0);
+
+	// Set up event loops and synchronization.
+	if (!mm_bitset_any(&mm_core_event_affinity))
+		mm_bitset_set(&mm_core_event_affinity, 0);
+	for (mm_core_t i = 0; i < mm_core_num; i++) {
+		struct mm_core *core = &mm_core_set[i];
+		if (mm_bitset_test(&mm_core_event_affinity, i)) {
+			mm_brief("start event loop on core %d", i);
+			core->events = mm_event_create_table();
+			core->synch = mm_synch_create_event_poll(core->events);
+		} else {
+			core->synch = mm_synch_create();
+		}
+	}
 
 	// Start core threads.
 	for (mm_core_t i = 0; i < mm_core_num; i++)

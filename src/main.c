@@ -18,6 +18,7 @@
  */
 
 #include "common.h"
+#include "bitset.h"
 #include "core.h"
 #include "event.h"
 #include "log.h"
@@ -94,6 +95,14 @@ static void
 mm_server_init(void)
 {
 	ENTER();
+
+	// Assign event loops to first three cores.
+	struct mm_bitset event_loop_cores;
+	mm_bitset_prepare(&event_loop_cores, &mm_alloc_global, 3);
+	mm_bitset_set(&event_loop_cores, 0);
+	mm_bitset_set(&event_loop_cores, 1);
+	mm_bitset_set(&event_loop_cores, 2);
+	mm_core_set_event_affinity(&event_loop_cores);
 
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
