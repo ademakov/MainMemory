@@ -687,6 +687,9 @@ mm_event_create_table(void)
 			    0, false, 0);
 	mm_event_register_fd(events, events->selfpipe_read_fd,
 			     &events->selfevent);
+	mm_event_collect(events);
+	mm_event_poll(events, 0);
+	mm_event_dispatch(events);
 
 	LEAVE();
 	return events;
