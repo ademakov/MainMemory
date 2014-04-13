@@ -21,13 +21,56 @@
 #define BITS_H
 
 /* Count leading zeros (from MSB). Zero argument is not allowed. */
-#define mm_clz(x)	__builtin_clz(x)
+#define mm_clz(x) ({					\
+		unsigned _r;				\
+		typeof(x) _x = x;			\
+		if (sizeof(_x) <= sizeof(int))		\
+			_r = __builtin_clz(_x);		\
+		else if (sizeof(_x) <= sizeof(long))	\
+			_r = __builtin_clzl(_x);	\
+		else					\
+			_r = __builtin_clzll(_x);	\
+		_r;					\
+	})
 
 /* Count trailing zeros (from LSB). Zero argument is not allowed. */
-#define mm_ctz(x)	__builtin_ctz(x)
+#define mm_ctz(x) ({					\
+		unsigned _r;				\
+		typeof(x) _x = x;			\
+		if (sizeof(_x) <= sizeof(int))		\
+			_r = __builtin_ctz(_x);		\
+		else if (sizeof(_x) <= sizeof(long))	\
+			_r = __builtin_ctzl(_x);	\
+		else					\
+			_r = __builtin_ctzll(_x);	\
+		_r;					\
+	})
 
 /* For non-zero arguments just like ctz(x)+1 but for zero returns zero too. */
-#define mm_ffs(x)	__builtin_ffs(x)
+#define mm_ffs(x) ({					\
+		unsigned _r;				\
+		typeof(x) _x = x;			\
+		if (sizeof(_x) <= sizeof(int))		\
+			_r = __builtin_ffs(_x);		\
+		else if (sizeof(_x) <= sizeof(long))	\
+			_r = __builtin_ffsl(_x);	\
+		else					\
+			_r = __builtin_ffsll(_x);	\
+		_r;					\
+	})
+
+/* Count set bits. */
+#define mm_popcount(x) ({				\
+		unsigned _r;				\
+		typeof(x) _x = x;			\
+		if (sizeof(_x) <= sizeof(int))		\
+			_r = __builtin_popcount(_x);	\
+		else if (sizeof(_x) <= sizeof(long))	\
+			_r = __builtin_popcountl(_x);	\
+		else					\
+			_r = __builtin_popcountll(_x);	\
+		_r;					\
+	})
 
 /* Check if a number is a power of 2. */
 #define mm_is_pow2(x) ({				\
