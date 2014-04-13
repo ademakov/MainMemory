@@ -237,7 +237,9 @@ mm_net_free_server_table(void)
 	ENTER();
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
-		mm_global_free(mm_srv_table[i].name);
+		struct mm_net_server *srv = &mm_srv_table[i];
+		mm_bitset_cleanup(&srv->affinity, &mm_alloc_global);
+		mm_global_free(srv->name);
 	}
 
 	mm_global_free(mm_srv_table);
@@ -261,9 +263,10 @@ mm_net_alloc_server(void)
 	srv->fd = -1;
 	srv->flags = 0;
 	srv->client_core = 0;
+	srv->core_num = 0;
+	srv->per_core = NULL;
 
-	/* Initialize the client list. */
-	mm_list_init(&srv->clients);
+	mm_bitset_prepare(&srv->affinity, &mm_alloc_global, mm_core_getnum());
 
 	LEAVE();
 	return srv;
@@ -320,12 +323,10 @@ mm_net_create_socket(int fd, struct mm_net_server *srv)
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->data = 0;
 	sock->core = MM_CORE_NONE;
+	sock->core_server_index = MM_CORE_NONE;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->server = srv;
-
-	// Register with the server.
-	mm_list_append(&srv->clients, &sock->clients);
 
 	LEAVE();
 	return sock;
@@ -402,38 +403,32 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Select a core for the client using round-robin discipline.
-	sock->core = 0; //srv->client_core++;
-	if (srv->client_core == mm_core_num)
+	mm_core_t index = srv->client_core++;
+	if (srv->client_core == srv->core_num)
 		srv->client_core = 0;
-	mm_verbose("bind connection to core %d", sock->core);
+
+	// Register with the server.
+	sock->core_server_index = index;
+	sock->core = srv->per_core[index].core;
+	mm_list_append(&srv->per_core[index].clients, &sock->clients);
+	mm_verbose("bind socket %d to core %d", fd, sock->core);
 
 	// Request required I/O tasks.
-	if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
+	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
 		sock->flags |= MM_NET_READER_PENDING;
-	if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0)
+	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
 		sock->flags |= MM_NET_WRITER_PENDING;
 
-	// Let the protocol layer prepare the socket data if needed.
-	if (sock->server->proto->prepare != NULL) {
-		// Delay starting I/O tasks until prepared.
-		if ((sock->server->proto->flags & MM_NET_INBOUND) != 0)
-			sock->flags |= MM_NET_READER_SPAWNED;
-		if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0)
-			sock->flags |= MM_NET_WRITER_SPAWNED;
-
-		// Request protocol handler routine.
-		mm_core_post(sock->core, mm_net_prepare, (mm_value_t) sock);
-	}
-
-	// Register the socket with the event loop.
-	struct mm_core *core = mm_core_getptr(sock->core);
-	bool input_oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
-	bool output_oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
+	// Prepare the event data.
+	bool input_oneshot = !(srv->proto->flags & MM_NET_INBOUND);
+	bool output_oneshot = !(srv->proto->flags & MM_NET_OUTBOUND);
 	mm_event_prepare_fd(&sock->event,
 			     srv->input_handler, input_oneshot,
 			     srv->output_handler, output_oneshot,
 			     srv->control_handler);
-	mm_event_register_fd(core->events, sock->fd, &sock->event);
+
+	// Request protocol handler routine.
+	mm_core_post(sock->core, mm_net_prepare, (mm_value_t) sock);
 
 leave:
 	LEAVE();
@@ -688,6 +683,10 @@ mm_net_control_handler(mm_event_t event, void *data)
 
 	switch (event) {
 	case MM_EVENT_REGISTER:
+		if ((sock->flags & MM_NET_READER_PENDING) != 0)
+			mm_net_spawn_reader(sock);
+		if ((sock->flags & MM_NET_WRITER_PENDING) != 0)
+			mm_net_spawn_writer(sock);
 		break;
 
 	case MM_EVENT_UNREGISTER:
@@ -889,22 +888,12 @@ mm_net_prepare(mm_value_t arg)
 	ASSERT(sock->core == mm_core_self());
 	ASSERT(!mm_net_is_closed(sock));
 
-	// Run the protocol handler routine.
-	(sock->server->proto->prepare)(sock);
+	// Let the protocol layer prepare the socket data if needed.
+	if (sock->server->proto->prepare != NULL)
+		(sock->server->proto->prepare)(sock);
 
-	// Let start I/O tasks.
-	if (!mm_net_is_closed(sock)) {
-		if ((sock->server->proto->flags & MM_NET_INBOUND) != 0) {
-			mm_running_task->flags |= MM_TASK_READING;
-			sock->reader = mm_running_task;
-			mm_net_yield_reader(sock);
-		}
-		if ((sock->server->proto->flags & MM_NET_OUTBOUND) != 0) {
-			mm_running_task->flags |= MM_TASK_WRITING;
-			sock->writer = mm_running_task;
-			mm_net_yield_writer(sock);
-		}
-	}
+	// Register the socket with the event loop.
+	mm_event_register_fd(mm_core->events, sock->fd, &sock->event);
 
 	LEAVE();
 	return 0;
@@ -1161,6 +1150,17 @@ mm_net_create_inet6_server(const char *name,
 }
 
 void
+mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
+{
+	ENTER();
+
+	mm_bitset_clear_all(&srv->affinity);
+	mm_bitset_or(&srv->affinity, mask);
+
+	LEAVE();
+}
+
+void
 mm_net_start_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -1168,8 +1168,34 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	mm_brief("start server '%s'", srv->name);
 
+	// Find the cores to run the server on.
+	if (mm_bitset_any(&srv->affinity))
+		mm_bitset_and(&srv->affinity, mm_core_get_event_affinity());
+	else
+		mm_bitset_or(&srv->affinity, mm_core_get_event_affinity());
+	srv->core_num = mm_bitset_count(&srv->affinity);
+	if (srv->core_num == 0)
+		mm_fatal(0, "the server cannot be bound to any core");
+
+	// Bind the server to the specified cores.
+	mm_core_t c = 0;
+	srv->per_core = mm_global_calloc(srv->core_num, sizeof(struct mm_net_server_per_core));
+	for (mm_core_t i = 0; i < mm_core_getnum(); i++) {
+		if (mm_bitset_test(&srv->affinity, i)) {
+			ASSERT(c < srv->core_num);
+			srv->per_core[c].core = i;
+
+			/* Initialize the client list. */
+			mm_list_init(&srv->per_core[c].clients);
+
+			c++;
+		}
+	}
+	ASSERT(c == srv->core_num);
+
 	// Create the server socket.
 	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
+	mm_verbose("bind server '%s' to socket %d", srv->name, srv->fd);
 
 	// Allocate an event handler IDs.
 	srv->input_handler = mm_event_register_handler(mm_net_input_handler);
@@ -1642,6 +1668,9 @@ mm_net_close(struct mm_net_socket *sock)
 
 	// Mark the socket as closed.
 	sock->close_flags = MM_NET_CLOSED;
+
+	mm_brief("close %d on core %d", sock->fd, sock->core);
+	mm_flush();
 
 	// Remove the socket from the event loop.
 	struct mm_core *core = mm_core_getptr(sock->core);

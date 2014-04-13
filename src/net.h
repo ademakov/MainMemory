@@ -21,6 +21,7 @@
 #define NET_H
 
 #include "common.h"
+#include "bitset.h"
 #include "event.h"
 #include "list.h"
 #include "wait.h"
@@ -33,7 +34,6 @@
 
 /* Forward declarations. */
 struct mm_buffer;
-struct mm_port;
 struct mm_task;
 
 /* Protocol flags. */
@@ -78,6 +78,16 @@ struct mm_net_peer_addr
 	};
 };
 
+/* Per-core server data. */
+struct mm_net_server_per_core
+{
+	/* The core id. */
+	mm_core_t core;
+
+	/* A list of all client sockets. */
+	struct mm_list clients;
+};
+
 /* Network server data. */
 struct mm_net_server
 {
@@ -89,6 +99,9 @@ struct mm_net_server
 	/* Server flags. */
 	int flags;
 
+	/* Protocol handlers. */
+	struct mm_net_proto *proto;
+
 	/* I/O event handler IDs. */
 	mm_event_hid_t input_handler;
 	mm_event_hid_t output_handler;
@@ -97,11 +110,12 @@ struct mm_net_server
 	/* A core the next client to be bound to. */
 	mm_core_t client_core;
 
-	/* A list of all client sockets. */
-	struct mm_list clients;
+	/* Per-core server data. */
+	mm_core_t core_num;
+	struct mm_net_server_per_core *per_core;
 
-	/* Protocol handlers. */
-	struct mm_net_proto *proto;
+	/* Core affinity. */
+	struct mm_bitset affinity;
 
 	/* Server name. */
 	char *name;
@@ -146,6 +160,7 @@ struct mm_net_socket
 
 	/* Pinned core. */
 	mm_core_t core;
+	mm_core_t core_server_index;
 
 	/* Socket server. */
 	struct mm_net_server *server;
@@ -186,6 +201,9 @@ struct mm_net_server *mm_net_create_inet6_server(const char *name,
                                                  struct mm_net_proto *proto,
                                                  const char *addrstr, uint16_t port)
         __attribute__((nonnull(1, 2, 3)));
+
+void mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
+        __attribute__((nonnull(1, 2)));
 
 void mm_net_start_server(struct mm_net_server *srv)
         __attribute__((nonnull(1)));
@@ -237,6 +255,7 @@ mm_net_is_closed(struct mm_net_socket *sock)
 {
 	return (sock->close_flags & MM_NET_CLOSED) != 0;
 }
+
 static inline bool
 mm_net_is_reader_shutdown(struct mm_net_socket *sock)
 {
