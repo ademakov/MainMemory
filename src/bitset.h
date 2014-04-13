@@ -111,6 +111,9 @@ mm_bitset_clear(struct mm_bitset *set, size_t bit)
 	}
 }
 
+size_t mm_bitset_count(const struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
 void mm_bitset_set_all(struct mm_bitset *set)
 	__attribute__((nonnull(1)));
 

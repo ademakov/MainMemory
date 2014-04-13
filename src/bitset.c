@@ -19,6 +19,8 @@
 
 #include "bitset.h"
 
+#include "bits.h"
+
 void
 mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
 		  size_t size)
@@ -39,6 +41,21 @@ mm_bitset_cleanup(struct mm_bitset *set, const struct mm_allocator *alloc)
 		// Nothing to do.
 	} else {
 		(alloc->free)(set->large_set);
+	}
+}
+
+size_t
+mm_bitset_count(const struct mm_bitset *set)
+{
+	if (mm_bitset_is_small(set)) {
+		return mm_popcount(set->small_set);
+	} else {
+		size_t count = 0;
+		size_t words = (set->size + MM_BITSET_UNIT - 1) / MM_BITSET_UNIT;
+		for (size_t i = 0; i < words; i++) {
+			count += mm_popcount(set->large_set[i]);
+		}
+		return count;
 	}
 }
 
