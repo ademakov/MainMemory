@@ -21,6 +21,7 @@
 
 #include "../alloc.h"
 #include "../bits.h"
+#include "../bitset.h"
 #include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
@@ -43,6 +44,9 @@
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
+
+// Table affinity.
+static struct mm_bitset mc_affinity;
 
 static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
@@ -235,8 +239,6 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
 /**********************************************************************
  * Memcache Table.
  **********************************************************************/
-
-#define MC_TABLE_CORE_DIV	4
 
 #define MC_TABLE_STRIDE		64
 
@@ -625,7 +627,7 @@ mc_table_init(void)
 	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
 
 	// Reserve the address space for the table.
-	mm_brief("Reserve %ld bytes of the address apace for the memcache table.",
+	mm_brief("reserve %ld bytes of the address apace for the memcache table.",
 		 (unsigned long) space);
 	void *address = mmap(NULL, space, PROT_NONE,
 			     MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
@@ -633,8 +635,9 @@ mc_table_init(void)
 		mm_fatal(errno, "mmap");
 
 	// Compute the number of table partitions. It has to be a power of 2.
-	mm_core_t ncores = mm_core_getnum();
-	mm_core_t nparts = (ncores + MC_TABLE_CORE_DIV - 1) / MC_TABLE_CORE_DIV;
+	if (!mm_bitset_any(&mc_affinity))
+		mm_bitset_set(&mc_affinity, 0);
+	mm_core_t nparts = mm_bitset_count(&mc_affinity);
 	nparts = 1 << (31 - mm_clz(nparts));
 	mm_brief("memcache table partitions: %d", nparts);
 
@@ -650,14 +653,19 @@ mc_table_init(void)
 	mc_table.table = address;
 
 	// Initialize the table partitions.
-	for (mm_core_t i = 0; i < nparts; i++) {
-		struct mc_tpart *part = &mc_table.parts[i];
-		part->nbytes = 0;
-		part->core = (i + 1) * MC_TABLE_CORE_DIV - 1;
-		part->evicting = false;
-		part->striding = false;
-		part->nentries = 0;
-		mm_list_init(&part->entries);
+	mm_core_t p = 0;
+	for (mm_core_t i = 0; i < mm_core_getnum(); i++) {
+		if (mm_bitset_test(&mc_affinity, i)) {
+			mm_verbose("partition #%d on core %d", p, i);
+
+			struct mc_tpart *part = &mc_table.parts[p++];
+			part->nbytes = 0;
+			part->core = i;
+			part->evicting = false;
+			part->striding = false;
+			part->nentries = 0;
+			mm_list_init(&part->entries);
+		}
 	}
 
 	// Allocate initial space for the table.
@@ -2824,7 +2832,7 @@ mc_memcache_stop(void)
 }
 
 void
-mm_memcache_init(void)
+mm_memcache_init(const struct mm_bitset *mask)
 {
 	ENTER();
 
@@ -2838,6 +2846,10 @@ mm_memcache_init(void)
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
 						  "127.0.0.1", 11211);
+
+	mm_bitset_prepare(&mc_affinity, &mm_alloc_global, mm_core_getnum());
+	if (mask)
+		mm_bitset_or(&mc_affinity, mask);
 
 	mm_core_hook_start(mc_memcache_start);
 	mm_core_hook_stop(mc_memcache_stop);

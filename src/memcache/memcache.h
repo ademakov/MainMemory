@@ -20,6 +20,8 @@
 #ifndef MEMCACHE_H
 #define	MEMCACHE_H
 
-void mm_memcache_init(void);
+struct mm_bitset;
+
+void mm_memcache_init(const struct mm_bitset *mask);
 
 #endif	/* MEMCACHE_H */

@@ -120,7 +120,11 @@ mm_server_init(void)
 	//mm_core_register_server(mm_ucmd_server);
 	mm_core_register_server(mm_icmd_server);
 
-	mm_memcache_init();
+	struct mm_bitset memcache_cores;
+	mm_bitset_prepare(&memcache_cores, &mm_alloc_global, 4);
+	mm_bitset_set(&memcache_cores, 3);
+
+	mm_memcache_init(&memcache_cores);
 
 	LEAVE();
 }
