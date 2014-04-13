@@ -429,8 +429,6 @@ mm_core_master(mm_value_t arg)
 #define MM_DEALER_POLL_TIMEOUT	((mm_timeout_t) 10)
 #define MM_DEALER_HOLD_TIMEOUT	((mm_timeout_t) 25)
 
-static mm_timeval_t mm_core_poll_time;
-
 static mm_atomic_uint32_t mm_core_deal_count;
 
 static void
@@ -480,7 +478,7 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		if (mm_event_collect(core->events))
 			poll_time = wait_time = core->time_value;
 		else
-			poll_time = mm_core_poll_time + MM_DEALER_POLL_TIMEOUT;
+			poll_time = core->poll_time + MM_DEALER_POLL_TIMEOUT;
 		hold_time = min(wait_time, poll_time);
 	} else {
 		poll_time = MM_TIMEVAL_MAX;
@@ -516,8 +514,7 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 	}
 
 	if (core->events) {
-		mm_core_poll_time = core->time_value;
-
+		core->poll_time = core->time_value;
 		if (dispatch)
 			mm_event_dispatch(core->events);
 	}
@@ -759,6 +756,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->log_tail = NULL;
 
 	core->events = NULL;
+	core->poll_time = 0;
 	core->synch = NULL;
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
@@ -943,6 +941,12 @@ mm_core_set_event_affinity(const struct mm_bitset *mask)
 	mm_bitset_or(&mm_core_event_affinity, mask);
 
 	LEAVE();
+}
+
+const struct mm_bitset *
+mm_core_get_event_affinity(void)
+{
+	return &mm_core_event_affinity;
 }
 
 void

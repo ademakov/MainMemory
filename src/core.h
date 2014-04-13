@@ -99,6 +99,7 @@ struct mm_core
 
 	/* Event poll data. */
 	struct mm_event_table *events;
+	mm_timeval_t poll_time;
 
 	/*
 	 * The fields below engage in cross-core communication.
@@ -130,6 +131,8 @@ void mm_core_register_server(struct mm_net_server *srv)
 
 void mm_core_set_event_affinity(const struct mm_bitset *mask)
 	__attribute__((nonnull(1)));
+
+const struct mm_bitset * mm_core_get_event_affinity(void);
 
 void mm_core_start(void);
 void mm_core_stop(void);
