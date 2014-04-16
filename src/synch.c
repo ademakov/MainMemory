@@ -219,6 +219,8 @@ mm_synch_wait_poll(struct mm_synch *synch)
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
 		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
+	else
+		mm_event_poll(poll->events, 0);
 
 	// Advertise that the thread has woken up.
 	mm_memory_store(poll->waiting, false);
@@ -227,6 +229,8 @@ mm_synch_wait_poll(struct mm_synch *synch)
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
 	if (value == 0)
 		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
+	else
+		mm_event_poll(poll->events, 0);
 #endif
 }
 
