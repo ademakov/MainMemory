@@ -177,6 +177,9 @@ struct mm_net_proto
 {
 	int flags;
 
+	struct mm_net_socket * (*alloc)(void);
+	void (*free)(struct mm_net_socket *);
+
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
 

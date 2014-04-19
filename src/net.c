@@ -273,7 +273,40 @@ mm_net_alloc_server(void)
 }
 
 /**********************************************************************
- * Socket table.
+ * Socket initialization and cleanup.
+ **********************************************************************/
+
+static void
+mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
+{
+	sock->fd = fd;
+	sock->flags = 0;
+	sock->close_flags = 0;
+	sock->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	sock->read_stamp = 0;
+	sock->write_stamp = 0;
+	mm_waitset_prepare(&sock->read_waitset);
+	mm_waitset_prepare(&sock->write_waitset);
+	sock->read_timeout = MM_TIMEOUT_INFINITE;
+	sock->write_timeout = MM_TIMEOUT_INFINITE;
+	sock->data = 0;
+	sock->core = MM_CORE_NONE;
+	sock->core_server_index = MM_CORE_NONE;
+	sock->reader = NULL;
+	sock->writer = NULL;
+	sock->server = srv;
+}
+
+static void
+mm_net_cleanup_socket(struct mm_net_socket *sock)
+{
+	mm_waitset_cleanup(&sock->read_waitset);
+	mm_waitset_cleanup(&sock->write_waitset);
+	mm_list_delete(&sock->clients);
+}
+
+/**********************************************************************
+ * Socket pool.
  **********************************************************************/
 
 static struct mm_pool mm_socket_pool;
@@ -294,39 +327,26 @@ mm_net_free_socket_table(void)
 {
 	ENTER();
 	
-	mm_flush();
-	mm_log_write();
-
 	mm_pool_cleanup(&mm_socket_pool);
 
 	LEAVE();
 }
 
 static struct mm_net_socket *
-mm_net_create_socket(int fd, struct mm_net_server *srv)
+mm_net_create_socket(struct mm_net_server *srv, int fd)
 {
 	ENTER();
 
 	// Allocate the socket.
-	struct mm_net_socket *sock = mm_pool_alloc(&mm_socket_pool);
+	struct mm_net_socket *sock;
+	if (srv->proto->alloc != NULL)
+		sock = (srv->proto->alloc)();
+	else
+		sock = mm_pool_alloc(&mm_socket_pool);
 
 	// Initialize the fields.
-	sock->fd = fd;
-	sock->flags = 0;
-	sock->close_flags = 0;
-	sock->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	sock->read_stamp = 0;
-	sock->write_stamp = 0;
-	mm_waitset_prepare(&sock->read_waitset);
-	mm_waitset_prepare(&sock->write_waitset);
-	sock->read_timeout = MM_TIMEOUT_INFINITE;
-	sock->write_timeout = MM_TIMEOUT_INFINITE;
-	sock->data = 0;
-	sock->core = MM_CORE_NONE;
-	sock->core_server_index = MM_CORE_NONE;
-	sock->reader = NULL;
-	sock->writer = NULL;
-	sock->server = srv;
+	if (likely(sock != NULL))
+		mm_net_prepare_socket(sock, fd, srv);
 
 	LEAVE();
 	return sock;
@@ -337,8 +357,12 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	mm_list_delete(&sock->clients);
-	mm_pool_free(&mm_socket_pool, sock);
+	mm_net_cleanup_socket(sock);
+
+	if (sock->server->proto->free != NULL)
+		(sock->server->proto->free)(sock);
+	else
+		mm_pool_free(&mm_socket_pool, sock);
 
 	LEAVE();
 }
@@ -387,9 +411,9 @@ retry:
 	mm_set_nonblocking(fd);
 
 	// Allocate a new socket structure.
-	struct mm_net_socket *sock = mm_net_create_socket(fd, srv);
+	struct mm_net_socket *sock = mm_net_create_socket(srv, fd);
 	if (sock == NULL) {
-		mm_error(0, "%s: socket table overflow", srv->name);
+		mm_error(0, "%s: failed to allocate socket data", srv->name);
 		close(fd);
 		goto leave;
 	}
