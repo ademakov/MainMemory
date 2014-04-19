@@ -20,8 +20,20 @@
 #ifndef MEMCACHE_H
 #define	MEMCACHE_H
 
-struct mm_bitset;
+#include "../common.h"
+#include "../bitset.h"
 
-void mm_memcache_init(const struct mm_bitset *mask);
+#define ENABLE_LOCKED_MEMCACHE		1
+
+struct mm_memcache_config
+{
+#if ENABLE_LOCKED_MEMCACHE
+	mm_core_t nparts;
+#else
+	struct mm_bitset affinity;
+#endif
+};
+
+void mm_memcache_init(const struct mm_memcache_config *config);
 
 #endif	/* MEMCACHE_H */

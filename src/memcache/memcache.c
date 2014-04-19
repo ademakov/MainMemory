@@ -21,7 +21,6 @@
 
 #include "../alloc.h"
 #include "../bits.h"
-#include "../bitset.h"
 #include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
@@ -45,14 +44,13 @@
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
 
-// Table affinity.
-static struct mm_bitset mc_affinity;
+struct mm_memcache_config mc_config;
 
 static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
 
 #if ENABLE_DEBUG //|| 1
-# define ENABLE_DEBUG_INDEX 1
+# define ENABLE_DEBUG_INDEX	1
 #endif
 
 /**********************************************************************
@@ -149,10 +147,6 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	entry->index = ((uint32_t) -1);
 #endif
 
-	// TODO: make this thread-safe
-	static uint64_t cas = 0;
-	entry->cas = ++cas;
-
 	LEAVE();
 	return entry;
 }
@@ -167,7 +161,7 @@ mc_entry_destroy(struct mc_entry *entry)
 	LEAVE();
 }
 
-static void
+static inline void
 mc_entry_ref(struct mc_entry *entry)
 {
 	uint32_t test = mm_atomic_uint32_inc_and_test(&entry->ref_count);
@@ -176,7 +170,7 @@ mc_entry_ref(struct mc_entry *entry)
 	}
 }
 
-static void
+static inline void
 mc_entry_unref(struct mc_entry *entry)
 {
 	uint32_t test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
@@ -253,15 +247,21 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
 /* A per-core partition of memcache entries. */
 struct mc_tpart
 {
-	size_t nbytes;
-
+#if ENABLE_LOCKED_MEMCACHE
+	mm_task_lock_t lock;
+#else
 	mm_core_t core;
+#endif
 
 	bool evicting;
 	bool striding;
 
+	uint64_t cas;
+
 	uint32_t nentries;
 	struct mm_list entries;
+
+	size_t nbytes;
 
 } __align(MM_CACHELINE);
 
@@ -335,6 +335,27 @@ mc_table_is_outofmemory(struct mc_tpart *part, size_t reserve)
 	return (part->nbytes + reserve) > mc_table.nbytes_evict_threshold;
 }
 
+#if ENABLE_LOCKED_MEMCACHE
+
+static inline void
+mc_table_lock(struct mc_tpart *part)
+{
+	mm_task_lock(&part->lock);
+}
+
+static inline void
+mc_table_unlock(struct mc_tpart *part)
+{
+	mm_task_unlock(&part->lock);
+}
+
+#else
+
+# define mc_table_lock(part)	((void) part)
+# define mc_table_unlock(part)	((void) part)
+
+#endif
+
 static void
 mc_table_start_evicting(struct mc_tpart *part)
 {
@@ -381,16 +402,20 @@ mc_table_expand(uint32_t old_size, uint32_t new_size)
 }
 
 static void
-mc_table_stride(void)
+mc_table_stride(struct mc_tpart *part)
 {
 	ENTER();
 
-	uint32_t used = mm_memory_load(mc_table.used);
-	uint32_t half_size = 1 << (31 - mm_clz(used - 1));
+	mc_table_lock(part);
 
+	uint32_t used = mm_memory_load(mc_table.used);
+
+	uint32_t half_size;
 	if (unlikely(mm_is_pow2z(used))) {
+		half_size = used;
 		mc_table_expand(used, used * 2);
-		half_size *= 2;
+	} else {
+		half_size = 1 << (31 - mm_clz(used));
 	}
 
 	uint32_t target = used;
@@ -432,6 +457,8 @@ mc_table_stride(void)
 	used += MC_TABLE_STRIDE;
 	mm_memory_store(mc_table.used, used);
 
+	mc_table_unlock(part);
+
 	LEAVE();
 }
 
@@ -443,7 +470,7 @@ mc_table_stride_routine(mm_value_t arg)
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	ASSERT(part->striding);
 
-	mc_table_stride();
+	mc_table_stride(part);
 
 	part->striding = false;
 
@@ -477,7 +504,7 @@ mc_table_lookup(uint32_t index, const char *key, uint8_t key_len)
 }
 
 static struct mc_entry *
-mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
+mc_table_remove(struct mc_tpart *part, uint32_t index, const char *key, uint8_t key_len)
 {
 	ENTER();
 	DEBUG("index: %d", index);
@@ -495,7 +522,6 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 		mm_list_delete(&entry->link);
 		mc_table.table[index] = entry->next;
 
-		struct mc_tpart *part = mc_table_part(index);
 		part->nbytes -= mc_entry_bytes(entry);
 		--(part->nentries);
 		goto leave;
@@ -517,7 +543,6 @@ mc_table_remove(uint32_t index, const char *key, uint8_t key_len)
 			mm_list_delete(&entry->link);
 			prev_entry->next = entry->next;
 
-			struct mc_tpart *part = mc_table_part(index);
 			part->nbytes -= mc_entry_bytes(entry);
 			--(part->nentries);
 			goto leave; 
@@ -530,12 +555,10 @@ leave:
 }
 
 static void
-mc_table_insert(uint32_t index, struct mc_entry *entry)
+mc_table_insert(struct mc_tpart *part, uint32_t index, struct mc_entry *entry)
 {
 	ENTER();
 	DEBUG("index: %d", index);
-
-	struct mc_tpart *part = mc_table_part(index);
 
 	mm_list_append(&part->entries, &entry->link);
 	entry->next = mc_table.table[index];
@@ -546,6 +569,9 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 
 	part->nbytes += mc_entry_bytes(entry);
 	++part->nentries;
+
+	entry->cas = part->cas;
+	part->cas += mc_table.nparts;
 
 	if (!part->evicting && mc_table_is_outofmemory(part, 0)) {
 		part->evicting = true;
@@ -559,10 +585,19 @@ mc_table_insert(uint32_t index, struct mc_entry *entry)
 	LEAVE();
 }
 
-static void
+static bool
 mc_table_evict(struct mc_tpart *part)
 {
 	ENTER();
+	bool rc = true;
+
+	mc_table_lock(part);
+
+	if (mm_list_empty(&part->entries)) {
+		mc_table_unlock(part);
+		rc = false;
+		goto leave;
+	}
 
 	struct mm_list *link = mm_list_head(&part->entries);
 	struct mc_entry *entry = containerof(link, struct mc_entry, link);
@@ -574,11 +609,15 @@ mc_table_evict(struct mc_tpart *part)
 	if (index != entry->index)
 		ABORT();
 #endif
-	mc_table_remove(index, key, entry->key_len);
+	mc_table_remove(part, index, key, entry->key_len);
+
+	mc_table_unlock(part);
 
 	mc_entry_unref(entry);
 
+leave:
 	LEAVE();
+	return rc;
 }
 
 static mm_value_t
@@ -590,9 +629,10 @@ mc_table_evict_routine(mm_value_t arg)
 	ASSERT(part->evicting);
 
 	while (mc_table_is_outofmemory(part, MC_SIZE_RESERVE)) {
-		int count = 32;
-		while (count-- && !mm_list_empty(&part->entries))
-			mc_table_evict(part);
+		for (int i = 0; i < 32; i++) {
+			if (!mc_table_evict(part))
+				break;
+		}
 		mm_task_yield();
 	}
 	part->evicting = false;
@@ -608,14 +648,35 @@ mc_table_flush_routine(mm_value_t arg)
 
 	struct mc_tpart *part = &mc_table.parts[arg];
 	while (!mm_list_empty(&part->entries)) {
-		int count = 32;
-		while (count-- && !mm_list_empty(&part->entries))
-			mc_table_evict(part);
+		for (int i = 0; i < 32; i++) {
+			if (!mc_table_evict(part))
+				break;
+		}
 		mm_task_yield();
 	}
 
 	LEAVE();
 	return 0;
+}
+
+static void
+mc_table_init_part(mm_core_t index, mm_core_t core)
+{
+	struct mc_tpart *part = &mc_table.parts[index];
+
+#if ENABLE_LOCKED_MEMCACHE
+	part->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	(void) core;
+#else
+	mm_verbose("bind partition %d to core %d", index, core);
+	part->core = core;
+#endif
+	part->evicting = false;
+	part->striding = false;
+	part->cas = index;
+	part->nentries = 0;
+	mm_list_init(&part->entries);
+	part->nbytes = 0;
 }
 
 static void
@@ -635,9 +696,12 @@ mc_table_init(void)
 		mm_fatal(errno, "mmap");
 
 	// Compute the number of table partitions. It has to be a power of 2.
-	if (!mm_bitset_any(&mc_affinity))
-		mm_bitset_set(&mc_affinity, 0);
-	mm_core_t nparts = mm_bitset_count(&mc_affinity);
+	mm_core_t nparts;
+#if ENABLE_LOCKED_MEMCACHE
+	nparts = mc_config.nparts;
+#else
+	nparts = mm_bitset_count(&mc_config.affinity);
+#endif
 	nparts = 1 << (31 - mm_clz(nparts));
 	mm_brief("memcache table partitions: %d", nparts);
 
@@ -653,20 +717,19 @@ mc_table_init(void)
 	mc_table.table = address;
 
 	// Initialize the table partitions.
-	mm_core_t p = 0;
-	for (mm_core_t i = 0; i < mm_core_getnum(); i++) {
-		if (mm_bitset_test(&mc_affinity, i)) {
-			mm_verbose("partition #%d on core %d", p, i);
-
-			struct mc_tpart *part = &mc_table.parts[p++];
-			part->nbytes = 0;
-			part->core = i;
-			part->evicting = false;
-			part->striding = false;
-			part->nentries = 0;
-			mm_list_init(&part->entries);
+#if ENABLE_LOCKED_MEMCACHE
+	for (mm_core_t index = 0; index < nparts; index++) {
+		mc_table_init_part(index, MM_CORE_NONE);
+	}
+#else
+	mm_core_t index = 0;
+	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
+		if (mm_bitset_test(&mc_config.affinity, core)) {
+			mc_table_init_part(index, core);
+			++index;
 		}
 	}
+#endif
 
 	// Allocate initial space for the table.
 	mc_table_expand(0, size);
@@ -1140,13 +1203,14 @@ mc_process_get2(mm_value_t arg, mc_result_t rc)
 	const char *key = command->key.str;
 	size_t key_len = command->key.len;
 
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
+
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *entry = mc_table_lookup(index, key, key_len);
-
-	// Maintain the LRU order.
 	if (entry != NULL) {
+		// Maintain the LRU order.
 		mm_list_delete(&entry->link);
-		struct mc_tpart *part = mc_table_part(index);
 		mm_list_append(&part->entries, &entry->link);
 	}
 
@@ -1156,6 +1220,8 @@ mc_process_get2(mm_value_t arg, mc_result_t rc)
 		rc = MC_RESULT_END;
 	else
 		rc = MC_RESULT_BLANK;
+
+	mc_table_unlock(part);
 
 	LEAVE();
 	return rc;
@@ -1183,17 +1249,21 @@ mc_process_set(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
-	uint32_t index = mc_table_index(command->key_hash);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
 
+	uint32_t index = mc_table_index(command->key_hash);
+	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
 	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
 	mc_entry_set_key(new_entry, key);
 	mc_process_value(new_entry, params, 0);
 	new_entry->flags = params->flags;
+	mc_table_insert(part, index, new_entry);
 
-	mc_table_insert(index, new_entry);
+	mc_table_unlock(part);
+
+	if (old_entry != NULL)
+		mc_entry_unref(old_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1215,17 +1285,21 @@ mc_process_add(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
+
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
-
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
 		new_entry = mc_entry_create(key_len, params->bytes);
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
-		mc_table_insert(index, new_entry);
+		mc_table_insert(part, index, new_entry);
 	}
+
+	mc_table_unlock(part);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1249,19 +1323,24 @@ mc_process_replace(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
-	uint32_t index = mc_table_index(command->key_hash);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
 
+	uint32_t index = mc_table_index(command->key_hash);
+	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
-		mc_entry_unref(old_entry);
-
 		new_entry = mc_entry_create(key_len, params->bytes);
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
-		mc_table_insert(index, new_entry);
+		mc_table_insert(part, index, new_entry);
 	}
+
+	mc_table_unlock(part);
+
+	if (old_entry != NULL)
+		mc_entry_unref(old_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1285,12 +1364,14 @@ mc_process_cas(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
+
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
-
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && old_entry->cas == params->cas) {
-		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		struct mc_entry *old_entry2 = mc_table_remove(part, index, key, key_len);
 		ASSERT(old_entry == old_entry2);
 		mc_entry_unref(old_entry2);
 
@@ -1298,8 +1379,10 @@ mc_process_cas(mm_value_t arg)
 		mc_entry_set_key(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
-		mc_table_insert(index, new_entry);
+		mc_table_insert(part, index, new_entry);
 	}
+
+	mc_table_unlock(part);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1325,9 +1408,11 @@ mc_process_append(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
-	uint32_t index = mc_table_index(command->key_hash);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
 
+	uint32_t index = mc_table_index(command->key_hash);
+	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
@@ -1339,10 +1424,13 @@ mc_process_append(mm_value_t arg)
 		memcpy(new_value, old_value, old_entry->value_len);
 		mc_process_value(new_entry, params, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
-		mc_table_insert(index, new_entry);
-
-		mc_entry_unref(old_entry);
+		mc_table_insert(part, index, new_entry);
 	}
+
+	mc_table_unlock(part);
+
+	if (old_entry != NULL)
+		mc_entry_unref(old_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1366,9 +1454,11 @@ mc_process_prepend(mm_value_t arg)
 	size_t key_len = command->key.len;
 	struct mc_set_params *params = &command->params.set;
 
-	uint32_t index = mc_table_index(command->key_hash);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
 
+	uint32_t index = mc_table_index(command->key_hash);
+	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
@@ -1380,10 +1470,13 @@ mc_process_prepend(mm_value_t arg)
 		mc_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
-		mc_table_insert(index, new_entry);
-
-		mc_entry_unref(old_entry);
+		mc_table_insert(part, index, new_entry);
 	}
+
+	mc_table_unlock(part);
+
+	if (old_entry != NULL)
+		mc_entry_unref(old_entry);
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -1406,6 +1499,9 @@ mc_process_incr(mm_value_t arg)
 	const char *key = command->key.str;
 	size_t key_len = command->key.len;
 
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
+
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
 	uint64_t value;
@@ -1418,11 +1514,11 @@ mc_process_incr(mm_value_t arg)
 		mc_entry_set_key(new_entry, key);
 		new_entry->flags = old_entry->flags;
 
-		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		struct mc_entry *old_entry2 = mc_table_remove(part, index, key, key_len);
 		ASSERT(old_entry == old_entry2);
 		mc_entry_unref(old_entry2);
 
-		mc_table_insert(index, new_entry);
+		mc_table_insert(part, index, new_entry);
 	}
 
 	mc_result_t rc;
@@ -1434,6 +1530,8 @@ mc_process_incr(mm_value_t arg)
 		rc = MC_RESULT_INC_DEC_NON_NUM;
 	else
 		rc = MC_RESULT_NOT_FOUND;
+
+	mc_table_unlock(part);
 
 	LEAVE();
 	return rc;
@@ -1447,6 +1545,9 @@ mc_process_decr(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	const char *key = command->key.str;
 	size_t key_len = command->key.len;
+
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
 
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_lookup(index, key, key_len);
@@ -1463,11 +1564,11 @@ mc_process_decr(mm_value_t arg)
 		mc_entry_set_key(new_entry, key);
 		new_entry->flags = old_entry->flags;
 
-		struct mc_entry *old_entry2 = mc_table_remove(index, key, key_len);
+		struct mc_entry *old_entry2 = mc_table_remove(part, index, key, key_len);
 		ASSERT(old_entry == old_entry2);
 		mc_entry_unref(old_entry2);
 
-		mc_table_insert(index, new_entry);
+		mc_table_insert(part, index, new_entry);
 	}
 
 	mc_result_t rc;
@@ -1479,6 +1580,8 @@ mc_process_decr(mm_value_t arg)
 		rc = MC_RESULT_INC_DEC_NON_NUM;
 	else
 		rc = MC_RESULT_NOT_FOUND;
+
+	mc_table_unlock(part);
 
 	LEAVE();
 	return rc;
@@ -1493,8 +1596,14 @@ mc_process_delete(mm_value_t arg)
 	const char *key = command->key.str;
 	size_t key_len = command->key.len;
 
+	struct mc_tpart *part = mc_table_part(command->key_hash);
+	mc_table_lock(part);
+
 	uint32_t index = mc_table_index(command->key_hash);
-	struct mc_entry *old_entry = mc_table_remove(index, key, key_len);
+	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
+
+	mc_table_unlock(part);
+
 	if (old_entry != NULL)
 		mc_entry_unref(old_entry);
 
@@ -1550,8 +1659,13 @@ mc_process_flush_all(mm_value_t arg)
 	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
 
 	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
+#if ENABLE_LOCKED_MEMCACHE
+		mm_core_post(0, mc_table_flush_routine, i);
+		//mm_core_post(MM_CORE_NONE, mc_table_flush_routine, i);
+#else
 		struct mc_tpart *part = &mc_table.parts[i];
 		mm_core_post(part->core, mc_table_flush_routine, i);
+#endif
 	}
 
 	mc_result_t rc;
@@ -1611,7 +1725,7 @@ mc_process_start(struct mc_command *command)
 	if ((command->type->flags & MC_ASYNC) != 0) {
 		command->key_hash = mc_hash(command->key.str, command->key.len);
 
-#if ENABLE_SMP
+#if ENABLE_SMP && !ENABLE_LOCKED_MEMCACHE
 		struct mc_tpart *part = mc_table_part(command->key_hash);
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->process,
@@ -2832,7 +2946,7 @@ mc_memcache_stop(void)
 }
 
 void
-mm_memcache_init(const struct mm_bitset *mask)
+mm_memcache_init(const struct mm_memcache_config *config)
 {
 	ENTER();
 
@@ -2847,9 +2961,18 @@ mm_memcache_init(const struct mm_bitset *mask)
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
 						  "127.0.0.1", 11211);
 
-	mm_bitset_prepare(&mc_affinity, &mm_alloc_global, mm_core_getnum());
-	if (mask)
-		mm_bitset_or(&mc_affinity, mask);
+#if ENABLE_LOCKED_MEMCACHE
+	if (config != 0 && config->nparts)
+		mc_config.nparts = config->nparts;
+	else
+		mc_config.nparts = 1;
+#else
+	mm_bitset_prepare(&mc_config.affinity, &mm_alloc_global, mm_core_getnum());
+	if (config != NULL && mm_bitset_any(&config->affinity))
+		mm_bitset_or(&mc_config.affinity, &config->affinity);
+	else
+		mm_bitset_set(&mc_config.affinity, 0);
+#endif
 
 	mm_core_hook_start(mc_memcache_start);
 	mm_core_hook_stop(mc_memcache_stop);

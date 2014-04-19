@@ -98,10 +98,11 @@ mm_server_init(void)
 
 	// Assign event loops to first three cores.
 	struct mm_bitset event_loop_cores;
-	mm_bitset_prepare(&event_loop_cores, &mm_alloc_global, 3);
+	mm_bitset_prepare(&event_loop_cores, &mm_alloc_global, 4);
 	mm_bitset_set(&event_loop_cores, 0);
 	mm_bitset_set(&event_loop_cores, 1);
 	mm_bitset_set(&event_loop_cores, 2);
+	mm_bitset_set(&event_loop_cores, 3);
 	mm_core_set_event_affinity(&event_loop_cores);
 
 	static struct mm_net_proto proto = {
@@ -120,11 +121,15 @@ mm_server_init(void)
 	//mm_core_register_server(mm_ucmd_server);
 	mm_core_register_server(mm_icmd_server);
 
-	struct mm_bitset memcache_cores;
-	mm_bitset_prepare(&memcache_cores, &mm_alloc_global, 4);
-	mm_bitset_set(&memcache_cores, 3);
-
-	mm_memcache_init(&memcache_cores);
+	struct mm_memcache_config memcache_config;
+#if ENABLE_LOCKED_MEMCACHE
+	memcache_config.nparts = 1;
+#else
+	mm_bitset_prepare(&memcache_config.affinity, &mm_alloc_global, 8);
+	mm_bitset_set(&memcache_config.affinity, 6);
+	mm_bitset_set(&memcache_config.affinity, 7);
+#endif
+	mm_memcache_init(&memcache_config);
 
 	LEAVE();
 }
