@@ -839,8 +839,8 @@ mm_core_get_ncpu(void)
 #if ENABLE_SMP
 # if defined(HAVE_SYS_SYSCTL_H) && defined(HW_AVAILCPU)
 //#  define SELECTOR "hw.ncpu"
-//#  define SELECTOR "hw.activecpu"
-#  define SELECTOR "hw.physicalcpu"
+#  define SELECTOR "hw.activecpu"
+//#  define SELECTOR "hw.physicalcpu"
 	int num;
 	size_t len = sizeof num;
 	if (sysctlbyname(SELECTOR, &num, &len, NULL, 0) < 0)
