@@ -155,9 +155,6 @@ struct mm_net_socket
 	uint32_t read_stamp;
 	uint32_t write_stamp;
 
-	/* Protocol data. */
-	intptr_t data;
-
 	/* Pinned core. */
 	mm_core_t core;
 	mm_core_t core_server_index;

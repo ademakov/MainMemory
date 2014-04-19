@@ -1053,6 +1053,13 @@ mc_command_destroy(struct mc_command *command)
 
 struct mc_state
 {
+	// The client socket,
+	struct mm_net_socket sock;
+	// Receive buffer.
+	struct mm_buffer rbuf;
+	// Transmit buffer.
+	struct mm_buffer tbuf;
+
 	// Current parse position.
 	char *start_ptr;
 	// Last processed position.
@@ -1062,58 +1069,10 @@ struct mc_state
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
 
-	// The client socket,
-	struct mm_net_socket *sock;
-	// Receive buffer.
-	struct mm_buffer rbuf;
-	// Transmit buffer.
-	struct mm_buffer tbuf;
-
 	// Flags.
 	bool error;
 	bool trash;
 };
-
-static struct mc_state *
-mc_create(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
-
-	state->start_ptr = NULL;
-
-	state->command_head = NULL;
-	state->command_tail = NULL;
-
-	state->sock = sock;
-	mm_buffer_prepare(&state->rbuf);
-	mm_buffer_prepare(&state->tbuf);
-
-	state->error = false;
-	state->trash = false;
-
-	LEAVE();
-	return state;
-}
-
-static void
-mc_destroy(struct mc_state *state)
-{
-	ENTER();
-
-	while (state->command_head != NULL) {
-		struct mc_command *command = state->command_head;
-		state->command_head = command->next;
-		mc_command_destroy(command);
-	}
-
-	mm_buffer_cleanup(&state->rbuf);
-	mm_buffer_cleanup(&state->tbuf);
-	mm_shared_free(state);
-
-	LEAVE();
-}
 
 static void
 mc_queue_command(struct mc_state *state,
@@ -1755,7 +1714,7 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 	}
 
 	mc_queue_command(state, first, last);
-	mm_net_spawn_writer(state->sock);
+	mm_net_spawn_writer(&state->sock);
 
 	LEAVE();
 	return 0;
@@ -1775,7 +1734,7 @@ mc_read(struct mc_state *state, size_t required, size_t optional)
 
 	size_t count = total;
 	while (count > optional) {
-		ssize_t n = mm_net_readbuf(state->sock, &state->rbuf);
+		ssize_t n = mm_net_readbuf(&state->sock, &state->rbuf);
 		if (n <= 0) {
 			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
 				state->error = true;
@@ -2123,7 +2082,7 @@ again:
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
 					command->type = &mc_desc_quit;
-					command->params.sock = parser->state->sock;
+					command->params.sock = &parser->state->sock;
 					state = S_SPACE;
 					shift = S_EOL;
 					break;
@@ -2740,7 +2699,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	}
 
 	case MC_RESULT_QUIT:
-		mm_net_close(state->sock);
+		mm_net_close(&state->sock);
 		break;
 
 	default:
@@ -2755,7 +2714,7 @@ mc_transmit_flush(struct mc_state *state)
 {
 	ENTER();
 
-	ssize_t n = mm_net_writebuf(state->sock, &state->tbuf);
+	ssize_t n = mm_net_writebuf(&state->sock, &state->tbuf);
 	if (n > 0)
 		mm_buffer_rectify(&state->tbuf);
 
@@ -2768,12 +2727,46 @@ mc_transmit_flush(struct mc_state *state)
 
 #define MC_READ_TIMEOUT		10000
 
+static struct mm_net_socket *
+mc_alloc(void)
+{
+	ENTER();
+
+	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
+
+	LEAVE();
+	return &state->sock;
+}
+
+static void
+mc_free(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	mm_shared_free(state);
+
+	LEAVE();
+}
+
 static void
 mc_prepare(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	sock->data = 0;
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	state->start_ptr = NULL;
+
+	state->command_head = NULL;
+	state->command_tail = NULL;
+
+	mm_buffer_prepare(&state->rbuf);
+	mm_buffer_prepare(&state->tbuf);
+
+	state->error = false;
+	state->trash = false;
 
 	LEAVE();
 }
@@ -2783,10 +2776,16 @@ mc_cleanup(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	if (sock->data) {
-		mc_destroy((struct mc_state *) sock->data);
-		sock->data = 0;
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	while (state->command_head != NULL) {
+		struct mc_command *command = state->command_head;
+		state->command_head = command->next;
+		mc_command_destroy(command);
 	}
+
+	mm_buffer_cleanup(&state->rbuf);
+	mm_buffer_cleanup(&state->tbuf);
 
 	LEAVE();
 }
@@ -2796,24 +2795,18 @@ mc_reader_routine(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	struct mc_parser parser;
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	// Get the protocol data if any.
-	struct mc_state *state = (struct mc_state *) sock->data;
-	if (state == NULL) {
-		// Create the protocol data.
-		state = mc_create(sock);
-		sock->data = (intptr_t) state;
-	} else if (mm_buffer_empty(&state->rbuf)) {
-		// Reset the buffer state.
+	// Reset the buffer state.
+	if (mm_buffer_empty(&state->rbuf)) {
 		mm_buffer_rectify(&state->rbuf);
 		state->start_ptr = NULL;
 	}
 
 	// Try to get some input w/o blocking.
-	mm_net_set_read_timeout(state->sock, 0);
+	mm_net_set_read_timeout(&state->sock, 0);
 	ssize_t n = mc_read(state, 1, 0);
-	mm_net_set_read_timeout(state->sock, MC_READ_TIMEOUT);
+	mm_net_set_read_timeout(&state->sock, MC_READ_TIMEOUT);
 
 retry:
 	// Get out of here if there is no more input available.
@@ -2830,6 +2823,7 @@ retry:
 	}
 
 	// Initialize the parser.
+	struct mc_parser parser;
 	mc_start_input(&parser, state);
 
 parse:
@@ -2840,7 +2834,7 @@ parse:
 			parser.command = NULL;
 		}
 		if (state->trash) {
-			mm_net_close(state->sock);
+			mm_net_close(&state->sock);
 			goto leave;
 		}
 
@@ -2869,10 +2863,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	// Get the protocol data if any.
-	struct mc_state *state = (struct mc_state *) sock->data;
-	if (unlikely(state == NULL))
-		goto leave;
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
 	// Check to see if there at least one ready result.
 	struct mc_command *command = state->command_head;
@@ -2952,6 +2943,8 @@ mm_memcache_init(const struct mm_memcache_config *config)
 
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
+		.alloc = mc_alloc,
+		.free = mc_free,
 		.prepare = mc_prepare,
 		.cleanup = mc_cleanup,
 		.reader = mc_reader_routine,

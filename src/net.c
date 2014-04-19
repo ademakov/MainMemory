@@ -289,7 +289,6 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 	mm_waitset_prepare(&sock->write_waitset);
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
-	sock->data = 0;
 	sock->core = MM_CORE_NONE;
 	sock->core_server_index = MM_CORE_NONE;
 	sock->reader = NULL;
