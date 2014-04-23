@@ -96,10 +96,11 @@ mm_buffer_chunk_reserve(size_t desired_size)
 
 	// Create an internal chunk.
 	struct mm_chunk *chunk = mm_chunk_create(size);
+	size = mm_chunk_size(chunk);
 
 	// Create a buffer segment based on the chunk.
 	struct mm_buffer_segment *seg
-		= mm_buffer_segment_create(chunk->data, chunk->size,
+		= mm_buffer_segment_create(chunk->data, size,
 					   mm_buffer_chunk_release,
 					   (uintptr_t) chunk);
 
@@ -332,7 +333,7 @@ mm_buffer_reduce(struct mm_buffer *buf, size_t size)
 		while (n <= size && seg != buf->in_seg) {
 			if (mm_buffer_is_chunk_segment(seg)) {
 				struct mm_chunk *chunk = (struct mm_chunk *) seg->release_data;
-				buf->chunk_size -= chunk->size;
+				buf->chunk_size -= mm_chunk_size(chunk);
 			} else {
 				buf->extra_size -= seg->size;
 			}

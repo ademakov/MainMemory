@@ -23,6 +23,7 @@
 #include "common.h"
 #include "alloc.h"
 #include "list.h"
+#include "trace.h"
 
 #define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + MM_ALLOC_OVERHEAD)
 
@@ -31,11 +32,17 @@
 struct mm_chunk
 {
 	uint32_t used;
-	uint32_t size;
-	struct mm_chunk *next;
 	mm_core_t core;
+	struct mm_chunk *next;
 	char data[];
 };
+
+static inline size_t
+mm_chunk_size(const struct mm_chunk *chunk)
+{
+	ASSERT(chunk->core != MM_CORE_NONE);
+	return mm_core_alloc_size(chunk) - sizeof(struct mm_chunk);
+}
 
 struct mm_chunk * mm_chunk_create(size_t size);
 void mm_chunk_destroy(struct mm_chunk *chunk);

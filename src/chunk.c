@@ -28,7 +28,6 @@ mm_chunk_create(size_t size)
 {
 	size_t total_size = sizeof(struct mm_chunk) + size;
 	struct mm_chunk *chunk = mm_core_alloc(total_size);
-	chunk->size = size;
 	chunk->used = 0;
 	chunk->core = mm_core_self();
 	chunk->next = NULL;

@@ -69,7 +69,6 @@ mm_log_create_chunk(size_t size)
 	struct mm_chunk *chunk;
 	if (mm_core == NULL) {
 		chunk = mm_global_alloc(sizeof(struct mm_chunk) + size);
-		chunk->size = size;
 		chunk->used = 0;
 		chunk->core = MM_CORE_NONE;
 		chunk->next = NULL;
@@ -88,6 +87,14 @@ mm_log_create_chunk(size_t size)
 	return chunk;
 }
 
+static size_t
+mm_log_chunk_size(const struct mm_chunk *chunk)
+{
+	if (chunk->core != MM_CORE_NONE)
+		return mm_chunk_size(chunk);
+	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+}
+
 void
 mm_log_str(const char *str)
 {
@@ -97,7 +104,7 @@ mm_log_str(const char *str)
 	if (mm_core != NULL && mm_core->log_tail != NULL) {
 		chunk = mm_core->log_tail;
 
-		size_t avail = chunk->size - chunk->used;
+		size_t avail = mm_log_chunk_size(chunk) - chunk->used;
 		if (avail < len) {
 			memcpy(chunk->data + chunk->used, str, avail);
 			chunk->used += avail;
@@ -137,7 +144,7 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 		avail = sizeof dummy;
 	} else {
 		space = chunk->data + chunk->used;
-		avail = chunk->size - chunk->used;
+		avail = mm_log_chunk_size(chunk) - chunk->used;
 	}
 
 	va_list va2;
