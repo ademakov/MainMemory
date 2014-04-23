@@ -73,6 +73,8 @@ void * mm_core_realloc(void *ptr, size_t size);
 
 void mm_core_free(void *ptr);
 
+size_t mm_core_alloc_size(const void *ptr);
+
 /**********************************************************************
  * Cross-core memory allocation routines.
  **********************************************************************/
@@ -90,6 +92,8 @@ void * mm_shared_realloc(void *ptr, size_t size);
 
 void mm_shared_free(void *ptr);
 
+size_t mm_shared_alloc_size(const void *ptr);
+
 /**********************************************************************
  * Global memory allocation routines.
  **********************************************************************/
@@ -106,5 +110,7 @@ void * mm_global_calloc(size_t count, size_t size)
 void * mm_global_realloc(void *ptr, size_t size);
 
 void mm_global_free(void *ptr);
+
+size_t mm_global_alloc_size(const void *ptr);
 
 #endif /* ALLOC_H */

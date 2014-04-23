@@ -130,6 +130,12 @@ mm_core_free(void *ptr)
 	mspace_free(mm_core->arena, ptr);
 }
 
+size_t
+mm_core_alloc_size(const void *ptr)
+{
+	return mspace_usable_size(ptr);
+}
+
 /**********************************************************************
  * Cross-core memory allocation routines.
  **********************************************************************/
@@ -214,6 +220,12 @@ mm_shared_free(void *ptr)
 	mm_task_unlock(&mm_shared_alloc_lock);
 }
 
+size_t
+mm_shared_alloc_size(const void *ptr)
+{
+	return mspace_usable_size(ptr);
+}
+
 /**********************************************************************
  * Global memory allocation routines.
  **********************************************************************/
@@ -274,6 +286,12 @@ mm_global_free(void *ptr)
 	mm_thread_lock(&mm_global_alloc_lock);
 	dlfree(ptr);
 	mm_thread_unlock(&mm_global_alloc_lock);
+}
+
+size_t
+mm_global_alloc_size(const void *ptr)
+{
+	return dlmalloc_usable_size(ptr);
 }
 
 /**********************************************************************
