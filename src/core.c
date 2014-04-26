@@ -296,7 +296,8 @@ mm_core_reclaim_chain(struct mm_chunk *chunk)
 	ENTER();
 
 	while (chunk != NULL) {
-		struct mm_chunk *next = chunk->next;
+		struct mm_link *link = chunk->link.next;
+		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
 		mm_core_reclaim_chunk(chunk);
 		chunk = next;
 	}
@@ -752,8 +753,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->master = NULL;
 	core->thread = NULL;
 
-	core->log_head = NULL;
-	core->log_tail = NULL;
+	mm_queue_init(&core->log_queue);
 
 	core->events = NULL;
 	core->poll_time = 0;

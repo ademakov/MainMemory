@@ -31,9 +31,9 @@
    passed from one thread to another. Useful for I/O buffers and such. */
 struct mm_chunk
 {
+	struct mm_link link;
 	uint32_t used;
 	mm_core_t core;
-	struct mm_chunk *next;
 	char data[];
 };
 

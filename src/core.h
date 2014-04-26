@@ -32,6 +32,7 @@
 
 /* Forward declarations. */
 struct mm_bitset;
+struct mm_chunk;
 struct mm_event_table;
 struct mm_timeq;
 struct mm_net_server;
@@ -89,8 +90,7 @@ struct mm_core
 	struct mm_thread *thread;
 
 	/* The log message memory. */
-	struct mm_chunk *log_head;
-	struct mm_chunk *log_tail;
+	struct mm_queue log_queue;
 
 	/* Memory pool for timers. */
 	struct mm_pool timer_pool;

@@ -30,7 +30,7 @@ mm_chunk_create(size_t size)
 	struct mm_chunk *chunk = mm_core_alloc(total_size);
 	chunk->used = 0;
 	chunk->core = mm_core_self();
-	chunk->next = NULL;
+	mm_link_init(&chunk->link);
 	return chunk;
 }
 
@@ -48,7 +48,8 @@ mm_chunk_destroy_chain(struct mm_chunk *chunk)
 	ENTER();
 
 	while (chunk != NULL) {
-		struct mm_chunk *next = chunk->next;
+		struct mm_link *link = chunk->link.next;
+		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
 		mm_chunk_destroy(chunk);
 		chunk = next;
 	}
