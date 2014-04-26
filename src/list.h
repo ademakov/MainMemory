@@ -224,6 +224,12 @@ mm_queue_head(struct mm_queue *list)
 	return list->head.next;
 }
 
+static inline struct mm_link *
+mm_queue_tail(struct mm_queue *list)
+{
+	return list->tail;
+}
+
 static inline bool
 mm_queue_is_last(struct mm_link *item)
 {
