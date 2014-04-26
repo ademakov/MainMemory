@@ -21,6 +21,7 @@
 #define POOL_H
 
 #include "common.h"
+#include "list.h"
 #include "lock.h"
 
 #define MM_POOL_INDEX_INVALID	((uint32_t) -1)
@@ -30,7 +31,7 @@ struct mm_allocator;
 
 struct mm_pool
 {
-	struct mm_pool_free_item *free_list;
+	struct mm_link free_list;
 	char *block_cur_ptr;
 	char *block_end_ptr;
 	char **block_array;

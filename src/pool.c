@@ -26,11 +26,6 @@
 
 #define MM_POOL_BLOCK_SIZE	(0x2000)
 
-struct mm_pool_free_item
-{
-	struct mm_pool_free_item *next;
-};
-
 static void
 mm_pool_grow_lock(struct mm_pool *pool)
 {
@@ -76,8 +71,8 @@ mm_pool_prepare(struct mm_pool *pool,
 	ENTER();
 	ASSERT(item_size < 0x200);
 
-	if (item_size < sizeof(struct mm_pool_free_item))
-		item_size = sizeof(struct mm_pool_free_item);
+	if (item_size < sizeof(struct mm_link))
+		item_size = sizeof(struct mm_link);
 
 	mm_brief("make the '%s' memory pool with element size %u",
 		 pool_name, item_size);
@@ -99,7 +94,8 @@ mm_pool_prepare(struct mm_pool *pool,
 	pool->block_cur_ptr = NULL;
 	pool->block_end_ptr = NULL;
 
-	pool->free_list = NULL;
+	mm_link_init(&pool->free_list);
+
 	pool->pool_name = mm_strdup(&mm_alloc_global, pool_name);
 
 	LEAVE();
@@ -235,9 +231,8 @@ mm_pool_alloc(struct mm_pool *pool)
 	mm_pool_free_lock(pool);
 
 	void *item;
-	if (pool->free_list != NULL) {
-		item = pool->free_list;
-		pool->free_list = pool->free_list->next;
+	if (!mm_link_empty(&pool->free_list)) {
+		item = mm_link_delete_head(&pool->free_list);
 
 		mm_pool_free_unlock(pool);
 	} else {
@@ -265,11 +260,7 @@ mm_pool_free(struct mm_pool *pool, void *item)
 	ASSERT(mm_pool_contains(pool, item));
 
 	mm_pool_free_lock(pool);
-
-	struct mm_pool_free_item *free_item = item;
-	free_item->next = pool->free_list;
-	pool->free_list = free_item;
-
+	mm_link_insert(&pool->free_list, (struct mm_link *) item);
 	mm_pool_free_unlock(pool);
 
 	LEAVE();
