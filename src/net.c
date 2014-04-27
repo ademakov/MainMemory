@@ -1692,9 +1692,6 @@ mm_net_close(struct mm_net_socket *sock)
 	// Mark the socket as closed.
 	sock->close_flags = MM_NET_CLOSED;
 
-	mm_brief("close %d on core %d", sock->fd, sock->core);
-	mm_flush();
-
 	// Remove the socket from the event loop.
 	struct mm_core *core = mm_core_getptr(sock->core);
 	mm_event_unregister_fd(core->events, sock->fd, &sock->event);
