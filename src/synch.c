@@ -102,6 +102,9 @@ mm_synch_wait_cond(struct mm_synch *synch)
 {
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
+	// Flush the log before a possible sleep.
+	mm_flush();
+
 	pthread_mutex_lock(&cond->lock);
 
 	while (cond->base.value.value == 0) {
@@ -126,6 +129,9 @@ mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
 	ts.tv_sec = (time / 1000000);
 	ts.tv_nsec = (time % 1000000) * 1000;
+
+	// Flush the log before a possible sleep.
+	mm_flush();
 
 	pthread_mutex_lock(&cond->lock);
 
@@ -417,6 +423,9 @@ mm_synch_wait_mach(struct mm_synch *synch)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&mach->base.value, 0);
 	if (value == 0) {
+		// Flush the log before a sleep.
+		mm_flush();
+
 		semaphore_wait(mach->sem);
 	}
 
@@ -445,6 +454,9 @@ mm_synch_timedwait_mach(struct mm_synch *synch, mm_timeout_t timeout)
 	// Check to see if there are already some wake signals pending.
 	uint32_t value = mm_atomic_uint32_fetch_and_set(&mach->base.value, 0);
 	if (value == 0) {
+		// Flush the log before a sleep.
+		mm_flush();
+
 		kern_return_t r = semaphore_timedwait(mach->sem, ts);
 		if (r != KERN_SUCCESS) {
 			if (r != KERN_OPERATION_TIMED_OUT)
@@ -538,9 +550,6 @@ mm_synch_wait(struct mm_synch *synch)
 {
 	ENTER();
 
-	// Flush the log before a possible sleep.
-	mm_flush();
-
 	switch (synch->magic) {
 	case MM_THREAD_SYNCH_COND:
 		mm_synch_wait_cond(synch);
@@ -574,9 +583,6 @@ mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout)
 {
 	ENTER();
 	bool rc;
-
-	// Flush the log before a possible sleep.
-	mm_flush();
 
 	switch (synch->magic) {
 	case MM_THREAD_SYNCH_COND:
