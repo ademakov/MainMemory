@@ -36,17 +36,17 @@ typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
 typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
 typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
+typedef mm_atomic_type(void *) mm_atomic_ptr_t;
 
 /**********************************************************************
  * Atomic compare-and-swap operations.
  **********************************************************************/
 
-#define mm_atomic_cas(base, mnemonic, operand)				\
-	static inline base##_t						\
-	mm_atomic_##base##_cas(mm_atomic_##base##_t *p,			\
-			       base##_t c, base##_t v)			\
+#define mm_atomic_cas_type(type, base, mnemonic, operand)		\
+	static inline type						\
+	mm_atomic_##base##_cas(mm_atomic_##base##_t *p, type c, type v)	\
 	{								\
-		base##_t r;						\
+		type r;							\
 		asm volatile(MM_LOCK_PREFIX mnemonic " %2,%1"		\
 			     : "=a"(r), "+m"(*p)			\
 			     : operand(v), "0"(c)			\
@@ -54,30 +54,38 @@ typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
 		return r;						\
 	}
 
+#define mm_atomic_cas(base, mnemonic, operand)				\
+	mm_atomic_cas_type(base##_t, base, mnemonic, operand)
+
 /* Define atomic compare-and-swap ops. */
 mm_atomic_cas(uint8, "cmpxchgb", "q")
 mm_atomic_cas(uint16, "cmpxchgw", "r")
 mm_atomic_cas(uint32, "cmpxchgl", "r")
 mm_atomic_cas(uintptr, "cmpxchgq", "r")
+mm_atomic_cas_type(void *, ptr, "cmpxchgq", "r")
 
+#undef mm_atomic_cas_type
 #undef mm_atomic_cas
 
 /**********************************************************************
  * Atomic arithmetics.
  **********************************************************************/
 
-#define mm_atomic_fetch(base, name, lock, mnemonic, operand)		\
-	static inline base##_t						\
+#define mm_atomic_fetch_type(type, base, name, lock, mnemonic, operand)	\
+	static inline type						\
 	mm_atomic_##base##_fetch_and_##name(mm_atomic_##base##_t *p,	\
-					    base##_t v)			\
+					    type v)			\
 	{								\
-		base##_t r;						\
+		type r;							\
 		asm volatile(lock mnemonic " %0,%1"			\
 			     : "="operand(r), "+m"(*p)			\
 			     : "0"(v)					\
 			     : "memory");				\
 		return r;						\
 	}
+
+#define mm_atomic_fetch(base, name, lock, mnemonic, operand)		\
+	mm_atomic_fetch_type(base##_t, base, name, lock, mnemonic, operand)
 
 #define mm_atomic_unary(base, name, mnemonic)				\
 	static inline void						\
@@ -90,7 +98,7 @@ mm_atomic_cas(uintptr, "cmpxchgq", "r")
 	}
 
 #define mm_atomic_unary_test(base, name, mnemonic)			\
-	static inline base##_t						\
+	static inline int						\
 	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
 	{								\
 		char r;							\
@@ -106,6 +114,7 @@ mm_atomic_fetch(uint8, set, "", "xchgb", "q")
 mm_atomic_fetch(uint16, set, "", "xchgw", "r")
 mm_atomic_fetch(uint32, set, "", "xchgl", "r")
 mm_atomic_fetch(uintptr, set, "", "xchgq", "r")
+mm_atomic_fetch_type(void *, ptr, set, "", "xchgq", "r")
 
 /* Define atomic fetch-and-add ops. */
 mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "q")
@@ -133,6 +142,7 @@ mm_atomic_unary_test(uint16, dec, "decw")
 mm_atomic_unary_test(uint32, dec, "decl")
 mm_atomic_unary_test(uintptr, dec, "decq")
 
+#undef mm_atomic_fetch_type
 #undef mm_atomic_fetch
 #undef mm_atomic_unary
 #undef mm_atomic_unary_test
