@@ -142,7 +142,7 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	struct mc_entry *entry = mm_shared_alloc(size);
 	entry->key_len = key_len;
 	entry->value_len = value_len;
-	entry->ref_count.value = 1;
+	entry->ref_count = 1;
 #if ENABLE_DEBUG_INDEX
 	entry->index = ((uint32_t) -1);
 #endif

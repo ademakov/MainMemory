@@ -71,19 +71,19 @@ mm_value_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 static inline bool
 mm_future_is_started(struct mm_future *future)
 {
-	return mm_memory_load(future->result.value) != MM_RESULT_DEFERRED;
+	return mm_memory_load(future->result) != MM_RESULT_DEFERRED;
 }
 
 static inline bool
 mm_future_is_canceled(struct mm_future *future)
 {
-	return mm_memory_load(future->result.value) == MM_RESULT_CANCELED;
+	return mm_memory_load(future->result) == MM_RESULT_CANCELED;
 }
 
 static inline bool
 mm_future_is_finished(struct mm_future *future)
 {
-	mm_value_t value = mm_memory_load(future->result.value);
+	mm_value_t value = mm_memory_load(future->result);
 	return value != MM_RESULT_NOTREADY && value != MM_RESULT_DEFERRED;
 }
 

@@ -872,6 +872,6 @@ mm_event_term(void)
 void
 mm_event_stats(void)
 {
-	uint32_t write = mm_memory_load(mm_selfpipe_write_count.value);
+	uint32_t write = mm_memory_load(mm_selfpipe_write_count);
 	mm_verbose("selfpipe stats: write = %u", write);
 }

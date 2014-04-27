@@ -72,7 +72,7 @@ mm_synch_create_cond(void)
 
 	struct mm_synch_cond *cond = mm_global_alloc(sizeof(struct mm_synch_cond));
 
-	cond->base.value.value = 0;
+	cond->base.value = 0;
 	cond->base.magic = MM_THREAD_SYNCH_COND;
 
 	int rc = pthread_mutex_init(&cond->lock, NULL);
@@ -107,13 +107,13 @@ mm_synch_wait_cond(struct mm_synch *synch)
 
 	pthread_mutex_lock(&cond->lock);
 
-	while (cond->base.value.value == 0) {
+	while (cond->base.value == 0) {
 		int err = pthread_cond_wait(&cond->cond, &cond->lock);
 		if (err)
 			mm_fatal(err, "pthread_cond_wait");
 	}
 
-	cond->base.value.value = 0;
+	cond->base.value = 0;
 
 	pthread_mutex_unlock(&cond->lock);
 }
@@ -135,7 +135,7 @@ mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 
 	pthread_mutex_lock(&cond->lock);
 
-	while (cond->base.value.value == 0) {
+	while (cond->base.value == 0) {
 		int err = pthread_cond_timedwait(&cond->cond, &cond->lock, &ts);
 		if (err) {
 			if (err != ETIMEDOUT)
@@ -145,7 +145,7 @@ mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 		}
 	}
 
-	cond->base.value.value = 0;
+	cond->base.value = 0;
 
 	pthread_mutex_unlock(&cond->lock);
 	return rc;
@@ -158,7 +158,7 @@ mm_synch_signal_cond(struct mm_synch *synch)
 
 	pthread_mutex_lock(&cond->lock);
 
-	cond->base.value.value = 1;
+	cond->base.value = 1;
 	pthread_cond_signal(&cond->cond);
 
 	pthread_mutex_unlock(&cond->lock);
@@ -169,7 +169,7 @@ mm_synch_clear_cond(struct mm_synch *synch)
 {
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
-	mm_memory_store(cond->base.value.value, 0);
+	mm_memory_store(cond->base.value, 0);
 	mm_memory_strict_fence();
 }
 
@@ -194,7 +194,7 @@ mm_synch_create_event_poll(struct mm_event_table *events)
 
 	struct mm_synch_poll *poll = mm_global_alloc(sizeof(struct mm_synch_poll));
 
-	poll->base.value.value = 0;
+	poll->base.value = 0;
 	poll->base.magic = MM_THREAD_SYNCH_POLL;
 	poll->events = events;
 	poll->waiting = false;
@@ -280,7 +280,7 @@ mm_synch_signal_poll(struct mm_synch *synch)
 {
 	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
 
-	mm_memory_store(poll->base.value.value, 1);
+	mm_memory_store(poll->base.value, 1);
 
 #if POLL_GUARD
 	// FIXME: have a store-load fence.
@@ -301,7 +301,7 @@ mm_synch_clear_poll(struct mm_synch *synch)
 	// Cleanup stale event signals.
 	mm_event_dampen(poll->events);
 
-	mm_memory_store(poll->base.value.value, 0);
+	mm_memory_store(poll->base.value, 0);
 	mm_memory_strict_fence();
 }
 
@@ -385,7 +385,7 @@ mm_synch_create_mach(void)
 
 	struct mm_synch_mach *mach = mm_global_alloc(sizeof(struct mm_synch_mach));
 
-	mach->base.value.value = 0;
+	mach->base.value = 0;
 	mach->base.magic = MM_THREAD_SYNCH_MACH;
 	mach->waiting = false;
 
@@ -476,7 +476,7 @@ mm_synch_signal_mach(struct mm_synch *synch)
 {
 	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
 
-	mm_memory_store(mach->base.value.value, 1);
+	mm_memory_store(mach->base.value, 1);
 
 	// FIXME: have a store-load fence.
 	mm_memory_strict_fence();
@@ -490,7 +490,7 @@ mm_synch_clear_mach(struct mm_synch *synch)
 {
 	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
 
-	mm_memory_store(mach->base.value.value, 0);
+	mm_memory_store(mach->base.value, 0);
 	mm_memory_strict_fence();
 }
 

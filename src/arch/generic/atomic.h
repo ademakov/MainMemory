@@ -24,8 +24,7 @@
  * Atomic types.
  **********************************************************************/
 
-#define mm_atomic_type(base) \
-	struct { base value __align(sizeof(base)); }
+#define mm_atomic_type(base) base __align(sizeof(base))
 
 typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
@@ -41,7 +40,7 @@ typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
 	mm_atomic_##base##_cas(mm_atomic_##base##_t *p,			\
 			       base##_t c, base##_t v)			\
 	{								\
-		return __sync_val_compare_and_swap(&p->value, c, v);	\
+		return __sync_val_compare_and_swap(p, c, v);		\
 	}
 
 mm_atomic_cas(uint8)
@@ -60,21 +59,21 @@ mm_atomic_cas(uintptr)
 	mm_atomic_##base##_fetch_and_##name(mm_atomic_##base##_t *p,	\
 					    base##_t v)			\
 	{								\
-		return func(&p->value, v);				\
+		return func(p, v);					\
 	}
 
 #define mm_atomic_unary(base, name, func)				\
 	static inline void						\
 	mm_atomic_##base##_##name(mm_atomic_##base##_t *p)		\
 	{								\
-		func(&p->value, 1);					\
+		func(p, 1);					\
 	}
 
 #define mm_atomic_unary_test(base, name, func)				\
 	static inline bool						\
 	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
 	{								\
-		return !func(&p->value, 1);				\
+		return !func(p, 1);				\
 	}
 
 /* Define atomic fetch-and-set ops. */
@@ -94,7 +93,7 @@ mm_atomic_unary(uint8, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint16, inc, __sync_fetch_and_add)
 mm_atomic_unary(uint32, inc, __sync_fetch_and_add)
 mm_atomic_unary(uintptr, inc, __sync_fetch_and_add)
-mm_atomic_unary_test(uint8, inc, __sync_add_and_fetch_)
+mm_atomic_unary_test(uint8, inc, __sync_add_and_fetch)
 mm_atomic_unary_test(uint16, inc, __sync_add_and_fetch)
 mm_atomic_unary_test(uint32, inc, __sync_add_and_fetch)
 mm_atomic_unary_test(uintptr, inc, __sync_add_and_fetch)

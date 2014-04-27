@@ -541,7 +541,7 @@ mm_core_dealer(mm_value_t arg)
 void
 mm_core_stats(void)
 {
-	uint32_t deal = mm_memory_load(mm_core_deal_count.value);
+	uint32_t deal = mm_memory_load(mm_core_deal_count);
 	mm_verbose("core stats: deal = %u", deal);
 	mm_event_stats();
 }

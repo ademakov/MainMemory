@@ -34,7 +34,7 @@ mm_future_finish(struct mm_future *future, mm_value_t result)
 	mm_task_lock(&future->lock);
 
 	// Store the result.
-	mm_memory_store(future->result.value, result);
+	mm_memory_store(future->result, result);
 	mm_memory_store_fence();
 
 	// Wakeup all the waiters.
@@ -120,7 +120,7 @@ mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
 	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	future->cancel = false;
-	future->result.value = MM_RESULT_DEFERRED;
+	future->result = MM_RESULT_DEFERRED;
 	future->start = start;
 	future->start_arg = start_arg;
 	future->task = NULL;
@@ -135,7 +135,7 @@ mm_future_destroy(struct mm_future *future)
 {
 	ENTER();
 
-	mm_value_t result = mm_memory_load(future->result.value);
+	mm_value_t result = mm_memory_load(future->result);
 	if (result != MM_RESULT_DEFERRED) {
 		if (unlikely(result == MM_RESULT_NOTREADY))
 			mm_fatal(0, "Destroying a running future object.");
@@ -186,7 +186,7 @@ mm_future_cancel(struct mm_future *future)
 	// Make a synchronized check of the future status.
 	mm_task_lock(&future->lock);
 
-	mm_value_t result = mm_memory_load(future->result.value);
+	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_NOTREADY) {
 		struct mm_task *task = mm_memory_load(future->task);
 		if (task != NULL) {
@@ -211,7 +211,7 @@ mm_future_wait(struct mm_future *future)
 	ENTER();
 
 	// Start the future if it has not been started already.
-	mm_value_t result = mm_memory_load(future->result.value);
+	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED)
 		result = mm_future_start(future, MM_CORE_NONE);
 
@@ -224,7 +224,7 @@ mm_future_wait(struct mm_future *future)
 		// Make a synchronized check of the future status.
 		mm_task_lock(&future->lock);
 
-		result = mm_memory_load(future->result.value);
+		result = mm_memory_load(future->result);
 		if (result != MM_RESULT_NOTREADY) {
 			mm_task_unlock(&future->lock);
 			break;
@@ -234,7 +234,7 @@ mm_future_wait(struct mm_future *future)
 		mm_waitset_wait(&future->waitset, &future->lock);
 
 		// Update the future status.
-		result = mm_memory_load(future->result.value);
+		result = mm_memory_load(future->result);
 	}
 
 	LEAVE();
@@ -250,7 +250,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	mm_timeval_t deadline = mm_core->time_value + timeout;
 
 	// Start the future if it has not been started already.
-	mm_value_t result = mm_memory_load(future->result.value);
+	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED)
 		result = mm_future_start(future, MM_CORE_NONE);
 
@@ -269,7 +269,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		// Make a synchronized check of the future status.
 		mm_task_lock(&future->lock);
 
-		result = mm_memory_load(future->result.value);
+		result = mm_memory_load(future->result);
 		if (result != MM_RESULT_NOTREADY) {
 			mm_task_unlock(&future->lock);
 			break;
@@ -279,7 +279,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_waitset_timedwait(&future->waitset, &future->lock, timeout);
 
 		// Update the future status.
-		result = mm_memory_load(future->result.value);
+		result = mm_memory_load(future->result);
 	}
 
 	LEAVE();

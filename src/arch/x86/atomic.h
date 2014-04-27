@@ -30,8 +30,7 @@
  * Atomic types.
  **********************************************************************/
 
-#define mm_atomic_type(base) \
-	struct { base value __align(sizeof(base)); }
+#define mm_atomic_type(base) base __align(sizeof(base))
 
 typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
@@ -49,7 +48,7 @@ typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
 	{								\
 		base##_t r;						\
 		asm volatile(MM_LOCK_PREFIX mnemonic " %2,%1"		\
-			     : "=a"(r), "+m"(p->value)			\
+			     : "=a"(r), "+m"(*p)			\
 			     : operand(v), "0"(c)			\
 			     : "memory");				\
 		return r;						\
@@ -74,7 +73,7 @@ mm_atomic_cas(uintptr, "cmpxchgl", "r")
 	{								\
 		base##_t r;						\
 		asm volatile(lock mnemonic " %0,%1"			\
-			     : "="operand(r), "+m"(p->value)		\
+			     : "="operand(r), "+m"(*p)			\
 			     : "0"(v)					\
 			     : "memory");				\
 		return r;						\
@@ -85,7 +84,7 @@ mm_atomic_cas(uintptr, "cmpxchgl", "r")
 	mm_atomic_##base##_##name(mm_atomic_##base##_t *p)		\
 	{								\
 		asm volatile(MM_LOCK_PREFIX mnemonic " %0"		\
-			     : "+m"(p->value)				\
+			     : "+m"(*p)					\
 			     :						\
 			     : "memory", "cc");				\
 	}
@@ -96,7 +95,7 @@ mm_atomic_cas(uintptr, "cmpxchgl", "r")
 	{								\
 		char r;							\
 		asm volatile(MM_LOCK_PREFIX mnemonic " %0; setnz %1"	\
-			     : "+m"(p->value), "=qm" (r)		\
+			     : "+m"(*p), "=qm" (r)			\
 			     :						\
 			     : "memory", "cc");				\
 		return r;						\

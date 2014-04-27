@@ -52,7 +52,7 @@ struct mm_synch
 static inline bool
 mm_synch_test(struct mm_synch *synch)
 {
-	return mm_memory_load(synch->value.value) != 0;
+	return mm_memory_load(synch->value) != 0;
 }
 
 struct mm_synch *mm_synch_create(void);
