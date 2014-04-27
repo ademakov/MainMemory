@@ -297,9 +297,8 @@ mm_core_reclaim_chain(struct mm_chunk *chunk)
 
 	while (chunk != NULL) {
 		struct mm_link *link = chunk->link.next;
-		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
 		mm_core_reclaim_chunk(chunk);
-		chunk = next;
+		chunk = containerof(link, struct mm_chunk, link);
 	}
 
 	LEAVE();

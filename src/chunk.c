@@ -49,9 +49,8 @@ mm_chunk_destroy_chain(struct mm_chunk *chunk)
 
 	while (chunk != NULL) {
 		struct mm_link *link = chunk->link.next;
-		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
 		mm_chunk_destroy(chunk);
-		chunk = next;
+		chunk = containerof(link, struct mm_chunk, link);
 	}
 
 	LEAVE();
