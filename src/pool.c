@@ -135,7 +135,7 @@ mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 }
 
 uint32_t
-mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
+mm_pool_ptr2idx(struct mm_pool *pool, const void *item_ptr)
 {
 	char *start = NULL;
 	uint32_t block = 0;
@@ -163,7 +163,7 @@ mm_pool_ptr2idx(struct mm_pool *pool, void *item_ptr)
 }
 
 bool
-mm_pool_contains(struct mm_pool *pool, void *item)
+mm_pool_contains(struct mm_pool *pool, const void *item)
 {
 	bool rc = false;
 	uint32_t block = 0;

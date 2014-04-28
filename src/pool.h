@@ -70,10 +70,11 @@ void mm_pool_cleanup(struct mm_pool *pool)
 void * mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index)
 	__attribute__((nonnull(1)));
 
-uint32_t mm_pool_ptr2idx(struct mm_pool *pool, void *item)
+uint32_t mm_pool_ptr2idx(struct mm_pool *pool, const void *item)
 	__attribute__((nonnull(1, 2)));
 
-bool mm_pool_contains(struct mm_pool *pool, void *item);
+bool mm_pool_contains(struct mm_pool *pool, const void *item)
+	__attribute__((nonnull(1)));
 
 void * mm_pool_alloc(struct mm_pool *pool)
 	__attribute__((nonnull(1)));

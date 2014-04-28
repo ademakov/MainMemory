@@ -202,10 +202,16 @@ void mm_task_destroy(struct mm_task *task)
  * Task utilities.
  **********************************************************************/
 
+static inline const char *
+mm_task_getname(const struct mm_task *task)
+{
+	return task->name;
+}
+
 void mm_task_setname(struct mm_task *task, const char *name)
 	__attribute__((nonnull(1, 2)));
 
-mm_task_t mm_task_getid(struct mm_task *task)
+mm_task_t mm_task_getid(const struct mm_task *task)
 	__attribute__((nonnull(1)));
 
 struct mm_task * mm_task_getptr(mm_task_t id);

@@ -79,7 +79,8 @@ void mm_thread_destroy(struct mm_thread *thread)
 
 struct mm_thread *mm_thread_self(void);
 
-const char * mm_thread_name(struct mm_thread *thread);
+const char * mm_thread_getname(const struct mm_thread *thread)
+	__attribute__((nonnull(1)));
 
 /**********************************************************************
  * Thread control routines.

@@ -133,7 +133,7 @@ mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
 static void
 mm_task_entry(void)
 {
-	TRACE("enter task %s", mm_running_task->name);
+	TRACE("enter task %s", mm_task_getname(mm_running_task));
 
 	// Execute the task routine on an empty stack.
 	mm_value_t result = mm_running_task->start(mm_running_task->start_arg);
@@ -344,7 +344,7 @@ mm_task_setname(struct mm_task *task, const char *name)
 }
 
 mm_task_t
-mm_task_getid(struct mm_task *task)
+mm_task_getid(const struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
 }
@@ -401,7 +401,7 @@ mm_task_run(struct mm_task *task)
 {
 	ENTER();
 	TRACE("queue task: [%d %s], state: %d, priority: %d",
-	      mm_task_getid(task), task->name,
+	      mm_task_getid(task), mm_task_getname(task),
 	      task->state, task->priority);
 	ASSERT(task->core == mm_core);
 	ASSERT(task->priority < MM_PRIO_BOOT);
@@ -420,7 +420,7 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 {
 	ENTER();
 	TRACE("hoist task: [%d %s], state: %d, priority: %d, %d",
-	      mm_task_getid(task), task->name,
+	      mm_task_getid(task), mm_task_getname(task),
 	      task->state, task->priority, priority);
 	ASSERT(task->core == mm_core);
 	ASSERT(task->priority < MM_PRIO_BOOT);

@@ -184,9 +184,9 @@ mm_thread_entry(void *arg)
 	mm_thread = thread;
 
 	// Run the required routine.
-	mm_brief("start thread '%s'", mm_thread_name(thread));
+	mm_brief("start thread '%s'", mm_thread_getname(thread));
 	thread->start(thread->start_arg);
-	mm_brief("end thread '%s'", mm_thread_name(thread));
+	mm_brief("end thread '%s'", mm_thread_getname(thread));
 	mm_flush();
 
 	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
@@ -257,7 +257,7 @@ mm_thread_self(void)
 }
 
 const char *
-mm_thread_name(struct mm_thread *thread)
+mm_thread_getname(const struct mm_thread *thread)
 {
 	if (thread == NULL)
 		return "main";
