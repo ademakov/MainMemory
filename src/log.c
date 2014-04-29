@@ -167,7 +167,6 @@ mm_log_flush(void)
 	}
 
 	struct mm_link *link = mm_queue_head(&mm_log_queue);
-	struct mm_chunk *chunk = containerof(link, struct mm_chunk, link);
 	mm_queue_init(&mm_log_queue);
 	mm_log_busy = true;
 
@@ -177,23 +176,23 @@ mm_log_flush(void)
 	size_t written = 0;
 
 	do {
+		struct mm_chunk *chunk = containerof(link, struct mm_chunk, link);
+
 		// TODO: take care of partial writes
 		if (write(2, chunk->data, chunk->used) != chunk->used)
 			ABORT();
 
 		written += chunk->used;
 
-		struct mm_link *link = chunk->link.next;
-		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
+		link = chunk->link.next;
+
 		if (chunk->core != MM_CORE_NONE)
 			mm_core_reclaim_chunk(chunk);
 		else
 			mm_chunk_destroy_global(chunk);
-		chunk = next;
 
-	} while (chunk != NULL);
+	} while (link != NULL);
 
-	// TODO: signal the write completion to waiting threads.
 	mm_memory_store(mm_log_busy, false);
 
 	return written;

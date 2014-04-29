@@ -295,10 +295,14 @@ mm_core_reclaim_chain(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	while (chunk != NULL) {
-		struct mm_link *link = chunk->link.next;
-		mm_core_reclaim_chunk(chunk);
-		chunk = containerof(link, struct mm_chunk, link);
+	if (chunk != NULL) {
+		for (;;) {
+			struct mm_link *link = chunk->link.next;
+			mm_core_reclaim_chunk(chunk);
+			if (link == NULL)
+				break;
+			chunk = containerof(link, struct mm_chunk, link);
+		}
 	}
 
 	LEAVE();
