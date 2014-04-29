@@ -653,6 +653,43 @@ mm_event_init_selfpipe(void)
 
 static mm_atomic_uint32_t mm_selfpipe_write_count;
 
+static void
+mm_event_open_selfpipe(struct mm_event_table *events)
+{
+	ENTER();
+	ASSERT(events->head_entry == 0);
+
+	// Open a pipe.
+	int fds[2];
+	if (pipe(fds) < 0)
+		mm_fatal(errno, "pipe()");
+	mm_set_nonblocking(fds[0]);
+	mm_set_nonblocking(fds[1]);
+	events->selfpipe_read_fd = fds[0];
+	events->selfpipe_write_fd = fds[1];
+	events->selfpipe_ready = false;
+
+	// Start serving the self-pipe.
+	mm_event_prepare_fd(&events->selfevent,
+			    mm_event_selfpipe_handler, false,
+			    0, false, 0);
+
+	events->entries[0].fd = events->selfpipe_read_fd;
+	events->entries[0].tag = MM_EVENT_FD_REGISTER;
+	events->entries[0].ev_fd = &events->selfevent;
+
+	events->head_entry = 1;
+
+	mm_event_collect(events);
+	mm_event_poll(events, 0);
+
+	events->head_entry = 0;
+	events->last_entry = 0;
+	events->tail_entry = 0;
+
+	LEAVE();
+}
+
 struct mm_event_table *
 mm_event_create_table(void)
 {
@@ -672,24 +709,7 @@ mm_event_create_table(void)
 	mm_waitset_prepare(&events->blocked_senders);
 
 	// Open an event-loop self-pipe.
-	int fds[2];
-	if (pipe(fds) < 0)
-		mm_fatal(errno, "pipe()");
-	mm_set_nonblocking(fds[0]);
-	mm_set_nonblocking(fds[1]);
-	events->selfpipe_read_fd = fds[0];
-	events->selfpipe_write_fd = fds[1];
-	events->selfpipe_ready = false;
-
-	// Start serving the event loop self-pipe.
-	mm_event_prepare_fd(&events->selfevent,
-			    mm_event_selfpipe_handler, false,
-			    0, false, 0);
-	mm_event_register_fd(events, events->selfpipe_read_fd,
-			     &events->selfevent);
-	mm_event_collect(events);
-	mm_event_poll(events, 0);
-	mm_event_dispatch(events);
+	mm_event_open_selfpipe(events);
 
 	LEAVE();
 	return events;
