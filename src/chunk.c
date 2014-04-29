@@ -37,6 +37,7 @@ mm_chunk_create(size_t size)
 void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
+	ASSERT(chunk->core != MM_CORE_NONE);
 	ASSERT(chunk->core == mm_core_self());
 
 	mm_core_free(chunk);
@@ -47,10 +48,51 @@ mm_chunk_destroy_chain(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	while (chunk != NULL) {
-		struct mm_link *link = chunk->link.next;
-		mm_chunk_destroy(chunk);
-		chunk = containerof(link, struct mm_chunk, link);
+	if (chunk != NULL) {
+		for (;;) {
+			struct mm_link *link = chunk->link.next;
+			mm_chunk_destroy(chunk);
+			if (link == NULL)
+				break;
+			chunk = containerof(link, struct mm_chunk, link);
+		}
+	}
+
+	LEAVE();
+}
+
+struct mm_chunk *
+mm_chunk_create_global(size_t size)
+{
+	size_t total_size = sizeof(struct mm_chunk) + size;
+	struct mm_chunk *chunk = mm_global_alloc(total_size);
+	chunk->used = 0;
+	chunk->core = MM_CORE_NONE;
+	mm_link_init(&chunk->link);
+	return chunk;
+}
+
+void
+mm_chunk_destroy_global(struct mm_chunk *chunk)
+{
+	ASSERT(chunk->core == MM_CORE_NONE);
+
+	mm_global_free(chunk);
+}
+
+void
+mm_chunk_destroy_chain_global(struct mm_chunk *chunk)
+{
+	ENTER();
+
+	if (chunk != NULL) {
+		for (;;) {
+			struct mm_link *link = chunk->link.next;
+			mm_chunk_destroy_global(chunk);
+			if (link == NULL)
+				break;
+			chunk = containerof(link, struct mm_chunk, link);
+		}
 	}
 
 	LEAVE();

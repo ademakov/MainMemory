@@ -44,8 +44,25 @@ mm_chunk_size(const struct mm_chunk *chunk)
 	return mm_core_alloc_size(chunk) - sizeof(struct mm_chunk);
 }
 
+static inline size_t
+mm_chunk_size_global(const struct mm_chunk *chunk)
+{
+	ASSERT(chunk->core == MM_CORE_NONE);
+	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+}
+
 struct mm_chunk * mm_chunk_create(size_t size);
-void mm_chunk_destroy(struct mm_chunk *chunk);
+
+void mm_chunk_destroy(struct mm_chunk *chunk)
+	__attribute__((nonnull(1)));
+
 void mm_chunk_destroy_chain(struct mm_chunk *chunk);
+
+struct mm_chunk * mm_chunk_create_global(size_t size);
+
+void mm_chunk_destroy_global(struct mm_chunk *chunk)
+	__attribute__((nonnull(1)));
+
+void mm_chunk_destroy_chain_global(struct mm_chunk *chunk);
 
 #endif /* CHUNK_H */

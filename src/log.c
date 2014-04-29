@@ -50,28 +50,20 @@ mm_log_add_chain(struct mm_link *head, struct mm_link *tail)
 	mm_thread_unlock(&mm_log_lock);
 }
 
-static void
-mm_log_add_chunk(struct mm_chunk *chunk)
-{
-	mm_log_add_chain(&chunk->link, &chunk->link);
-}
-
 static struct mm_chunk *
 mm_log_create_chunk(size_t size)
 {
-	struct mm_chunk *chunk;
-	if (mm_core == NULL) {
-		chunk = mm_global_alloc(sizeof(struct mm_chunk) + size);
-		chunk->used = 0;
-		chunk->core = MM_CORE_NONE;
-		mm_link_init(&chunk->link);
-	} else {
-		if (size < MM_LOG_CHUNK_SIZE)
-			size = MM_LOG_CHUNK_SIZE;
+	if (size < MM_LOG_CHUNK_SIZE)
+		size = MM_LOG_CHUNK_SIZE;
 
+	struct mm_chunk *chunk;
+	if (mm_core != NULL)
 		chunk = mm_chunk_create(size);
-		mm_queue_append(&mm_core->log_queue, &chunk->link);
-	}
+	else
+		chunk = mm_chunk_create_global(size);
+
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	mm_queue_append(queue, &chunk->link);
 
 	return chunk;
 }
@@ -81,7 +73,8 @@ mm_log_chunk_size(const struct mm_chunk *chunk)
 {
 	if (chunk->core != MM_CORE_NONE)
 		return mm_chunk_size(chunk);
-	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+	else
+		return mm_chunk_size_global(chunk);
 }
 
 void
@@ -90,8 +83,9 @@ mm_log_str(const char *str)
 	size_t len = strlen(str);
 
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL && !mm_queue_empty(&mm_core->log_queue)) {
-		struct mm_link *link = mm_queue_tail(&mm_core->log_queue);
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	if (!mm_queue_empty(queue)) {
+		struct mm_link *link = mm_queue_tail(queue);
 		chunk = containerof(link, struct mm_chunk, link);
 
 		size_t avail = mm_log_chunk_size(chunk) - chunk->used;
@@ -104,27 +98,20 @@ mm_log_str(const char *str)
 		}
 	}
 
-	if (chunk == NULL) {
+	if (chunk == NULL)
 		chunk = mm_log_create_chunk(len);
-	}
 
 	memcpy(chunk->data + chunk->used, str, len);
 	chunk->used += len;
-
-	if (mm_core == NULL) {
-		mm_log_add_chunk(chunk);
-		if (len == 1 && str[0] == '\n') {
-			mm_log_write();
-		}
-	}
 }
 
 void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_chunk *chunk = NULL;
-	if (mm_core != NULL && !mm_queue_empty(&mm_core->log_queue)) {
-		struct mm_link *link = mm_queue_tail(&mm_core->log_queue);
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	if (!mm_queue_empty(queue)) {
+		struct mm_link *link = mm_queue_tail(queue);
 		chunk = containerof(link, struct mm_chunk, link);
 	}
 
@@ -149,10 +136,6 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 		(void) vsnprintf(chunk->data, len + 1, fmt, va);
 	}
 	chunk->used += len;
-
-	if (mm_core == NULL) {
-		mm_log_add_chunk(chunk);
-	}
 }
 
 void
@@ -194,11 +177,10 @@ mm_log_write(void)
 
 		struct mm_link *link = chunk->link.next;
 		struct mm_chunk *next = containerof(link, struct mm_chunk, link);
-		if (chunk->core == MM_CORE_NONE) {
-			mm_global_free(chunk);
-		} else {
+		if (chunk->core != MM_CORE_NONE)
 			mm_core_reclaim_chunk(chunk);
-		}
+		else
+			mm_chunk_destroy_global(chunk);
 		chunk = next;
 
 	} while (chunk != NULL);
@@ -316,10 +298,11 @@ mm_fatal(int error, const char *restrict msg, ...)
 void
 mm_flush(void)
 {
-	if (mm_core != NULL && !mm_queue_empty(&mm_core->log_queue)) {
-		struct mm_link *head = mm_queue_head(&mm_core->log_queue);
-		struct mm_link *tail = mm_queue_tail(&mm_core->log_queue);
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	if (!mm_queue_empty(queue)) {
+		struct mm_link *head = mm_queue_head(queue);
+		struct mm_link *tail = mm_queue_tail(queue);
 		mm_log_add_chain(head, tail);
-		mm_queue_init(&mm_core->log_queue);
+		mm_queue_init(queue);
 	}
 }

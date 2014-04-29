@@ -22,6 +22,7 @@
 #include "thread.h"
 
 #include "alloc.h"
+#include "list.h"
 #include "log.h"
 #include "trace.h"
 
@@ -38,6 +39,9 @@
 
 struct mm_thread
 {
+	/* The log message storage. */
+	struct mm_queue log_queue;
+
 	/* Underlying system thread. */
 	pthread_t system_thread;
 
@@ -52,16 +56,26 @@ struct mm_thread
 	char name[MM_THREAD_NAME_SIZE];
 };
 
-static __thread struct mm_thread *mm_thread = NULL;
+static struct mm_thread mm_thread_main = {
+	.log_queue = {
+		.head = { NULL },
+		.tail = &mm_thread_main.log_queue.head
+	},
+	.name = "main"
+};
+
+static __thread struct mm_thread *mm_thread = &mm_thread_main;
 
 /**********************************************************************
  * Global thread data initialization and termination.
  **********************************************************************/
 
+// TODO: have a global thread list used for debugging/statistics.
+
 void
 mm_thread_init()
 {
-	// TODO: have a global thread list used for debugging/statistics.
+	mm_thread_main.system_thread = pthread_self();
 }
 
 void
@@ -164,33 +178,28 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 static void *
 mm_thread_entry(void *arg)
 {
+	// Set the thread-local pointer to the thread object.
+	mm_thread = arg;
+
 	ENTER();
 
-	struct mm_thread *thread = arg;
-
 	// Set CPU affinity.
-	mm_thread_setaffinity(thread->cpu_tag);
+	mm_thread_setaffinity(mm_thread->cpu_tag);
 
 #if HAVE_PTHREAD_SETNAME_NP
 	// Let the system know the thread name.
 # ifdef __APPLE__
-	pthread_setname_np(thread->name);
+	pthread_setname_np(mm_thread->name);
 # else
-	pthread_setname_np(pthread_self(), thread->name);
+	pthread_setname_np(pthread_self(), mm_thread->name);
 # endif
 #endif
 
-	// Set the thread-local pointer to the thread object.
-	mm_thread = thread;
-
 	// Run the required routine.
-	mm_brief("start thread '%s'", mm_thread_getname(thread));
-	thread->start(thread->start_arg);
-	mm_brief("end thread '%s'", mm_thread_getname(thread));
+	mm_brief("start thread '%s'", mm_thread_getname(mm_thread));
+	mm_thread->start(mm_thread->start_arg);
+	mm_brief("end thread '%s'", mm_thread_getname(mm_thread));
 	mm_flush();
-
-	// Reset the thread pointer (just for balanced ENTER/LEAVE trace).
-	mm_thread = NULL;
 
 	LEAVE();
 	return NULL;
@@ -216,6 +225,8 @@ mm_thread_create(struct mm_thread_attr *attr,
 		thread->cpu_tag = attr->cpu_tag;
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
+
+	mm_queue_init(&thread->log_queue);
 
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
@@ -259,11 +270,15 @@ mm_thread_self(void)
 const char *
 mm_thread_getname(const struct mm_thread *thread)
 {
-	if (thread == NULL)
-		return "main";
 	if (thread->name[0] == 0)
 		return "unnamed";
 	return thread->name;
+}
+
+struct mm_queue *
+mm_thread_getlog(struct mm_thread *thread)
+{
+	return &thread->log_queue;
 }
 
 /**********************************************************************

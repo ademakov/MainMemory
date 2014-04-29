@@ -89,9 +89,6 @@ struct mm_core
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
-	/* The log message memory. */
-	struct mm_queue log_queue;
-
 	/* Memory pool for timers. */
 	struct mm_pool timer_pool;
 	/* Memory pool for futures. */

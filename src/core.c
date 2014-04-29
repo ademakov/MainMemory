@@ -752,8 +752,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->master = NULL;
 	core->thread = NULL;
 
-	mm_queue_init(&core->log_queue);
-
 	core->events = NULL;
 	core->poll_time = 0;
 	core->synch = NULL;
@@ -978,6 +976,7 @@ mm_core_start(void)
 
 		DEBUG("cycle");
 		mm_core_stats();
+		mm_flush();
 		mm_log_write();
 
 		usleep(logged ? 30000 : 3000000);
