@@ -330,8 +330,8 @@ mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 	// Find the event wait timeout.
 	timeout /= 1000;
 
-	// Flush the log before possible sleep.
-	mm_flush();
+	// Publish the log before a possible sleep.
+	mm_log_relay();
 
 	// Poll the system for events.
 	int n = epoll_wait(events->event_fd,
@@ -542,8 +542,8 @@ mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
 	ts.tv_sec = timeout / 1000000;
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	// Flush the log before a possible sleep.
-	mm_flush();
+	// Publish the log before a possible sleep.
+	mm_log_relay();
 
 	// Poll the system for events.
 	int n = kevent(events->event_fd,

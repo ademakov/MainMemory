@@ -199,7 +199,7 @@ mm_thread_entry(void *arg)
 	mm_brief("start thread '%s'", mm_thread_getname(mm_thread));
 	mm_thread->start(mm_thread->start_arg);
 	mm_brief("end thread '%s'", mm_thread_getname(mm_thread));
-	mm_flush();
+	mm_log_relay();
 
 	LEAVE();
 	return NULL;

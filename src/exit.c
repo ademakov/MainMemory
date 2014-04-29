@@ -49,8 +49,8 @@ static void
 mm_do_atexit(void)
 {
 	mm_hook_call(&mm_exit_hook, true);
-	mm_flush();
-	mm_log_write();
+	mm_log_relay();
+	mm_log_flush();
 }
 
 void

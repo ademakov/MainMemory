@@ -37,7 +37,9 @@ void mm_log_fmt(const char *restrict fmt, ...)
 void mm_log_vfmt(const char *restrict fmt, va_list va)
 	__attribute__((nonnull(1)));
 
-size_t mm_log_write(void);
+void mm_log_relay(void);
+
+size_t mm_log_flush(void);
 
 /**********************************************************************
  * High-Level Logging Routines.
@@ -66,7 +68,5 @@ void mm_fatal(int error, const char *restrict msg, ...)
 	__attribute__((format(printf, 2, 3)))
 	__attribute__((nonnull(2)))
 	__attribute__((noreturn));
-
-void mm_flush(void);
 
 #endif /* LOG_H */

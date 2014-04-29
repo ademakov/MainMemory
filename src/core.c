@@ -972,12 +972,12 @@ mm_core_start(void)
 
 	// Loop until stopped.
 	while (!mm_exit_test()) {
-		size_t logged = mm_log_write();
+		size_t logged = mm_log_flush();
 
 		DEBUG("cycle");
 		mm_core_stats();
-		mm_flush();
-		mm_log_write();
+		mm_log_relay();
+		mm_log_flush();
 
 		usleep(logged ? 30000 : 3000000);
 	}

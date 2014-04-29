@@ -42,14 +42,6 @@ static struct mm_queue MM_QUEUE_INIT(mm_log_queue);
 static mm_thread_lock_t mm_log_lock = MM_THREAD_LOCK_INIT;
 static bool mm_log_busy = false;
 
-static void
-mm_log_add_chain(struct mm_link *head, struct mm_link *tail)
-{
-	mm_thread_lock(&mm_log_lock);
-	mm_queue_splice_tail(&mm_log_queue, head, tail);
-	mm_thread_unlock(&mm_log_lock);
-}
-
 static struct mm_chunk *
 mm_log_create_chunk(size_t size)
 {
@@ -147,8 +139,24 @@ mm_log_fmt(const char *restrict fmt, ...)
 	va_end(va);
 }
 
+void
+mm_log_relay(void)
+{
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	if (!mm_queue_empty(queue)) {
+		struct mm_link *head = mm_queue_head(queue);
+		struct mm_link *tail = mm_queue_tail(queue);
+
+		mm_thread_lock(&mm_log_lock);
+		mm_queue_splice_tail(&mm_log_queue, head, tail);
+		mm_thread_unlock(&mm_log_lock);
+
+		mm_queue_init(queue);
+	}
+}
+
 size_t
-mm_log_write(void)
+mm_log_flush(void)
 {
 	mm_thread_lock(&mm_log_lock);
 
@@ -293,16 +301,4 @@ mm_fatal(int error, const char *restrict msg, ...)
 	}
 
 	mm_exit(EXIT_FAILURE);
-}
-
-void
-mm_flush(void)
-{
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
-	if (!mm_queue_empty(queue)) {
-		struct mm_link *head = mm_queue_head(queue);
-		struct mm_link *tail = mm_queue_tail(queue);
-		mm_log_add_chain(head, tail);
-		mm_queue_init(queue);
-	}
 }
