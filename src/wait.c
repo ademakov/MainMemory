@@ -38,8 +38,7 @@ mm_wait_start(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_wait_pool, "wait", &mm_alloc_shared,
-			sizeof(struct mm_wait));
+	mm_pool_prepare_shared(&mm_wait_pool, "wait", sizeof(struct mm_wait));
 
 	LEAVE();
 }

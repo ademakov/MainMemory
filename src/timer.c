@@ -94,8 +94,7 @@ mm_timer_init(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_core->timer_pool, "timer",
-			&mm_alloc_core, sizeof (struct mm_timer));
+	mm_pool_prepare(&mm_core->timer_pool, "timer", sizeof (struct mm_timer));
 
 	LEAVE();
 }

@@ -34,8 +34,7 @@ mm_work_start(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_work_pool, "work", &mm_alloc_shared,
-			sizeof(struct mm_work));
+	mm_pool_prepare_shared(&mm_work_pool, "work", sizeof(struct mm_work));
 
 	LEAVE();
 }

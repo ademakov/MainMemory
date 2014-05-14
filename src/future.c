@@ -96,8 +96,7 @@ mm_future_init(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_core->future_pool, "future", &mm_alloc_core,
-			sizeof(struct mm_future));
+	mm_pool_prepare(&mm_core->future_pool, "future", sizeof(struct mm_future));
 
 	LEAVE();
 }

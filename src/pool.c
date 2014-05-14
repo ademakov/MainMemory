@@ -63,12 +63,11 @@ mm_pool_free_unlock(struct mm_pool *pool)
 }
 
 void
-mm_pool_prepare(struct mm_pool *pool,
-		const char *pool_name,
-		const struct mm_allocator *alloc,
-		uint32_t item_size)
+mm_pool_prepare_low(struct mm_pool *pool,
+		    const char *pool_name,
+		    const struct mm_allocator *alloc,
+		    uint32_t item_size)
 {
-	ENTER();
 	ASSERT(item_size < 0x200);
 
 	if (item_size < sizeof(struct mm_link))
@@ -84,11 +83,6 @@ mm_pool_prepare(struct mm_pool *pool,
 	pool->block_array_used = 0;
 	pool->block_array_size = 0;
 
-	pool->shared = (alloc == &mm_alloc_shared);
-	pool->global = (alloc == &mm_alloc_global);
-	pool->free_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
-	pool->grow_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
-
 	pool->alloc = alloc;
 	pool->block_array = NULL;
 	pool->block_cur_ptr = NULL;
@@ -97,6 +91,49 @@ mm_pool_prepare(struct mm_pool *pool,
 	mm_link_init(&pool->free_list);
 
 	pool->pool_name = mm_strdup(&mm_alloc_global, pool_name);
+}
+
+void
+mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
+{
+	ENTER();
+
+	mm_pool_prepare_low(pool, name, &mm_alloc_core, item_size);
+
+	pool->shared = false;
+	pool->global = false;
+
+	LEAVE();
+}
+
+void
+mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_size)
+{
+	ENTER();
+
+	mm_pool_prepare_low(pool, name, &mm_alloc_shared, item_size);
+
+	pool->shared = true;
+	pool->global = false;
+
+	pool->free_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	pool->grow_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+
+	LEAVE();
+}
+
+void
+mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_size)
+{
+	ENTER();
+
+	mm_pool_prepare_low(pool, name, &mm_alloc_global, item_size);
+
+	pool->shared = false;
+	pool->global = true;
+
+	pool->free_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	pool->grow_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
 	LEAVE();
 }

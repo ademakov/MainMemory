@@ -58,11 +58,14 @@ struct mm_pool
 	char *pool_name;
 };
 
-void mm_pool_prepare(struct mm_pool *pool,
-		     const char *pool_name,
-		     const struct mm_allocator *alloc,
-		     uint32_t item_size)
-	__attribute__((nonnull(1, 2, 3)));
+void mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
+	__attribute__((nonnull(1, 2)));
+
+void mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_size)
+	__attribute__((nonnull(1, 2)));
+
+void mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_size)
+	__attribute__((nonnull(1, 2)));
 
 void mm_pool_cleanup(struct mm_pool *pool)
 	__attribute__((nonnull(1)));
