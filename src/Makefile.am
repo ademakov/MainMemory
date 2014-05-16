@@ -8,7 +8,7 @@ mmem_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 mmem_SOURCES = \
 	arch/atomic.h arch/common.h arch/memory.h arch/stack.h \
 	alloc.c alloc.h bits.h bitset.c bitset.h buffer.c buffer.h \
-	chunk.c chunk.h clock.c clock.h common.h core.c core.h \
+	cdata.c cdata.h chunk.c chunk.h clock.c clock.h common.h core.c core.h \
 	event.c event.h exit.c exit.h future.c future.h hook.c hook.h \
 	list.h lock.h log.c log.h main.c net.c net.h pool.c pool.h \
 	port.c port.h ring.c ring.h runq.c runq.h stack.c stack.h \

@@ -21,6 +21,7 @@
 
 #include "alloc.h"
 #include "bitset.h"
+#include "cdata.h"
 #include "chunk.h"
 #include "future.h"
 #include "hook.h"
@@ -672,6 +673,7 @@ mm_core_boot_init(struct mm_core *core)
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);
+		mm_cdata_summary();
 		mm_core_boot_signal();
 	}
 }
@@ -875,6 +877,8 @@ mm_core_init(void)
 	mm_bitset_prepare(&mm_core_event_affinity, &mm_alloc_global, mm_core_num);
 
 	mm_alloc_init();
+	mm_cdata_init();
+
 	mm_clock_init();
 	mm_thread_init();
 	mm_event_init();
@@ -914,6 +918,8 @@ mm_core_term(void)
 	mm_net_term();
 	mm_event_term();
 	mm_thread_term();
+
+	mm_cdata_term();
 	mm_alloc_term();
 
 	LEAVE();
