@@ -30,6 +30,13 @@
  * Wait entries.
  **********************************************************************/
 
+// An entry for a waiting task.
+struct mm_wait
+{
+	struct mm_link link;
+	struct mm_task *task;
+};
+
 // The memory pool for waiting tasks.
 static struct mm_pool mm_wait_pool;
 
@@ -99,7 +106,6 @@ mm_wait_cache_prepare(struct mm_wait_cache *cache)
 	cache->cache_size = 0;
 
 	mm_link_init(&cache->pending);
-	cache->pending_count = 0;
 
 	LEAVE();
 }
@@ -153,7 +159,6 @@ static void
 mm_wait_add_pending(struct mm_wait_cache *cache, struct mm_wait *wait)
 {
 	mm_link_insert(&cache->pending, &wait->link);
-	cache->pending_count++;
 }
 
 void
@@ -161,10 +166,9 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 {
 	ENTER();
 
-	if (cache->pending_count) {
+	if (!mm_link_empty(&cache->pending)) {
 		struct mm_link pending = cache->pending;
 		mm_link_init(&cache->pending);
-		cache->pending_count = 0;
 
 		while (!mm_link_empty(&pending)) {
 			struct mm_link *link = mm_link_delete_head(&pending);

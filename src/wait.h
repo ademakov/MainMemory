@@ -27,13 +27,6 @@
 /* Forward declaration. */
 struct mm_task;
 
-/* An entry for a waiting task. */
-struct mm_wait
-{
-	struct mm_link link;
-	struct mm_task *task;
-};
-
 /* A cache of free wait entries. */
 struct mm_wait_cache
 {
@@ -43,8 +36,6 @@ struct mm_wait_cache
 	struct mm_link pending;
 	/* The number of free entries in the wait cache. */
 	uint32_t cache_size;
-	/* The number of busy entries in the wait cache. */
-	uint32_t pending_count;
 };
 
 /* A set of tasks waiting on an entity shared between cores. */
