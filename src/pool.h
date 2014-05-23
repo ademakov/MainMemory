@@ -21,13 +21,42 @@
 #define POOL_H
 
 #include "common.h"
+#include "cdata.h"
 #include "list.h"
 #include "lock.h"
 
+/* Forward declaration. */
+struct mm_allocator;
+
 #define MM_POOL_INDEX_INVALID	((uint32_t) -1)
 
-// Forward declaration.
-struct mm_allocator;
+#if ENABLE_SMP
+
+struct mm_pool_shared_cdata
+{
+	/* The cache of free work items. */
+	struct mm_link cache;
+	/* The number of items in the free cache. */
+	uint32_t cache_size;
+	/* The cache is full. */
+	bool cache_full;
+};
+
+struct mm_pool_shared
+{
+	mm_task_lock_t free_lock;
+	mm_task_lock_t grow_lock;
+
+	MM_CDATA(struct mm_pool_shared_cdata, cdata);
+};
+
+#endif
+
+struct mm_pool_global
+{
+	mm_thread_lock_t free_lock;
+	mm_thread_lock_t grow_lock;
+};
 
 struct mm_pool
 {
@@ -44,16 +73,18 @@ struct mm_pool
 
 	bool shared;
 	bool global;
+
 	union {
-		mm_task_lock_t shared;
-		mm_thread_lock_t global;
-	} free_lock;
-	union {
-		mm_task_lock_t shared;
-		mm_thread_lock_t global;
-	} grow_lock;
+#if ENABLE_SMP
+		struct mm_pool_shared shared_data;
+#endif
+		struct mm_pool_global global_data;
+	};
 
 	const struct mm_allocator *alloc;
+
+	void * (*alloc_item)(struct mm_pool *pool);
+	void (*free_item)(struct mm_pool *pool, void *item);
 
 	char *pool_name;
 };
@@ -79,10 +110,16 @@ uint32_t mm_pool_ptr2idx(struct mm_pool *pool, const void *item)
 bool mm_pool_contains(struct mm_pool *pool, const void *item)
 	__attribute__((nonnull(1)));
 
-void * mm_pool_alloc(struct mm_pool *pool)
-	__attribute__((nonnull(1)));
+static inline void *
+mm_pool_alloc(struct mm_pool *pool)
+{
+	return (pool->alloc_item)(pool);
+}
 
-void mm_pool_free(struct mm_pool *pool, void *item)
-	__attribute__((nonnull(1, 2)));
+static inline void
+mm_pool_free(struct mm_pool *pool, void *item)
+{
+	(pool->free_item)(pool, item);
+}
 
 #endif /* POOL_H */
