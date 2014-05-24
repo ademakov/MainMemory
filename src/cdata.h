@@ -31,9 +31,8 @@
 	})
 
 #define MM_CDATA_DEREF(core, data) ({					\
-		typeof(data.ptr) ptr;					\
-		ptr = mm_cdata_getptr(core, data.ref);			\
-		ptr;							\
+		size_t off = (core) * MM_CDATA_CHUNK_SIZE;		\
+		(typeof(data.ptr)) (data.ref + off);			\
 	})
 
 typedef uintptr_t mm_cdata_t;
@@ -42,12 +41,6 @@ void mm_cdata_init(void);
 void mm_cdata_term(void);
 
 mm_cdata_t mm_cdata_alloc(const char *name, size_t size);
-
-static inline void *
-mm_cdata_getptr(mm_core_t core, mm_cdata_t dref)
-{
-	return (void *) (dref + core * MM_CDATA_CHUNK_SIZE);
-}
 
 void mm_cdata_summary(void);
 
