@@ -51,16 +51,15 @@ mm_task_backoff(uint32_t count)
 {
 	ASSERT(mm_running_task != NULL);
 
-	uint32_t n = count;
-	if (n > 0x100) {
+	if (count > 0xff) {
+		count = 0;
 		mm_task_yield();
-		n = 0x100;
 	}
 
-	while (n--)
+	for (uint32_t n = count; n; n--)
 		mm_atomic_lock_pause();
 
-	return count ? count * 2 : 1;
+	return count * 2 + 1;
 }
 
 static inline void
@@ -107,24 +106,26 @@ mm_thread_trylock(mm_thread_lock_t *lock)
 static inline uint32_t
 mm_thread_backoff(uint32_t count)
 {
-	uint32_t n = count;
-	if (n > 0x100) {
 #if ENABLE_SMP
-		if (mm_running_task != NULL)
-			mm_task_yield();
-#endif
-		if (n < 0x1000) {
-			n = 0x100;
-		} else {
+	if (count > 0xff) {
+		if (count > 0x7ff) {
+			count = 0;
 			mm_thread_yield();
-			n = 0;
+		} else {
+			mm_task_yield();
 		}
 	}
+#else
+	if (count > 0x7ff) {
+		count = 0;
+		mm_thread_yield();
+	}
+#endif
 
-	while (n--)
+	for (uint32_t n = count & 0xff; n; n--)
 		mm_atomic_lock_pause();
 
-	return count ? count * 2 : 1;
+	return count * 2 + 1;
 }
 
 static inline void
