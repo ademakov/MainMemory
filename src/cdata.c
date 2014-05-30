@@ -27,7 +27,7 @@
 #include "trace.h"
 #include "util.h"
 
-#define MM_CDATA_ALIGN		(16)
+#define MM_CDATA_ALIGN		(8)
 #define MM_CDATA_CHUNK_HEAD	mm_align(sizeof(struct mm_cdata_chunk), MM_CDATA_ALIGN)
 
 // CData entry info.
