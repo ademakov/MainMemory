@@ -32,29 +32,23 @@ struct mm_allocator;
 
 #if ENABLE_SMP
 
-struct mm_pool_shared_cdata
-{
-	/* The cache of free work items. */
-	struct mm_link cache;
-	/* The number of items in the free cache. */
-	uint32_t cache_size;
-	/* The cache is full. */
-	bool cache_full;
-};
-
 struct mm_pool_shared
 {
-	mm_task_lock_t free_lock;
-	mm_task_lock_t grow_lock;
-
+	/* Per-core data. */
 	MM_CDATA(struct mm_pool_shared_cdata, cdata);
+
+	/* Pool growth lock. */
+	mm_task_lock_t grow_lock;
 };
 
 #endif
 
 struct mm_pool_global
 {
+	/* Free list lock. */
 	mm_thread_lock_t free_lock;
+
+	/* Pool growth lock. */
 	mm_thread_lock_t grow_lock;
 };
 

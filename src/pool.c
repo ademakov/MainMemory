@@ -269,9 +269,26 @@ mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
  * Shared pools.
  **********************************************************************/
 
-#define MM_POOL_FREE_BATCH	(8)
+#define MM_POOL_FREE_BATCH	(16)
+#define MM_POOL_FREE_THRESHOLD	(32)
 
 #if ENABLE_SMP
+
+struct mm_pool_shared_cdata
+{
+	/* Free items cache. */
+	struct mm_link cache;
+
+	/* ABA-problem guard. */
+	struct mm_link *item_guard;
+	struct mm_link **guard_buffer;
+
+	/* Number of items in the cache. */
+	uint32_t cache_size;
+
+	/* The cache is full. */
+	bool cache_full;
+};
 
 void *
 mm_pool_alloc_shared(struct mm_pool *pool)
@@ -283,22 +300,38 @@ mm_pool_alloc_shared(struct mm_pool *pool)
 		MM_CDATA_DEREF(mm_core_self(), pool->shared_data.cdata);
 
 	if (!mm_link_empty(&cdata->cache)) {
+		// Get an item from the core-local cache.
 		item = mm_link_delete_head(&cdata->cache);
 		cdata->cache_size--;
 
 	} else {
-		mm_task_lock(&pool->shared_data.free_lock);
+		// Get an item form the shared free list.
+		struct mm_link *head = mm_link_head(&pool->free_list);
+		if (head != NULL) {
+			for (uint32_t count = 0; ; count = mm_task_backoff(count)) {
+				// Prevent ABA-problem.
+				mm_memory_store(cdata->item_guard, head);
 
-		if (!mm_link_empty(&pool->free_list)) {
-			item = mm_link_delete_head(&pool->free_list);
+				// Make sure the guard store is not reordered
+				// wrt 'head->next' load below.
+				mm_memory_strict_fence();
 
-			mm_task_unlock(&pool->shared_data.free_lock);
+				// Try to pop the item atomically.
+				struct mm_link *old_head = head;
+				head = mm_link_cas_head(&pool->free_list, old_head, head->next);
+				if (head == old_head || head == NULL)
+					break;
+  			}
+
+			cdata->item_guard = NULL;
+		}
+
+		if (head != NULL) {
+			item = head;
 		} else {
-			mm_task_unlock(&pool->shared_data.free_lock);
+			// Allocate a new item.
 			mm_task_lock(&pool->shared_data.grow_lock);
-
 			item = mm_pool_alloc_new(pool);
-
 			mm_task_unlock(&pool->shared_data.grow_lock);
 		}
 	}
@@ -315,7 +348,9 @@ mm_pool_free_shared(struct mm_pool *pool, void *item)
 
 	struct mm_pool_shared_cdata *cdata =
 		MM_CDATA_DEREF(mm_core_self(), pool->shared_data.cdata);
-	if (cdata->cache_size < MM_POOL_FREE_BATCH) {
+
+	// Find out if the core-local cache is too large.
+	if (cdata->cache_size < MM_POOL_FREE_THRESHOLD) {
 		cdata->cache_full = false;
 	} else {
 		uint32_t aver = pool->item_last / mm_core_getnum();
@@ -328,22 +363,71 @@ mm_pool_free_shared(struct mm_pool *pool, void *item)
 		}
 	}
 
+	// Add the item to the core-local cache.
 	mm_link_insert(&cdata->cache, (struct mm_link *) item);
+	cdata->cache_size++;
+
+	// If the core-local cache is too large move some number of items
+	// from it to the shared free list.
 	if (cdata->cache_full) {
-		cdata->cache_size -= MM_POOL_FREE_BATCH - 1;
+		// Collect items that might be subjects to ABA-problem.
+		int nguards = 0;
+		struct mm_link **guards = cdata->guard_buffer;
+		mm_core_t n = mm_core_getnum();
+		for (mm_core_t i = 0; i < n; i++) {
+			struct mm_pool_shared_cdata *cd =
+				MM_CDATA_DEREF(i, pool->shared_data.cdata);
+			struct mm_link *guard = mm_memory_load(cd->item_guard);
+			if (guard != NULL)
+				guards[nguards++] = guard;
+		}
 
-		struct mm_link *head = mm_link_head(&cdata->cache);
-		struct mm_link *tail = head;
-		for (int count = 0; count < (MM_POOL_FREE_BATCH - 1); count++)
-			tail = tail->next;
-		mm_link_cleave(&cdata->cache, tail->next);
+		// Collect the items to move.
+		int nitems = 0;
+		struct mm_link *head;
+		struct mm_link *tail;
+		struct mm_link *prev = &cdata->cache;
+		while (nitems < MM_POOL_FREE_BATCH) {
+			struct mm_link *link = prev->next;
+			if (link == NULL)
+				break;
 
-		mm_task_lock(&pool->shared_data.free_lock);
-		mm_link_splice(&pool->free_list, head, tail);
-		mm_task_unlock(&pool->shared_data.free_lock);
+			bool guarded = false;
+			for (int i = 0; i < nguards; i++) {
+				if (link == guards[i]) {
+					guarded = false;
+					break;
+				}
+			}
 
-	} else {
-		cdata->cache_size++;
+			if (guarded) {
+				prev = link;
+			} else {
+				if (0 == nitems++)
+					head = tail = link;
+				else
+					tail->next = link;
+				tail = link;
+
+				prev->next = link->next;
+			}
+		}
+
+		// Move the items to the free list.
+		if (nitems > 0) {
+			cdata->cache_size -= nitems;
+
+			// Make sure the guard load ops above are not reordered
+			// wrt the CAS below.
+			mm_memory_fence();
+
+			for (uint32_t count = 0; ; count = mm_task_backoff(count)) {
+				struct mm_link *old_head = mm_link_shared_head(&pool->free_list);
+				tail->next = old_head;
+				if (mm_link_cas_head(&pool->free_list, old_head, head) == old_head)
+					break;
+			}
+		}
 	}
 
 	LEAVE();
@@ -362,15 +446,18 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->global = false;
 
 #if ENABLE_SMP
-	pool->shared_data.free_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	pool->shared_data.grow_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 
 	char *cdata_name = mm_asprintf(&mm_alloc_global, "'%s' memory pool", name);
 	MM_CDATA_ALLOC(cdata_name, pool->shared_data.cdata);
-	for (mm_core_t i = 0; i < mm_core_num; i++) {
+	mm_core_t n = mm_core_getnum();
+	for (mm_core_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =
 			MM_CDATA_DEREF(i, pool->shared_data.cdata);
+
 		mm_link_init(&cdata->cache);
+		cdata->item_guard = 0;
+		cdata->guard_buffer = mm_global_calloc(n, sizeof(struct mm_link *));
 		cdata->cache_size = 0;
 		cdata->cache_full = false;
 	}
@@ -404,10 +491,9 @@ mm_pool_alloc_global(struct mm_pool *pool)
 		mm_thread_unlock(&pool->global_data.free_lock);
 	} else {
 		mm_thread_unlock(&pool->global_data.free_lock);
+
 		mm_thread_lock(&pool->global_data.grow_lock);
-
 		item = mm_pool_alloc_new(pool);
-
 		mm_thread_unlock(&pool->global_data.grow_lock);
 	}
 
