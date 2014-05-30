@@ -199,6 +199,19 @@ mm_link_delete_head(struct mm_link *list)
 	return head;
 }
 
+static inline struct mm_link *
+mm_link_shared_head(struct mm_link *list)
+{
+	return mm_memory_load(list->next);
+}
+
+static inline struct mm_link *
+mm_link_cas_head(struct mm_link *list, struct mm_link *head, struct mm_link *item)
+{
+	void **headp = (void **) &list->next;
+	return mm_atomic_ptr_cas(headp, head, item);
+}
+
 /**********************************************************************
  * Single-linked list with FIFO support.
  **********************************************************************/
