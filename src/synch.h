@@ -41,12 +41,11 @@ struct mm_synch
 };
 
 /*
- * The mm_thread_synch_test() and mm_thread_synch_clear() functions are not
- * synchronized. There might be data contention between these functions and
- * mm_thread_synch_wait() or mm_thread_synch_timedwait() functions so it is
- * only safe to use them together when all of their calls are serialized by
- * some other means, for instance, by being called just from single 'owner'
- * thread.
+ * The mm_synch_test() and mm_synch_clear() functions are not synchronized.
+ * There might be data contention between these functions and mm_synch_wait()
+ * or mm_synch_timedwait() functions so it is only safe to use them together
+ * when all of their calls are serialized by some other means, for instance,
+ * by being called just from single 'owner' thread.
  */
 
 static inline bool
