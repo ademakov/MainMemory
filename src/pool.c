@@ -224,7 +224,7 @@ mm_pool_contains(struct mm_pool *pool, const void *item)
  **********************************************************************/
 
 void *
-mm_pool_alloc_private(struct mm_pool *pool)
+mm_pool_local_alloc(struct mm_pool *pool)
 {
 	ENTER();
 	void *item;
@@ -238,8 +238,8 @@ mm_pool_alloc_private(struct mm_pool *pool)
 	return item;
 }
 
-static void
-mm_pool_free_private(struct mm_pool *pool, void *item)
+void
+mm_pool_local_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
 	ASSERT(mm_pool_contains(pool, item));
@@ -259,8 +259,8 @@ mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
 	pool->shared = false;
 	pool->global = false;
 
-	pool->alloc_item = mm_pool_alloc_private;
-	pool->free_item = mm_pool_free_private;
+	pool->alloc_item = mm_pool_local_alloc;
+	pool->free_item = mm_pool_local_free;
 
 	LEAVE();
 }
@@ -291,13 +291,14 @@ struct mm_pool_shared_cdata
 };
 
 void *
-mm_pool_alloc_shared(struct mm_pool *pool)
+mm_pool_shared_alloc_low(mm_core_t core, struct mm_pool *pool)
 {
 	ENTER();
+	ASSERT(pool->shared);
 	void *item;
 
 	struct mm_pool_shared_cdata *cdata =
-		MM_CDATA_DEREF(mm_core_self(), pool->shared_data.cdata);
+		MM_CDATA_DEREF(core, pool->shared_data.cdata);
 
 	if (!mm_link_empty(&cdata->cache)) {
 		// Get an item from the core-local cache.
@@ -318,7 +319,7 @@ mm_pool_alloc_shared(struct mm_pool *pool)
 
 				// Try to pop the item atomically.
 				struct mm_link *old_head = head;
-				head = mm_link_cas_head(&pool->free_list, old_head, head->next);
+				head = mm_link_cas_head(&pool->free_list, head, head->next);
 				if (head == old_head || head == NULL)
 					break;
   			}
@@ -340,14 +341,15 @@ mm_pool_alloc_shared(struct mm_pool *pool)
 	return item;
 }
 
-static void
-mm_pool_free_shared(struct mm_pool *pool, void *item)
+void
+mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 {
 	ENTER();
+	ASSERT(pool->shared);
 	ASSERT(mm_pool_contains(pool, item));
 
 	struct mm_pool_shared_cdata *cdata =
-		MM_CDATA_DEREF(mm_core_self(), pool->shared_data.cdata);
+		MM_CDATA_DEREF(core, pool->shared_data.cdata);
 
 	// Find out if the core-local cache is too large.
 	if (cdata->cache_size < MM_POOL_FREE_THRESHOLD) {
@@ -384,8 +386,8 @@ mm_pool_free_shared(struct mm_pool *pool, void *item)
 
 		// Collect the items to move.
 		int nitems = 0;
-		struct mm_link *head;
-		struct mm_link *tail;
+		struct mm_link *head = NULL;
+		struct mm_link *tail = NULL;
 		struct mm_link *prev = &cdata->cache;
 		while (nitems < MM_POOL_FREE_BATCH) {
 			struct mm_link *link = prev->next;
@@ -433,6 +435,18 @@ mm_pool_free_shared(struct mm_pool *pool, void *item)
 	LEAVE();
 }
 
+void *
+mm_pool_shared_alloc(struct mm_pool *pool)
+{
+	return mm_pool_shared_alloc_low(mm_core_self(), pool);
+}
+
+void
+mm_pool_shared_free(struct mm_pool *pool, void *item)
+{
+	mm_pool_shared_free_low(mm_core_self(), pool, item);
+}
+
 #endif
 
 void
@@ -463,11 +477,11 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	}
 	mm_global_free(cdata_name);
 
-	pool->alloc_item = mm_pool_alloc_shared;
-	pool->free_item = mm_pool_free_shared;
+	pool->alloc_item = mm_pool_shared_alloc;
+	pool->free_item = mm_pool_shared_free;
 #else
-	pool->alloc_item = mm_pool_alloc_private;
-	pool->free_item = mm_pool_free_private;
+	pool->alloc_item = mm_pool_local_alloc;
+	pool->free_item = mm_pool_local_free;
 #endif
 
 	LEAVE();
@@ -477,8 +491,8 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
  * Global pools.
  **********************************************************************/
 
-void *
-mm_pool_alloc_global(struct mm_pool *pool)
+static void *
+mm_pool_global_alloc(struct mm_pool *pool)
 {
 	ENTER();
 
@@ -502,7 +516,7 @@ mm_pool_alloc_global(struct mm_pool *pool)
 }
 
 static void
-mm_pool_free_global(struct mm_pool *pool, void *item)
+mm_pool_global_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
 	ASSERT(mm_pool_contains(pool, item));
@@ -527,8 +541,8 @@ mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->global_data.free_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 	pool->global_data.grow_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
-	pool->alloc_item = mm_pool_alloc_global;
-	pool->free_item = mm_pool_free_global;
+	pool->alloc_item = mm_pool_global_alloc;
+	pool->free_item = mm_pool_global_free;
 
 	LEAVE();
 }

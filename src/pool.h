@@ -116,4 +116,52 @@ mm_pool_free(struct mm_pool *pool, void *item)
 	(pool->free_item)(pool, item);
 }
 
+void * mm_pool_local_alloc(struct mm_pool *pool)
+	__attribute__((nonnull(1)));
+
+void mm_pool_local_free(struct mm_pool *pool, void *item)
+	__attribute__((nonnull(1)));
+
+#if ENABLE_SMP
+
+void * mm_pool_shared_alloc(struct mm_pool *pool)
+	__attribute__((nonnull(1)));
+
+void mm_pool_shared_free(struct mm_pool *pool, void *item)
+	__attribute__((nonnull(1)));
+
+void * mm_pool_shared_alloc_low(mm_core_t core, struct mm_pool *pool)
+	__attribute__((nonnull(2)));
+
+void mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
+	__attribute__((nonnull(2)));
+
+#else
+
+static inline void *
+mm_pool_shared_alloc(struct mm_pool *pool)
+{
+	return mm_pool_local_alloc(pool);
+}
+
+static inline void
+mm_pool_shared_free(struct mm_pool *pool, void *item)
+{
+	mm_pool_local_free(pool, item);
+}
+
+static inline void *
+mm_pool_shared_alloc_low(mm_core_t core __attribute__((unused)), struct mm_pool *pool)
+{
+	return mm_pool_local_alloc(pool);
+}
+
+static inline void
+mm_pool_shared_free_low(mm_core_t core __attribute__((unused)), struct mm_pool *pool, void *item)
+{
+	mm_pool_local_free(pool, item);
+}
+
+#endif
+
 #endif /* POOL_H */
