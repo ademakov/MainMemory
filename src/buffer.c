@@ -37,7 +37,7 @@ mm_buffer_segment_create(char *data, size_t size,
 {
 	ENTER();
 
-	struct mm_buffer_segment *seg = mm_core_alloc(sizeof *seg);
+	struct mm_buffer_segment *seg = mm_local_alloc(sizeof *seg);
 	seg->data = data;
 	seg->size = size;
 	seg->next = NULL;
@@ -55,7 +55,7 @@ mm_buffer_segment_destroy(struct mm_buffer_segment *seg)
 
 	if (seg->release != NULL)
 		(*seg->release)(seg->release_data);
-	mm_core_free(seg);
+	mm_local_free(seg);
 
 	LEAVE();
 }
@@ -257,14 +257,14 @@ mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 	} else if ((unsigned) len < n) {
 		buf->in_off += len;
 	} else {
-		char *ptr = mm_core_alloc(len + 1);
+		char *ptr = mm_local_alloc(len + 1);
 
 		va_start(va, fmt);
 		len = vsnprintf(ptr, len + 1, fmt, va);
 		va_end(va);
 
 		mm_buffer_append(buf, ptr, len);
-		mm_core_free(ptr);
+		mm_local_free(ptr);
 	}
 
 	LEAVE();

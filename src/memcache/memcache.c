@@ -1025,7 +1025,7 @@ mc_command_destroy(struct mm_net_socket *sock, struct mc_command *command)
 	ENTER();
 
 	if (command->own_key)
-		mm_core_free((char *) command->key.str);
+		mm_local_free((char *) command->key.str);
 
 	switch (mc_command_result(command)) {
 	case MC_RESULT_ENTRY:
@@ -2556,7 +2556,7 @@ again:
 			} else {
 				state = S_KEY_COPY;
 
-				char *str = mm_core_alloc(MC_KEY_LEN_MAX);
+				char *str = mm_local_alloc(MC_KEY_LEN_MAX);
 				memcpy(str, command->key.str, len);
 				command->key.len = len;
 				command->key.str = str;

@@ -45,7 +45,7 @@ struct mm_allocator
 	void (*free)(void *ptr);
 };
 
-extern const struct mm_allocator mm_alloc_core;
+extern const struct mm_allocator mm_alloc_local;
 extern const struct mm_allocator mm_alloc_shared;
 extern const struct mm_allocator mm_alloc_global;
 
@@ -60,20 +60,20 @@ void mm_alloc_term(void);
  * Intra-core memory allocation routines.
  **********************************************************************/
 
-void * mm_core_alloc(size_t size)
+void * mm_local_alloc(size_t size)
 	__attribute__((malloc));
 
-void * mm_core_alloc_aligned(size_t align, size_t size)
+void * mm_local_alloc_aligned(size_t align, size_t size)
 	__attribute__((malloc));
 
-void * mm_core_calloc(size_t count, size_t size)
+void * mm_local_calloc(size_t count, size_t size)
 	__attribute__((malloc));
 
-void * mm_core_realloc(void *ptr, size_t size);
+void * mm_local_realloc(void *ptr, size_t size);
 
-void mm_core_free(void *ptr);
+void mm_local_free(void *ptr);
 
-size_t mm_core_alloc_size(const void *ptr);
+size_t mm_local_alloc_size(const void *ptr);
 
 /**********************************************************************
  * Cross-core memory allocation routines.

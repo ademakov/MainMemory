@@ -254,7 +254,7 @@ mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_alloc_core, item_size);
+	mm_pool_prepare_low(pool, name, &mm_alloc_local, item_size);
 
 	pool->shared = false;
 	pool->global = false;

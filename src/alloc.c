@@ -26,11 +26,11 @@
 
 #include "dlmalloc/malloc.h"
 
-const struct mm_allocator mm_alloc_core = {
-	mm_core_alloc,
-	mm_core_calloc,
-	mm_core_realloc,
-	mm_core_free
+const struct mm_allocator mm_alloc_local = {
+	mm_local_alloc,
+	mm_local_calloc,
+	mm_local_realloc,
+	mm_local_free
 };
 
 const struct mm_allocator mm_alloc_shared = {
@@ -85,7 +85,7 @@ free(void *ptr)
  **********************************************************************/
 
 void *
-mm_core_alloc(size_t size)
+mm_local_alloc(size_t size)
 {
 	void *ptr = mspace_malloc(mm_core->arena, size);
 
@@ -95,7 +95,7 @@ mm_core_alloc(size_t size)
 }
 
 void *
-mm_core_alloc_aligned(size_t align, size_t size)
+mm_local_alloc_aligned(size_t align, size_t size)
 {
 	void *ptr = mspace_memalign(mm_core->arena, align, size);
 
@@ -105,7 +105,7 @@ mm_core_alloc_aligned(size_t align, size_t size)
 }
 
 void *
-mm_core_calloc(size_t count, size_t size)
+mm_local_calloc(size_t count, size_t size)
 {
 	void *ptr = mspace_calloc(mm_core->arena, count, size);
 
@@ -115,7 +115,7 @@ mm_core_calloc(size_t count, size_t size)
 }
 
 void *
-mm_core_realloc(void *ptr, size_t size)
+mm_local_realloc(void *ptr, size_t size)
 {
 	ptr = mspace_realloc(mm_core->arena, ptr, size);
 
@@ -125,13 +125,13 @@ mm_core_realloc(void *ptr, size_t size)
 }
 
 void
-mm_core_free(void *ptr)
+mm_local_free(void *ptr)
 {
 	mspace_free(mm_core->arena, ptr);
 }
 
 size_t
-mm_core_alloc_size(const void *ptr)
+mm_local_alloc_size(const void *ptr)
 {
 	return mspace_usable_size(ptr);
 }
