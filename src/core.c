@@ -56,6 +56,21 @@
 # define MM_CORE_IS_PRIMARY(core)	(true)
 #endif
 
+/* A work item. */
+struct mm_work
+{
+	/* A link in the work queue. */
+	struct mm_link link;
+
+	/* The work is pinned to a specific core. */
+	bool pinned;
+
+	/* The work routine. */
+	mm_routine_t routine;
+	/* The work routine argument. */
+	mm_value_t routine_arg;
+};
+
 // The core set.
 mm_core_t mm_core_num;
 struct mm_core *mm_core_set;
@@ -64,7 +79,7 @@ struct mm_core *mm_core_set;
 __thread struct mm_core *mm_core;
 
 // The set of cores with event loops.
-struct mm_bitset mm_core_event_affinity;
+static struct mm_bitset mm_core_event_affinity;
 
 /**********************************************************************
  * Idle queue.
@@ -127,8 +142,78 @@ mm_core_poke(struct mm_core *core)
 }
 
 /**********************************************************************
+ * Work pool.
+ **********************************************************************/
+
+// The memory pool for work items.
+static struct mm_pool mm_core_work_pool;
+
+static void
+mm_core_start_work(void)
+{
+	ENTER();
+
+	mm_pool_prepare_shared(&mm_core_work_pool, "work", sizeof(struct mm_work));
+
+	LEAVE();
+}
+
+static void
+mm_core_stop_work(void)
+{
+	ENTER();
+
+	mm_pool_cleanup(&mm_core_work_pool);
+
+	LEAVE();
+}
+
+static void
+mm_core_init_work(void)
+{
+	ENTER();
+
+	mm_core_hook_start(mm_core_start_work);
+	mm_core_hook_stop(mm_core_stop_work);
+
+	LEAVE();
+}
+
+static inline struct mm_work *
+mm_core_create_work(struct mm_core *core, bool pinned, mm_routine_t routine, mm_value_t routine_arg)
+{
+	struct mm_work *work = mm_pool_shared_alloc_low(mm_core_getid(core), &mm_core_work_pool);
+	work->pinned = pinned;
+	work->routine = routine;
+	work->routine_arg = routine_arg;
+	return work;
+}
+
+static inline void
+mm_core_destroy_work(struct mm_core *core, struct mm_work *work)
+{
+	mm_pool_shared_free_low(mm_core_getid(core), &mm_core_work_pool, work);
+}
+
+/**********************************************************************
  * Work queue.
  **********************************************************************/
+
+static inline bool
+mm_core_has_work(struct mm_core *core)
+{
+	return core->nwork != 0;
+}
+
+static struct mm_work *
+mm_core_get_work(struct mm_core *core)
+{
+	ASSERT(mm_core_has_work(core));
+
+	core->nwork--;
+	struct mm_link *link = mm_queue_delete_head(&core->workq);
+	return containerof(link, struct mm_work, link);
+}
 
 static void
 mm_core_add_work(struct mm_core *core, struct mm_work *work)
@@ -136,7 +221,8 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 	ENTER();
 
 	// Enqueue the work item.
-	mm_work_put(&core->workq, work);
+	mm_queue_append(&core->workq, &work->link);
+	core->nwork++;
 
 	// If there is a task waiting for work then let it run now.
 	mm_core_poke(core);
@@ -150,20 +236,18 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 	ENTER();
 
 	// Get the destination core.
-	bool core_is_pinned;
+	bool pinned;
 	struct mm_core *core;
 	if (core_id != MM_CORE_NONE) {
-		core_is_pinned = true;
+		pinned = true;
 		core = mm_core_getptr(core_id);
 	} else {
-		core_is_pinned = false;
+		pinned = false;
 		core = mm_core;
 	}
 
 	// Create a work item.
-	struct mm_work *work = mm_work_create(&mm_core->workq);
-	mm_work_set(work, core_is_pinned, routine, routine_arg);
-
+	struct mm_work *work = mm_core_create_work(core, pinned, routine, routine_arg);
 	if (core == mm_core) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
@@ -359,19 +443,19 @@ mm_core_worker(mm_value_t arg)
 		// Save the work data and recycle the work item.
 		mm_routine_t routine = work->routine;
 		mm_value_t routine_arg = work->routine_arg;
-		mm_work_destroy(&core->workq, work);
+		mm_core_destroy_work(core, work);
 
 		// Execute the work routine.
 		routine(routine_arg);
 
 		// Check to see if there is outstanding work.
-		while (!mm_work_available(&core->workq)) {
+		while (!mm_core_has_work(core)) {
 			// Wait for work standing at the front of the idle queue.
 			mm_core_idle(core, false);
 		}
 
 		// Take the first available work item.
-		work = mm_work_get(&core->workq);
+		work = mm_core_get_work(core);
 	}
 
 	// Cleanup on return.
@@ -401,9 +485,9 @@ mm_core_master(mm_value_t arg)
 		}
 
 		// Check to see if there is outstanding work.
-		if (mm_work_available(&core->workq)) {
+		if (mm_core_has_work(core)) {
 			// Take the first available work item.
-			struct mm_work *work = mm_work_get(&core->workq);
+			struct mm_work *work = mm_core_get_work(core);
 
 			// Start a new worker to handle the work.
 			struct mm_task_attr attr;
@@ -743,10 +827,11 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
 	mm_list_init(&core->dead);
-	mm_work_prepare(&core->workq);
+	mm_queue_init(&core->workq);
+
 	mm_wait_cache_prepare(&core->wait_cache);
 
-	core->stop = false;
+	core->nwork = 0;
 	core->nidle = 0;
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
@@ -760,6 +845,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->events = NULL;
 	core->poll_time = 0;
+
+	core->stop = false;
 	core->synch = NULL;
 
 	mm_ring_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE);
@@ -779,11 +866,20 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 }
 
 static void
+mm_core_term_work(struct mm_core *core)
+{
+	while (mm_core_has_work(core)) {
+		struct mm_work *work = mm_core_get_work(core);
+		mm_core_destroy_work(core, work);
+	}
+}
+
+static void
 mm_core_term_inbox(struct mm_core *core)
 {
 	struct mm_work *work = mm_ring_get(&core->inbox);
 	while (work != NULL) {
-		mm_work_destroy(&core->workq, work);
+		mm_core_destroy_work(core, work);
 		work = mm_ring_get(&core->inbox);
 	}
 }
@@ -793,9 +889,9 @@ mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
+	mm_core_term_work(core);
 	mm_core_term_inbox(core);
 
-	mm_work_cleanup(&core->workq);
 	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_synch_destroy(core->synch);
@@ -887,7 +983,7 @@ mm_core_init(void)
 	mm_task_init();
 	mm_port_init();
 	mm_wait_init();
-	mm_work_init();
+	mm_core_init_work();
 
 	mm_core_set = mm_global_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
@@ -913,7 +1009,6 @@ mm_core_term(void)
 	mm_task_term();
 	mm_port_term();
 	mm_wait_term();
-	mm_work_term();
 
 	mm_net_term();
 	mm_event_term();

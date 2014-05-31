@@ -14,7 +14,7 @@ mmem_SOURCES = \
 	port.c port.h ring.c ring.h runq.c runq.h stack.c stack.h \
 	synch.c synch.h task.c task.h thread.c thread.h timeq.c timeq.h \
 	timer.c timer.h trace.c trace.h util.c util.h value.h wait.c wait.h \
-	work.c work.h dlmalloc/malloc.c dlmalloc/malloc.h
+	dlmalloc/malloc.c dlmalloc/malloc.h
 
 mmem_LDADD = memcache/libmemcache.a
 
