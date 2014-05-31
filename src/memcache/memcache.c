@@ -961,11 +961,11 @@ mc_command_term()
 }
 
 static struct mc_command *
-mc_command_create(void)
+mc_command_create(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	struct mc_command *command = mm_pool_alloc(&mc_command_pool);
+	struct mc_command *command = mm_pool_shared_alloc_low(sock->core, &mc_command_pool);
 	memset(command, 0, sizeof(struct mc_command));
 
 	LEAVE();
@@ -1020,7 +1020,7 @@ mc_command_result(struct mc_command *command)
 }
 
 static void
-mc_command_destroy(struct mc_command *command)
+mc_command_destroy(struct mm_net_socket *sock, struct mc_command *command)
 {
 	ENTER();
 
@@ -1041,7 +1041,7 @@ mc_command_destroy(struct mc_command *command)
 	if (command->future != NULL)
 		mm_future_destroy(command->future);
 
-	mm_pool_free(&mc_command_pool, command);
+	mm_pool_shared_free_low(sock->core, &mc_command_pool, command);
 
 	LEAVE();
 }
@@ -1920,7 +1920,7 @@ mc_parse(struct mc_parser *parser)
 	char *match = "";
 
 	// The current command.
-	struct mc_command *command = mc_command_create();
+	struct mc_command *command = mc_command_create(&parser->state->sock);
 	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
@@ -2269,7 +2269,7 @@ again:
 				} else {
 					state = S_KEY;
 					command->end_ptr = s;
-					command->next = mc_command_create();
+					command->next = mc_command_create(&parser->state->sock);
 					command->next->type = command->type;
 					command = command->next;
 					goto again;
@@ -2504,7 +2504,7 @@ again:
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
-						mc_command_destroy(tmp);
+						mc_command_destroy(&parser->state->sock, tmp);
 					} while (command != NULL);
 
 					parser->command->next = NULL;
@@ -2780,7 +2780,7 @@ mc_cleanup(struct mm_net_socket *sock)
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(command);
+		mc_command_destroy(sock, command);
 	}
 
 	mm_buffer_cleanup(&state->rbuf);
@@ -2812,7 +2812,7 @@ retry:
 	if (n <= 0) {
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create();
+			struct mc_command *command = mc_command_create(sock);
 			command->type = &mc_desc_quit;
 			command->params.sock = sock;
 			command->end_ptr = state->start_ptr;
@@ -2829,7 +2829,7 @@ parse:
 	// Try to parse the received input.
 	if (!mc_parse(&parser)) {
 		if (parser.command != NULL) {
-			mc_command_destroy(parser.command);
+			mc_command_destroy(sock, parser.command);
 			parser.command = NULL;
 		}
 		if (state->trash) {
@@ -2893,7 +2893,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 		if (state->command_head == NULL)
 			state->command_tail = NULL;
 
-		mc_command_destroy(head);
+		mc_command_destroy(sock, head);
 
 		if (head == command) {
 			break;
