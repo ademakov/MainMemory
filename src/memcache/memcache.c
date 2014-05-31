@@ -2954,15 +2954,15 @@ mm_memcache_init(const struct mm_memcache_config *config)
 						  "127.0.0.1", 11211);
 
 #if ENABLE_LOCKED_MEMCACHE
-	if (config != 0 && config->nparts)
+	if (config != NULL && config->nparts)
 		mc_config.nparts = config->nparts;
 	else
 		mc_config.nparts = 1;
 #else
 	mm_bitset_prepare(&mc_config.affinity, &mm_alloc_global, mm_core_getnum());
-	if (config != NULL && mm_bitset_any(&config->affinity))
+	if (config != NULL)
 		mm_bitset_or(&mc_config.affinity, &config->affinity);
-	else
+	if (!mm_bitset_any(&mc_config.affinity))
 		mm_bitset_set(&mc_config.affinity, 0);
 #endif
 
