@@ -165,7 +165,7 @@ mm_core_getid(struct mm_core *core)
 {
 	if (unlikely(core == NULL))
 		return MM_CORE_NONE;
-	return (mm_core_t) (mm_core - mm_core_set);
+	return (mm_core_t) (core - mm_core_set);
 }
 
 static inline struct mm_core *
