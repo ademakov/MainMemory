@@ -247,7 +247,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 	}
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(core, pinned, routine, routine_arg);
+	struct mm_work *work = mm_core_create_work(mm_core, pinned, routine, routine_arg);
 	if (core == mm_core) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
@@ -549,18 +549,15 @@ mm_core_deal(struct mm_core *core)
 }
 
 static void
-mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
+mm_core_halt(struct mm_core *core)
 {
 	ENTER();
-
-	// Get the current time value.
-	mm_core_update_time();
 
 	// Get the closest pending timer.
 	mm_timeval_t wait_time = mm_timer_next();
 
 	// Consider the time until the next required event poll.
-	mm_timeval_t poll_time, hold_time;
+	mm_timeval_t poll_time = MM_TIMEVAL_MAX;
 	if (core->events) {
 		// If any event system changes have been requested then it is
 		// required to notify on their completion immediately.
@@ -568,44 +565,45 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 			poll_time = wait_time = core->time_value;
 		else
 			poll_time = core->poll_time + MM_DEALER_POLL_TIMEOUT;
-		hold_time = min(wait_time, poll_time);
-	} else {
-		poll_time = MM_TIMEVAL_MAX;
-		hold_time = min(wait_time, core->time_value + MM_DEALER_HOLD_TIMEOUT);
 	}
 
-	// Limit the halt time with respect to this.
-	mm_timeval_t halt_time = min(wait_time, core->time_value + timeout);
+	// Find the halt time.
+	mm_timeval_t halt_time = min(wait_time, core->time_value + MM_DEALER_HALT_TIMEOUT);
 
 	// Before actually halting hang around a little bit waiting for
 	// possible wake requests.
-	while (hold_time > core->time_value) {
-		for (int i = 0; i < 10; i++) {
-			if (mm_synch_test(core->synch)) {
-				hold_time = halt_time = core->time_value;
+	mm_timeval_t hold_time = min(wait_time, core->time_value + MM_DEALER_HOLD_TIMEOUT);
+	if (hold_time > poll_time)
+		hold_time = poll_time;
+	if (core->time_value < hold_time) {
+		bool quit = false;
+		while (!quit) {
+			mm_core_update_time();
+			if (core->time_value >= hold_time)
 				break;
+			for (int i = 0; i < 10; i++) {
+				quit = mm_synch_test(core->synch);
+				if (quit) {
+					halt_time = core->time_value;
+					break;
+				}
+				mm_atomic_lock_pause();
 			}
-			mm_atomic_lock_pause();
 		}
-		mm_core_update_time();
 	}
 
-	bool dispatch = false;
-
-	if (halt_time > core->time_value)
+	mm_timeout_t timeout = 0;
+	if (core->time_value < halt_time)
 		timeout = halt_time - core->time_value;
-	else
-		timeout = 0;
 
-	if (timeout || poll_time >= core->time_value) {
-		dispatch = mm_synch_timedwait(core->synch, timeout);
+	if (timeout || core->time_value <= poll_time) {
+		bool dispatch = mm_synch_timedwait(core->synch, timeout);
 		mm_core_update_time();
-	}
-
-	if (core->events) {
-		core->poll_time = core->time_value;
-		if (dispatch)
-			mm_event_dispatch(core->events);
+		if (core->events) {
+			core->poll_time = core->time_value;
+			if (dispatch)
+				mm_event_dispatch(core->events);
+		}
 	}
 
 	LEAVE();
@@ -620,7 +618,7 @@ mm_core_dealer(mm_value_t arg)
 
 	while (!mm_memory_load(core->stop)) {
 		mm_core_deal(core);
-		mm_core_halt(core, MM_DEALER_HALT_TIMEOUT);
+		mm_core_halt(core);
 	}
 
 	LEAVE();
