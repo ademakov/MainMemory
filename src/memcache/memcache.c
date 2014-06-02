@@ -24,6 +24,7 @@
 #include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
+#include "../hash.h"
 #include "../future.h"
 #include "../list.h"
 #include "../log.h"
@@ -53,33 +54,7 @@ static mm_timeval_t mc_exptime;
 # define ENABLE_DEBUG_INDEX	1
 #endif
 
-/**********************************************************************
- * Hash function.
- **********************************************************************/
-
-/*
- * The Fowler/Noll/Vo (FNV) hash function, variant 1a.
- * 
- * http://www.isthe.com/chongo/tech/comp/fnv/index.html
- */
-
-#define FNV1_32_INIT ((uint32_t) 0x811c9dc5)
-#define FNV_32_PRIME ((uint32_t) 0x01000193)
-
-static uint32_t
-mc_hash(const void *data, size_t size)
-{
-	const unsigned char *p = (unsigned char *) data;
-	const unsigned char *e = (unsigned char *) data + size;
-
-	uint32_t h = FNV1_32_INIT;
-	while (p < e) {
-		h ^= (uint32_t) *p++;
-		h *= FNV_32_PRIME;
-	}
-
-	return h;
-}
+#define mc_hash mm_hash_fnv
 
 /**********************************************************************
  * Memcache Entry.
