@@ -578,7 +578,7 @@ mm_core_halt(struct mm_core *core)
 	if (core->time_value < hold_time) {
 		bool quit = false;
 		while (!quit) {
-			mm_core_update_time();
+			mm_core_update_time(core);
 			if (core->time_value >= hold_time)
 				break;
 			for (int i = 0; i < 10; i++) {
@@ -598,7 +598,7 @@ mm_core_halt(struct mm_core *core)
 
 	if (timeout || core->time_value <= poll_time) {
 		bool dispatch = mm_synch_timedwait(core->synch, timeout);
-		mm_core_update_time();
+		mm_core_update_time(core);
 		if (core->events) {
 			core->poll_time = core->time_value;
 			if (dispatch)
@@ -732,8 +732,8 @@ mm_core_boot_init(struct mm_core *core)
 	mm_future_init();
 
 	// Update the time.
-	mm_core_update_time();
-	mm_core_update_real_time();
+	mm_core_update_time(core);
+	mm_core_update_real_time(core);
 
 	// Create the time queue.
 	core->time_queue = mm_timeq_create();

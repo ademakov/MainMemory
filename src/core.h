@@ -190,17 +190,17 @@ mm_core_self(void)
  **********************************************************************/
 
 static inline void
-mm_core_update_time(void)
+mm_core_update_time(struct mm_core *core)
 {
-	mm_core->time_value = mm_clock_gettime_monotonic();
-	TRACE("%lld", (long long) mm_core->time_value);
+	core->time_value = mm_clock_gettime_monotonic();
+	TRACE("%lld", (long long) core->time_value);
 }
 
 static inline void
-mm_core_update_real_time(void)
+mm_core_update_real_time(struct mm_core *core)
 {
-	mm_core->real_time_value = mm_clock_gettime_realtime();
-	TRACE("%lld", (long long) mm_core->real_time_value);
+	core->real_time_value = mm_clock_gettime_realtime();
+	TRACE("%lld", (long long) core->real_time_value);
 }
 
 #endif /* CORE_H */

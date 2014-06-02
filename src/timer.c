@@ -209,7 +209,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 			}
 		} else {
 			if (abstime) {
-				mm_core_update_real_time();
+				mm_core_update_real_time(mm_core);
 				timer->entry.value = value - mm_core->real_time_value + mm_core->time_value;
 			} else {
 				timer->entry.value = value + mm_core->time_value;
