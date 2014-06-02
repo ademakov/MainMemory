@@ -558,7 +558,7 @@ mm_core_halt(struct mm_core *core)
 
 	// Consider the time until the next required event poll.
 	mm_timeval_t poll_time = MM_TIMEVAL_MAX;
-	if (core->events) {
+	if (core->events != NULL) {
 		// If any event system changes have been requested then it is
 		// required to notify on their completion immediately.
 		if (mm_event_collect(core->events))
@@ -570,6 +570,9 @@ mm_core_halt(struct mm_core *core)
 	// Find the halt time.
 	mm_timeval_t halt_time = min(wait_time, core->time_value + MM_DEALER_HALT_TIMEOUT);
 
+#if 1
+	mm_core_update_time(core);
+#else
 	// Before actually halting hang around a little bit waiting for
 	// possible wake requests.
 	mm_timeval_t hold_time = min(wait_time, core->time_value + MM_DEALER_HOLD_TIMEOUT);
@@ -591,15 +594,16 @@ mm_core_halt(struct mm_core *core)
 			}
 		}
 	}
+#endif
 
 	mm_timeout_t timeout = 0;
 	if (core->time_value < halt_time)
 		timeout = halt_time - core->time_value;
 
-	if (timeout || core->time_value <= poll_time) {
+	if (timeout || core->time_value >= poll_time) {
 		bool dispatch = mm_synch_timedwait(core->synch, timeout);
 		mm_core_update_time(core);
-		if (core->events) {
+		if (core->events != NULL) {
 			core->poll_time = core->time_value;
 			if (dispatch)
 				mm_event_dispatch(core->events);
@@ -893,7 +897,7 @@ mm_core_term_single(struct mm_core *core)
 	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_synch_destroy(core->synch);
-	if (core->events)
+	if (core->events != NULL)
 		mm_event_destroy_table(core->events);
 
 	mm_thread_destroy(core->thread);
