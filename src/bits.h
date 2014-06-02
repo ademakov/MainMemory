@@ -72,6 +72,14 @@
 		_r;					\
 	})
 
+/* Cyclic left bit rotation. */
+#define mm_rotl32(x, r) ({				\
+	uint32_t _x = (uint32_t) (x);			\
+	uint32_t _r = (uint32_t) (r);			\
+	_x = (_x << _r) | (_x >> (32 - _r));		\
+	_x;						\
+})
+
 /* Check if a number is a power of 2. */
 #define mm_is_pow2(x) ({				\
 		typeof(x) _x = (x);			\

@@ -54,7 +54,7 @@ static mm_timeval_t mc_exptime;
 # define ENABLE_DEBUG_INDEX	1
 #endif
 
-#define mc_hash mm_hash_fnv
+#define mc_hash mm_hash_murmur3_32
 
 /**********************************************************************
  * Memcache Entry.
