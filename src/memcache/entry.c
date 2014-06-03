@@ -24,7 +24,6 @@
 struct mc_entry *
 mc_entry_create(uint8_t key_len, size_t value_len)
 {
-	ENTER();
 	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
 
 	size_t size = mc_entry_sum_length(key_len, value_len);
@@ -36,18 +35,7 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	entry->index = ((uint32_t) -1);
 #endif
 
-	LEAVE();
 	return entry;
-}
-
-void
-mc_entry_destroy(struct mc_entry *entry)
-{
-	ENTER();
-
-	mm_shared_free(entry);
-
-	LEAVE();
 }
 
 struct mc_entry *

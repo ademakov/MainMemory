@@ -44,8 +44,11 @@ struct mc_entry
 
 struct mc_entry * mc_entry_create(uint8_t key_len, size_t value_len);
 
-void mc_entry_destroy(struct mc_entry *entry)
-	__attribute__((nonnull(1)));
+static inline void
+mc_entry_destroy(struct mc_entry *entry)
+{
+	mm_shared_free(entry);
+}
 
 struct mc_entry * mc_entry_create_u64(uint8_t key_len, uint64_t value);
 
@@ -102,7 +105,7 @@ mc_entry_unref(struct mc_entry *entry)
 {
 	uint32_t test;
 #if ENABLE_SMP
-	uint32_t test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
+	test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
 #else
 	test = --(entry->ref_count);
 #endif
