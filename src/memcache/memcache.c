@@ -19,6 +19,8 @@
 
 #include "memcache.h"
 
+#include "entry.h"
+
 #include "../alloc.h"
 #include "../bits.h"
 #include "../buffer.h"
@@ -32,7 +34,6 @@
 #include "../pool.h"
 #include "../trace.h"
 
-#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <sys/mman.h>
@@ -50,160 +51,7 @@ struct mm_memcache_config mc_config;
 static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
 
-#if ENABLE_DEBUG //|| 1
-# define ENABLE_DEBUG_INDEX	1
-#endif
-
 #define mc_hash mm_hash_murmur3_32
-
-/**********************************************************************
- * Memcache Entry.
- **********************************************************************/
-
-struct mc_entry
-{
-	struct mc_entry *next;
-	struct mm_list link;
-	uint8_t key_len;
-	uint32_t value_len;
-	mm_atomic_uint32_t ref_count;
-#if ENABLE_DEBUG_INDEX
-	uint32_t index;
-#endif
-	uint32_t flags;
-	uint64_t cas;
-	char data[];
-};
-
-
-static inline size_t
-mc_entry_size(uint8_t key_len, size_t value_len)
-{
-	return sizeof(struct mc_entry) + key_len + value_len;
-}
-
-static inline size_t
-mc_entry_bytes(struct mc_entry *entry)
-{
-	return mc_entry_size(entry->key_len, entry->value_len);
-}
-
-static inline char *
-mc_entry_key(struct mc_entry *entry)
-{
-	return entry->data;
-}
-
-static inline char *
-mc_entry_value(struct mc_entry *entry)
-{
-	return entry->data + entry->key_len;
-}
-
-static inline void
-mc_entry_set_key(struct mc_entry *entry, const char *key)
-{
-	char *entry_key = mc_entry_key(entry);
-	memcpy(entry_key, key, entry->key_len);
-}
-
-static struct mc_entry *
-mc_entry_create(uint8_t key_len, size_t value_len)
-{
-	ENTER();
-	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
-
-	size_t size = mc_entry_size(key_len, value_len);
-	struct mc_entry *entry = mm_shared_alloc(size);
-	entry->key_len = key_len;
-	entry->value_len = value_len;
-	entry->ref_count = 1;
-#if ENABLE_DEBUG_INDEX
-	entry->index = ((uint32_t) -1);
-#endif
-
-	LEAVE();
-	return entry;
-}
-
-static void
-mc_entry_destroy(struct mc_entry *entry)
-{
-	ENTER();
-
-	mm_shared_free(entry);
-
-	LEAVE();
-}
-
-static inline void
-mc_entry_ref(struct mc_entry *entry)
-{
-	uint32_t test = mm_atomic_uint32_inc_and_test(&entry->ref_count);
-	if (unlikely(!test)) {
-		ABORT();
-	}
-}
-
-static inline void
-mc_entry_unref(struct mc_entry *entry)
-{
-	uint32_t test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
-	if (!test) {
-		mc_entry_destroy(entry);
-	}
-}
-
-static bool
-mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
-{
-	if (entry->value_len == 0) {
-		return false;
-	}
-
-	char *p = mc_entry_value(entry);
-	char *e = p + entry->value_len;
-
-	uint64_t v = 0;
-	while (p < e) {
-		int c = *p++;
-		if (!isdigit(c)) {
-			return false;
-		}
-
-		uint64_t vv = v * 10 + c - '0';
-		if (unlikely(vv < v)) {
-			return false;
-		}
-
-		v = vv;
-	}
-
-	*value = v;
-	return true;
-}
-
-static struct mc_entry *
-mc_entry_create_u64(uint8_t key_len, uint64_t value)
-{
-	char buffer[32];
-
-	size_t value_len = 0;
-	do {
-		int c = (int) (value % 10);
-		buffer[value_len++] = '0' + c;
-		value /= 10;
-	} while (value);
-
-	struct mc_entry *entry = mc_entry_create(key_len, value_len);
-	char *v = mc_entry_value(entry);
-	do {
-		size_t i = entry->value_len - value_len--;
-		v[i] = buffer[value_len];
-	} while (value_len);
-
-	return entry;
-}
 
 /**********************************************************************
  * Memcache Table.
@@ -467,7 +315,7 @@ mc_table_lookup(uint32_t index, const char *key, uint8_t key_len)
 		if (index != entry->index)
 			ABORT();
 #endif
-		char *entry_key = mc_entry_key(entry);
+		char *entry_key = mc_entry_getkey(entry);
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len))
 			break;
 
@@ -492,12 +340,12 @@ mc_table_remove(struct mc_tpart *part, uint32_t index, const char *key, uint8_t 
 		ABORT();
 #endif
 
-	char *entry_key = mc_entry_key(entry);
+	char *entry_key = mc_entry_getkey(entry);
 	if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
 		mm_list_delete(&entry->link);
 		mc_table.table[index] = entry->next;
 
-		part->nbytes -= mc_entry_bytes(entry);
+		part->nbytes -= mc_entry_size(entry);
 		--(part->nentries);
 		goto leave;
 	}
@@ -513,12 +361,12 @@ mc_table_remove(struct mc_tpart *part, uint32_t index, const char *key, uint8_t 
 			ABORT();
 #endif
 
-		entry_key = mc_entry_key(entry);
+		entry_key = mc_entry_getkey(entry);
 		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
 			mm_list_delete(&entry->link);
 			prev_entry->next = entry->next;
 
-			part->nbytes -= mc_entry_bytes(entry);
+			part->nbytes -= mc_entry_size(entry);
 			--(part->nentries);
 			goto leave; 
 		}
@@ -542,7 +390,7 @@ mc_table_insert(struct mc_tpart *part, uint32_t index, struct mc_entry *entry)
 #endif
 	mc_table.table[index] = entry;
 
-	part->nbytes += mc_entry_bytes(entry);
+	part->nbytes += mc_entry_size(entry);
 	++part->nentries;
 
 	entry->cas = part->cas;
@@ -577,7 +425,7 @@ mc_table_evict(struct mc_tpart *part)
 	struct mm_list *link = mm_list_head(&part->entries);
 	struct mc_entry *entry = containerof(link, struct mc_entry, link);
 
-	char *key = mc_entry_key(entry);
+	char *key = mc_entry_getkey(entry);
 	uint32_t hash = mc_hash(key, entry->key_len);
 	uint32_t index = mc_table_index(hash);
 #if ENABLE_DEBUG_INDEX
@@ -1109,7 +957,7 @@ mc_process_value(struct mc_entry *entry, struct mc_set_params *params, uint32_t 
 	struct mm_buffer_segment *seg = params->seg;
 	ASSERT(src >= seg->data && src <= seg->data + seg->size);
 
-	char *dst = mc_entry_value(entry) + offset;
+	char *dst = mc_entry_getvalue(entry) + offset;
 	for (;;) {
 		uint32_t n = (seg->data + seg->size) - src;
 		if (n >= bytes) {
@@ -1188,7 +1036,7 @@ mc_process_set(mm_value_t arg)
 	uint32_t index = mc_table_index(command->key_hash);
 	struct mc_entry *old_entry = mc_table_remove(part, index, key, key_len);
 	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
-	mc_entry_set_key(new_entry, key);
+	mc_entry_setkey(new_entry, key);
 	mc_process_value(new_entry, params, 0);
 	new_entry->flags = params->flags;
 	mc_table_insert(part, index, new_entry);
@@ -1226,7 +1074,7 @@ mc_process_add(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_set_key(new_entry, key);
+		mc_entry_setkey(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
 		mc_table_insert(part, index, new_entry);
@@ -1264,7 +1112,7 @@ mc_process_replace(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_set_key(new_entry, key);
+		mc_entry_setkey(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
 		mc_table_insert(part, index, new_entry);
@@ -1309,7 +1157,7 @@ mc_process_cas(mm_value_t arg)
 		mc_entry_unref(old_entry2);
 
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_set_key(new_entry, key);
+		mc_entry_setkey(new_entry, key);
 		mc_process_value(new_entry, params, 0);
 		new_entry->flags = params->flags;
 		mc_table_insert(part, index, new_entry);
@@ -1349,11 +1197,11 @@ mc_process_append(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
-		char *old_value = mc_entry_value(old_entry);
+		char *old_value = mc_entry_getvalue(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_set_key(new_entry, key);
-		char *new_value = mc_entry_value(new_entry);
+		mc_entry_setkey(new_entry, key);
+		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
 		mc_process_value(new_entry, params, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
@@ -1395,11 +1243,11 @@ mc_process_prepend(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
-		char *old_value = mc_entry_value(old_entry);
+		char *old_value = mc_entry_getvalue(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_set_key(new_entry, key);
-		char *new_value = mc_entry_value(new_entry);
+		mc_entry_setkey(new_entry, key);
+		char *new_value = mc_entry_getvalue(new_entry);
 		mc_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
 		new_entry->flags = old_entry->flags;
@@ -1444,7 +1292,7 @@ mc_process_incr(mm_value_t arg)
 		value += command->params.val64;
 
 		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_set_key(new_entry, key);
+		mc_entry_setkey(new_entry, key);
 		new_entry->flags = old_entry->flags;
 
 		struct mc_entry *old_entry2 = mc_table_remove(part, index, key, key_len);
@@ -1494,7 +1342,7 @@ mc_process_decr(mm_value_t arg)
 			value = 0;
 
 		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_set_key(new_entry, key);
+		mc_entry_setkey(new_entry, key);
 		new_entry->flags = old_entry->flags;
 
 		struct mc_entry *old_entry2 = mc_table_remove(part, index, key, key_len);
@@ -2628,8 +2476,8 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS: {
 		struct mc_entry *entry = command->entry;
-		const char *key = mc_entry_key(entry);
-		char *value = mc_entry_value(entry);
+		const char *key = mc_entry_getkey(entry);
+		char *value = mc_entry_getvalue(entry);
 		uint8_t key_len = entry->key_len;
 		uint32_t value_len = entry->value_len;
 
@@ -2661,7 +2509,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 
 	case MC_RESULT_VALUE: {
 		struct mc_entry *entry = command->entry;
-		char *value = mc_entry_value(entry);
+		char *value = mc_entry_getvalue(entry);
 		uint32_t value_len = entry->value_len;
 
 		mc_entry_ref(entry);
