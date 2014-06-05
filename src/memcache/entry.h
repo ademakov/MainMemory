@@ -23,20 +23,19 @@
 #include "memcache.h"
 #include "list.h"
 
-#if ENABLE_DEBUG //|| 1
-# define ENABLE_DEBUG_INDEX	1
-#endif
-
 struct mc_entry
 {
-	struct mc_entry *next;
-	struct mm_list link;
+	struct mm_link table_link;
+	struct mm_list evict_list;
+
 	uint8_t key_len;
 	uint32_t value_len;
+
 	mm_atomic_uint32_t ref_count;
-#if ENABLE_DEBUG_INDEX
+#if ENABLE_MEMCACHE_INDEX_DEBUG
 	uint32_t index;
 #endif
+
 	uint32_t flags;
 	uint64_t cas;
 	char data[];

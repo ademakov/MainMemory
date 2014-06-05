@@ -122,7 +122,7 @@ mm_server_init(void)
 	mm_core_register_server(mm_icmd_server);
 
 	struct mm_memcache_config memcache_config;
-#if ENABLE_LOCKED_MEMCACHE
+#if ENABLE_MEMCACHE_LOCKS
 	memcache_config.nparts = 1;
 #else
 	mm_bitset_prepare(&memcache_config.affinity, &mm_alloc_global, 8);

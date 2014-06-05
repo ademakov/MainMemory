@@ -23,16 +23,26 @@
 #include "../common.h"
 #include "../bitset.h"
 
-#define ENABLE_LOCKED_MEMCACHE		1
+#define ENABLE_MEMCACHE_LOCKS		1
+
+#if ENABLE_DEBUG //|| 1
+# define ENABLE_MEMCACHE_INDEX_DEBUG	1
+#endif
+
+#ifndef mc_hash
+# define mc_hash	mm_hash_murmur3_32
+#endif
+
 
 struct mm_memcache_config
 {
-#if ENABLE_LOCKED_MEMCACHE
+#if ENABLE_MEMCACHE_LOCKS
 	mm_core_t nparts;
 #else
 	struct mm_bitset affinity;
 #endif
 };
+
 
 void mm_memcache_init(const struct mm_memcache_config *config);
 
