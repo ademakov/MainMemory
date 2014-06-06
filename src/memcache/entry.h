@@ -28,16 +28,16 @@ struct mc_entry
 	struct mm_link table_link;
 	struct mm_list evict_list;
 
-	uint8_t key_len;
-	uint32_t value_len;
+	uint32_t flags;
+	uint32_t hash;
+
+	uint64_t cas;
 
 	mm_atomic_uint32_t ref_count;
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-	uint32_t index;
-#endif
 
-	uint32_t flags;
-	uint64_t cas;
+	uint32_t value_len;
+	uint8_t key_len;
+
 	char data[];
 };
 
@@ -79,10 +79,13 @@ mc_entry_getvalue(struct mc_entry *entry)
 }
 
 static inline void
-mc_entry_setkey(struct mc_entry *entry, const char *key)
+mc_entry_setmisc(struct mc_entry *entry, const char *key,
+	          uint32_t flags, uint32_t hash)
 {
 	char *entry_key = mc_entry_getkey(entry);
 	memcpy(entry_key, key, entry->key_len);
+	entry->flags = flags;
+	entry->hash = hash;
 }
 
 static inline void

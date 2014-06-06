@@ -141,19 +141,11 @@ mc_table_stride(struct mc_tpart *part)
 
 			struct mc_entry *entry =
 				containerof(link, struct mc_entry, table_link);
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-			if (source != entry->index)
-				ABORT();
-#endif
-			uint32_t hash = mc_hash(entry->data, entry->key_len);
-			uint32_t index = (hash >> mc_table.part_bits) & mask;
+			uint32_t index = (entry->hash >> mc_table.part_bits) & mask;
 			if (index == source) {
 				mm_link_insert(&s_entries, link);
 			} else {
 				ASSERT(index == target);
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-				entry->index = target;
-#endif
 				mm_link_insert(&t_entries, link);
 			}
 
@@ -220,10 +212,9 @@ mc_table_evict(struct mc_tpart *part, size_t nrequired)
 	while (!mm_list_empty(&part->evict_list)) {
 		struct mm_list *link = mm_list_head(&part->evict_list);
 		struct mc_entry *entry = containerof(link, struct mc_entry, evict_list);
-
 		char *key = mc_entry_getkey(entry);
-		uint32_t hash = mc_hash(key, entry->key_len);
-		mc_table_remove(part, hash, key, entry->key_len);
+
+		mc_table_remove(part, entry->hash, key, entry->key_len);
 
 		mm_link_insert(&victims, &entry->table_link);
 		if (++nvictims == nrequired)
@@ -413,12 +404,10 @@ mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 	struct mm_link *link = mm_link_head(bucket);
 	while (link != NULL) {
 		struct mc_entry *entry = containerof(link, struct mc_entry, table_link);
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-		if (index != entry->index)
-			ABORT();
-#endif
 		char *entry_key = mc_entry_getkey(entry);
-		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+		if (hash == entry->hash
+		    && key_len == entry->key_len
+		    && !memcmp(key, entry_key, key_len)) {
 			found_entry = entry;
 			break;
 		}
@@ -441,13 +430,11 @@ mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 	while (!mm_link_is_last(pred)) {
 		struct mm_link *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, table_link);
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-		if (index != entry->index)
-			ABORT();
-#endif
 
 		char *entry_key = mc_entry_getkey(entry);
-		if (key_len == entry->key_len && !memcmp(key, entry_key, key_len)) {
+		if (hash == entry->hash
+		    && key_len == entry->key_len
+		    && !memcmp(key, entry_key, key_len)) {
 			mm_list_delete(&entry->evict_list);
 			mm_link_cleave(pred, link->next);
 
@@ -473,9 +460,6 @@ mc_table_insert(struct mc_tpart *part, uint32_t hash, struct mc_entry *entry)
 	uint32_t index = mc_table_index(part, hash);
 	struct mm_link *bucket = &part->buckets[index];
 
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-	entry->index = index;
-#endif
 	mm_link_insert(bucket, &entry->table_link);
 	mm_list_append(&part->evict_list, &entry->evict_list);
 

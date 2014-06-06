@@ -25,10 +25,6 @@
 
 #define ENABLE_MEMCACHE_LOCKS		1
 
-#if ENABLE_DEBUG //|| 1
-# define ENABLE_MEMCACHE_INDEX_DEBUG	1
-#endif
-
 #ifndef mc_hash
 # define mc_hash	mm_hash_murmur3_32
 #endif

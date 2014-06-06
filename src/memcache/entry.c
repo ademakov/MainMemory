@@ -31,9 +31,6 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	entry->key_len = key_len;
 	entry->value_len = value_len;
 	entry->ref_count = 1;
-#if ENABLE_MEMCACHE_INDEX_DEBUG
-	entry->index = ((uint32_t) -1);
-#endif
 
 	return entry;
 }
