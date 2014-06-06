@@ -111,7 +111,7 @@ mm_thread_backoff(uint32_t count)
 		if (count > 0x7ff) {
 			count = 0;
 			mm_thread_yield();
-		} else {
+		} else if (mm_running_task != NULL) {
 			mm_task_yield();
 		}
 	}
