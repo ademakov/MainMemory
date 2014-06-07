@@ -930,7 +930,7 @@ mm_net_destroy(mm_value_t arg)
 	// bound to this socket.
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->core == mm_core_self());
+	//ASSERT(sock->core == mm_core_self());
 	ASSERT(mm_net_is_closed(sock));
 
 	// Close the socket.
