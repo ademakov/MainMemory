@@ -318,7 +318,7 @@ mm_synch_create_fast(void)
 
 	struct mm_synch *fast = mm_global_alloc(sizeof(struct mm_synch));
 
-	fast->value.value = 0;
+	fast->value = 0;
 	fast->magic = MM_THREAD_SYNCH_FAST;
 
 	LEAVE();
@@ -334,7 +334,7 @@ mm_synch_destroy_fast(struct mm_synch *synch)
 static void
 mm_synch_wait_fast(struct mm_synch *synch)
 {
-	syscall(SYS_futex, &synch->value.value, FUTEX_WAIT, 0, NULL, NULL, 0);
+	syscall(SYS_futex, &synch->value, FUTEX_WAIT, 0, NULL, NULL, 0);
 }
 
 static bool
@@ -344,20 +344,20 @@ mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	syscall(SYS_futex, &synch->value.value, FUTEX_WAIT, 0, &ts, NULL, 0);
+	syscall(SYS_futex, &synch->value, FUTEX_WAIT, 0, &ts, NULL, 0);
 	return true;
 }
 
 static void
 mm_synch_signal_fast(struct mm_synch *synch)
 {
-	syscall(SYS_futex, &synch->value.value, FUTEX_WAKE, 1, NULL, NULL, 0);
+	syscall(SYS_futex, &synch->value, FUTEX_WAKE, 1, NULL, NULL, 0);
 }
 
 static void
 mm_synch_clear_fast(struct mm_synch *synch)
 {
-	mm_memory_store(synch->value.value, 0);
+	mm_memory_store(synch->value, 0);
 	mm_memory_strict_fence();
 }
 
