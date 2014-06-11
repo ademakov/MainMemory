@@ -41,15 +41,15 @@
 # endif
 #endif
 
-#define MM_THREAD_SYNCH_COND	0x796c4000
-#define MM_THREAD_SYNCH_POLL	0x796c4001
+#define MM_SYNCH_COND	0x796c4000
+#define MM_SYNCH_POLL	0x796c4001
 
 #if HAVE_LINUX_FUTEX_H
-# define MM_THREAD_SYNCH_FAST	0x796c4002
+# define MM_SYNCH_FAST	0x796c4002
 #endif
 
 #if HAVE_MACH_SEMAPHORE_H
-# define MM_THREAD_SYNCH_MACH	0x796c4003
+# define MM_SYNCH_MACH	0x796c4003
 #endif
 
 /**********************************************************************
@@ -73,7 +73,7 @@ mm_synch_create_cond(void)
 	struct mm_synch_cond *cond = mm_global_alloc(sizeof(struct mm_synch_cond));
 
 	cond->base.value = 0;
-	cond->base.magic = MM_THREAD_SYNCH_COND;
+	cond->base.magic = MM_SYNCH_COND;
 
 	int rc = pthread_mutex_init(&cond->lock, NULL);
 	if (rc)
@@ -195,7 +195,7 @@ mm_synch_create_event_poll(struct mm_event_table *events)
 	struct mm_synch_poll *poll = mm_global_alloc(sizeof(struct mm_synch_poll));
 
 	poll->base.value = 0;
-	poll->base.magic = MM_THREAD_SYNCH_POLL;
+	poll->base.magic = MM_SYNCH_POLL;
 	poll->events = events;
 	poll->waiting = false;
 
@@ -309,7 +309,7 @@ mm_synch_clear_poll(struct mm_synch *synch)
  * Synchronization based on Linux futexes.
  **********************************************************************/
 
-#if MM_THREAD_SYNCH_FAST
+#if MM_SYNCH_FAST
 
 #define MM_SYNCH_CLEAR		0
 #define MM_SYNCH_SIGNALED	1
@@ -323,7 +323,7 @@ mm_synch_create_fast(void)
 	struct mm_synch *fast = mm_global_alloc(sizeof(struct mm_synch));
 
 	fast->value = MM_SYNCH_CLEAR;
-	fast->magic = MM_THREAD_SYNCH_FAST;
+	fast->magic = MM_SYNCH_FAST;
 
 	LEAVE();
 	return fast;
@@ -400,7 +400,7 @@ mm_synch_clear_fast(struct mm_synch *synch)
  * Synchronization based on Mach semaphores.
  **********************************************************************/
 
-#if MM_THREAD_SYNCH_MACH
+#if MM_SYNCH_MACH
 
 struct mm_synch_mach
 {
@@ -419,7 +419,7 @@ mm_synch_create_mach(void)
 	struct mm_synch_mach *mach = mm_global_alloc(sizeof(struct mm_synch_mach));
 
 	mach->base.value = 0;
-	mach->base.magic = MM_THREAD_SYNCH_MACH;
+	mach->base.magic = MM_SYNCH_MACH;
 	mach->waiting = false;
 
 	kern_return_t r = semaphore_create(mach_task_self(), &mach->sem,
@@ -536,9 +536,9 @@ mm_synch_clear_mach(struct mm_synch *synch)
 struct mm_synch *
 mm_synch_create(void)
 {
-#if MM_THREAD_SYNCH_FAST
+#if MM_SYNCH_FAST
 	return mm_synch_create_fast();
-#elif MM_THREAD_SYNCH_MACH
+#elif MM_SYNCH_MACH
 	return mm_synch_create_mach();
 #else
 	return mm_synch_create_cond();
@@ -551,22 +551,22 @@ mm_synch_destroy(struct mm_synch *synch)
 	ENTER();
 
 	switch (synch->magic) {
-	case MM_THREAD_SYNCH_COND:
+	case MM_SYNCH_COND:
 		mm_synch_destroy_cond(synch);
 		break;
 
-	case MM_THREAD_SYNCH_POLL:
+	case MM_SYNCH_POLL:
 		mm_synch_destroy_poll(synch);
 		break;
 
-#if MM_THREAD_SYNCH_FAST
-	case MM_THREAD_SYNCH_FAST:
+#if MM_SYNCH_FAST
+	case MM_SYNCH_FAST:
 		mm_synch_destroy_fast(synch);
 		break;
 #endif
 
-#if MM_THREAD_SYNCH_MACH
-	case MM_THREAD_SYNCH_MACH:
+#if MM_SYNCH_MACH
+	case MM_SYNCH_MACH:
 		mm_synch_destroy_mach(synch);
 		break;
 #endif
@@ -584,22 +584,22 @@ mm_synch_wait(struct mm_synch *synch)
 	ENTER();
 
 	switch (synch->magic) {
-	case MM_THREAD_SYNCH_COND:
+	case MM_SYNCH_COND:
 		mm_synch_wait_cond(synch);
 		break;
 
-	case MM_THREAD_SYNCH_POLL:
+	case MM_SYNCH_POLL:
 		mm_synch_wait_poll(synch);
 		break;
 
-#if MM_THREAD_SYNCH_FAST
-	case MM_THREAD_SYNCH_FAST:
+#if MM_SYNCH_FAST
+	case MM_SYNCH_FAST:
 		mm_synch_wait_fast(synch);
 		break;
 #endif
 
-#if MM_THREAD_SYNCH_MACH
-	case MM_THREAD_SYNCH_MACH:
+#if MM_SYNCH_MACH
+	case MM_SYNCH_MACH:
 		mm_synch_wait_mach(synch);
 		break;
 #endif
@@ -618,22 +618,22 @@ mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout)
 	bool rc;
 
 	switch (synch->magic) {
-	case MM_THREAD_SYNCH_COND:
+	case MM_SYNCH_COND:
 		rc = mm_synch_timedwait_cond(synch, timeout);
 		break;
 
-	case MM_THREAD_SYNCH_POLL:
+	case MM_SYNCH_POLL:
 		rc = mm_synch_timedwait_poll(synch, timeout);
 		break;
 
-#if MM_THREAD_SYNCH_FAST
-	case MM_THREAD_SYNCH_FAST:
+#if MM_SYNCH_FAST
+	case MM_SYNCH_FAST:
 		rc = mm_synch_timedwait_fast(synch, timeout);
 		break;
 #endif
 
-#if MM_THREAD_SYNCH_MACH
-	case MM_THREAD_SYNCH_MACH:
+#if MM_SYNCH_MACH
+	case MM_SYNCH_MACH:
 		rc = mm_synch_timedwait_mach(synch, timeout);
 		break;
 #endif
@@ -652,22 +652,22 @@ mm_synch_signal(struct mm_synch *synch)
 	ENTER();
 
 	switch (synch->magic) {
-	case MM_THREAD_SYNCH_COND:
+	case MM_SYNCH_COND:
 		mm_synch_signal_cond(synch);
 		break;
 
-	case MM_THREAD_SYNCH_POLL:
+	case MM_SYNCH_POLL:
 		mm_synch_signal_poll(synch);
 		break;
 
-#if MM_THREAD_SYNCH_FAST
-	case MM_THREAD_SYNCH_FAST:
+#if MM_SYNCH_FAST
+	case MM_SYNCH_FAST:
 		mm_synch_signal_fast(synch);
 		break;
 #endif
 
-#if MM_THREAD_SYNCH_MACH
-	case MM_THREAD_SYNCH_MACH:
+#if MM_SYNCH_MACH
+	case MM_SYNCH_MACH:
 		mm_synch_signal_mach(synch);
 		break;
 #endif
@@ -685,22 +685,22 @@ mm_synch_clear(struct mm_synch *synch)
 	ENTER();
 
 	switch (synch->magic) {
-	case MM_THREAD_SYNCH_COND:
+	case MM_SYNCH_COND:
 		mm_synch_clear_cond(synch);
 		break;
 
-	case MM_THREAD_SYNCH_POLL:
+	case MM_SYNCH_POLL:
 		mm_synch_clear_poll(synch);
 		break;
 
-#if MM_THREAD_SYNCH_FAST
-	case MM_THREAD_SYNCH_FAST:
+#if MM_SYNCH_FAST
+	case MM_SYNCH_FAST:
 		mm_synch_clear_fast(synch);
 		break;
 #endif
 
-#if MM_THREAD_SYNCH_MACH
-	case MM_THREAD_SYNCH_MACH:
+#if MM_SYNCH_MACH
+	case MM_SYNCH_MACH:
 		mm_synch_clear_mach(synch);
 		break;
 #endif
