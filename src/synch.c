@@ -311,6 +311,10 @@ mm_synch_clear_poll(struct mm_synch *synch)
 
 #if MM_THREAD_SYNCH_FAST
 
+#define MM_SYNCH_CLEAR		0
+#define MM_SYNCH_SIGNALED	1
+#define MM_SYNCH_SLEEPING	2
+
 static struct mm_synch *
 mm_synch_create_fast(void)
 {
@@ -318,7 +322,7 @@ mm_synch_create_fast(void)
 
 	struct mm_synch *fast = mm_global_alloc(sizeof(struct mm_synch));
 
-	fast->value = 0;
+	fast->value = MM_SYNCH_CLEAR;
 	fast->magic = MM_THREAD_SYNCH_FAST;
 
 	LEAVE();
@@ -334,7 +338,18 @@ mm_synch_destroy_fast(struct mm_synch *synch)
 static void
 mm_synch_wait_fast(struct mm_synch *synch)
 {
-	syscall(SYS_futex, &synch->value, FUTEX_WAIT, 0, NULL, NULL, 0);
+	for (;;) {
+		uint32_t value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_SIGNALED, MM_SYNCH_CLEAR);
+		if (value == MM_SYNCH_SIGNALED)
+			break;
+		if (value == MM_SYNCH_CLEAR) {
+			value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_CLEAR, MM_SYNCH_SLEEPING);
+			if (value == MM_SYNCH_SIGNALED)
+				continue;
+		}
+
+		syscall(SYS_futex, &synch->value, FUTEX_WAIT_PRIVATE, MM_SYNCH_SLEEPING, NULL, NULL, 0);
+	}
 }
 
 static bool
@@ -344,21 +359,39 @@ mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	syscall(SYS_futex, &synch->value, FUTEX_WAIT, 0, &ts, NULL, 0);
+	for (;;) {
+		uint32_t value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_SIGNALED, MM_SYNCH_CLEAR);
+		if (value == MM_SYNCH_SIGNALED)
+			break;
+		if (value == MM_SYNCH_CLEAR) {
+			value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_CLEAR, MM_SYNCH_SLEEPING);
+			if (value == MM_SYNCH_SIGNALED)
+				continue;
+		}
+
+		int rc = syscall(SYS_futex, &synch->value, FUTEX_WAIT_PRIVATE, MM_SYNCH_SLEEPING, &ts, NULL, 0);
+		if (rc) {
+			if (unlikely(errno) != ETIMEDOUT)
+				mm_fatal(errno, "futex");
+			return false;
+		}
+	}
+
 	return true;
 }
 
 static void
 mm_synch_signal_fast(struct mm_synch *synch)
 {
-	syscall(SYS_futex, &synch->value, FUTEX_WAKE, 1, NULL, NULL, 0);
+	uint32_t value = mm_atomic_uint32_fetch_and_set(&synch->value, MM_SYNCH_SIGNALED);
+	if (value == MM_SYNCH_SLEEPING)
+		syscall(SYS_futex, &synch->value, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
 }
 
 static void
 mm_synch_clear_fast(struct mm_synch *synch)
 {
-	mm_memory_store(synch->value, 0);
-	mm_memory_strict_fence();
+	mm_memory_store(synch->value, MM_SYNCH_CLEAR);
 }
 
 #endif
