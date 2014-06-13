@@ -167,10 +167,7 @@ mm_synch_signal_cond(struct mm_synch *synch)
 static void
 mm_synch_clear_cond(struct mm_synch *synch)
 {
-	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
-
-	mm_memory_store(cond->base.value, 0);
-	mm_memory_strict_fence();
+	mm_memory_store(synch->value, 0);
 }
 
 /**********************************************************************
@@ -302,7 +299,6 @@ mm_synch_clear_poll(struct mm_synch *synch)
 	mm_event_dampen(poll->events);
 
 	mm_memory_store(poll->base.value, 0);
-	mm_memory_strict_fence();
 }
 
 /**********************************************************************
@@ -338,6 +334,9 @@ mm_synch_destroy_fast(struct mm_synch *synch)
 static void
 mm_synch_wait_fast(struct mm_synch *synch)
 {
+	// Publish the log before a sleep.
+	mm_log_relay();
+
 	for (;;) {
 		uint32_t value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_SIGNALED, MM_SYNCH_CLEAR);
 		if (value == MM_SYNCH_SIGNALED)
@@ -358,6 +357,9 @@ mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 	struct timespec ts;
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
+
+	// Publish the log before a sleep.
+	mm_log_relay();
 
 	for (;;) {
 		uint32_t value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_SIGNALED, MM_SYNCH_CLEAR);
@@ -521,10 +523,7 @@ mm_synch_signal_mach(struct mm_synch *synch)
 static void
 mm_synch_clear_mach(struct mm_synch *synch)
 {
-	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
-
-	mm_memory_store(mach->base.value, 0);
-	mm_memory_strict_fence();
+	mm_memory_store(synch->value, 0);
 }
 
 #endif
