@@ -710,7 +710,7 @@ mm_core_boot_signal(void)
 }
 
 static void
-mm_core_term_wait(void)
+mm_core_boot_join(void)
 {
 #if ENABLE_SMP
 	for (mm_core_t i = 1; i < mm_core_num; i++) {
@@ -744,18 +744,6 @@ mm_core_boot_init(struct mm_core *core)
 	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
 	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 
-	// Create the master task for this core and schedule it for execution.
-	struct mm_task_attr attr;
-	mm_task_attr_init(&attr);
-	mm_task_attr_setpriority(&attr, MM_PRIO_MASTER);
-	mm_task_attr_setname(&attr, "master");
-	core->master = mm_task_create(&attr, mm_core_master, (mm_value_t) core);
-
-	// Create the dealer task for this core and schedule it for execution.
-	mm_task_attr_setpriority(&attr, MM_PRIO_DEALER);
-	mm_task_attr_setname(&attr, "dealer");
-	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
-
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);
@@ -769,7 +757,7 @@ mm_core_boot_term(struct mm_core *core)
 {
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_core_term_wait();
+		mm_core_boot_join();
 		mm_hook_call(&mm_core_stop_hook, false);
 	}
 
@@ -781,6 +769,23 @@ mm_core_boot_term(struct mm_core *core)
 	// TODO:
 	//mm_task_destroy(core->master);
 	//mm_task_destroy(core->dealer);
+}
+
+static void
+mm_core_start_basic_tasks(struct mm_core *core)
+{
+	struct mm_task_attr attr;
+	mm_task_attr_init(&attr);
+
+	// Create the master task for this core and schedule it for execution.
+	mm_task_attr_setpriority(&attr, MM_PRIO_MASTER);
+	mm_task_attr_setname(&attr, "master");
+	core->master = mm_task_create(&attr, mm_core_master, (mm_value_t) core);
+
+	// Create the dealer task for this core and schedule it for execution.
+	mm_task_attr_setpriority(&attr, MM_PRIO_DEALER);
+	mm_task_attr_setname(&attr, "dealer");
+	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 }
 
 /* A per-core thread entry point. */
@@ -801,6 +806,9 @@ mm_core_boot(mm_value_t arg)
 
 	// Initialize per-core resources.
 	mm_core_boot_init(core);
+
+	// Start master & dealer tasks.
+	mm_core_start_basic_tasks(core);
 
 	// Run the other tasks while there are any.
 	mm_task_yield();
