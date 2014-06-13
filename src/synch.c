@@ -373,7 +373,7 @@ mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 
 		int rc = syscall(SYS_futex, &synch->value, FUTEX_WAIT_PRIVATE, MM_SYNCH_SLEEPING, &ts, NULL, 0);
 		if (rc) {
-			if (unlikely(errno) != ETIMEDOUT)
+			if (unlikely(errno != ETIMEDOUT))
 				mm_fatal(errno, "futex");
 			return false;
 		}
