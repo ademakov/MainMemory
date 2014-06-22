@@ -111,6 +111,7 @@ struct mm_net_server
 	mm_core_t client_core;
 
 	/* Per-core server data. */
+	mm_core_t core;
 	mm_core_t core_num;
 	struct mm_net_server_per_core *per_core;
 

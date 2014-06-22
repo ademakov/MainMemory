@@ -263,6 +263,8 @@ mm_net_alloc_server(void)
 	srv->fd = -1;
 	srv->flags = 0;
 	srv->client_core = 0;
+
+	srv->core = MM_CORE_NONE;
 	srv->core_num = 0;
 	srv->per_core = NULL;
 
@@ -705,10 +707,12 @@ mm_net_control_handler(mm_event_t event, void *data)
 
 	switch (event) {
 	case MM_EVENT_REGISTER:
+#if 0
 		if ((sock->flags & MM_NET_READER_PENDING) != 0)
 			mm_net_spawn_reader(sock);
 		if ((sock->flags & MM_NET_WRITER_PENDING) != 0)
 			mm_net_spawn_writer(sock);
+#endif
 		break;
 
 	case MM_EVENT_UNREGISTER:
@@ -1210,6 +1214,8 @@ mm_net_start_server(struct mm_net_server *srv)
 			/* Initialize the client list. */
 			mm_list_init(&srv->per_core[c].clients);
 
+			if (c == 0)
+				srv->core = i;
 			c++;
 		}
 	}
@@ -1226,9 +1232,10 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, mm_net_accept_hid, false, 0, false, 0);
-	mm_event_register_fd(mm_core->events, srv->fd, &srv->event);
+	struct mm_core *core = mm_core_getptr(srv->core);
+	mm_event_register_fd(core->events, srv->fd, &srv->event);
 
-        LEAVE();
+	LEAVE();
 }
 
 void
@@ -1240,7 +1247,8 @@ mm_net_stop_server(struct mm_net_server *srv)
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	mm_event_unregister_fd(mm_core->events, srv->fd, &srv->event);
+	struct mm_core *core = mm_core_getptr(srv->core);
+	mm_event_unregister_fd(core->events, srv->fd, &srv->event);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->fd);
