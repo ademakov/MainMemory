@@ -254,7 +254,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 	} else {
 		// Put the item to the target core inbox.
 		for (;;) {
-			bool ok = mm_ring_core_put(&core->inbox, work);
+			bool ok = mm_ring_shared_put(&core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
 			mm_synch_signal(core->synch);
@@ -304,7 +304,7 @@ mm_core_run_task(struct mm_task *task)
 	} else {
 		// Put the task to the target core sched ring.
 		for (;;) {
-			bool ok = mm_ring_core_put(&task->core->sched, task);
+			bool ok = mm_ring_shared_put(&task->core->sched, task);
 
 			// Wakeup the target core if it is asleep.
 			mm_synch_signal(task->core->synch);

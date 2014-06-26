@@ -98,19 +98,19 @@ mm_ring_put(struct mm_ring *ring, void *new_data)
 }
 
 static inline bool
-mm_ring_core_trylock(struct mm_ring *ring)
+mm_ring_shared_trylock(struct mm_ring *ring)
 {
 	return mm_task_trylock(&ring->tail_lock.core);
 }
 
 static inline void
-mm_ring_core_lock(struct mm_ring *ring)
+mm_ring_shared_lock(struct mm_ring *ring)
 {
 	mm_task_lock(&ring->tail_lock.core);
 }
 
 static inline void
-mm_ring_core_unlock(struct mm_ring *ring)
+mm_ring_shared_unlock(struct mm_ring *ring)
 {
 	mm_task_unlock(&ring->tail_lock.core);
 }
@@ -135,12 +135,12 @@ mm_ring_global_unlock(struct mm_ring *ring)
 
 /* Multi-producer enqueue operation with synchronization for core threads. */
 static inline bool
-mm_ring_core_put(struct mm_ring *ring, void *new_data)
+mm_ring_shared_put(struct mm_ring *ring, void *new_data)
 {
 	bool rc;
-	mm_ring_core_lock(ring);
+	mm_ring_shared_lock(ring);
 	rc = mm_ring_put(ring, new_data);
-	mm_ring_core_unlock(ring);
+	mm_ring_shared_unlock(ring);
 	return rc;
 }
 
