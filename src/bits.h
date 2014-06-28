@@ -92,14 +92,14 @@
 		(_x & (_x - 1)) == 0;			\
 	})
 
-/* Round down to a power of 2. */
+/* Round down to a power of 2 multiple. */
 #define mm_round_down(x, p) ({				\
 		typeof(x) _x = (x);			\
 		typeof(p) _p = (p);			\
 		_x & ~(_p - 1);				\
 	})
 
-/* Round up to a power of 2. */
+/* Round up to a power of 2 multiple. */
 #define mm_round_up(x, p) ({				\
 		typeof(x) _x = (x);			\
 		typeof(p) _p = (p);			\
