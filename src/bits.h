@@ -92,7 +92,18 @@
 		(_x & (_x - 1)) == 0;			\
 	})
 
-/* Align to a power of 2. */
-#define mm_align(x, align) (((x) + align - 1) & ~(align - 1))
+/* Round down to a power of 2. */
+#define mm_round_down(x, p) ({				\
+		typeof(x) _x = (x);			\
+		typeof(p) _p = (p);			\
+		_x & ~(_p - 1);				\
+	})
+
+/* Round up to a power of 2. */
+#define mm_round_up(x, p) ({				\
+		typeof(x) _x = (x);			\
+		typeof(p) _p = (p);			\
+		(_x + _p - 1) & ~(_p - 1);		\
+	})
 
 #endif /* BITS_H */
