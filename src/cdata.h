@@ -22,7 +22,7 @@
 
 #include "common.h"
 
-#define MM_CDATA_CHUNK_SIZE	(16 * 1024)
+#define MM_CDATA_CHUNK_SIZE	MM_PAGE_SIZE
 
 #define MM_CDATA(type, name) union { type *ptr; mm_cdata_t ref; } name
 
