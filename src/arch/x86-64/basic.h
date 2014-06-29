@@ -21,7 +21,6 @@
 #define ARCH_X86_64_BASIC_H
 
 /* General purpose register width. */
-/*#define MM_WORD_32BIT		0*/
 #define MM_WORD_64BIT		1
 
 /* Cache line size. */

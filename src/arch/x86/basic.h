@@ -22,7 +22,6 @@
 
 /* General purpose register width. */
 #define MM_WORD_32BIT		1
-/*define MM_WORD_64BIT		0*/
 
 /* Cache line size. */
 #define MM_CACHELINE		(64)
