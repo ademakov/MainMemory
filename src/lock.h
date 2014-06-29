@@ -25,13 +25,52 @@
 #include "thread.h"
 #include "trace.h"
 
+#if ENABLE_LOCK_STATS
+#include "cdata.h"
+#include "list.h"
+#endif
+
 /**********************************************************************
  * Synchronization between tasks running on different cores.
  **********************************************************************/
 
-#define MM_TASK_LOCK_INIT { MM_ATOMIC_LOCK_INIT }
+#if ENABLE_LOCK_STATS
+# define MM_TASK_LOCK_INIT	{ .lock = MM_ATOMIC_LOCK_INIT, .stat = NULL, .file = __FILE__, .line = __LINE__ }
+#else
+# define MM_TASK_LOCK_INIT	{ .lock = MM_ATOMIC_LOCK_INIT }
+#endif
 
-typedef struct { mm_atomic_lock_t lock; } mm_task_lock_t;
+#if ENABLE_LOCK_STATS
+
+/* Lock statistics for all cores. */
+struct mm_task_lock_statistics;
+
+/* Lock statistics for single core. */
+struct mm_task_lock_core_stat
+{
+	uint64_t lock_count;
+	uint64_t fail_count;
+};
+
+#endif
+
+typedef struct
+{
+	mm_atomic_lock_t lock;
+
+#if ENABLE_LOCK_STATS
+	struct mm_task_lock_statistics *stat;
+	const char *file;
+	int line;
+#endif
+
+} mm_task_lock_t;
+
+
+#if ENABLE_LOCK_STATS
+struct mm_task_lock_core_stat *mm_task_lock_getstat(mm_task_lock_t *lock)
+	__attribute__((nonnull(1)));
+#endif
 
 static inline bool
 mm_task_trylock(mm_task_lock_t *lock)
@@ -39,7 +78,17 @@ mm_task_trylock(mm_task_lock_t *lock)
 	ASSERT(mm_running_task != NULL);
 
 #if ENABLE_SMP
-	return !mm_atomic_lock_acquire(&lock->lock);
+	bool success = !mm_atomic_lock_acquire(&lock->lock);
+
+# if ENABLE_LOCK_STATS
+	struct mm_task_lock_core_stat *stat = mm_task_lock_getstat(lock);
+	if (success)
+		stat->lock_count++;
+	else
+		stat->fail_count++;
+#endif
+
+	return success;
 #else
 	(void) lock;
 	return true;
@@ -66,13 +115,29 @@ static inline void
 mm_task_lock(mm_task_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
+
 #if ENABLE_SMP
-	uint32_t count = 0;
+
+# if ENABLE_LOCK_STATS
+	uint32_t fail = 0;
+# endif
+	uint32_t backoff = 0;
+
 	while (mm_atomic_lock_acquire(&lock->lock)) {
-		do
-			count = mm_task_backoff(count);
-		while (mm_memory_load(lock->lock.locked));
+		do {
+# if ENABLE_LOCK_STATS
+			++fail;
+# endif
+			backoff = mm_task_backoff(backoff);
+		} while (mm_memory_load(lock->lock.locked));
 	}
+
+# if ENABLE_LOCK_STATS
+	struct mm_task_lock_core_stat *stat = mm_task_lock_getstat(lock);
+	stat->fail_count += fail;
+	stat->lock_count++;
+# endif
+
 #else
 	(void) lock;
 #endif
@@ -82,6 +147,7 @@ static inline void
 mm_task_unlock(mm_task_lock_t *lock)
 {
 	ASSERT(mm_running_task != NULL);
+
 #if ENABLE_SMP
 	mm_atomic_lock_release(&lock->lock);
 #else

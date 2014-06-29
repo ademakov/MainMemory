@@ -62,10 +62,17 @@ AC_CHECK_FUNCS(pthread_setname_np)
 dnl Check command line arguments
 
 AC_ARG_ENABLE([smp],
-	[AS_HELP_STRING([--enable-smp], [enable SMP (default=no)])],
+	[AS_HELP_STRING([--enable-smp], [enable SMP support (default=no)])],
 	[smp="$enableval"], [smp=no])
 if test "x$smp" = "xyes"; then
-	AC_DEFINE([ENABLE_SMP], 1, [Define to 1 to enable SMP.])
+	AC_DEFINE([ENABLE_SMP], 1, [Define to 1 to enable SMP support.])
+fi
+
+AC_ARG_ENABLE([lock-stats],
+	[AS_HELP_STRING([--enable-lock-stats], [enable lock statistics (default=no)])],
+	[lock_stats="$enableval"], [lock_stats=no])
+if test "x$lock_stats" = "xyes"; then
+	AC_DEFINE([ENABLE_LOCK_STATS], 1, [Define to 1 to enable lock statistics.])
 fi
 
 AC_ARG_ENABLE([debug],
