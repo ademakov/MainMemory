@@ -23,7 +23,7 @@
 #include "table.h"
 
 #include "../alloc.h"
-#include "../bits.h"
+#include "../bitops.h"
 #include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"

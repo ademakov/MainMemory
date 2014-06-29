@@ -18,7 +18,8 @@
  */
 
 #include "runq.h"
-#include "bits.h"
+
+#include "bitops.h"
 #include "task.h"
 #include "trace.h"
 

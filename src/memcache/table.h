@@ -23,7 +23,7 @@
 #include "memcache.h"
 #include "entry.h"
 
-#include "../bits.h"
+#include "../bitops.h"
 #include "../list.h"
 #include "../lock.h"
 

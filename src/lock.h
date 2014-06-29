@@ -21,8 +21,7 @@
 #define LOCK_H
 
 #include "common.h"
-#include "task.h"
-#include "thread.h"
+#include "backoff.h"
 #include "trace.h"
 
 #if ENABLE_LOCK_STATS
@@ -95,22 +94,6 @@ mm_task_trylock(mm_task_lock_t *lock)
 #endif
 }
 
-static inline uint32_t
-mm_task_backoff(uint32_t count)
-{
-	ASSERT(mm_running_task != NULL);
-
-	if (count > 0xff) {
-		count = 0;
-		mm_task_yield();
-	}
-
-	for (uint32_t n = count; n; n--)
-		mm_atomic_lock_pause();
-
-	return count * 2 + 1;
-}
-
 static inline void
 mm_task_lock(mm_task_lock_t *lock)
 {
@@ -167,31 +150,6 @@ static inline bool
 mm_thread_trylock(mm_thread_lock_t *lock)
 {
 	return !mm_atomic_lock_acquire(&lock->lock);
-}
-
-static inline uint32_t
-mm_thread_backoff(uint32_t count)
-{
-#if ENABLE_SMP
-	if (count > 0xff) {
-		if (count > 0x7ff) {
-			count = 0;
-			mm_thread_yield();
-		} else if (mm_running_task != NULL) {
-			mm_task_yield();
-		}
-	}
-#else
-	if (count > 0x7ff) {
-		count = 0;
-		mm_thread_yield();
-	}
-#endif
-
-	for (uint32_t n = count & 0xff; n; n--)
-		mm_atomic_lock_pause();
-
-	return count * 2 + 1;
 }
 
 static inline void

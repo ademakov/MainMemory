@@ -79,7 +79,7 @@
  * Architecture Specific Definitions.
  **********************************************************************/
 
-#include "arch/common.h"
+#include "arch/basic.h"
 #include "arch/memory.h"
 #include "arch/atomic.h"
 #include "arch/stack.h"

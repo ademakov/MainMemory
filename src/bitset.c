@@ -19,7 +19,7 @@
 
 #include "bitset.h"
 
-#include "bits.h"
+#include "bitops.h"
 
 void
 mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,

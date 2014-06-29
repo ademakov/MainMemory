@@ -1,5 +1,5 @@
 /*
- * arch/x86/common.h - MainMemory arch-specific basic properties.
+ * arch/x86/basic.h - MainMemory basic architecture properties.
  *
  * Copyright (C) 2013  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARCH_X86_COMMON_H
-#define ARCH_X86_COMMON_H
+#ifndef ARCH_X86_BASIC_H
+#define ARCH_X86_BASIC_H
 
 /* General purpose register width. */
 #define MM_WORD_32BIT		1
@@ -30,4 +30,4 @@
 /* Virtual memory page size. */
 #define MM_PAGE_SIZE		(4096)
 
-#endif /* ARCH_X86_COMMON_H */
+#endif /* ARCH_X86_BASIC_H */

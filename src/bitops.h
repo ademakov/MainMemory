@@ -1,5 +1,5 @@
 /*
- * bits.h - Bit manipulation.
+ * bitops.h - Bit operations.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BITS_H
-#define BITS_H
+#ifndef BITOPS_H
+#define BITOPS_H
 
 /* Count leading zeros (from MSB). Zero argument is not allowed. */
 #define mm_clz(x) ({					\
@@ -106,4 +106,4 @@
 		(_x + _p - 1) & ~(_p - 1);		\
 	})
 
-#endif /* BITS_H */
+#endif /* BITOPS_H */

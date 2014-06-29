@@ -21,7 +21,7 @@
 #define HASH_H
 
 #include "common.h"
-#include "bits.h"
+#include "bitops.h"
 
 /**********************************************************************
  *  D. J. Bernstein's hash function.

@@ -20,7 +20,7 @@
 #include "cdata.h"
 
 #include "alloc.h"
-#include "bits.h"
+#include "bitops.h"
 #include "core.h"
 #include "list.h"
 #include "lock.h"
