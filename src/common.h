@@ -82,7 +82,6 @@
 #include "arch/basic.h"
 #include "arch/memory.h"
 #include "arch/atomic.h"
-#include "arch/stack.h"
 
 /**********************************************************************
  * Basic Definitions.

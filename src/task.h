@@ -21,6 +21,7 @@
 #define TASK_H
 
 #include "common.h"
+#include "arch/stack.h"
 #include "list.h"
 #include "value.h"
 
