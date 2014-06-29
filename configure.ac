@@ -33,6 +33,15 @@ AM_CONDITIONAL([ARCH_X86], [test "$arch" = "x86"])
 AM_CONDITIONAL([ARCH_X86_64], [test "$arch" = "x86-64"])
 AM_CONDITIONAL([ARCH_GENERIC], [test "$arch" = "generic"])
 
+dnl check for API variants
+AC_GNU_SOURCE
+#case "$host" in
+#        *-*-darwin*)
+#            AC_DEFINE([_XOPEN_SOURCE], 600, [Enable for ucontext.h on Darwin])
+#            AC_DEFINE([_DARWIN_C_SOURCE], 1, [Enable for ucontext.h on Darwin])
+#            ;;
+#esac
+
 dnl Checks for programs.
 AC_PROG_CC
 AC_PROG_CC_C99
