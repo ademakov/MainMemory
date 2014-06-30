@@ -101,7 +101,6 @@ mm_task_lock(mm_task_lock_t *lock)
 	ASSERT(mm_running_task != NULL);
 
 #if ENABLE_SMP
-
 # if ENABLE_LOCK_STATS
 	uint32_t fail = 0;
 # endif
@@ -121,7 +120,6 @@ mm_task_lock(mm_task_lock_t *lock)
 	stat->fail_count += fail;
 	stat->lock_count++;
 # endif
-
 #else
 	(void) lock;
 #endif
@@ -169,5 +167,11 @@ mm_thread_unlock(mm_thread_lock_t *lock)
 {
 	mm_lock_release(&lock->lock);
 }
+
+/**********************************************************************
+ * Lock statistics.
+ **********************************************************************/
+
+void mm_lock_stats(void);
 
 #endif /* LOCK_H */

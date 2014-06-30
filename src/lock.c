@@ -22,6 +22,7 @@
 #include "alloc.h"
 #include "core.h"
 #include "hash.h"
+#include "log.h"
 #include "util.h"
 
 /**********************************************************************
@@ -130,3 +131,28 @@ mm_task_lock_getstat(mm_task_lock_t *lock)
 }
 
 #endif
+
+void
+mm_lock_stats(void)
+{
+#if ENABLE_LOCK_STATS
+	struct mm_link *link = mm_link_shared_head(&mm_lock_stat_list);
+	while (link != NULL) {
+		struct mm_task_lock_statistics *stat =
+			containerof(link, struct mm_task_lock_statistics, common_link);
+		mm_memory_load_fence();
+
+		for (mm_core_t c = 0; c < mm_core_getnum(); c++) {
+			struct mm_task_lock_core_stat *core_stat =
+				MM_CDATA_DEREF(c, stat->per_core_stat);
+
+			mm_verbose("lock %s:%d, core %d, locked %llu, failed %llu",
+				stat->file, stat->line, c,
+				core_stat->lock_count,
+				core_stat->fail_count);
+		}
+
+		link = mm_memory_load(link->next);
+	}
+#endif
+}
