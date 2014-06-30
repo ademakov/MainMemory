@@ -590,7 +590,7 @@ mm_core_halt(struct mm_core *core)
 					halt_time = core->time_value;
 					break;
 				}
-				mm_atomic_lock_pause();
+				mm_spin_pause();
 			}
 		}
 	}

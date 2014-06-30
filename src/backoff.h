@@ -21,6 +21,7 @@
 #define BACKOFF_H
 
 #include "common.h"
+#include "arch/spin.h"
 #include "task.h"
 #include "thread.h"
 #include "trace.h"
@@ -36,7 +37,7 @@ mm_task_backoff(uint32_t count)
 	}
 
 	for (uint32_t n = count; n; n--)
-		mm_atomic_lock_pause();
+		mm_spin_pause();
 
 	return count * 2 + 1;
 }
@@ -61,7 +62,7 @@ mm_thread_backoff(uint32_t count)
 #endif
 
 	for (uint32_t n = count & 0xff; n; n--)
-		mm_atomic_lock_pause();
+		mm_spin_pause();
 
 	return count * 2 + 1;
 }

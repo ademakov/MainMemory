@@ -184,10 +184,4 @@ mm_atomic_lock_release(mm_atomic_lock_t *lock)
 	mm_memory_store(lock->locked, 0);
 }
 
-static inline void
-mm_atomic_lock_pause(void)
-{
-	asm volatile("pause" ::: "memory");
-}
-
 #endif /* ARCH_X86_64_ATOMIC_H */

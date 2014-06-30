@@ -153,9 +153,4 @@ mm_atomic_lock_release(mm_atomic_lock_t *lock)
 	__sync_lock_release(&lock->locked);
 }
 
-static inline void
-mm_atomic_lock_pause(void)
-{
-}
-
 #endif /* ARCH_GENERIC_ATOMIC_H */
