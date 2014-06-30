@@ -21,6 +21,8 @@
 #define LIST_H
 
 #include "common.h"
+#include "arch/atomic.h"
+#include "arch/memory.h"
 
 /**********************************************************************
  * Double-linked circular list.

@@ -21,6 +21,7 @@
 #define EXIT_H
 
 #include "common.h"
+#include "arch/memory.h"
 
 /**********************************************************************
  * Exit Signal Handling.

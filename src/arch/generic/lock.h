@@ -1,7 +1,7 @@
 /*
- * arch/spin.h - MainMemory spinning pause.
+ * arch/generic/lock.h - MainMemory test-and-set lock primitives.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,22 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARCH_SPIN_H
-#define ARCH_SPIN_H
+#ifndef ARCH_GENERIC_LOCK_H
+#define ARCH_GENERIC_LOCK_H
 
-#include "config.h"
+#define MM_LOCK_INIT	{0}
 
-/*
- * mm_spin_pause() is a special instruction to be used in busy wait loops
- * to make hyper-threading CPUs happy.
- */
+typedef struct { char locked; } mm_lock_t;
 
-#if ARCH_X86
-# include "arch/x86/spin.h"
-#elif ARCH_X86_64
-# include "arch/x86-64/spin.h"
-#else
-# include "arch/generic/spin.h"
-#endif
+static inline int
+mm_lock_acquire(mm_lock_t *lock)
+{
+	return __sync_lock_test_and_set(&lock->locked, 1);
+}
 
-#endif /* ARCH_SPIN_H */
+static inline void
+mm_lock_release(mm_lock_t *lock)
+{
+	__sync_lock_release(&lock->locked);
+}
+
+#endif /* ARCH_GENERIC_LOCK_H */

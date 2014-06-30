@@ -147,41 +147,4 @@ mm_atomic_unary_test(uintptr, dec, "decq")
 #undef mm_atomic_unary
 #undef mm_atomic_unary_test
 
-/**********************************************************************
- * Atomic operations for spin-locks.
- **********************************************************************/
-
-/*
- * mm_atomic_lock_acquire() is a test-and-set atomic operation along with
- * acquire fence.
- * 
- * mm_atomic_lock_release() is a simple clear operation along with release
- * fence.
- * 
- * mm_atomic_lock_pause() is a special instruction to be used in spin-lock
- * loops to make hyper-threading CPUs happy.
- */
-
-#define MM_ATOMIC_LOCK_INIT	{0}
-
-typedef struct { char locked; } mm_atomic_lock_t;
-
-static inline int
-mm_atomic_lock_acquire(mm_atomic_lock_t *lock)
-{
-	char locked;
-	asm volatile("xchgb %0,%1"
-		     : "=q"(locked), "+m"(lock->locked)
-		     : "0"(1)
-		     : "memory");
-	return locked;
-}
-
-static inline void
-mm_atomic_lock_release(mm_atomic_lock_t *lock)
-{
-	mm_memory_store_fence();
-	mm_memory_store(lock->locked, 0);
-}
-
 #endif /* ARCH_X86_64_ATOMIC_H */

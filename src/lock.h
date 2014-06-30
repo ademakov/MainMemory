@@ -21,6 +21,7 @@
 #define LOCK_H
 
 #include "common.h"
+#include "arch/lock.h"
 #include "backoff.h"
 #include "trace.h"
 
@@ -34,9 +35,9 @@
  **********************************************************************/
 
 #if ENABLE_LOCK_STATS
-# define MM_TASK_LOCK_INIT	{ .lock = MM_ATOMIC_LOCK_INIT, .stat = NULL, .file = __FILE__, .line = __LINE__ }
+# define MM_TASK_LOCK_INIT	{ .lock = MM_LOCK_INIT, .stat = NULL, .file = __FILE__, .line = __LINE__ }
 #else
-# define MM_TASK_LOCK_INIT	{ .lock = MM_ATOMIC_LOCK_INIT }
+# define MM_TASK_LOCK_INIT	{ .lock = MM_LOCK_INIT }
 #endif
 
 #if ENABLE_LOCK_STATS
@@ -55,7 +56,7 @@ struct mm_task_lock_core_stat
 
 typedef struct
 {
-	mm_atomic_lock_t lock;
+	mm_lock_t lock;
 
 #if ENABLE_LOCK_STATS
 	struct mm_task_lock_statistics *stat;
@@ -77,7 +78,7 @@ mm_task_trylock(mm_task_lock_t *lock)
 	ASSERT(mm_running_task != NULL);
 
 #if ENABLE_SMP
-	bool success = !mm_atomic_lock_acquire(&lock->lock);
+	bool success = !mm_lock_acquire(&lock->lock);
 
 # if ENABLE_LOCK_STATS
 	struct mm_task_lock_core_stat *stat = mm_task_lock_getstat(lock);
@@ -106,7 +107,7 @@ mm_task_lock(mm_task_lock_t *lock)
 # endif
 	uint32_t backoff = 0;
 
-	while (mm_atomic_lock_acquire(&lock->lock)) {
+	while (mm_lock_acquire(&lock->lock)) {
 		do {
 # if ENABLE_LOCK_STATS
 			++fail;
@@ -132,7 +133,7 @@ mm_task_unlock(mm_task_lock_t *lock)
 	ASSERT(mm_running_task != NULL);
 
 #if ENABLE_SMP
-	mm_atomic_lock_release(&lock->lock);
+	mm_lock_release(&lock->lock);
 #else
 	(void) lock;
 #endif
@@ -142,21 +143,21 @@ mm_task_unlock(mm_task_lock_t *lock)
  * Synchronization between different threads.
  **********************************************************************/
 
-#define MM_THREAD_LOCK_INIT { MM_ATOMIC_LOCK_INIT }
+#define MM_THREAD_LOCK_INIT { MM_LOCK_INIT }
 
-typedef struct { mm_atomic_lock_t lock; } mm_thread_lock_t;
+typedef struct { mm_lock_t lock; } mm_thread_lock_t;
 
 static inline bool
 mm_thread_trylock(mm_thread_lock_t *lock)
 {
-	return !mm_atomic_lock_acquire(&lock->lock);
+	return !mm_lock_acquire(&lock->lock);
 }
 
 static inline void
 mm_thread_lock(mm_thread_lock_t *lock)
 {
 	uint32_t count = 0;
-	while (mm_atomic_lock_acquire(&lock->lock)) {
+	while (mm_lock_acquire(&lock->lock)) {
 		do
 			count = mm_thread_backoff(count);
 		while (mm_memory_load(lock->lock.locked));
@@ -166,7 +167,7 @@ mm_thread_lock(mm_thread_lock_t *lock)
 static inline void
 mm_thread_unlock(mm_thread_lock_t *lock)
 {
-	mm_atomic_lock_release(&lock->lock);
+	mm_lock_release(&lock->lock);
 }
 
 #endif /* LOCK_H */

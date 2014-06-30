@@ -21,6 +21,8 @@
 #define SYNCH_H
 
 #include "common.h"
+#include "arch/atomic.h"
+#include "arch/memory.h"
 
 /* Forward declarations. */
 struct mm_event_table;

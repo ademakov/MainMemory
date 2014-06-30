@@ -25,6 +25,7 @@
 #endif
 
 #include "config.h"
+#include "arch/basic.h"
 
 /**********************************************************************
  * Common Standard Headers.
@@ -74,14 +75,6 @@
 #define mm_volatile_load(x)	(* (volatile typeof(x) *) &(x))
 
 #define mm_volatile_store(x, v)	((* (volatile typeof(x) *) &(x)) = (v))
-
-/**********************************************************************
- * Architecture Specific Definitions.
- **********************************************************************/
-
-#include "arch/basic.h"
-#include "arch/memory.h"
-#include "arch/atomic.h"
 
 /**********************************************************************
  * Basic Definitions.
