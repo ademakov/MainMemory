@@ -29,6 +29,7 @@
 static inline uint32_t
 mm_task_backoff(uint32_t count)
 {
+#if ENABLE_SMP
 	ASSERT(mm_running_task != NULL);
 
 	if (count > 0xff) {
@@ -40,6 +41,9 @@ mm_task_backoff(uint32_t count)
 		mm_spin_pause();
 
 	return count * 2 + 1;
+#else
+	return count;
+#endif
 }
 
 static inline uint32_t
