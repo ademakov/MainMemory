@@ -678,9 +678,7 @@ mm_event_open_selfpipe(struct mm_event_table *events)
 	events->entries[0].tag = MM_EVENT_FD_REGISTER;
 	events->entries[0].ev_fd = &events->selfevent;
 
-	events->head_entry = 1;
-
-	mm_event_collect(events);
+	mm_event_process_entry(events, &events->entries[0]);
 	mm_event_poll(events, 0);
 
 	events->head_entry = 0;
