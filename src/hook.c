@@ -25,12 +25,14 @@
 struct mm_hook_link0
 {
 	struct mm_link link;
+	uint8_t arity;
 	mm_hook_rtn0 proc;
 };
 
 struct mm_hook_link1
 {
 	struct mm_link link;
+	uint8_t arity;
 	mm_hook_rtn1 proc;
 	void *data;
 };
@@ -39,6 +41,7 @@ static struct mm_hook_link0 *
 mm_hook_create_link0(mm_hook_rtn0 proc)
 {
 	struct mm_hook_link0 *link = mm_global_alloc(sizeof(struct mm_hook_link0));
+	link->arity = 0;
 	link->proc = proc;
 	return link;
 }
@@ -47,7 +50,8 @@ static struct mm_hook_link1 *
 mm_hook_create_link1(mm_hook_rtn1 proc, void *data)
 {
 	struct mm_hook_link1 *link = mm_global_alloc(sizeof(struct mm_hook_link1));
-	link->proc = (mm_hook_rtn1) (((intptr_t) proc) | 1);
+	link->arity = 1;
+	link->proc = proc;
 	link->data = data;
 	return link;
 }
@@ -56,15 +60,13 @@ static void
 mm_hook_call_link(struct mm_link *link)
 {
 	struct mm_hook_link0 *link0 = (struct mm_hook_link0 *) link;
-	mm_hook_rtn0 proc0 = link0->proc;
-	uint8_t arity = ((uintptr_t) proc0) & 0x1;
+	uint8_t arity = link0->arity;
 
 	if (arity == 0) {
-		proc0();
+		(link0->proc)();
 	} else {
-		mm_hook_rtn1 proc1 = (mm_hook_rtn1) (((uintptr_t) proc0) & ~1);
 		struct mm_hook_link1 *link1 = (struct mm_hook_link1 *) link0;
-		proc1(link1->data);
+		(link1->proc)(link1->data);
 	}
 }
 
