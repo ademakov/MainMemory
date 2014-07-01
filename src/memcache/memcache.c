@@ -223,7 +223,7 @@ struct mc_command
 static struct mm_pool mc_command_pool;
 
 static void
-mc_command_init(void)
+mc_command_start(void)
 {
 	ENTER();
 
@@ -233,7 +233,7 @@ mc_command_init(void)
 }
 
 static void
-mc_command_term()
+mc_command_stop()
 {
 	ENTER();
 
@@ -2200,7 +2200,7 @@ mc_memcache_start(void)
 	ENTER();
 
 	mc_table_init(&mc_config);
-	mc_command_init();
+	mc_command_start();
 	mm_net_start_server(mc_tcp_server);
 
 	LEAVE();
@@ -2212,7 +2212,7 @@ mc_memcache_stop(void)
 	ENTER();
 
 	mm_net_stop_server(mc_tcp_server);
-	mc_command_term();
+	mc_command_stop();
 	mc_table_term();
 
 	LEAVE();
