@@ -50,7 +50,7 @@ typedef mm_atomic_type(void *) mm_atomic_ptr_t;
 		asm volatile(MM_LOCK_PREFIX mnemonic " %2,%1"		\
 			     : "=a"(r), "+m"(*p)			\
 			     : operand(v), "0"(c)			\
-			     : "memory");				\
+			     : "memory", "cc");				\
 		return r;						\
 	}
 
