@@ -845,11 +845,10 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
+		mm_task_unlock(&sock->lock);
+
 		if ((fd_flags & MM_NET_READ_ERROR) != 0) {
-			mm_task_unlock(&sock->lock);
 			mm_core_post(sock->core, mm_net_closer, (mm_value_t) sock);
-		} else {
-			mm_task_unlock(&sock->lock);
 		}
 	}
 
@@ -893,11 +892,10 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		if ((sock->flags & MM_NET_WRITE_ERROR) != 0) {
-			mm_task_unlock(&sock->lock);
+		mm_task_unlock(&sock->lock);
+
+		if ((fd_flags & MM_NET_WRITE_ERROR) != 0) {
 			mm_core_post(sock->core, mm_net_closer, (mm_value_t) sock);
-		} else {
-			mm_task_unlock(&sock->lock);
 		}
 	}
 
