@@ -1,5 +1,5 @@
 /*
- * wait.h - MainMemory wait queue.
+ * wait.h - MainMemory wait queues.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -43,12 +43,21 @@ struct mm_waitset
 {
 	/* The task queue. */
 	struct mm_link set;
-	/* The number of entries in the queue. */
-	uint32_t size;
+	/* The core the waitset is pinned to. It is equal to
+	   MM_CORE_NONE in case the waitset is not pinned. */
+	mm_core_t core;
 };
+
+/**********************************************************************
+ * Wait entry global data initialization and cleanup.
+ **********************************************************************/
 
 void mm_wait_init(void);
 void mm_wait_term(void);
+
+/**********************************************************************
+ * Per-core wait entry cache initialization and cleanup.
+ **********************************************************************/
 
 void mm_wait_cache_prepare(struct mm_wait_cache *cache)
 	__attribute__((nonnull(1)));
@@ -57,18 +66,45 @@ void mm_wait_cache_cleanup(struct mm_wait_cache *cache)
 void mm_wait_cache_truncate(struct mm_wait_cache *cache)
 	__attribute__((nonnull(1)));
 
+/**********************************************************************
+ * Wait-set initialization and cleanup.
+ **********************************************************************/
+
 void mm_waitset_prepare(struct mm_waitset *waitset)
 	__attribute__((nonnull(1)));
 void mm_waitset_cleanup(struct mm_waitset *waitset)
 	__attribute__((nonnull(1)));
 
-void mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
+static inline void
+mm_waitset_pin(struct mm_waitset *waitset, mm_core_t core)
+{
+	waitset->core = core;
+}
+
+/**********************************************************************
+ * Private single-core wait-sets.
+ **********************************************************************/
+
+void mm_waitset_local_wait(struct mm_waitset *waitset)
 	__attribute__((nonnull(1)));
+
+void mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
+	__attribute__((nonnull(1)));
+
+void mm_waitset_local_broadcast(struct mm_waitset *waitset)
+	__attribute__((nonnull(1)));
+
+/**********************************************************************
+ * Shared inter-core wait-sets with locking.
+ **********************************************************************/
+
+void mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
+	__attribute__((nonnull(1, 2)));
 
 void mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout)
-	__attribute__((nonnull(1)));
+	__attribute__((nonnull(1, 2)));
 
 void mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
-	__attribute__((nonnull(1)));
+	__attribute__((nonnull(1, 2)));
 
 #endif /* WAIT_H */

@@ -1,5 +1,5 @@
 /*
- * wait.c - MainMemory wait queue.
+ * wait.c - MainMemory wait queues.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -26,16 +26,16 @@
 #include "timer.h"
 #include "trace.h"
 
-/**********************************************************************
- * Wait entries.
- **********************************************************************/
-
 // An entry for a waiting task.
 struct mm_wait
 {
 	struct mm_link link;
 	struct mm_task *task;
 };
+
+/**********************************************************************
+ * Wait entry pool.
+ **********************************************************************/
 
 // The memory pool for waiting tasks.
 static struct mm_pool mm_wait_pool;
@@ -60,6 +60,22 @@ mm_wait_stop(void)
 	LEAVE();
 }
 
+static struct mm_wait *
+mm_wait_create(void)
+{
+	return mm_pool_alloc(&mm_wait_pool);
+}
+
+static void
+mm_wait_destroy(struct mm_wait *wait)
+{
+	mm_pool_free(&mm_wait_pool, wait);
+}
+
+/**********************************************************************
+ * Wait entry global data initialization and cleanup.
+ **********************************************************************/
+
 void
 mm_wait_init(void)
 {
@@ -79,20 +95,8 @@ mm_wait_term(void)
 	LEAVE();
 }
 
-static struct mm_wait *
-mm_wait_create(void)
-{
-	return mm_pool_alloc(&mm_wait_pool);
-}
-
-static void
-mm_wait_destroy(struct mm_wait *wait)
-{
-	mm_pool_free(&mm_wait_pool, wait);
-}
-
 /**********************************************************************
- * Cache of wait entries.
+ * Per-core wait entry cache initialization and cleanup.
  **********************************************************************/
 
 #define MM_WAIT_CACHE_MAX	(256)
@@ -193,7 +197,7 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 }
 
 /**********************************************************************
- * Wait-set functions.
+ * Wait-set initialization and cleanup.
  **********************************************************************/
 
 void
@@ -202,7 +206,7 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 	ENTER();
 
 	mm_link_init(&waitset->set);
-	waitset->size = 0;
+	waitset->core = MM_CORE_NONE;
 
 	LEAVE();
 }
@@ -212,9 +216,83 @@ mm_waitset_cleanup(struct mm_waitset *waitset __attribute__((unused)))
 {
 	ENTER();
 	// TODO: ensure the waitset is empty.
-	ASSERT(waitset->size == 0);
 	LEAVE();
 }
+
+/**********************************************************************
+ * Private single-core wait-sets.
+ **********************************************************************/
+
+void
+mm_waitset_local_wait(struct mm_waitset *waitset)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_self());
+
+	// Enqueue the task.
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
+	wait->task = mm_running_task;
+	mm_link_insert(&waitset->set, &wait->link);
+
+	// Wait for a wakeup signal.
+	mm_task_block();
+
+	wait->task = NULL;
+
+	LEAVE();
+}
+
+void
+mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_self());
+
+	// Enqueue the task.
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
+	wait->task = mm_running_task;
+	mm_link_insert(&waitset->set, &wait->link);
+
+	// Wait for a wakeup signal.
+	mm_timer_block(timeout);
+
+	wait->task = NULL;
+
+	LEAVE();
+}
+
+void
+mm_waitset_local_broadcast(struct mm_waitset *waitset)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_self());
+
+	// Capture the waitset.
+	struct mm_link set = waitset->set;
+	mm_link_init(&waitset->set);
+
+	while (!mm_link_empty(&set)) {
+		// Get the next wait entry.
+		struct mm_link *link = mm_link_delete_head(&set);
+		struct mm_wait *wait = containerof(link, struct mm_wait, link);
+		struct mm_task *task = wait->task;
+
+		if (likely(task != NULL)) {
+			// Run the task if it has not been reset.
+			wait->task = NULL;
+			mm_task_run(task);
+		}
+
+		// Return unused wait entry to the pool.
+		mm_wait_cache_put(&mm_core->wait_cache, wait);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Shared inter-core wait-sets with locking.
+ **********************************************************************/
 
 void
 mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
@@ -225,7 +303,6 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_running_task;
 	mm_link_insert(&waitset->set, &wait->link);
-	waitset->size++;
 
 	// Release the waitset lock.
 	mm_task_unlock(lock);
@@ -248,7 +325,6 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeou
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_running_task;
 	mm_link_insert(&waitset->set, &wait->link);
-	waitset->size++;
 
 	// Release the waitset lock.
 	mm_task_unlock(lock);
@@ -270,7 +346,6 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	// Capture the waitset.
 	struct mm_link set = waitset->set;
 	mm_link_init(&waitset->set);
-	waitset->size = 0;
 
 	// Release the waitset lock.
 	mm_task_unlock(lock);

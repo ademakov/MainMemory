@@ -147,7 +147,6 @@ mm_future_destroy(struct mm_future *future)
 			count = mm_task_backoff(count);
 	}
 
-	ASSERT(future->waitset.size == 0);
 	mm_waitset_cleanup(&future->waitset);
 
 	mm_pool_free(&mm_core->future_pool, future);
