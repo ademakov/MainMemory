@@ -36,6 +36,8 @@
 struct mm_buffer;
 struct mm_task;
 
+#define MM_NET_LOCAL_EVENTS	1
+
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x01
 #define MM_NET_OUTBOUND		0x02
@@ -145,8 +147,10 @@ struct mm_net_socket
 	uint8_t flags;
 	uint8_t close_flags;
 
+#if !MM_NET_LOCAL_EVENTS
 	/* Socket I/O status lock. */
 	mm_task_lock_t lock;
+#endif
 
 	/* Tasks pending on socket I/O. */
 	struct mm_waitset read_waitset;
