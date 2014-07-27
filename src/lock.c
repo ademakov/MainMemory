@@ -127,7 +127,7 @@ mm_task_lock_getstat(mm_task_lock_t *lock)
 	struct mm_task_lock_statistics *stat = mm_memory_load(lock->stat);
 	if (stat == NULL)
 		stat = mm_task_lock_getstat_slowpath(lock);
-	return MM_CDATA_DEREF(mm_core_self(), stat->per_core_stat);
+	return MM_CDATA_DEREF(mm_core_selfid(), stat->per_core_stat);
 }
 
 #endif

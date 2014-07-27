@@ -90,7 +90,7 @@ mm_core_idle(struct mm_core *core, bool tail)
 {
 	ENTER();
 
-	struct mm_task *task = mm_running_task;
+	struct mm_task *task = mm_task_self();
 	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
 	// Put the task into the wait queue.
@@ -348,7 +348,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	if (chunk->core == mm_core_self()) {
+	if (chunk->core == mm_core_selfid()) {
 		// Destroy the chunk directly.
 		mm_chunk_destroy(chunk);
 	} else {

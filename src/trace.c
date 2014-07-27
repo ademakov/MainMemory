@@ -40,12 +40,13 @@ static __thread int mm_trace_recur;
 static bool
 mm_trace_enter(int level)
 {
-	if (mm_running_task != NULL) {
-		if (unlikely(mm_running_task->trace_recur))
+	struct mm_task *task = mm_task_self();
+	if (task != NULL) {
+		if (unlikely(task->trace_recur))
 			return false;
 		if (level < 0)
-			mm_running_task->trace_level += level;
-		mm_running_task->trace_recur++;
+			task->trace_level += level;
+		task->trace_recur++;
 	} else {
 		if (unlikely(mm_trace_recur)) 
 			return false;
@@ -59,10 +60,11 @@ mm_trace_enter(int level)
 static void
 mm_trace_leave(int level)
 {
-	if (mm_running_task != NULL) {
+	struct mm_task *task = mm_task_self();
+	if (task != NULL) {
 		if (level > 0)
-			mm_running_task->trace_level += level;
-		mm_running_task->trace_recur--;
+			task->trace_level += level;
+		task->trace_recur--;
 	} else {
 		if (level > 0)
 			mm_trace_level += level;
@@ -73,12 +75,13 @@ mm_trace_leave(int level)
 void
 mm_trace_prefix(void)
 {
-	if (likely(mm_running_task != NULL)) {
+	struct mm_task *task = mm_task_self();
+	if (task != NULL) {
 		mm_log_fmt("[%s][%d %s] %*s",
 			   mm_thread_getname(mm_thread_self()),
-			   mm_task_getid(mm_running_task),
-			   mm_task_getname(mm_running_task),
-			   mm_running_task->trace_level * 2, "");
+			   mm_task_getid(task),
+			   mm_task_getname(task),
+			   task->trace_level * 2, "");
 	} else {
 		mm_log_fmt("[%s]%*s",
 			   mm_thread_getname(mm_thread_self()),

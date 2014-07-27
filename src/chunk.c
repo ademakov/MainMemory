@@ -29,7 +29,7 @@ mm_chunk_create(size_t size)
 	size_t total_size = sizeof(struct mm_chunk) + size;
 	struct mm_chunk *chunk = mm_local_alloc(total_size);
 	chunk->used = 0;
-	chunk->core = mm_core_self();
+	chunk->core = mm_core_selfid();
 	mm_link_init(&chunk->link);
 	return chunk;
 }
@@ -38,7 +38,7 @@ void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
 	ASSERT(chunk->core != MM_CORE_NONE);
-	ASSERT(chunk->core == mm_core_self());
+	ASSERT(chunk->core == mm_core_selfid());
 
 	mm_local_free(chunk);
 }

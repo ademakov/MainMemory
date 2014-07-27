@@ -102,18 +102,19 @@ struct mm_task_cleanup_rec
 /* Register a cleanup handler. */
 #define mm_task_cleanup_push(rtn, arg)					\
 	do {								\
+		struct mm_task *__task = mm_task_self();		\
 		struct mm_task_cleanup_rec __cleanup = {		\
-				.next = mm_running_task->cleanup,	\
+				.next = __task->cleanup,		\
 				.routine = (void (*)(uintptr_t)) (rtn),	\
 				.routine_arg = (uintptr_t) (arg),	\
 			};						\
-		mm_running_task->cleanup = &__cleanup;			\
+		__task->cleanup = &__cleanup;				\
 		do {
 
 /* Unregister a cleanup handler optionally executing it. */
 #define mm_task_cleanup_pop(execute)					\
 		} while (0);						\
-		mm_running_task->cleanup = __cleanup.next;		\
+		__task->cleanup = __cleanup.next;			\
 		if (execute) {						\
 			__cleanup.routine(__cleanup.routine_arg);	\
 		}							\
@@ -203,6 +204,12 @@ void mm_task_destroy(struct mm_task *task)
  * Task utilities.
  **********************************************************************/
 
+static inline struct mm_task *
+mm_task_self(void)
+{
+	return mm_running_task;
+}
+
 static inline const char *
 mm_task_getname(const struct mm_task *task)
 {
@@ -253,8 +260,9 @@ void mm_task_exit(mm_value_t result)
 static inline void
 mm_task_testcancel(void)
 {
-	if (unlikely(MM_TASK_CANCEL_TEST(mm_running_task->flags))) {
-		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+	struct mm_task *task = mm_task_self();
+	if (unlikely(MM_TASK_CANCEL_TEST(task->flags))) {
+		task->flags |= MM_TASK_CANCEL_OCCURRED;
 		mm_task_exit(MM_RESULT_CANCELED);
 	}
 }
@@ -262,8 +270,9 @@ mm_task_testcancel(void)
 static inline void
 mm_task_testcancel_asynchronous(void)
 {
-	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(mm_running_task->flags))) {
-		mm_running_task->flags |= MM_TASK_CANCEL_OCCURRED;
+	struct mm_task *task = mm_task_self();
+	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(task->flags))) {
+		task->flags |= MM_TASK_CANCEL_OCCURRED;
 		mm_task_exit(MM_RESULT_CANCELED);
 	}
 }

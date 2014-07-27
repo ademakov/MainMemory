@@ -438,13 +438,13 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 void *
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
-	return mm_pool_shared_alloc_low(mm_core_self(), pool);
+	return mm_pool_shared_alloc_low(mm_core_selfid(), pool);
 }
 
 void
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
-	mm_pool_shared_free_low(mm_core_self(), pool, item);
+	mm_pool_shared_free_low(mm_core_selfid(), pool, item);
 }
 
 #endif

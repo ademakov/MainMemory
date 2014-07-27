@@ -227,11 +227,11 @@ void
 mm_waitset_local_wait(struct mm_waitset *waitset)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_self());
+	ASSERT(waitset->core == mm_core_selfid());
 
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_running_task;
+	wait->task = mm_task_self();
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
@@ -246,11 +246,11 @@ void
 mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_self());
+	ASSERT(waitset->core == mm_core_selfid());
 
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_running_task;
+	wait->task = mm_task_self();
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
@@ -265,7 +265,7 @@ void
 mm_waitset_local_broadcast(struct mm_waitset *waitset)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_self());
+	ASSERT(waitset->core == mm_core_selfid());
 
 	// Capture the waitset.
 	struct mm_link set = waitset->set;
@@ -301,7 +301,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
 
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_running_task;
+	wait->task = mm_task_self();
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
@@ -323,7 +323,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeou
 
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_running_task;
+	wait->task = mm_task_self();
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.

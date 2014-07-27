@@ -236,7 +236,7 @@ mm_timer_block(mm_timeout_t timeout)
 	mm_timeval_t time = mm_core->time_value + timeout;
 	DEBUG("time: %llu", time);
 
-	struct mm_timer_resume timer = { .task = mm_running_task };
+	struct mm_timer_resume timer = { .task = mm_task_self() };
 	mm_timeq_entry_init(&timer.entry, time, MM_TIMER_BLOCK);
 
 	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);

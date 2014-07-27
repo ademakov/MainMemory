@@ -30,7 +30,7 @@ static inline uint32_t
 mm_task_backoff(uint32_t count)
 {
 #if ENABLE_SMP
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_task_self() != NULL);
 
 	if (count > 0xff) {
 		count = 0;
@@ -54,7 +54,7 @@ mm_thread_backoff(uint32_t count)
 		if (count > 0x7ff) {
 			count = 0;
 			mm_thread_yield();
-		} else if (mm_running_task != NULL) {
+		} else if (mm_task_self() != NULL) {
 			mm_task_yield();
 		}
 	}

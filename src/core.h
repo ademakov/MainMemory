@@ -43,9 +43,6 @@ struct mm_net_server;
 /* Virtual core state. */
 struct mm_core
 {
-	/* Private memory arena. */
-	void *arena;
-
 	/* Queue of ready to run tasks. */
 	struct mm_runq runq;
 
@@ -69,12 +66,15 @@ struct mm_core
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;
 
-	/* Queue of delayed tasks. */
-	struct mm_timeq *time_queue;
-
 	/* The (almost) current time. */
 	mm_timeval_t time_value;
 	mm_timeval_t real_time_value;
+
+	/* Queue of delayed tasks. */
+	struct mm_timeq *time_queue;
+
+	/* Private memory arena. */
+	void *arena;
 
 	/* Master task. */
 	struct mm_task *master;
@@ -179,10 +179,16 @@ mm_core_getptr(mm_core_t core)
 	return &mm_core_set[core];
 }
 
-static inline mm_core_t
+static inline struct mm_core *
 mm_core_self(void)
 {
-	return mm_core_getid(mm_core);
+	return mm_core;
+}
+
+static inline mm_core_t
+mm_core_selfid(void)
+{
+	return mm_core_getid(mm_core_self());
 }
 
 /**********************************************************************

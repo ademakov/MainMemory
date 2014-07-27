@@ -71,7 +71,7 @@ mm_port_send_internal(struct mm_port *port,
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
-	ASSERT(port->task != mm_running_task);
+	ASSERT(port->task != mm_task_self());
 	int rc = 0;
 
 again:
@@ -122,7 +122,7 @@ mm_port_receive_internal(struct mm_port *port,
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
-	ASSERT(port->task == mm_running_task);
+	ASSERT(port->task == mm_task_self());
 	int rc = 0;
 
 again:

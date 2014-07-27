@@ -75,7 +75,7 @@ struct mm_task_lock_core_stat *mm_task_lock_getstat(mm_task_lock_t *lock)
 static inline bool
 mm_task_trylock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_task_self() != NULL);
 
 #if ENABLE_SMP
 	bool success = !mm_lock_acquire(&lock->lock);
@@ -98,7 +98,7 @@ mm_task_trylock(mm_task_lock_t *lock)
 static inline void
 mm_task_lock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_task_self() != NULL);
 
 #if ENABLE_SMP
 # if ENABLE_LOCK_STATS
@@ -128,7 +128,7 @@ mm_task_lock(mm_task_lock_t *lock)
 static inline void
 mm_task_unlock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_running_task != NULL);
+	ASSERT(mm_task_self() != NULL);
 
 #if ENABLE_SMP
 	mm_lock_release(&lock->lock);

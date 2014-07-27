@@ -70,7 +70,7 @@ mm_future_routine(mm_value_t arg)
 	mm_task_cleanup_push(mm_future_cleanup, future);
 
 	// Advertise that the future task is running.
-	mm_memory_store(future->task, mm_running_task);
+	mm_memory_store(future->task, mm_task_self());
 	mm_memory_store_fence();
 
 	// Actually start the future unless already canceled.
