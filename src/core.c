@@ -90,7 +90,7 @@ mm_core_idle(struct mm_core *core, bool tail)
 {
 	ENTER();
 
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = core->task;
 	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
 
 	// Put the task into the wait queue.
@@ -802,8 +802,8 @@ mm_core_boot(mm_value_t arg)
 	mm_core->thread = mm_thread_self();
 
 	// Set the thread-local pointer to the running task.
-	mm_running_task = mm_core->boot;
-	mm_running_task->state = MM_TASK_RUNNING;
+	mm_core->task = mm_core->boot;
+	mm_core->task->state = MM_TASK_RUNNING;
 
 	// Initialize per-core resources.
 	mm_core_boot_init(core);
@@ -818,8 +818,8 @@ mm_core_boot(mm_value_t arg)
 	mm_core_boot_term(core);
 
 	// Invalidate the boot task.
-	mm_running_task->state = MM_TASK_INVALID;
-	mm_running_task = NULL;
+	mm_core->task->state = MM_TASK_INVALID;
+	mm_core->task = NULL;
 
 	// Abandon the core.
 	mm_core = NULL;

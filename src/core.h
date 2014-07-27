@@ -26,13 +26,13 @@
 #include "pool.h"
 #include "ring.h"
 #include "runq.h"
-#include "task.h"
 #include "wait.h"
 
 /* Forward declarations. */
 struct mm_bitset;
 struct mm_chunk;
 struct mm_event_table;
+struct mm_task;
 struct mm_timeq;
 struct mm_net_server;
 
@@ -43,6 +43,9 @@ struct mm_net_server;
 /* Virtual core state. */
 struct mm_core
 {
+	/* Currently running task. */
+	struct mm_task *task;
+
 	/* Queue of ready to run tasks. */
 	struct mm_runq runq;
 

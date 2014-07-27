@@ -75,8 +75,6 @@ struct mm_task_lock_core_stat *mm_task_lock_getstat(mm_task_lock_t *lock)
 static inline bool
 mm_task_trylock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_task_self() != NULL);
-
 #if ENABLE_SMP
 	bool success = !mm_lock_acquire(&lock->lock);
 
@@ -98,8 +96,6 @@ mm_task_trylock(mm_task_lock_t *lock)
 static inline void
 mm_task_lock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_task_self() != NULL);
-
 #if ENABLE_SMP
 # if ENABLE_LOCK_STATS
 	uint32_t fail = 0;
@@ -128,8 +124,6 @@ mm_task_lock(mm_task_lock_t *lock)
 static inline void
 mm_task_unlock(mm_task_lock_t *lock)
 {
-	ASSERT(mm_task_self() != NULL);
-
 #if ENABLE_SMP
 	mm_lock_release(&lock->lock);
 #else
@@ -154,10 +148,10 @@ mm_thread_trylock(mm_thread_lock_t *lock)
 static inline void
 mm_thread_lock(mm_thread_lock_t *lock)
 {
-	uint32_t count = 0;
+	uint32_t backoff = 0;
 	while (mm_lock_acquire(&lock->lock)) {
 		do
-			count = mm_thread_backoff(count);
+			backoff = mm_thread_backoff(backoff);
 		while (mm_memory_load(lock->lock.locked));
 	}
 }

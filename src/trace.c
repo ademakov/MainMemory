@@ -19,6 +19,7 @@
 
 #include "trace.h"
 
+#include "core.h"
 #include "log.h"
 #include "task.h"
 #include "thread.h"
@@ -40,7 +41,7 @@ static __thread int mm_trace_recur;
 static bool
 mm_trace_enter(int level)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
 	if (task != NULL) {
 		if (unlikely(task->trace_recur))
 			return false;
@@ -60,7 +61,7 @@ mm_trace_enter(int level)
 static void
 mm_trace_leave(int level)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
 	if (task != NULL) {
 		if (level > 0)
 			task->trace_level += level;
@@ -75,7 +76,7 @@ mm_trace_leave(int level)
 void
 mm_trace_prefix(void)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
 	if (task != NULL) {
 		mm_log_fmt("[%s][%d %s] %*s",
 			   mm_thread_getname(mm_thread_self()),

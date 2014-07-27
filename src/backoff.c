@@ -19,6 +19,7 @@
 
 #include "backoff.h"
 
+#include "core.h"
 #include "task.h"
 #include "thread.h"
 
@@ -28,7 +29,7 @@ mm_thread_backoff_slow(uint32_t count)
 	if (count > 0xffff) {
 		mm_thread_yield();
 		return 0;
-	} else if (mm_task_self() != NULL) {
+	} else if (mm_core != NULL) {
 		mm_task_yield();
 		return count * 2 + 1;
 	} else {

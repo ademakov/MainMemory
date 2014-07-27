@@ -20,9 +20,9 @@
 #include "table.h"
 #include "entry.h"
 
-#include "../core.h"
 #include "../hash.h"
 #include "../log.h"
+#include "../task.h"
 
 #include <sys/mman.h>
 

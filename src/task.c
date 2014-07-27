@@ -41,9 +41,6 @@
 // The memory pool for tasks.
 static struct mm_pool mm_task_pool;
 
-// The currently running task.
-__thread struct mm_task *mm_running_task = NULL;
-
 /**********************************************************************
  * Global task data initialization and termination.
  **********************************************************************/
@@ -132,10 +129,11 @@ mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
 static void
 mm_task_entry(void)
 {
-	TRACE("enter task %s", mm_task_getname(mm_running_task));
+	struct mm_task *task = mm_task_self();
+	TRACE("enter task %s", mm_task_getname(task));
 
 	// Execute the task routine on an empty stack.
-	mm_value_t result = mm_running_task->start(mm_running_task->start_arg);
+	mm_value_t result = task->start(task->start_arg);
 
 	// Finish the task making sure there is no return from this point
 	// as there is no valid stack frame above it.
@@ -362,11 +360,11 @@ mm_task_getptr(mm_task_t id)
 static void
 mm_task_switch(mm_task_state_t state)
 {
-	ASSERT(mm_running_task->state == MM_TASK_RUNNING);
-
 	// Move the currently running task to a new state.
-	struct mm_task *old_task = mm_running_task;
+	struct mm_task *old_task = mm_core->task;
+	ASSERT(old_task->state == MM_TASK_RUNNING);
 	old_task->state = state;
+
 	if (unlikely(state == MM_TASK_INVALID)) {
 		// Add it to the dead task list.
 		mm_list_append(&mm_core->dead, &old_task->queue);
@@ -384,7 +382,7 @@ mm_task_switch(mm_task_state_t state)
 	// there should never be a NULL value returned.
 	struct mm_task *new_task = mm_runq_get(&mm_core->runq);
 	new_task->state = MM_TASK_RUNNING;
-	mm_running_task = new_task;
+	mm_core->task = new_task;
 
 	// Switch to the new task relinquishing CPU control for a while.
 	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
@@ -464,25 +462,25 @@ mm_task_block(void)
 void
 mm_task_exit(mm_value_t result)
 {
-	TRACE("exiting task '%s' with status %lu",
-	      mm_running_task->name, (unsigned long) result);
+	struct mm_task *task = mm_task_self();
+	TRACE("exiting task '%s' with status %lu", task->name, (unsigned long) result);
 
 	// Set the task result.
-	mm_running_task->result = result;
+	task->result = result;
 
 	// TODO: invalidate ports ?
 
 	// Call the cleanup handlers.
-	mm_task_cleanup(mm_running_task);
+	mm_task_cleanup(task);
 
 	// At this point the task must not be in any queue.
-	ASSERT((mm_running_task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
+	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
 
 	// Free the dynamic memory.
-	mm_task_free_chunks(mm_running_task);
+	mm_task_free_chunks(task);
 
 	// Reset the task name.
-	mm_task_setname(mm_running_task, "dead");
+	mm_task_setname(task, "dead");
 
 	// Give the control to still running tasks.
 	mm_task_switch(MM_TASK_INVALID);
@@ -502,12 +500,13 @@ mm_task_setcancelstate(int new_value, int *old_value_ptr)
 	ASSERT(new_value == MM_TASK_CANCEL_ENABLE
 	       || new_value == MM_TASK_CANCEL_DISABLE);
 
-	int old_value = (mm_running_task->flags & MM_TASK_CANCEL_DISABLE);
+	struct mm_task *task = mm_task_self();
+	int old_value = (task->flags & MM_TASK_CANCEL_DISABLE);
 	if (likely(old_value != new_value)) {
 		if (new_value) {
-			mm_running_task->flags |= MM_TASK_CANCEL_DISABLE;
+			task->flags |= MM_TASK_CANCEL_DISABLE;
 		} else {
-			mm_running_task->flags &= ~MM_TASK_CANCEL_DISABLE;
+			task->flags &= ~MM_TASK_CANCEL_DISABLE;
 			mm_task_testcancel_asynchronous();
 		}
 	}
@@ -526,13 +525,14 @@ mm_task_setcanceltype(int new_value, int *old_value_ptr)
 	ASSERT(new_value == MM_TASK_CANCEL_DEFERRED
 	       || new_value == MM_TASK_CANCEL_ASYNCHRONOUS);
 
-	int old_value = (mm_running_task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
+	struct mm_task *task = mm_task_self();
+	int old_value = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
 	if (likely(old_value != new_value)) {
 		if (new_value) {
-			mm_running_task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
+			task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
 			mm_task_testcancel_asynchronous();
 		} else {
-			mm_running_task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
+			task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
 		}
 	}
 
@@ -548,9 +548,10 @@ mm_task_enter_cancel_point(void)
 {
 	ENTER();
 
-	int cp = (mm_running_task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
+	struct mm_task *task = mm_task_self();
+	int cp = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
 	if (likely(cp == 0)) {
-		mm_running_task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
+		task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
 		mm_task_testcancel_asynchronous();
 	}
 
@@ -564,7 +565,8 @@ mm_task_leave_cancel_point(int cp)
 	ENTER();
 
 	if (likely(cp == 0)) {
-		mm_running_task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
+		struct mm_task *task = mm_task_self();
+		task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
 	}
 
 	LEAVE();
@@ -577,7 +579,7 @@ mm_task_cancel(struct mm_task *task)
 
 	task->flags |= MM_TASK_CANCEL_REQUIRED;
 	if (unlikely(task->state == MM_TASK_RUNNING)) {
-		ASSERT(task == mm_running_task);
+		ASSERT(task == mm_task_self());
 		mm_task_testcancel_asynchronous();
 	} else {
 		mm_task_run(task);
@@ -600,7 +602,8 @@ mm_task_alloc(size_t size)
 	void *ptr = mm_local_alloc(size + sizeof(struct mm_list));
 
 	/* Keep the allocated memory in the task's chunk list. */
-	mm_list_append(&mm_running_task->chunks, (struct mm_list *) ptr);
+	struct mm_task *task = mm_task_self();
+	mm_list_append(&task->chunks, (struct mm_list *) ptr);
 
 	/* Get the address past the list link. */
 	ptr = (void *) (((char *) ptr) + sizeof(struct mm_list));

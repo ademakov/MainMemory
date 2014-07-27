@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "arch/stack.h"
+#include "core.h"
 #include "list.h"
 #include "value.h"
 
@@ -171,9 +172,6 @@ struct mm_task
 #endif
 };
 
-/* The currently running task. */
-extern __thread struct mm_task *mm_running_task;
-
 void mm_task_init(void);
 void mm_task_term(void);
 
@@ -207,7 +205,7 @@ void mm_task_destroy(struct mm_task *task)
 static inline struct mm_task *
 mm_task_self(void)
 {
-	return mm_running_task;
+	return mm_core->task;
 }
 
 static inline const char *
