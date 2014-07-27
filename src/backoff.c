@@ -1,5 +1,5 @@
 /*
- * backoff.h - MainMemory contention back off.
+ * backoff.c - MainMemory contention back off.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,43 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BACKOFF_H
-#define BACKOFF_H
+#include "backoff.h"
 
-#include "common.h"
-#include "arch/spin.h"
+#include "task.h"
+#include "thread.h"
 
-uint32_t mm_thread_backoff_slow(uint32_t count);
-
-static inline uint32_t
-mm_task_backoff(uint32_t count)
+uint32_t
+mm_thread_backoff_slow(uint32_t count)
 {
-#if ENABLE_SMP
-	void mm_task_yield(void);
-
-	if (count < 0xff) {
-		for (uint32_t n = count; n; n--)
-			mm_spin_pause();
-		return count * 2 + 1;
-	} else {
-		mm_task_yield();
+	if (count > 0xffff) {
+		mm_thread_yield();
 		return 0;
-	}
-#else
-	return count;
-#endif
-}
-
-static inline uint32_t
-mm_thread_backoff(uint32_t count)
-{
-	if (count < 0xff) {
-		for (uint32_t n = count; n; n--)
-			mm_spin_pause();
+	} else if (mm_task_self() != NULL) {
+		mm_task_yield();
 		return count * 2 + 1;
 	} else {
-		return mm_thread_backoff_slow(count);
+		for (uint32_t n = count & 0xff; n; n--)
+			mm_spin_pause();
+		return count * 2 + 1;
 	}
 }
-
-#endif /* BACKOFF_H */

@@ -24,6 +24,7 @@
 #include "core.h"
 #include "list.h"
 #include "lock.h"
+#include "thread.h"
 
 #include <stdio.h>
 #include <stdlib.h>
