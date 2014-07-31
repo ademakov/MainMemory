@@ -28,26 +28,24 @@ struct mc_entry
 	struct mm_link table_link;
 	struct mm_list evict_list;
 
+	uint64_t cas;
+
+	mm_core_t chunk_core;
+
+	uint8_t key_len;
+	uint32_t value_len;
+
 	uint32_t flags;
 	uint32_t hash;
 
-	uint64_t cas;
-
 	mm_atomic_uint32_t ref_count;
-
-	uint32_t value_len;
-	uint8_t key_len;
 
 	char data[];
 };
 
 struct mc_entry * mc_entry_create(uint8_t key_len, size_t value_len);
 
-static inline void
-mc_entry_destroy(struct mc_entry *entry)
-{
-	mm_shared_free(entry);
-}
+void mc_entry_destroy(struct mc_entry *entry);
 
 struct mc_entry * mc_entry_create_u64(uint8_t key_len, uint64_t value);
 

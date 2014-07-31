@@ -19,7 +19,29 @@
 
 #include "entry.h"
 
+#include "../bitops.h"
+#include "../chunk.h"
+#include "../core.h"
+
 #include <ctype.h>
+
+static struct mc_entry *
+mc_entry_convert_chunk(struct mm_chunk *chunk)
+{
+	mm_core_t core = chunk->core;
+	struct mc_entry *entry = (struct mc_entry *) chunk;
+	entry->chunk_core = core;
+	return entry;
+}
+
+static struct mm_chunk *
+mc_entry_restore_chunk(struct mc_entry *entry)
+{
+	mm_core_t core = entry->chunk_core;
+	struct mm_chunk *chunk = (struct mm_chunk *) entry;
+	chunk->core = core;
+	return chunk;
+}
 
 struct mc_entry *
 mc_entry_create(uint8_t key_len, size_t value_len)
@@ -27,12 +49,20 @@ mc_entry_create(uint8_t key_len, size_t value_len)
 	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
 
 	size_t size = mc_entry_sum_length(key_len, value_len);
-	struct mc_entry *entry = mm_shared_alloc(size);
+	struct mm_chunk *chunk = mm_chunk_create(size - sizeof(struct mm_chunk));
+	struct mc_entry *entry = mc_entry_convert_chunk(chunk);
 	entry->key_len = key_len;
 	entry->value_len = value_len;
 	entry->ref_count = 1;
 
 	return entry;
+}
+
+void
+mc_entry_destroy(struct mc_entry *entry)
+{
+	struct mm_chunk *chunk = mc_entry_restore_chunk(entry);
+	mm_core_reclaim_chunk(chunk);
 }
 
 struct mc_entry *
