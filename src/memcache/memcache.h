@@ -1,5 +1,5 @@
 /*
- * memcache.h - MainMemory memcached protocol support.
+ * memcache/memcache.h - MainMemory memcached protocol support.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *

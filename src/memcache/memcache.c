@@ -1,5 +1,5 @@
 /*
- * memcache.c - MainMemory memcached protocol support.
+ * memcache/memcache.c - MainMemory memcached protocol support.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -19,6 +19,7 @@
 
 #include "memcache.h"
 
+#include "command.h"
 #include "entry.h"
 #include "table.h"
 
@@ -27,7 +28,6 @@
 #include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
-#include "../hash.h"
 #include "../future.h"
 #include "../list.h"
 #include "../log.h"
@@ -38,295 +38,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#define MC_VERSION		"VERSION MainMemory 0.0\r\n"
-
-// The logging verbosity level.
-static uint8_t mc_verbose = 0;
+#define MC_VERSION	"VERSION " PACKAGE_STRING "\r\n"
 
 struct mm_memcache_config mc_config;
-
-static mm_timeval_t mc_curtime;
-static mm_timeval_t mc_exptime;
-
-/**********************************************************************
- * Command type declarations.
- **********************************************************************/
-
-#define MC_ASYNC 1
-
-/*
- * Some preprocessor magic to emit command definitions.
- */
-
-#define MC_COMMAND_LIST(_)				\
-	_(get,		get,		MC_ASYNC)	\
-	_(gets,		gets,		MC_ASYNC)	\
-	_(set,		set,		MC_ASYNC)	\
-	_(add,		add,		MC_ASYNC)	\
-	_(replace,	replace,	MC_ASYNC)	\
-	_(append,	append,		MC_ASYNC)	\
-	_(prepend,	prepend,	MC_ASYNC)	\
-	_(cas,		cas,		MC_ASYNC)	\
-	_(incr,		incr,		MC_ASYNC)	\
-	_(decr,		decr,		MC_ASYNC)	\
-	_(delete,	delete,		MC_ASYNC)	\
-	_(touch,	touch,		MC_ASYNC)	\
-	_(slabs,	slabs,		0)		\
-	_(stats,	stats,		0)		\
-	_(flush_all,	flush_all,	0)		\
-	_(version,	version,	0)		\
-	_(verbosity,	verbosity,	0)		\
-	_(quit,		quit,		0)
-
-/*
- * Define enumerated type to tag commands.
- */
-
-#define MC_COMMAND_TAG(cmd, process_name, value)	mc_command_##cmd,
-
-typedef enum {
-	MC_COMMAND_LIST(MC_COMMAND_TAG)
-} mc_command_t;
-
-/*
- * Define command handling info.
- */
-
-struct mc_command_type
-{
-	mc_command_t tag;
-	mm_routine_t process;
-	uint32_t flags;
-};
-
-#define MC_COMMAND_TYPE(cmd, process_name, value)			\
-	static mm_value_t mc_process_##process_name(mm_value_t);	\
-	static struct mc_command_type mc_desc_##cmd = {			\
-		.tag = mc_command_##cmd,				\
-		.process = mc_process_##process_name,			\
-		.flags = value,						\
-	};
-
-MC_COMMAND_LIST(MC_COMMAND_TYPE)
-
-/*
- * Define command names.
- */
-
-#if ENABLE_DEBUG
-
-#define MC_COMMAND_NAME(cmd, process_name, value)	#cmd,
-
-static const char *mc_command_names[] = {
-	MC_COMMAND_LIST(MC_COMMAND_NAME)
-};
-
-static const char *
-mc_command_name(mc_command_t tag)
-{
-	static const size_t n = sizeof(mc_command_names) / sizeof(*mc_command_names);
-
-	if (tag >= n)
-		return "bad command";
-	else
-		return mc_command_names[tag];
-}
-
-#endif
-
-/**********************************************************************
- * Command Data.
- **********************************************************************/
-
-struct mc_string
-{
-	size_t len;
-	const char *str;
-};
-
-struct mc_set_params
-{
-	struct mm_buffer_segment *seg;
-	const char *start;
-	uint32_t bytes;
-
-	uint32_t flags;
-	uint32_t exptime;
-	uint64_t cas;
-};
-
-struct mc_slabs_params
-{
-	uint32_t nopts;
-};
-
-struct mc_stats_params
-{
-	uint32_t nopts;
-};
-
-union mc_params
-{
-	struct mc_set_params set;
-	struct mc_slabs_params slabs;
-	struct mc_stats_params stats;
-	struct mm_net_socket *sock;
-	uint64_t val64;
-	uint32_t val32;
-	bool last;
-};
-
-typedef enum
-{
-	MC_RESULT_NONE = 0,
-	MC_RESULT_FUTURE,
-
-	MC_RESULT_BLANK,
-	MC_RESULT_OK,
-	MC_RESULT_END,
-	MC_RESULT_ERROR,
-	MC_RESULT_EXISTS,
-	MC_RESULT_STORED,
-	MC_RESULT_DELETED,
-	MC_RESULT_NOT_FOUND,
-	MC_RESULT_NOT_STORED,
-	MC_RESULT_INC_DEC_NON_NUM,
-	MC_RESULT_NOT_IMPLEMENTED,
-	MC_RESULT_CANCELED,
-	MC_RESULT_VERSION,
-
-	MC_RESULT_ENTRY,
-	MC_RESULT_ENTRY_CAS,
-	MC_RESULT_VALUE,
-
-	MC_RESULT_QUIT,
-} mc_result_t;
-
-struct mc_command
-{
-	struct mc_command *next;
-
-	struct mc_command_type *type;
-	struct mc_string key;
-	union mc_params params;
-	struct mc_entry *entry;
-	mc_result_t result_type;
-	bool noreply;
-	bool own_key;
-	uint32_t key_hash;
-
-	struct mm_future *future;
-
-	char *end_ptr;
-};
-
-static struct mm_pool mc_command_pool;
-
-static void
-mc_command_start(void)
-{
-	ENTER();
-
-	mm_pool_prepare_shared(&mc_command_pool, "memcache command", sizeof(struct mc_command));
-
-	LEAVE();
-}
-
-static void
-mc_command_stop()
-{
-	ENTER();
-
-	mm_pool_cleanup(&mc_command_pool);
-
-	LEAVE();
-}
-
-static struct mc_command *
-mc_command_create(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_command *command = mm_pool_shared_alloc_low(sock->core, &mc_command_pool);
-	memset(command, 0, sizeof(struct mc_command));
-
-	LEAVE();
-	return command;
-}
-
-// TODO: Really support some options.
-static void
-mc_command_option(struct mc_command *command)
-{
-	ENTER();
-
-	if (command->type != NULL) {
-
-		switch (command->type->tag) {
-		case mc_command_slabs:
-			command->params.slabs.nopts++;
-			break;
-
-		case mc_command_stats:
-			command->params.stats.nopts++;
-			break;
-
-		default:
-			break;
-		}
-	}
-
-	LEAVE();
-}
-
-static mc_result_t
-mc_command_entry(struct mc_command *command, struct mc_entry *entry, mc_result_t res_type)
-{
-	mc_entry_ref(entry);
-	command->entry = entry;
-	return res_type;
-}
-
-static mc_result_t
-mc_command_result(struct mc_command *command)
-{
-	mc_result_t result = command->result_type;
-	if (result == MC_RESULT_FUTURE) {
-		result = mm_future_wait(command->future);
-		if (mm_future_is_canceled(command->future)) {
-			result = MC_RESULT_CANCELED;
-		}
-		command->result_type = result;
-	}
-	return result;
-}
-
-static void
-mc_command_destroy(struct mm_net_socket *sock, struct mc_command *command)
-{
-	ENTER();
-
-	if (command->own_key)
-		mm_local_free((char *) command->key.str);
-
-	switch (mc_command_result(command)) {
-	case MC_RESULT_ENTRY:
-	case MC_RESULT_ENTRY_CAS:
-	case MC_RESULT_VALUE:
-		mc_entry_unref(command->entry);
-		break;
-
-	default:
-		break;
-	}
-
-	if (command->future != NULL)
-		mm_future_destroy(command->future);
-
-	mm_pool_shared_free_low(sock->core, &mc_command_pool, command);
-
-	LEAVE();
-}
 
 /**********************************************************************
  * Aggregate Connection State.
@@ -402,583 +116,6 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 	LEAVE();
 }
 
-/**********************************************************************
- * Command Processing.
- **********************************************************************/
-
-static void
-mc_process_value(struct mc_entry *entry, struct mc_set_params *params, uint32_t offset)
-{
-	ENTER();
-
-	const char *src = params->start;
-	uint32_t bytes = params->bytes;
-	struct mm_buffer_segment *seg = params->seg;
-	ASSERT(src >= seg->data && src <= seg->data + seg->size);
-
-	char *dst = mc_entry_getvalue(entry) + offset;
-	for (;;) {
-		uint32_t n = (seg->data + seg->size) - src;
-		if (n >= bytes) {
-			memcpy(dst, src, bytes);
-			break;
-		}
-
-		memcpy(dst, src, n);
-		seg = seg->next;
-		src = seg->data;
-		dst += n;
-		bytes -= n;
-	}
-
-	LEAVE();
-}
-
-static mm_value_t
-mc_process_get2(mm_value_t arg, mc_result_t rc)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
-
-	struct mc_entry *entry = mc_table_lookup(part, hash, key, key_len);
-	if (entry != NULL)
-		mc_table_touch(part, entry);
-
-	if (entry != NULL)
-		rc = mc_command_entry(command, entry, rc);
-	else if (command->params.last)
-		rc = MC_RESULT_END;
-	else
-		rc = MC_RESULT_BLANK;
-
-	mc_table_unlock(part);
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_get(mm_value_t arg)
-{
-	return mc_process_get2(arg, MC_RESULT_ENTRY);
-}
-
-static mm_value_t
-mc_process_gets(mm_value_t arg)
-{
-	return mc_process_get2(arg, MC_RESULT_ENTRY_CAS);
-}
-
-static mm_value_t
-mc_process_set(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
-	mc_entry_setmisc(new_entry, key, params->flags, hash);
-	mc_process_value(new_entry, params, 0);
-	mc_table_insert(part, hash, new_entry);
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else
-		rc = MC_RESULT_STORED;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_add(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
-	struct mc_entry *new_entry = NULL;
-	if (old_entry == NULL) {
-		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
-		mc_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_table_unlock(part);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = MC_RESULT_STORED;
-	else
-		rc = MC_RESULT_NOT_STORED;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_replace(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL) {
-		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
-		mc_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = MC_RESULT_STORED;
-	else
-		rc = MC_RESULT_NOT_STORED;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_cas(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL && old_entry->cas == params->cas) {
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_entry_unref(old_entry2);
-
-		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
-		mc_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_table_unlock(part);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = MC_RESULT_STORED;
-	else if (old_entry != NULL)
-		rc = MC_RESULT_EXISTS;
-	else
-		rc = MC_RESULT_NOT_FOUND;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_append(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL) {
-		size_t value_len = old_entry->value_len + params->bytes;
-		char *old_value = mc_entry_getvalue(old_entry);
-
-		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
-		char *new_value = mc_entry_getvalue(new_entry);
-		memcpy(new_value, old_value, old_entry->value_len);
-		mc_process_value(new_entry, params, old_entry->value_len);
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = MC_RESULT_STORED;
-	else
-		rc = MC_RESULT_NOT_STORED;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_prepend(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-	struct mc_set_params *params = &command->params.set;
-
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL) {
-		size_t value_len = old_entry->value_len + params->bytes;
-		char *old_value = mc_entry_getvalue(old_entry);
-
-		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
-		char *new_value = mc_entry_getvalue(new_entry);
-		mc_process_value(new_entry, params, 0);
-		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = MC_RESULT_STORED;
-	else
-		rc = MC_RESULT_NOT_STORED;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_incr(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
-	uint64_t value;
-
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		value += command->params.val64;
-
-		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
-
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_entry_unref(old_entry2);
-
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = mc_command_entry(command, new_entry, MC_RESULT_VALUE);
-	else if (old_entry != NULL)
-		rc = MC_RESULT_INC_DEC_NON_NUM;
-	else
-		rc = MC_RESULT_NOT_FOUND;
-
-	mc_table_unlock(part);
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_decr(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
-	uint64_t value;
-
-	struct mc_entry *new_entry = NULL;
-	if (old_entry != NULL && mc_entry_value_u64(old_entry, &value)) {
-		if (value > command->params.val64)
-			value -= command->params.val64;
-		else
-			value = 0;
-
-		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
-
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_entry_unref(old_entry2);
-
-		mc_table_insert(part, hash, new_entry);
-	}
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (new_entry != NULL)
-		rc = mc_command_entry(command, new_entry, MC_RESULT_VALUE);
-	else if (old_entry != NULL)
-		rc = MC_RESULT_INC_DEC_NON_NUM;
-	else
-		rc = MC_RESULT_NOT_FOUND;
-
-	mc_table_unlock(part);
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_delete(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
-
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
-
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_entry_unref(old_entry);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else if (old_entry != NULL)
-		rc = MC_RESULT_DELETED;
-	else
-		rc = MC_RESULT_NOT_FOUND;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_touch(mm_value_t arg __attribute__((unused)))
-{
-	return MC_RESULT_NOT_IMPLEMENTED;
-}
-
-static mm_value_t
-mc_process_slabs(mm_value_t arg __attribute__((unused)))
-{
-	return MC_RESULT_NOT_IMPLEMENTED;
-}
-
-static mm_value_t
-mc_process_stats(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-
-	mc_result_t rc;
-	if (command->params.stats.nopts)
-		rc = MC_RESULT_NOT_IMPLEMENTED;
-	else
-		rc = MC_RESULT_END;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_flush(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_tpart *part = &mc_table.parts[arg];
-	while (mc_table_evict(part, 256))
-		mm_task_yield();
-
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mc_process_flush_all(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-
-	// TODO: really use the exptime.
-	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
-
-	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
-#if ENABLE_MEMCACHE_LOCKS
-		mm_core_post(MM_CORE_NONE, mc_process_flush, i);
-#else
-		struct mc_tpart *part = &mc_table.parts[i];
-		mm_core_post(part->core, mc_process_flush, i);
-#endif
-	}
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else
-		rc = MC_RESULT_OK;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_version(mm_value_t arg __attribute__((unused)))
-{
-	return MC_RESULT_VERSION;
-}
-
-static mm_value_t
-mc_process_verbosity(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-
-	mc_verbose = min(command->params.val32, 2u);
-	DEBUG("set verbosity %d", mc_verbose);
-
-	mc_result_t rc;
-	if (command->noreply)
-		rc = MC_RESULT_BLANK;
-	else
-		rc = MC_RESULT_OK;
-
-	LEAVE();
-	return rc;
-}
-
-static mm_value_t
-mc_process_quit(mm_value_t arg)
-{
-	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
-	mm_net_shutdown_reader(command->params.sock);
-
-	LEAVE();
-	return MC_RESULT_QUIT;
-}
-
-static void
-mc_process_start(struct mc_command *command)
-{
-	if (command->result_type != MC_RESULT_NONE)
-		return;
-
-	if ((command->type->flags & MC_ASYNC) != 0) {
-		command->key_hash = mc_hash(command->key.str, command->key.len);
-
-#if ENABLE_SMP && !ENABLE_MEMCACHE_LOCKS
-		struct mc_tpart *part = mc_table_part(command->key_hash);
-		command->result_type = MC_RESULT_FUTURE;
-		command->future = mm_future_create(command->type->process,
-						   (mm_value_t) command);
-		mm_future_start(command->future, part->core);
-		return;
-#endif
-	}
-
-	command->result_type = (command->type->process)((mm_value_t) command);
-}
-
 static mm_value_t
 mc_process_command(struct mc_state *state, struct mc_command *first)
 {
@@ -988,7 +125,7 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 	if (likely(first->type != NULL)) {
 		DEBUG("command %s", mc_command_name(first->type->tag));
 		for (;;) {
-			mc_process_start(last);
+			mc_command_execute(last);
 			if (last->next == NULL)
 				break;
 			last = last->next;
@@ -1138,6 +275,31 @@ mc_parse_value(struct mc_parser *parser)
 	return rc;
 }
 
+// TODO: Really support some options.
+static void
+mc_parse_option(struct mc_command *command)
+{
+	ENTER();
+
+	if (command->type != NULL) {
+
+		switch (command->type->tag) {
+		case mc_command_slabs:
+			command->params.slabs.nopts++;
+			break;
+
+		case mc_command_stats:
+			command->params.stats.nopts++;
+			break;
+
+		default:
+			break;
+		}
+	}
+
+	LEAVE();
+}
+
 static bool
 mc_parse(struct mc_parser *parser)
 {
@@ -1203,7 +365,7 @@ mc_parse(struct mc_parser *parser)
 	char *match = "";
 
 	// The current command.
-	struct mc_command *command = mc_command_create(&parser->state->sock);
+	struct mc_command *command = mc_command_create(parser->state->sock.core);
 	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
@@ -1473,7 +635,7 @@ again:
 					state = shift;
 					goto again;
 				} else {
-					struct mc_string *key = &command->key;
+					struct mc_command_key *key = &command->key;
 					if (key->len == MC_KEY_LEN_MAX) {
 						DEBUG("Too long key.");
 						state = S_ERROR;
@@ -1552,7 +714,7 @@ again:
 				} else {
 					state = S_KEY;
 					command->end_ptr = s;
-					command->next = mc_command_create(&parser->state->sock);
+					command->next = mc_command_create(parser->state->sock.core);
 					command->next->type = command->type;
 					command = command->next;
 					goto again;
@@ -1726,11 +888,11 @@ again:
 				// TODO: limit the option number
 				// TODO: use the option value
 				if (c == ' ') {
-					mc_command_option(command);
+					mc_parse_option(command);
 					state = S_SPACE;
 					break;
 				} else if (c == '\r' || c == '\n') {
-					mc_command_option(command);
+					mc_parse_option(command);
 					state = S_EOL;
 					goto again;
 				} else {
@@ -1787,7 +949,7 @@ again:
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
-						mc_command_destroy(&parser->state->sock, tmp);
+						mc_command_destroy(parser->state->sock.core, tmp);
 					} while (command != NULL);
 
 					parser->command->next = NULL;
@@ -1799,7 +961,7 @@ again:
 				if (c == '\n') {
 					parser->cursor.ptr = s + 1;
 					command->end_ptr = parser->cursor.ptr;
-					command->result_type = MC_RESULT_ERROR;
+					command->result = MC_RESULT_ERROR;
 					goto leave;
 				} else {
 					// Skip char.
@@ -1941,7 +1103,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		uint8_t key_len = entry->key_len;
 		uint32_t value_len = entry->value_len;
 
-		if (command->result_type == MC_RESULT_ENTRY) {
+		if (command->result == MC_RESULT_ENTRY) {
 			mm_buffer_printf(
 				&state->tbuf,
 				"VALUE %.*s %u %u\r\n",
@@ -2063,7 +1225,7 @@ mc_cleanup(struct mm_net_socket *sock)
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(sock, command);
+		mc_command_destroy(sock->core, command);
 	}
 
 	mm_buffer_cleanup(&state->rbuf);
@@ -2095,7 +1257,7 @@ retry:
 	if (n <= 0) {
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create(sock);
+			struct mc_command *command = mc_command_create(sock->core);
 			command->type = &mc_desc_quit;
 			command->params.sock = sock;
 			command->end_ptr = state->start_ptr;
@@ -2112,7 +1274,7 @@ parse:
 	// Try to parse the received input.
 	if (!mc_parse(&parser)) {
 		if (parser.command != NULL) {
-			mc_command_destroy(sock, parser.command);
+			mc_command_destroy(sock->core, parser.command);
 			parser.command = NULL;
 		}
 		if (state->trash) {
@@ -2176,7 +1338,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 		if (state->command_head == NULL)
 			state->command_tail = NULL;
 
-		mc_command_destroy(sock, head);
+		mc_command_destroy(sock->core, head);
 
 		if (head == command) {
 			break;
