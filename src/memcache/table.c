@@ -1,5 +1,5 @@
 /*
- * table.c - MainMemory memcache entry table.
+ * memcache/table.c - MainMemory memcache entry table.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -370,7 +370,7 @@ mc_table_term(void)
 					containerof(link, struct mc_entry, table_link);
 				link = link->next;
 
-				mm_shared_free(entry);
+				mc_entry_destroy(entry);
 			}
 		}
 	}

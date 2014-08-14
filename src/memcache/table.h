@@ -1,5 +1,5 @@
 /*
- * table.h - MainMemory memcache entry table.
+ * memcache/table.h - MainMemory memcache entry table.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
