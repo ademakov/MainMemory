@@ -1,5 +1,5 @@
 /*
- * entry.c - MainMemory memcache entries.
+ * memcache/entry.c - MainMemory memcache entries.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
