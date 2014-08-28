@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "trace.h"
+#include <stdarg.h>
 
 /*
  * MainMemory buffers grow and shrink as necessary. Incoming data is appended
@@ -90,6 +91,9 @@ void mm_buffer_append(struct mm_buffer *buf, const char *data, size_t size)
 
 void mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(1, 2)));
+
+void mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 	__attribute__((nonnull(1, 2)));
 
 void mm_buffer_demand(struct mm_buffer *buf, size_t size)

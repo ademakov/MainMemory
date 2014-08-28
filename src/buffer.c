@@ -239,7 +239,7 @@ leave:
 }
 
 void
-mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
+mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 {
 	ENTER();
 
@@ -247,10 +247,10 @@ mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 	char *p = seg->data + buf->in_off;
 	size_t n = seg->size - buf->in_off;
 
-	va_list va;
-	va_start(va, fmt);
-	int len = vsnprintf(p, n, fmt, va);
-	va_end(va);
+	va_list va2;
+	va_copy(va2, va);
+	int len = vsnprintf(p, n, fmt, va2);
+	va_end(va2);
 
 	if (unlikely(len < 0)) {
 		mm_error(errno, "invalid format string");
@@ -258,16 +258,23 @@ mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 		buf->in_off += len;
 	} else {
 		char *ptr = mm_local_alloc(len + 1);
-
-		va_start(va, fmt);
 		len = vsnprintf(ptr, len + 1, fmt, va);
-		va_end(va);
 
 		mm_buffer_append(buf, ptr, len);
+
 		mm_local_free(ptr);
 	}
 
 	LEAVE();
+}
+
+void
+mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	mm_buffer_vprintf(buf, fmt, va);
+	va_end(va);
 }
 
 void
