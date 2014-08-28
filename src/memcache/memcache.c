@@ -31,7 +31,7 @@
 #include "../future.h"
 #include "../list.h"
 #include "../log.h"
-#include "../net.h"
+#include "../netbuf.h"
 #include "../pool.h"
 #include "../trace.h"
 
@@ -49,11 +49,7 @@ struct mm_memcache_config mc_config;
 struct mc_state
 {
 	// The client socket,
-	struct mm_net_socket sock;
-	// Receive buffer.
-	struct mm_buffer rbuf;
-	// Transmit buffer.
-	struct mm_buffer tbuf;
+	struct mm_netbuf_socket sock;
 
 	// Current parse position.
 	char *start_ptr;
@@ -88,6 +84,12 @@ mc_queue_command(struct mc_state *state,
 	LEAVE();
 }
 
+static inline bool
+mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
+{
+	return ptr >= cur->ptr && ptr < cur->end;
+}
+
 static void
 mc_release_buffers(struct mc_state *state, char *ptr)
 {
@@ -96,7 +98,7 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 	size_t size = 0;
 
 	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_first_out(&state->rbuf, &cur);
+	bool rc = mm_netbuf_read_first(&state->sock, &cur);
 	while (rc) {
 		if (ptr >= cur.ptr && ptr <= cur.end) {
 			// The buffer is (might be) still in use.
@@ -107,11 +109,11 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 		}
 
 		size += cur.end - cur.ptr;
-		rc = mm_buffer_next_out(&state->rbuf, &cur);
+		rc = mm_netbuf_read_next(&state->sock, &cur);
 	}
 
 	if (size > 0)
-		mm_buffer_reduce(&state->rbuf, size);
+		mm_netbuf_reduce(&state->sock, size);
 
 	LEAVE();
 }
@@ -133,7 +135,7 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 	}
 
 	mc_queue_command(state, first, last);
-	mm_net_spawn_writer(&state->sock);
+	mm_net_spawn_writer(&state->sock.sock);
 
 	LEAVE();
 	return 0;
@@ -149,11 +151,11 @@ mc_read(struct mc_state *state, size_t required, size_t optional)
 	ENTER();
 
 	size_t total = required + optional;
-	mm_buffer_demand(&state->rbuf, total);
+	mm_netbuf_demand(&state->sock, total);
 
 	size_t count = total;
 	while (count > optional) {
-		ssize_t n = mm_net_readbuf(&state->sock, &state->rbuf);
+		ssize_t n = mm_netbuf_read(&state->sock);
 		if (n <= 0) {
 			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
 				state->error = true;
@@ -186,12 +188,6 @@ struct mc_parser
 	struct mc_state *state;
 };
 
-static inline bool
-mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
-{
-	return ptr >= cur->ptr && ptr < cur->end;
-}
-
 /*
  * Prepare for parsing a command.
  */
@@ -201,10 +197,10 @@ mc_start_input(struct mc_parser *parser, struct mc_state *state)
 	ENTER();
 	DEBUG("Start parser.");
 
-	mm_buffer_first_out(&state->rbuf, &parser->cursor);
+	mm_netbuf_read_first(&state->sock, &parser->cursor);
 	if (state->start_ptr != NULL) {
 		while (!mc_cursor_contains(&parser->cursor, state->start_ptr)) {
-			mm_buffer_next_out(&state->rbuf, &parser->cursor);
+			mm_netbuf_read_next(&state->sock, &parser->cursor);
 		}
 		if (parser->cursor.ptr < state->start_ptr) {
 			parser->cursor.ptr = state->start_ptr;
@@ -225,12 +221,12 @@ mc_parse_lf(struct mc_parser *parser, char *s)
 	if ((s + 1) < parser->cursor.end)
 		return *(s + 1) == '\n';
 
+	struct mm_buffer *buf = &parser->state->sock.rbuf;
 	struct mm_buffer_segment *seg = parser->cursor.seg;
-	if (seg != parser->state->rbuf.in_seg) {
+	if (seg != buf->in_seg) {
 		seg = seg->next;
-		if (seg != parser->state->rbuf.in_seg || parser->state->rbuf.in_off) {
+		if (seg != buf->in_seg || buf->in_off)
 			return seg->data[0] == '\n';
-		}
 	}
 
 	return false;
@@ -259,7 +255,7 @@ mc_parse_value(struct mc_parser *parser)
 		parser->cursor.ptr += avail;
 		bytes -= avail;
 
-		if (!mm_buffer_next_out(&parser->state->rbuf, &parser->cursor)) {
+		if (!mm_netbuf_read_next(&parser->state->sock, &parser->cursor)) {
 			// Try to read the value and required LF and optional CR.
 			ssize_t r = bytes + 1;
 			ssize_t n = mc_read(parser->state, r, 1);
@@ -267,7 +263,7 @@ mc_parse_value(struct mc_parser *parser)
 				rc = false;
 				break;
 			}
-			mm_buffer_size_out(&parser->state->rbuf, &parser->cursor);
+			mm_netbuf_read_more(&parser->state->sock, &parser->cursor);
 		}
 	}
 
@@ -364,8 +360,10 @@ mc_parse(struct mc_parser *parser)
 	uint64_t num64 = 0;
 	char *match = "";
 
+	mm_core_t core = mm_netbuf_core(&parser->state->sock);
+
 	// The current command.
-	struct mc_command *command = mc_command_create(parser->state->sock.core);
+	struct mc_command *command = mc_command_create(core);
 	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
@@ -526,7 +524,7 @@ again:
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
 					command->type = &mc_desc_quit;
-					command->params.sock = &parser->state->sock;
+					command->params.sock = &parser->state->sock.sock;
 					state = S_SPACE;
 					shift = S_EOL;
 					break;
@@ -714,7 +712,7 @@ again:
 				} else {
 					state = S_KEY;
 					command->end_ptr = s;
-					command->next = mc_command_create(parser->state->sock.core);
+					command->next = mc_command_create(core);
 					command->next->type = command->type;
 					command = command->next;
 					goto again;
@@ -949,7 +947,7 @@ again:
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
-						mc_command_destroy(parser->state->sock.core, tmp);
+						mc_command_destroy(core, tmp);
 					} while (command != NULL);
 
 					parser->command->next = NULL;
@@ -1009,7 +1007,7 @@ again:
 			}
 		}
 
-		rc = mm_buffer_next_out(&parser->state->rbuf, &parser->cursor);
+		rc = mm_netbuf_read_next(&parser->state->sock, &parser->cursor);
 
 	} while (rc);
 
@@ -1046,51 +1044,51 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		break;
 
 	case MC_RESULT_OK:
-		mm_buffer_append(&state->tbuf, SL("OK\r\n"));
+		mm_netbuf_append(&state->sock, SL("OK\r\n"));
 		break;
 
 	case MC_RESULT_END:
-		mm_buffer_append(&state->tbuf, SL("END\r\n"));
+		mm_netbuf_append(&state->sock, SL("END\r\n"));
 		break;
 
 	case MC_RESULT_ERROR:
-		mm_buffer_append(&state->tbuf, SL("ERROR\r\n"));
+		mm_netbuf_append(&state->sock, SL("ERROR\r\n"));
 		break;
 
 	case MC_RESULT_EXISTS:
-		mm_buffer_append(&state->tbuf, SL("EXISTS\r\n"));
+		mm_netbuf_append(&state->sock, SL("EXISTS\r\n"));
 		break;
 
 	case MC_RESULT_STORED:
-		mm_buffer_append(&state->tbuf, SL("STORED\r\n"));
+		mm_netbuf_append(&state->sock, SL("STORED\r\n"));
 		break;
 
 	case MC_RESULT_DELETED:
-		mm_buffer_append(&state->tbuf, SL("DELETED\r\n"));
+		mm_netbuf_append(&state->sock, SL("DELETED\r\n"));
 		break;
 
 	case MC_RESULT_NOT_FOUND:
-		mm_buffer_append(&state->tbuf, SL("NOT_FOUND\r\n"));
+		mm_netbuf_append(&state->sock, SL("NOT_FOUND\r\n"));
 		break;
 
 	case MC_RESULT_NOT_STORED:
-		mm_buffer_append(&state->tbuf, SL("NOT_STORED\r\n"));
+		mm_netbuf_append(&state->sock, SL("NOT_STORED\r\n"));
 		break;
 
 	case MC_RESULT_INC_DEC_NON_NUM:
-		mm_buffer_append(&state->tbuf, SL("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n"));
+		mm_netbuf_append(&state->sock, SL("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n"));
 		break;
 
 	case MC_RESULT_NOT_IMPLEMENTED:
-		mm_buffer_append(&state->tbuf, SL("SERVER_ERROR not implemented\r\n"));
+		mm_netbuf_append(&state->sock, SL("SERVER_ERROR not implemented\r\n"));
 		break;
 
 	case MC_RESULT_CANCELED:
-		mm_buffer_append(&state->tbuf, SL("SERVER_ERROR command canceled\r\n"));
+		mm_netbuf_append(&state->sock, SL("SERVER_ERROR command canceled\r\n"));
 		break;
 
 	case MC_RESULT_VERSION:
-		mm_buffer_append(&state->tbuf, SL(MC_VERSION));
+		mm_netbuf_append(&state->sock, SL(MC_VERSION));
 		break;
 
 #undef SL
@@ -1104,14 +1102,14 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		uint32_t value_len = entry->value_len;
 
 		if (command->result == MC_RESULT_ENTRY) {
-			mm_buffer_printf(
-				&state->tbuf,
+			mm_netbuf_printf(
+				&state->sock,
 				"VALUE %.*s %u %u\r\n",
 				key_len, key,
 				entry->flags, value_len);
 		} else {
-			mm_buffer_printf(
-				&state->tbuf,
+			mm_netbuf_printf(
+				&state->sock,
 				"VALUE %.*s %u %u %llu\r\n",
 				key_len, key,
 				entry->flags, value_len,
@@ -1119,13 +1117,13 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		}
 
 		mc_entry_ref(entry);
-		mm_buffer_splice(&state->tbuf, value, value_len,
+		mm_netbuf_splice(&state->sock, value, value_len,
 				 mc_transmit_unref, (uintptr_t) entry);
 
 		if (command->params.last)
-			mm_buffer_append(&state->tbuf, "\r\nEND\r\n", 7);
+			mm_netbuf_append(&state->sock, "\r\nEND\r\n", 7);
 		else
-			mm_buffer_append(&state->tbuf, "\r\n", 2);
+			mm_netbuf_append(&state->sock, "\r\n", 2);
 		break;
 	}
 
@@ -1135,15 +1133,15 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		uint32_t value_len = entry->value_len;
 
 		mc_entry_ref(entry);
-		mm_buffer_splice(&state->tbuf, value, value_len,
+		mm_netbuf_splice(&state->sock, value, value_len,
 				 mc_transmit_unref, (uintptr_t) entry);
 
-		mm_buffer_append(&state->tbuf, "END\r\n", 5);
+		mm_netbuf_append(&state->sock, "END\r\n", 5);
 		break;
 	}
 
 	case MC_RESULT_QUIT:
-		mm_net_close(&state->sock);
+		mm_netbuf_close(&state->sock);
 		break;
 
 	default:
@@ -1158,9 +1156,9 @@ mc_transmit_flush(struct mc_state *state)
 {
 	ENTER();
 
-	ssize_t n = mm_net_writebuf(&state->sock, &state->tbuf);
+	ssize_t n = mm_netbuf_write(&state->sock);
 	if (n > 0)
-		mm_buffer_rectify(&state->tbuf);
+		mm_netbuf_write_reset(&state->sock);
 
 	LEAVE();
 }
@@ -1179,7 +1177,7 @@ mc_alloc(void)
 	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
 
 	LEAVE();
-	return &state->sock;
+	return &state->sock.sock;
 }
 
 static void
@@ -1206,8 +1204,7 @@ mc_prepare(struct mm_net_socket *sock)
 	state->command_head = NULL;
 	state->command_tail = NULL;
 
-	mm_buffer_prepare(&state->rbuf);
-	mm_buffer_prepare(&state->tbuf);
+	mm_netbuf_prepare(&state->sock);
 
 	state->error = false;
 	state->trash = false;
@@ -1228,8 +1225,7 @@ mc_cleanup(struct mm_net_socket *sock)
 		mc_command_destroy(sock->core, command);
 	}
 
-	mm_buffer_cleanup(&state->rbuf);
-	mm_buffer_cleanup(&state->tbuf);
+	mm_netbuf_cleanup(&state->sock);
 
 	LEAVE();
 }
@@ -1242,15 +1238,15 @@ mc_reader_routine(struct mm_net_socket *sock)
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
 	// Reset the buffer state.
-	if (mm_buffer_empty(&state->rbuf)) {
-		mm_buffer_rectify(&state->rbuf);
+	if (mm_netbuf_read_empty(&state->sock)) {
+		mm_netbuf_read_reset(&state->sock);
 		state->start_ptr = NULL;
 	}
 
 	// Try to get some input w/o blocking.
-	mm_net_set_read_timeout(&state->sock, 0);
+	mm_net_set_read_timeout(&state->sock.sock, 0);
 	ssize_t n = mc_read(state, 1, 0);
-	mm_net_set_read_timeout(&state->sock, MC_READ_TIMEOUT);
+	mm_net_set_read_timeout(&state->sock.sock, MC_READ_TIMEOUT);
 
 retry:
 	// Get out of here if there is no more input available.
@@ -1278,7 +1274,7 @@ parse:
 			parser.command = NULL;
 		}
 		if (state->trash) {
-			mm_net_close(&state->sock);
+			mm_netbuf_close(&state->sock);
 			goto leave;
 		}
 
@@ -1295,7 +1291,7 @@ parse:
 
 	// If there is more input in the buffer then try to parse the next
 	// command.
-	if (!mm_buffer_depleted(&state->rbuf, &parser.cursor))
+	if (!mm_netbuf_read_end(&state->sock, &parser.cursor))
 		goto parse;
 
 leave:

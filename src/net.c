@@ -20,7 +20,6 @@
 #include "net.h"
 
 #include "alloc.h"
-#include "buffer.h"
 #include "core.h"
 #include "event.h"
 #include "exit.h"
@@ -1028,7 +1027,6 @@ mm_net_writer(mm_value_t arg)
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 	ASSERT(sock->core == mm_core_selfid());
-
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
@@ -1276,8 +1274,6 @@ mm_net_stop_server(struct mm_net_server *srv)
 /**********************************************************************
  * Network sockets.
  **********************************************************************/
-
-#define MM_NET_MAXIOV	64
 
 static int
 mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
@@ -1597,102 +1593,6 @@ retry:
 			mm_error(saved_errno, "writev()");
 			errno = saved_errno;
 		}
-	}
-
-leave:
-	DEBUG("n: %ld", (long) n);
-	LEAVE();
-	return n;
-}
-
-ssize_t
-mm_net_readbuf(struct mm_net_socket *sock, struct mm_buffer *buf)
-{
-	ENTER();
-	ASSERT(sock->core == mm_core_selfid());
-	ssize_t n = 0;
-
-	int iovcnt = 0;
-	struct iovec iov[MM_NET_MAXIOV];
-
-	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_first_in(buf, &cur);
-	while (rc) {
-		size_t len = cur.end - cur.ptr;
-		if (likely(len)) {
-			n += len;
-
-			iov[iovcnt].iov_len = len;
-			iov[iovcnt].iov_base = cur.ptr;
-			++iovcnt;
-
-			if (unlikely(iovcnt == MM_NET_MAXIOV))
-				break;
-		}
-		rc = mm_buffer_next_in(buf, &cur);
-	}
-
-	if (unlikely(n <= 0)) {
-		n = -1;
-		errno = EINVAL;
-		goto leave;
-	}
-
-	if (iovcnt == 1) {
-		n = mm_net_read(sock, iov[0].iov_base, iov[0].iov_len);
-	} else {
-		n = mm_net_readv(sock, iov, iovcnt, n);
-	}
-	if (n > 0) {
-		mm_buffer_expand(buf, n);
-	}
-
-leave:
-	DEBUG("n: %ld", (long) n);
-	LEAVE();
-	return n;
-}
-
-ssize_t
-mm_net_writebuf(struct mm_net_socket *sock, struct mm_buffer *buf)
-{
-	ENTER();
-	ASSERT(sock->core == mm_core_selfid());
-	ssize_t n = 0;
-
-	int iovcnt = 0;
-	struct iovec iov[MM_NET_MAXIOV];
-
-	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_first_out(buf, &cur);
-	while (rc) {
-		size_t len = cur.end - cur.ptr;
-		if (likely(len)) {
-			n += len;
-
-			iov[iovcnt].iov_len = len;
-			iov[iovcnt].iov_base = cur.ptr;
-			++iovcnt;
-
-			if (unlikely(iovcnt == MM_NET_MAXIOV))
-				break;
-		}
-		rc = mm_buffer_next_out(buf, &cur);
-	}
-
-	if (unlikely(n <= 0)) {
-		n = -1;
-		errno = EINVAL;
-		goto leave;
-	}
-
-	if (iovcnt == 1) {
-		n = mm_net_write(sock, iov[0].iov_base, iov[0].iov_len);
-	} else {
-		n = mm_net_writev(sock, iov, iovcnt, n);
-	}
-	if (n > 0) {
-		mm_buffer_reduce(buf, n);
 	}
 
 leave:
