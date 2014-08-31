@@ -343,6 +343,7 @@ again:
 					command->type = &mc_desc_touch;
 					state = S_MATCH;
 					match = "h";
+					shift = S_TOUCH_1;
 					break;
 				} else if (start == Cx4('s', 'l', 'a', 'b')) {
 					command->type = &mc_desc_slabs;
