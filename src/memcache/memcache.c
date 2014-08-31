@@ -142,37 +142,6 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 }
 
 /**********************************************************************
- * Receiving commands.
- **********************************************************************/
-
-static ssize_t
-mc_read(struct mc_state *state, size_t required, size_t optional)
-{
-	ENTER();
-
-	size_t total = required + optional;
-	mm_netbuf_demand(&state->sock, total);
-
-	size_t count = total;
-	while (count > optional) {
-		ssize_t n = mm_netbuf_read(&state->sock);
-		if (n <= 0) {
-			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-				state->error = true;
-			break;
-		}
-		if (count < (size_t) n) {
-			count = 0;
-			break;
-		}
-		count -= n;
-	}
-
-	LEAVE();
-	return (total - count);
-}
-
-/**********************************************************************
  * Command Parsing.
  **********************************************************************/
 
@@ -238,12 +207,13 @@ mc_parse_value(struct mc_parser *parser)
 	ENTER();
 
 	bool rc = true;
-	uint32_t bytes = parser->command->params.set.bytes;
 
 	// Store the start position.
   	parser->command->params.set.seg = parser->cursor.seg;
 	parser->command->params.set.start = parser->cursor.ptr;
 
+	// Move over the required number of bytes.
+	uint32_t bytes = parser->command->params.set.bytes;
 	for (;;) {
 		uint32_t avail = parser->cursor.end - parser->cursor.ptr;
 		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) bytes);
@@ -257,12 +227,15 @@ mc_parse_value(struct mc_parser *parser)
 
 		if (!mm_netbuf_read_next(&parser->state->sock, &parser->cursor)) {
 			// Try to read the value and required LF and optional CR.
-			ssize_t r = bytes + 1;
-			ssize_t n = mc_read(parser->state, r, 1);
-			if (n < r) {
+			mm_netbuf_demand(&parser->state->sock, bytes + 2);
+			ssize_t n = mm_netbuf_read(&parser->state->sock);
+			if (n <= 0) {
+				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+					parser->state->error = true;
 				rc = false;
 				break;
 			}
+
 			mm_netbuf_read_more(&parser->state->sock, &parser->cursor);
 		}
 	}
@@ -1245,12 +1218,16 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
-	ssize_t n = mc_read(state, 1, 0);
+	mm_netbuf_demand(&state->sock, 1);
+	ssize_t n = mm_netbuf_read(&state->sock);
 	mm_net_set_read_timeout(&state->sock.sock, MC_READ_TIMEOUT);
 
 retry:
 	// Get out of here if there is no more input available.
 	if (n <= 0) {
+		if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+			state->error = true;
+
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
 			struct mc_command *command = mc_command_create(sock->core);
@@ -1279,7 +1256,8 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		n = mc_read(state, 1, 0);
+		mm_netbuf_demand(&state->sock, 1);
+		n = mm_netbuf_read(&state->sock);
 		goto retry;
 	}
 
