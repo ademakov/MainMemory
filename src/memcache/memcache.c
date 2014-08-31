@@ -21,17 +21,16 @@
 
 #include "command.h"
 #include "entry.h"
+#include "state.h"
 #include "table.h"
 
 #include "../alloc.h"
 #include "../bitops.h"
-#include "../buffer.h"
 #include "../chunk.h"
 #include "../core.h"
 #include "../future.h"
 #include "../list.h"
 #include "../log.h"
-#include "../netbuf.h"
 #include "../pool.h"
 #include "../trace.h"
 
@@ -41,105 +40,6 @@
 #define MC_VERSION	"VERSION " PACKAGE_STRING "\r\n"
 
 struct mm_memcache_config mc_config;
-
-/**********************************************************************
- * Aggregate Connection State.
- **********************************************************************/
-
-struct mc_state
-{
-	// The client socket,
-	struct mm_netbuf_socket sock;
-
-	// Current parse position.
-	char *start_ptr;
-	// Last processed position.
-	char *end_ptr;
-
-	// Command processing queue.
-	struct mc_command *command_head;
-	struct mc_command *command_tail;
-
-	// Flags.
-	bool error;
-	bool trash;
-};
-
-static void
-mc_queue_command(struct mc_state *state,
-		 struct mc_command *first,
-		 struct mc_command *last)
-{
-	ENTER();
-	ASSERT(first != NULL);
-	ASSERT(last != NULL);
-
-	if (state->command_head == NULL) {
-		state->command_head = first;
-	} else {
-		state->command_tail->next = first;
-	}
-	state->command_tail = last;
-
-	LEAVE();
-}
-
-static inline bool
-mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
-{
-	return ptr >= cur->ptr && ptr < cur->end;
-}
-
-static void
-mc_release_buffers(struct mc_state *state, char *ptr)
-{
-	ENTER();
-
-	size_t size = 0;
-
-	struct mm_buffer_cursor cur;
-	bool rc = mm_netbuf_read_first(&state->sock, &cur);
-	while (rc) {
-		if (ptr >= cur.ptr && ptr <= cur.end) {
-			// The buffer is (might be) still in use.
-			if (ptr == cur.end && state->start_ptr == cur.end)
-				state->start_ptr = NULL;
-			size += ptr - cur.ptr;
-			break;
-		}
-
-		size += cur.end - cur.ptr;
-		rc = mm_netbuf_read_next(&state->sock, &cur);
-	}
-
-	if (size > 0)
-		mm_netbuf_reduce(&state->sock, size);
-
-	LEAVE();
-}
-
-static mm_value_t
-mc_process_command(struct mc_state *state, struct mc_command *first)
-{
-	ENTER();
- 
-	struct mc_command *last = first;
-	if (likely(first->type != NULL)) {
-		DEBUG("command %s", mc_command_name(first->type->tag));
-		for (;;) {
-			mc_command_execute(last);
-			if (last->next == NULL)
-				break;
-			last = last->next;
-		}
-	}
-
-	mc_queue_command(state, first, last);
-	mm_net_spawn_writer(&state->sock.sock);
-
-	LEAVE();
-	return 0;
-}
 
 /**********************************************************************
  * Command Parsing.
@@ -156,6 +56,12 @@ struct mc_parser
 	struct mc_command *command;
 	struct mc_state *state;
 };
+
+static inline bool
+mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
+{
+	return ptr >= cur->ptr && ptr < cur->end;
+}
 
 /*
  * Prepare for parsing a command.
@@ -1142,63 +1048,53 @@ mc_transmit_flush(struct mc_state *state)
 
 #define MC_READ_TIMEOUT		10000
 
-static struct mm_net_socket *
-mc_alloc(void)
+static mm_value_t
+mc_process_command(struct mc_state *state, struct mc_command *first)
 {
 	ENTER();
-
-	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
-
-	LEAVE();
-	return &state->sock.sock;
-}
-
-static void
-mc_free(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	mm_shared_free(state);
-
-	LEAVE();
-}
-
-static void
-mc_prepare(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	state->start_ptr = NULL;
-
-	state->command_head = NULL;
-	state->command_tail = NULL;
-
-	mm_netbuf_prepare(&state->sock);
-
-	state->error = false;
-	state->trash = false;
-
-	LEAVE();
-}
-
-static void
-mc_cleanup(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	while (state->command_head != NULL) {
-		struct mc_command *command = state->command_head;
-		state->command_head = command->next;
-		mc_command_destroy(sock->core, command);
+ 
+	struct mc_command *last = first;
+	if (likely(first->type != NULL)) {
+		DEBUG("command %s", mc_command_name(first->type->tag));
+		for (;;) {
+			mc_command_execute(last);
+			if (last->next == NULL)
+				break;
+			last = last->next;
+		}
 	}
 
-	mm_netbuf_cleanup(&state->sock);
+	mc_queue_command(state, first, last);
+	mm_net_spawn_writer(&state->sock.sock);
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mc_release_buffers(struct mc_state *state, char *ptr)
+{
+	ENTER();
+
+	size_t size = 0;
+
+	struct mm_buffer_cursor cur;
+	bool rc = mm_netbuf_read_first(&state->sock, &cur);
+	while (rc) {
+		if (ptr >= cur.ptr && ptr <= cur.end) {
+			// The buffer is (might be) still in use.
+			if (ptr == cur.end && state->start_ptr == cur.end)
+				state->start_ptr = NULL;
+			size += ptr - cur.ptr;
+			break;
+		}
+
+		size += cur.end - cur.ptr;
+		rc = mm_netbuf_read_next(&state->sock, &cur);
+	}
+
+	if (size > 0)
+		mm_netbuf_reduce(&state->sock, size);
 
 	LEAVE();
 }
@@ -1361,10 +1257,10 @@ mm_memcache_init(const struct mm_memcache_config *config)
 
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
-		.alloc = mc_alloc,
-		.free = mc_free,
-		.prepare = mc_prepare,
-		.cleanup = mc_cleanup,
+		.alloc = mc_state_alloc,
+		.free = mc_state_free,
+		.prepare = mc_state_prepare,
+		.cleanup = mc_state_cleanup,
 		.reader = mc_reader_routine,
 		.writer = mc_writer_routine,
 	};
