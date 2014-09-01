@@ -270,7 +270,7 @@ mc_table_start_evicting(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core, struct mm_link *buckets)
+mc_table_init_part(mm_core_t index, mm_core_t core, struct mm_link *buckets, uint32_t pages)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
@@ -290,7 +290,7 @@ mc_table_init_part(mm_core_t index, mm_core_t core, struct mm_link *buckets)
 	part->nbytes = 0;
 
 	// Compute the initial table size
-	uint32_t size = MM_PAGE_SIZE / sizeof(struct mc_entry *);
+	uint32_t size = pages * MM_PAGE_SIZE / sizeof(struct mc_entry *);
 
 	// Allocate initial space for the table.
 	mc_table_expand(part, 0, size);
@@ -334,19 +334,22 @@ mc_table_init(const struct mm_memcache_config *config)
 	mm_brief("memcache partitions: %d", nparts);
 	mm_brief("memcache partition bits: %d", mc_table.part_bits);
 
+	// Compute the initial number of pages per partition.
+	uint32_t pages = nparts > 2 ? 2 : nparts == 2 ? 4 : 8;
+
 	// Initialize the table partitions.
 	struct mm_link *base = address;
 #if ENABLE_MEMCACHE_LOCKS
 	for (mm_core_t index = 0; index < nparts; index++) {
 		struct mm_link *buckets = base + index * mc_table.nbuckets_max;
-		mc_table_init_part(index, MM_CORE_NONE, buckets);
+		mc_table_init_part(index, MM_CORE_NONE, buckets, pages);
 	}
 #else
 	mm_core_t index = 0;
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		if (mm_bitset_test(&mc_config.affinity, core)) {
 			struct mc_entry **buckets = base + index * mc_table.nbuckets_max;
-			mc_table_init_part(index, core, buckets);
+			mc_table_init_part(index, core, buckets, pages);
 			++index;
 		}
 	}

@@ -778,7 +778,9 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
 
 		// Let it start immediately.
+#if ENABLE_SMP
 		if (sock->core == mm_core_selfid())
+#endif
 			mm_task_yield();
 	}
 
@@ -809,7 +811,9 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
 
 		// Let it start immediately.
+#if ENABLE_SMP
 		if (sock->core == mm_core_selfid())
+#endif
 			mm_task_yield();
 	}
 

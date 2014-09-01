@@ -229,14 +229,14 @@ mc_parser_parse(struct mc_parser *parser)
 		DEBUG("'%.*s'", (int) (e - s), s);
 
 		for (; s < e; s++) {
-			int c = *s;	
+			int c = *s;
 again:
 			switch (state) {
 			case S_START:
 				if (c == ' ') {
 					// Skip space.
 					break;
-				} else if (c == '\n') {
+				} else if (unlikely(c == '\n')) {
 					DEBUG("Unexpected line end.");
 					state = S_ERROR;
 					goto again;
@@ -427,7 +427,7 @@ again:
 
 			case S_KEY:
 				ASSERT(c != ' ');
-				if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
+				if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s)) || unlikely(c == '\n')) {
 					DEBUG("Missing key.");
 					state = S_ERROR;
 					goto again;
@@ -440,7 +440,7 @@ again:
 			case S_KEY_N:
 				if (c == ' ') {
 					size_t len = s - command->key.str;
-					if (len > MC_KEY_LEN_MAX) {
+					if (unlikely(len > MC_KEY_LEN_MAX)) {
 						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
@@ -499,7 +499,7 @@ again:
 
 			case S_NUM32:
 				ASSERT(c != ' ');
-				if (c >= '0' && c <= '9') {
+				if (likely(c >= '0') && likely(c <= '9')) {
 					state = S_NUM32_N;
 					num32 = c - '0';
 					break;
@@ -526,7 +526,7 @@ again:
 
 			case S_NUM64:
 				ASSERT(c != ' ');
-				if (c >= '0' && c <= '9') {
+				if (likely(c >= '0') && likely(c <= '9')) {
 					state = S_NUM64_N;
 					num64 = c - '0';
 					break;
@@ -753,13 +753,13 @@ again:
 
 			case S_VALUE:
 				ASSERT(c != ' ');
-				if (c == '\r') {
+				if (likely(c == '\r')) {
 					state = S_VALUE_1;
 					break;
 				}
 				// FALLTHRU
 			case S_VALUE_1:
-				if (c == '\n') {
+				if (likely(c == '\n')) {
 					state = S_VALUE_2;
 					break;
 				} else {
@@ -770,7 +770,7 @@ again:
 			case S_VALUE_2:
 				parser->cursor.ptr = s;
 				rc = mc_parser_scan_value(parser);
-				if (!rc)
+				if (unlikely(!rc))
 					goto leave;
 				s = parser->cursor.ptr;
 				e = parser->cursor.end;
@@ -779,13 +779,13 @@ again:
 
 			case S_EOL:
 				ASSERT(c != ' ');
-				if (c == '\r') {
+				if (likely(c == '\r')) {
 					state = S_EOL_1;
 					break;
 				}
 				// FALLTHRU
 			case S_EOL_1:
-				if (c == '\n') {
+				if (likely(c == '\n')) {
 					parser->cursor.ptr = s + 1;
 					command->end_ptr = parser->cursor.ptr;
 					goto leave;
