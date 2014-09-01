@@ -1,11 +1,9 @@
 
 ASAP:
-* non-blocking log
-* non-blocking pool
-* non-blocking ring (for producers)
 * improve smp performance
+** avoid long memcache locks or non-blocking memcache table
+** some form of work stealing
 * implement memcache expiration
-* thread-safe memcache CAS counter
 * polish & optimize
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
@@ -21,6 +19,7 @@ Essentials:
 * syslog
 * daemonize
 * statistics
+* global lock counters
 * UDP servers
 * SSL servers
 * performance instrumentation
@@ -28,6 +27,9 @@ Essentials:
 ** statistics
 ** add UDP protocol support
 ** add binary protocol support
+** for table future-based mode
+*** copy data on client core, add 'enable' work item
+*** release memcache entries with 'unref' work items thus avoid atomic inc/dec
 * correct object destruction and graceful shutdown:
 ** ensure worker & master & aux tasks are finished on shutdown
 ** ensure destroyed socket & server objects are not accessed anymore
@@ -50,6 +52,14 @@ Enhancements:
 * core and task local storage (tls)
 * exit idle workers pending for too long
 * reap dead tasks pending for too long
+* adopt C11-compatible fences and atomics
+* try to beautify buffer & netbuf interfaces.
+* try to separate net I/O proper and reader/writer task layers?
+* non-blocking log
+* non-blocking ring (for producers)
+* backoff and/or wait queue on ring full
+* non-blocking pool growth
+* Brodnik-style pool growth
 * shrink pools on low demand
 * shrink memcache table on low demand
 * improve ports:
