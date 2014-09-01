@@ -19,6 +19,8 @@
 
 #include "netbuf.h"
 
+#include "core.h"
+
 #define MM_NETBUF_MAXIOV	64
 
 void
@@ -48,7 +50,7 @@ ssize_t
 mm_netbuf_read(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->core == mm_core_selfid());
+	ASSERT(sock->sock.core == mm_core_selfid());
 
 	struct mm_buffer *buf = &sock->rbuf;
 
@@ -98,7 +100,7 @@ ssize_t
 mm_netbuf_write(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->core == mm_core_selfid());
+	ASSERT(sock->sock.core == mm_core_selfid());
 
 	struct mm_buffer *buf = &sock->tbuf;
 
