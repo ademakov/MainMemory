@@ -775,7 +775,9 @@ again:
 				s = parser->cursor.ptr;
 				e = parser->cursor.end;
 				state = S_EOL;
-				break;
+				ASSERT(s < e);
+				c = *s;
+				goto again;
 
 			case S_EOL:
 				ASSERT(c != ' ');
