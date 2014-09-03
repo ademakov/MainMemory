@@ -732,8 +732,6 @@ mm_core_boot_init(struct mm_core *core)
 
 	mm_timer_init(&core->time_manager);
 
-	mm_future_init();
-
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);
@@ -750,8 +748,6 @@ mm_core_boot_term(struct mm_core *core)
 		mm_core_boot_join();
 		mm_hook_call(&mm_core_stop_hook, false);
 	}
-
-	mm_future_term();
 
 	mm_timer_term(&core->time_manager);
 
@@ -978,6 +974,7 @@ mm_core_init(void)
 	mm_task_init();
 	mm_port_init();
 	mm_wait_init();
+	mm_future_init();
 	mm_core_init_work();
 
 	mm_core_set = mm_global_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
@@ -1004,6 +1001,7 @@ mm_core_term(void)
 	mm_task_term();
 	mm_port_term();
 	mm_wait_term();
+	mm_future_term();
 
 	mm_net_term();
 	mm_event_term();

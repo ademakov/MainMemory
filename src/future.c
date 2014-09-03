@@ -25,6 +25,9 @@
 #include "pool.h"
 #include "trace.h"
 
+// The memory pool for futures.
+static struct mm_pool mm_future_pool;
+
 static void
 mm_future_finish(struct mm_future *future, mm_value_t result)
 {
@@ -91,12 +94,33 @@ mm_future_routine(mm_value_t arg)
 	return 0;
 }
 
+static void
+mm_future_shared_init(void)
+{
+	ENTER();
+
+	mm_pool_prepare_shared(&mm_future_pool, "future", sizeof(struct mm_future));
+
+	LEAVE();
+}
+
+static void
+mm_future_shared_term(void)
+{
+	ENTER();
+
+	mm_pool_cleanup(&mm_future_pool);
+
+	LEAVE();
+}
+
 void
 mm_future_init(void)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_core->future_pool, "future", sizeof(struct mm_future));
+	mm_core_hook_start(mm_future_shared_init);
+	mm_core_hook_stop(mm_future_shared_term);
 
 	LEAVE();
 }
@@ -106,8 +130,6 @@ mm_future_term(void)
 {
 	ENTER();
 
-	mm_pool_cleanup(&mm_core->future_pool);
-
 	LEAVE();
 }
 
@@ -116,7 +138,7 @@ mm_future_create(mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
-	struct mm_future *future = mm_pool_alloc(&mm_core->future_pool);
+	struct mm_future *future = mm_pool_alloc(&mm_future_pool);
 	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	future->cancel = false;
 	future->result = MM_RESULT_DEFERRED;
@@ -149,7 +171,7 @@ mm_future_destroy(struct mm_future *future)
 
 	mm_waitset_cleanup(&future->waitset);
 
-	mm_pool_free(&mm_core->future_pool, future);
+	mm_pool_free(&mm_future_pool, future);
 
 	LEAVE();
 }

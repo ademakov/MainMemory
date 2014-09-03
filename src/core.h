@@ -86,9 +86,6 @@ struct mm_core
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
-	/* Memory pool for futures. */
-	struct mm_pool future_pool;
-
 	/* Event poll data. */
 	struct mm_event_table *events;
 	mm_timeval_t poll_time;
