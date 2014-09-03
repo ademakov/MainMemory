@@ -35,6 +35,8 @@ struct mc_entry
 	uint8_t key_len;
 	uint32_t value_len;
 
+	uint32_t exp_time;
+
 	uint32_t flags;
 	uint32_t hash;
 
@@ -78,11 +80,12 @@ mc_entry_getvalue(struct mc_entry *entry)
 
 static inline void
 mc_entry_setmisc(struct mc_entry *entry, const char *key,
-	          uint32_t flags, uint32_t hash)
+	         uint32_t flags, uint32_t exp_time, uint32_t hash)
 {
 	char *entry_key = mc_entry_getkey(entry);
 	memcpy(entry_key, key, entry->key_len);
 	entry->flags = flags;
+	entry->exp_time = exp_time;
 	entry->hash = hash;
 }
 

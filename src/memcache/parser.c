@@ -36,6 +36,14 @@ mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
 	return ptr >= cur->ptr && ptr < cur->end;
 }
 
+static uint32_t
+mc_parser_exptime(uint32_t exptime)
+{
+	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
+		exptime += mm_core->time_manager.real_time / 1000000;
+	return exptime;
+}
+
 /*
  * Prepare for parsing a command.
  */
@@ -588,7 +596,7 @@ again:
 				goto again;
 
 			case S_SET_4:
-				command->params.set.exptime = num32;
+				command->params.set.exptime = mc_parser_exptime(num32);
 				state = S_NUM32;
 				shift = S_SET_5;
 				goto again;

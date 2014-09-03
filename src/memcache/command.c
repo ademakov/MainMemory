@@ -273,7 +273,7 @@ mc_command_exec_set(mm_value_t arg)
 
 	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
 	struct mc_entry *new_entry = mc_entry_create(key_len, params->bytes);
-	mc_entry_setmisc(new_entry, key, params->flags, hash);
+	mc_entry_setmisc(new_entry, key, params->flags, params->exptime, hash);
 	mc_command_process_value(new_entry, params, 0);
 	mc_table_insert(part, hash, new_entry);
 
@@ -310,7 +310,7 @@ mc_command_exec_add(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
+		mc_entry_setmisc(new_entry, key, params->flags, params->exptime, hash);
 		mc_command_process_value(new_entry, params, 0);
 		mc_table_insert(part, hash, new_entry);
 	}
@@ -347,7 +347,7 @@ mc_command_exec_replace(mm_value_t arg)
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
+		mc_entry_setmisc(new_entry, key, params->flags, params->exptime, hash);
 		mc_command_process_value(new_entry, params, 0);
 		mc_table_insert(part, hash, new_entry);
 	}
@@ -391,7 +391,7 @@ mc_command_exec_cas(mm_value_t arg)
 		mc_entry_unref(old_entry2);
 
 		new_entry = mc_entry_create(key_len, params->bytes);
-		mc_entry_setmisc(new_entry, key, params->flags, hash);
+		mc_entry_setmisc(new_entry, key, params->flags, params->exptime, hash);
 		mc_command_process_value(new_entry, params, 0);
 		mc_table_insert(part, hash, new_entry);
 	}
@@ -433,7 +433,7 @@ mc_command_exec_append(mm_value_t arg)
 		char *old_value = mc_entry_getvalue(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
+		mc_entry_setmisc(new_entry, key, old_entry->flags, old_entry->exp_time, hash);
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
 		mc_command_process_value(new_entry, params, old_entry->value_len);
@@ -478,7 +478,7 @@ mc_command_exec_prepend(mm_value_t arg)
 		char *old_value = mc_entry_getvalue(old_entry);
 
 		new_entry = mc_entry_create(key_len, value_len);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
+		mc_entry_setmisc(new_entry, key, old_entry->flags, old_entry->exp_time, hash);
 		char *new_value = mc_entry_getvalue(new_entry);
 		mc_command_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
@@ -523,7 +523,7 @@ mc_command_exec_incr(mm_value_t arg)
 		value += command->params.val64;
 
 		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
+		mc_entry_setmisc(new_entry, key, old_entry->flags, old_entry->exp_time, hash);
 
 		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
 		ASSERT(old_entry == old_entry2);
@@ -572,7 +572,7 @@ mc_command_exec_decr(mm_value_t arg)
 			value = 0;
 
 		new_entry = mc_entry_create_u64(key_len, value);
-		mc_entry_setmisc(new_entry, key, old_entry->flags, hash);
+		mc_entry_setmisc(new_entry, key, old_entry->flags, old_entry->exp_time, hash);
 
 		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
 		ASSERT(old_entry == old_entry2);
