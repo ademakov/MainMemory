@@ -23,6 +23,7 @@
 #include "core.h"
 #include "log.h"
 #include "pool.h"
+#include "task.h"
 #include "timer.h"
 #include "trace.h"
 
