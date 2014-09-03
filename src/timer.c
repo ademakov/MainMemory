@@ -1,7 +1,7 @@
 /*
  * timer.c - MainMemory timers.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,9 +21,10 @@
 
 #include "alloc.h"
 #include "core.h"
-#include "pool.h"
-#include "timeq.h"
-#include "trace.h"
+#include "task.h"
+
+#define MM_TIMER_QUEUE_MAX_WIDTH	500
+#define MM_TIMER_QUEUE_MAX_COUNT	2000
 
 /* Generic timer. */
 struct mm_timer
@@ -52,6 +53,9 @@ struct mm_timer_resume
 {
 	struct mm_timeq_entry entry;
 
+	/* The time manager the timer belongs to. */
+	struct mm_time_manager *manager;
+
 	/* The task to schedule. */
 	struct mm_task *task;
 };
@@ -64,7 +68,7 @@ mm_timer_is_armed(struct mm_timeq_entry *entry)
 }
 
 static void
-mm_timer_fire(struct mm_timeq_entry *entry)
+mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 {
 	ENTER();
 
@@ -81,8 +85,8 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 		}
 
 		if (timer->interval) {
-			entry->value = mm_core->time_value + timer->interval;
-			mm_timeq_insert(mm_core->time_queue, entry);
+			entry->value = manager->time + timer->interval;
+			mm_timeq_insert(manager->time_queue, entry);
 		}
 	}
 
@@ -90,48 +94,58 @@ mm_timer_fire(struct mm_timeq_entry *entry)
 }
 
 void
-mm_timer_init(void)
+mm_timer_init(struct mm_time_manager *manager)
 {
 	ENTER();
 
-	mm_pool_prepare(&mm_core->timer_pool, "timer", sizeof (struct mm_timer));
+	// Update the time.
+	mm_timer_update_time(manager);
+	mm_timer_update_real_time(manager);
+
+	// Create the time queue.
+	manager->time_queue = mm_timeq_create();
+	mm_timeq_set_max_bucket_width(manager->time_queue, MM_TIMER_QUEUE_MAX_WIDTH);
+	mm_timeq_set_max_bucket_count(manager->time_queue, MM_TIMER_QUEUE_MAX_COUNT);
+
+	mm_pool_prepare(&manager->timer_pool, "timer", sizeof (struct mm_timer));
 
 	LEAVE();
 }
 
 void
-mm_timer_term(void)
+mm_timer_term(struct mm_time_manager *manager)
 {
 	ENTER();
 
-	mm_pool_cleanup(&mm_core->timer_pool);
+	mm_timeq_destroy(manager->time_queue);
+	mm_pool_cleanup(&manager->timer_pool);
 
 	LEAVE();
 }
 
 void
-mm_timer_tick(void)
+mm_timer_tick(struct mm_time_manager *manager)
 {
 	ENTER();
 
-	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
-	while (entry != NULL && entry->value <= mm_core->time_value) {
-		mm_timeq_delete(mm_core->time_queue, entry);
-		mm_timer_fire(entry);
+	struct mm_timeq_entry *entry = mm_timeq_getmin(manager->time_queue);
+	while (entry != NULL && entry->value <= manager->time) {
+		mm_timeq_delete(manager->time_queue, entry);
+		mm_timer_fire(manager, entry);
 
-		entry = mm_timeq_getmin(mm_core->time_queue);
+		entry = mm_timeq_getmin(manager->time_queue);
 	}
 
 	LEAVE();
 }
 
 mm_timeval_t
-mm_timer_next(void)
+mm_timer_next(struct mm_time_manager *manager)
 {
 	ENTER();
 
 	mm_timeval_t value = MM_TIMEVAL_MAX;
-	struct mm_timeq_entry *entry = mm_timeq_getmin(mm_core->time_queue);
+	struct mm_timeq_entry *entry = mm_timeq_getmin(manager->time_queue);
 	if (entry != NULL)
 		value = entry->value;
 
@@ -144,12 +158,13 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_alloc(&mm_core->timer_pool);
-	mm_timer_t timer_id = mm_pool_ptr2idx(&mm_core->timer_pool, timer);
+	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_timer *timer = mm_pool_alloc(&manager->timer_pool);
+	mm_timer_t timer_id = mm_pool_ptr2idx(&manager->timer_pool, timer);
 
 	// Check for timer_id overflow over the MM_TIMER_BLOCK value.
 	if (unlikely(timer_id == MM_TIMER_BLOCK)) {
-		mm_pool_free(&mm_core->timer_pool, timer);
+		mm_pool_free(&manager->timer_pool, timer);
 
 		timer_id = MM_TIMER_ERROR;
 		errno = EAGAIN;
@@ -173,13 +188,14 @@ mm_timer_destroy(mm_timer_t timer_id)
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_idx2ptr(&mm_core->timer_pool, timer_id);
+	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
 	if (mm_timer_is_armed(&timer->entry))
-		mm_timeq_delete(mm_core->time_queue, &timer->entry);
+		mm_timeq_delete(manager->time_queue, &timer->entry);
 
-	mm_pool_free(&mm_core->timer_pool, timer);
+	mm_pool_free(&manager->timer_pool, timer);
 
 	LEAVE();
 }
@@ -190,33 +206,29 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 {
 	ENTER();
 
-	struct mm_timer *timer = mm_pool_idx2ptr(&mm_core->timer_pool, timer_id);
+	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
 	if (mm_timer_is_armed(&timer->entry))
-		mm_timeq_delete(mm_core->time_queue, &timer->entry);
+		mm_timeq_delete(manager->time_queue, &timer->entry);
 
 	timer->abstime = abstime;
 	timer->value = value;
 	timer->interval = interval;
 
 	if (value != 0) {
-		if (timer->clock == MM_CLOCK_MONOTONIC) {
-			if (abstime) {
-				timer->entry.value = value;
+		if (abstime) {
+			if (timer->clock == MM_CLOCK_MONOTONIC) {
+				timer->entry.value = value + manager->time;
 			} else {
-				timer->entry.value = value + mm_core->time_value;
+				timer->entry.value = value - manager->real_time + manager->time;
 			}
 		} else {
-			if (abstime) {
-				mm_core_update_real_time(mm_core);
-				timer->entry.value = value - mm_core->real_time_value + mm_core->time_value;
-			} else {
-				timer->entry.value = value + mm_core->time_value;
-			}
+			timer->entry.value = value + manager->time;
 		}
 
-		mm_timeq_insert(mm_core->time_queue, &timer->entry);
+		mm_timeq_insert(manager->time_queue, &timer->entry);
 	}
 
 	LEAVE();
@@ -225,7 +237,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 static void
 mm_timer_block_cleanup(struct mm_timer_resume *timer)
 {
-	mm_timeq_delete(mm_core->time_queue, &timer->entry);
+	mm_timeq_delete(timer->manager->time_queue, &timer->entry);
 }
 
 void
@@ -233,15 +245,17 @@ mm_timer_block(mm_timeout_t timeout)
 {
 	ENTER();
 
-	mm_timeval_t time = mm_core->time_value + timeout;
+	struct mm_time_manager *manager = &mm_core->time_manager;
+	mm_timeval_t time = manager->time + timeout;
 	DEBUG("time: %llu", time);
 
-	struct mm_timer_resume timer = { .task = mm_task_self() };
+	struct mm_timer_resume timer = { .manager = manager,
+					 .task = mm_task_self() };
 	mm_timeq_entry_init(&timer.entry, time, MM_TIMER_BLOCK);
 
 	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);
 
-	mm_timeq_insert(mm_core->time_queue, &timer.entry);
+	mm_timeq_insert(manager->time_queue, &timer.entry);
 	mm_task_block();
 
 	mm_task_cleanup_pop(mm_timer_is_armed(&timer.entry));

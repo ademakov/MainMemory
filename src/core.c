@@ -31,8 +31,6 @@
 #include "synch.h"
 #include "task.h"
 #include "thread.h"
-#include "timeq.h"
-#include "timer.h"
 #include "trace.h"
 
 #include "dlmalloc/malloc.h"
@@ -46,9 +44,6 @@
 
 #define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	256
-
-#define MM_TIME_QUEUE_MAX_WIDTH	500
-#define MM_TIME_QUEUE_MAX_COUNT	2000
 
 #if ENABLE_SMP
 # define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
@@ -526,7 +521,7 @@ mm_core_deal(struct mm_core *core)
 	ENTER();
 
 	// Start current timer tasks.
-	mm_timer_tick();
+	mm_timer_tick(&core->time_manager);
 
 	// Indicate that the data that has so far been put to the rings
 	// is to be consumed now.
@@ -554,7 +549,7 @@ mm_core_halt(struct mm_core *core)
 	ENTER();
 
 	// Get the closest pending timer.
-	mm_timeval_t wait_time = mm_timer_next();
+	mm_timeval_t wait_time = mm_timer_next(&core->time_manager);
 
 	// Consider the time until the next required event poll.
 	mm_timeval_t poll_time = MM_TIMEVAL_MAX;
@@ -562,32 +557,32 @@ mm_core_halt(struct mm_core *core)
 		// If any event system changes have been requested then it is
 		// required to notify on their completion immediately.
 		if (mm_event_collect(core->events))
-			poll_time = wait_time = core->time_value;
+			poll_time = wait_time = core->time_manager.time;
 		else
 			poll_time = core->poll_time + MM_DEALER_POLL_TIMEOUT;
 	}
 
 	// Find the halt time.
-	mm_timeval_t halt_time = min(wait_time, core->time_value + MM_DEALER_HALT_TIMEOUT);
+	mm_timeval_t halt_time = min(wait_time, core->time_manager.time + MM_DEALER_HALT_TIMEOUT);
 
 #if 1
-	mm_core_update_time(core);
+	mm_timer_update_time(&core->time_manager);
 #else
 	// Before actually halting hang around a little bit waiting for
 	// possible wake requests.
-	mm_timeval_t hold_time = min(wait_time, core->time_value + MM_DEALER_HOLD_TIMEOUT);
+	mm_timeval_t hold_time = min(wait_time, core->time_manager.time + MM_DEALER_HOLD_TIMEOUT);
 	if (hold_time > poll_time)
 		hold_time = poll_time;
-	if (core->time_value < hold_time) {
+	if (core->time_manager.time < hold_time) {
 		bool quit = false;
 		while (!quit) {
 			mm_core_update_time(core);
-			if (core->time_value >= hold_time)
+			if (core->time_manager.time >= hold_time)
 				break;
 			for (int i = 0; i < 10; i++) {
 				quit = mm_synch_test(core->synch);
 				if (quit) {
-					halt_time = core->time_value;
+					halt_time = core->time_manager.time;
 					break;
 				}
 				mm_spin_pause();
@@ -597,18 +592,20 @@ mm_core_halt(struct mm_core *core)
 #endif
 
 	mm_timeout_t timeout = 0;
-	if (core->time_value < halt_time)
-		timeout = halt_time - core->time_value;
+	if (core->time_manager.time < halt_time)
+		timeout = halt_time - core->time_manager.time;
 
-	if (timeout || core->time_value >= poll_time) {
+	if (timeout || core->time_manager.time >= poll_time) {
 		bool dispatch = mm_synch_timedwait(core->synch, timeout);
-		mm_core_update_time(core);
+		mm_timer_update_time(&core->time_manager);
 		if (core->events != NULL) {
-			core->poll_time = core->time_value;
+			core->poll_time = core->time_manager.time;
 			if (dispatch)
 				mm_event_dispatch(core->events);
 		}
 	}
+
+	mm_timer_update_real_time(&core->time_manager);
 
 	LEAVE();
 }
@@ -733,17 +730,9 @@ mm_core_boot_init(struct mm_core *core)
 	if (!MM_CORE_IS_PRIMARY(core))
 		mm_synch_wait(core->synch);
 
-	mm_timer_init();
+	mm_timer_init(&core->time_manager);
+
 	mm_future_init();
-
-	// Update the time.
-	mm_core_update_time(core);
-	mm_core_update_real_time(core);
-
-	// Create the time queue.
-	core->time_queue = mm_timeq_create();
-	mm_timeq_set_max_bucket_width(core->time_queue, MM_TIME_QUEUE_MAX_WIDTH);
-	mm_timeq_set_max_bucket_count(core->time_queue, MM_TIME_QUEUE_MAX_COUNT);
 
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
@@ -762,10 +751,9 @@ mm_core_boot_term(struct mm_core *core)
 		mm_hook_call(&mm_core_stop_hook, false);
 	}
 
-	mm_timeq_destroy(core->time_queue);
-
 	mm_future_term();
-	mm_timer_term();
+
+	mm_timer_term(&core->time_manager);
 
 	// TODO:
 	//mm_task_destroy(core->master);
@@ -846,10 +834,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->nidle = 0;
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
-
-	core->time_queue = NULL;
-	core->time_value = 0;
-	core->real_time_value = 0;
 
 	core->master = NULL;
 	core->thread = NULL;

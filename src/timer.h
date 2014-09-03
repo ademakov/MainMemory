@@ -1,7 +1,7 @@
 /*
  * timer.h - MainMemory timers.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,20 +22,41 @@
 
 #include "common.h"
 #include "clock.h"
-#include "task.h"
+#include "pool.h"
 #include "timeq.h"
+#include "trace.h"
 
 #define MM_TIMER_ERROR	((mm_timer_t) -1)
 #define MM_TIMER_BLOCK	((mm_timer_t) -2)
 
 typedef mm_timeq_ident_t mm_timer_t;
 
-void mm_timer_init(void);
-void mm_timer_term(void);
+struct mm_time_manager
+{
+	/* The (almost) current monotonic time. */
+	mm_timeval_t time;
 
-void mm_timer_tick(void);
+	/* The (almost) current real time. */
+	mm_timeval_t real_time;
 
-mm_timeval_t mm_timer_next(void);
+	/* Queue of delayed tasks. */
+	struct mm_timeq *time_queue;
+
+	/* Memory pool for timers. */
+	struct mm_pool timer_pool;
+};
+
+void mm_timer_init(struct mm_time_manager *manager)
+	__attribute__((nonnull(1)));
+
+void mm_timer_term(struct mm_time_manager *manager)
+	__attribute__((nonnull(1)));
+
+void mm_timer_tick(struct mm_time_manager *manager)
+	__attribute__((nonnull(1)));
+
+mm_timeval_t mm_timer_next(struct mm_time_manager *manager)
+	__attribute__((nonnull(1)));
 
 mm_timer_t mm_timer_create(mm_clock_t clock,
 			   mm_routine_t start,
@@ -48,5 +69,19 @@ void mm_timer_settime(mm_timer_t timer_id, bool abstime,
 		      mm_timeval_t value, mm_timeval_t interval);
 
 void mm_timer_block(mm_timeout_t timeout);
+
+static inline void
+mm_timer_update_time(struct mm_time_manager *manager)
+{
+	manager->time = mm_clock_gettime_monotonic();
+	TRACE("%lld", (long long) manager->time);
+}
+
+static inline void
+mm_timer_update_real_time(struct mm_time_manager *manager)
+{
+	manager->real_time = mm_clock_gettime_realtime();
+	TRACE("%lld", (long long) manager->real_time);
+}
 
 #endif /* TIMER_H */

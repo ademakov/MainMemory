@@ -21,11 +21,11 @@
 #define CORE_H
 
 #include "common.h"
-#include "clock.h"
 #include "list.h"
 #include "pool.h"
 #include "ring.h"
 #include "runq.h"
+#include "timer.h"
 #include "wait.h"
 
 /* Forward declarations. */
@@ -33,7 +33,6 @@ struct mm_bitset;
 struct mm_chunk;
 struct mm_event_table;
 struct mm_task;
-struct mm_timeq;
 struct mm_net_server;
 
 #define MM_CORE_SCHED_RING_SIZE		(1024)
@@ -69,12 +68,8 @@ struct mm_core
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;
 
-	/* The (almost) current time. */
-	mm_timeval_t time_value;
-	mm_timeval_t real_time_value;
-
-	/* Queue of delayed tasks. */
-	struct mm_timeq *time_queue;
+	/* Time-related data. */
+	struct mm_time_manager time_manager;
 
 	/* Private memory arena. */
 	void *arena;
@@ -91,8 +86,6 @@ struct mm_core
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
-	/* Memory pool for timers. */
-	struct mm_pool timer_pool;
 	/* Memory pool for futures. */
 	struct mm_pool future_pool;
 
@@ -192,24 +185,6 @@ static inline mm_core_t
 mm_core_selfid(void)
 {
 	return mm_core_getid(mm_core_self());
-}
-
-/**********************************************************************
- * Core time utilities.
- **********************************************************************/
-
-static inline void
-mm_core_update_time(struct mm_core *core)
-{
-	core->time_value = mm_clock_gettime_monotonic();
-	TRACE("%lld", (long long) core->time_value);
-}
-
-static inline void
-mm_core_update_real_time(struct mm_core *core)
-{
-	core->real_time_value = mm_clock_gettime_realtime();
-	TRACE("%lld", (long long) core->real_time_value);
 }
 
 #endif /* CORE_H */

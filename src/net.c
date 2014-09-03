@@ -1312,8 +1312,8 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	if (sock->read_timeout == MM_TIMEOUT_INFINITE) {
 		mm_net_socket_wait(sock, &sock->read_waitset);
 		rc = 0;
-	} else if (mm_core->time_value < deadline) {
-		mm_timeout_t timeout = deadline - mm_core->time_value;
+	} else if (mm_core->time_manager.time < deadline) {
+		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
 		mm_net_socket_timedwait(sock, &sock->read_waitset, timeout);
 		rc = 0;
 	} else {
@@ -1367,8 +1367,8 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	if (sock->write_timeout == MM_TIMEOUT_INFINITE) {
 		mm_net_socket_wait(sock, &sock->write_waitset);
 		rc = 0;
-	} else  if (mm_core->time_value < deadline) {
-		mm_timeout_t timeout = deadline - mm_core->time_value;
+	} else  if (mm_core->time_manager.time < deadline) {
+		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
 		mm_net_socket_timedwait(sock, &sock->write_waitset, timeout);
 		rc = 0;
 	} else {
@@ -1399,7 +1399,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_value + sock->read_timeout;
+		deadline = mm_core->time_manager.time + sock->read_timeout;
 
 retry:
 	// Check to see if the socket is ready for reading.
@@ -1452,7 +1452,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_value + sock->write_timeout;
+		deadline = mm_core->time_manager.time + sock->write_timeout;
 
 retry:
 	// Check to see if the socket is ready for writing.
@@ -1507,7 +1507,7 @@ mm_net_readv(struct mm_net_socket *sock,
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_value + sock->read_timeout;
+		deadline = mm_core->time_manager.time + sock->read_timeout;
 
 retry:
 	// Check to see if the socket is ready for reading.
@@ -1562,7 +1562,7 @@ mm_net_writev(struct mm_net_socket *sock,
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_value + sock->write_timeout;
+		deadline = mm_core->time_manager.time + sock->write_timeout;
 
 retry:
 	// Check to see if the socket is ready for writing.
