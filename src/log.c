@@ -35,7 +35,14 @@
  * Low-Level Logging Routines.
  **********************************************************************/
 
-#define MM_LOG_CHUNK_SIZE	(2000)
+#define MM_LOG_CHUNK_SIZE	(MM_PAGE_SIZE - MM_ALLOC_OVERHEAD)
+
+struct mm_log_chunk
+{
+	struct mm_chunk_base base;
+	uint16_t used;
+	char data[];
+};
 
 // The pending log chunk list.
 static struct mm_queue MM_QUEUE_INIT(mm_log_queue);
@@ -43,9 +50,10 @@ static struct mm_queue MM_QUEUE_INIT(mm_log_queue);
 static mm_thread_lock_t mm_log_lock = MM_THREAD_LOCK_INIT;
 static bool mm_log_busy = false;
 
-static struct mm_chunk *
+static struct mm_log_chunk *
 mm_log_create_chunk(size_t size)
 {
+	size += sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk);
 	if (size < MM_LOG_CHUNK_SIZE)
 		size = MM_LOG_CHUNK_SIZE;
 
@@ -55,19 +63,24 @@ mm_log_create_chunk(size_t size)
 	else
 		chunk = mm_chunk_create_global(size);
 
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
-	mm_queue_append(queue, &chunk->link);
+	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
+	log_chunk->used = 0;
 
-	return chunk;
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	mm_queue_append(queue, &log_chunk->base.link);
+
+	return log_chunk;
 }
 
 static size_t
-mm_log_chunk_size(const struct mm_chunk *chunk)
+mm_log_chunk_size(const struct mm_log_chunk *chunk)
 {
-	if (chunk->core != MM_CORE_NONE)
-		return mm_chunk_size(chunk);
+	size_t size;
+	if (chunk->base.core != MM_CORE_NONE)
+		size = mm_chunk_base_size(&chunk->base);
 	else
-		return mm_chunk_size_global(chunk);
+		size = mm_chunk_base_size_global(&chunk->base);
+	return size - (sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk));
 }
 
 void
@@ -75,11 +88,11 @@ mm_log_str(const char *str)
 {
 	size_t len = strlen(str);
 
-	struct mm_chunk *chunk = NULL;
+	struct mm_log_chunk *chunk = NULL;
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
 	if (!mm_queue_empty(queue)) {
 		struct mm_link *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_chunk, link);
+		chunk = containerof(link, struct mm_log_chunk, base.link);
 
 		size_t avail = mm_log_chunk_size(chunk) - chunk->used;
 		if (avail < len) {
@@ -101,11 +114,11 @@ mm_log_str(const char *str)
 void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
-	struct mm_chunk *chunk = NULL;
+	struct mm_log_chunk *chunk = NULL;
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
 	if (!mm_queue_empty(queue)) {
 		struct mm_link *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_chunk, link);
+		chunk = containerof(link, struct mm_log_chunk, base.link);
 	}
 
 	char dummy[1];
@@ -177,7 +190,8 @@ mm_log_flush(void)
 	size_t written = 0;
 
 	do {
-		struct mm_chunk *chunk = containerof(link, struct mm_chunk, link);
+		struct mm_log_chunk *chunk = containerof(link, struct mm_log_chunk, base.link);
+		link = chunk->base.link.next;
 
 		// TODO: take care of partial writes
 		if (write(2, chunk->data, chunk->used) != chunk->used)
@@ -185,12 +199,10 @@ mm_log_flush(void)
 
 		written += chunk->used;
 
-		link = chunk->link.next;
-
-		if (chunk->core != MM_CORE_NONE)
-			mm_core_reclaim_chunk(chunk);
+		if (chunk->base.core != MM_CORE_NONE)
+			mm_core_reclaim_chunk((struct mm_chunk *) chunk);
 		else
-			mm_chunk_destroy_global(chunk);
+			mm_chunk_destroy_global((struct mm_chunk *) chunk);
 
 	} while (link != NULL);
 

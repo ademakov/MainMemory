@@ -27,28 +27,35 @@
 
 #define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + MM_ALLOC_OVERHEAD)
 
+struct mm_chunk_base
+{
+	struct mm_link link;
+	mm_core_t core;
+};
+
 /* A chunk of memory that could be chained together with other chunks and
    passed from one thread to another. Useful for I/O buffers and such. */
 struct mm_chunk
 {
-	struct mm_link link;
-	uint32_t used;
-	mm_core_t core;
+	struct mm_chunk_base base;
 	char data[];
 };
 
+/**********************************************************************
+ * Local chunks (for core threads).
+ **********************************************************************/
+
 static inline size_t
-mm_chunk_size(const struct mm_chunk *chunk)
+mm_chunk_base_size(const struct mm_chunk_base *chunk)
 {
 	ASSERT(chunk->core != MM_CORE_NONE);
 	return mm_local_alloc_size(chunk) - sizeof(struct mm_chunk);
 }
 
 static inline size_t
-mm_chunk_size_global(const struct mm_chunk *chunk)
+mm_chunk_size(const struct mm_chunk *chunk)
 {
-	ASSERT(chunk->core == MM_CORE_NONE);
-	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+	return mm_chunk_base_size(&chunk->base);
 }
 
 struct mm_chunk * mm_chunk_create(size_t size);
@@ -57,6 +64,23 @@ void mm_chunk_destroy(struct mm_chunk *chunk)
 	__attribute__((nonnull(1)));
 
 void mm_chunk_destroy_chain(struct mm_chunk *chunk);
+
+/**********************************************************************
+ * Global chunks (for auxiliary threads).
+ **********************************************************************/
+
+static inline size_t
+mm_chunk_base_size_global(const struct mm_chunk_base *chunk)
+{
+	ASSERT(chunk->core == MM_CORE_NONE);
+	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+}
+
+static inline size_t
+mm_chunk_size_global(const struct mm_chunk *chunk)
+{
+	return mm_chunk_base_size_global(&chunk->base);
+}
 
 struct mm_chunk * mm_chunk_create_global(size_t size);
 

@@ -23,22 +23,25 @@
 #include "core.h"
 #include "trace.h"
 
+/**********************************************************************
+ * Local chunks.
+ **********************************************************************/
+
 struct mm_chunk *
 mm_chunk_create(size_t size)
 {
-	size_t total_size = sizeof(struct mm_chunk) + size;
-	struct mm_chunk *chunk = mm_local_alloc(total_size);
-	chunk->used = 0;
-	chunk->core = mm_core_selfid();
-	mm_link_init(&chunk->link);
+	size += sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_local_alloc(size);
+	chunk->base.core = mm_core_selfid();
+	mm_link_init(&chunk->base.link);
 	return chunk;
 }
 
 void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
-	ASSERT(chunk->core != MM_CORE_NONE);
-	ASSERT(chunk->core == mm_core_selfid());
+	ASSERT(chunk->base.core != MM_CORE_NONE);
+	ASSERT(chunk->base.core == mm_core_selfid());
 
 	mm_local_free(chunk);
 }
@@ -50,32 +53,35 @@ mm_chunk_destroy_chain(struct mm_chunk *chunk)
 
 	if (chunk != NULL) {
 		for (;;) {
-			struct mm_link *link = chunk->link.next;
+			struct mm_link *link = chunk->base.link.next;
 			mm_chunk_destroy(chunk);
 			if (link == NULL)
 				break;
-			chunk = containerof(link, struct mm_chunk, link);
+			chunk = containerof(link, struct mm_chunk, base.link);
 		}
 	}
 
 	LEAVE();
 }
 
+/**********************************************************************
+ * Global chunks.
+ **********************************************************************/
+
 struct mm_chunk *
 mm_chunk_create_global(size_t size)
 {
 	size_t total_size = sizeof(struct mm_chunk) + size;
 	struct mm_chunk *chunk = mm_global_alloc(total_size);
-	chunk->used = 0;
-	chunk->core = MM_CORE_NONE;
-	mm_link_init(&chunk->link);
+	chunk->base.core = MM_CORE_NONE;
+	mm_link_init(&chunk->base.link);
 	return chunk;
 }
 
 void
 mm_chunk_destroy_global(struct mm_chunk *chunk)
 {
-	ASSERT(chunk->core == MM_CORE_NONE);
+	ASSERT(chunk->base.core == MM_CORE_NONE);
 
 	mm_global_free(chunk);
 }
@@ -87,11 +93,11 @@ mm_chunk_destroy_chain_global(struct mm_chunk *chunk)
 
 	if (chunk != NULL) {
 		for (;;) {
-			struct mm_link *link = chunk->link.next;
+			struct mm_link *link = chunk->base.link.next;
 			mm_chunk_destroy_global(chunk);
 			if (link == NULL)
 				break;
-			chunk = containerof(link, struct mm_chunk, link);
+			chunk = containerof(link, struct mm_chunk, base.link);
 		}
 	}
 

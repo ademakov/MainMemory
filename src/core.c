@@ -343,12 +343,12 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 {
 	ENTER();
 
-	if (chunk->core == mm_core_selfid()) {
+	if (chunk->base.core == mm_core_selfid()) {
 		// Destroy the chunk directly.
 		mm_chunk_destroy(chunk);
 	} else {
 		// Put the chunk to the target core chunks ring.
-		struct mm_core *core = mm_core_getptr(chunk->core);
+		struct mm_core *core = mm_core_getptr(chunk->base.core);
 		for (;;) {
 			bool ok = mm_ring_global_put(&core->chunks, chunk);
 
@@ -358,7 +358,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 				break;
 			} else if (unlikely(mm_memory_load(core->stop))) {
 				mm_warning(0, "lost a chunk as core %d is stopped",
-					   chunk->core);
+					   chunk->base.core);
 				break;
 			}
 
@@ -377,11 +377,11 @@ mm_core_reclaim_chain(struct mm_chunk *chunk)
 
 	if (chunk != NULL) {
 		for (;;) {
-			struct mm_link *link = chunk->link.next;
+			struct mm_link *link = chunk->base.link.next;
 			mm_core_reclaim_chunk(chunk);
 			if (link == NULL)
 				break;
-			chunk = containerof(link, struct mm_chunk, link);
+			chunk = containerof(link, struct mm_chunk, base.link);
 		}
 	}
 

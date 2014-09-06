@@ -28,7 +28,7 @@
 static struct mc_entry *
 mc_entry_convert_chunk(struct mm_chunk *chunk)
 {
-	mm_core_t core = chunk->core;
+	mm_core_t core = chunk->base.core;
 	struct mc_entry *entry = (struct mc_entry *) chunk;
 	entry->chunk_core = core;
 	return entry;
@@ -39,7 +39,7 @@ mc_entry_restore_chunk(struct mc_entry *entry)
 {
 	mm_core_t core = entry->chunk_core;
 	struct mm_chunk *chunk = (struct mm_chunk *) entry;
-	chunk->core = core;
+	chunk->base.core = core;
 	return chunk;
 }
 
