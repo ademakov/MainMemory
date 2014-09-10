@@ -632,7 +632,32 @@ mc_command_exec_delete(mm_value_t arg)
 static mm_value_t
 mc_command_exec_touch(mm_value_t arg __attribute__((unused)))
 {
-	return MC_RESULT_NOT_IMPLEMENTED;
+	ENTER();
+
+	struct mc_command *command = (struct mc_command *) arg;
+	const char *key = command->key.str;
+	size_t key_len = command->key.len;
+	uint32_t hash = command->key_hash;
+
+	struct mc_tpart *part = mc_table_part(hash);
+	mc_table_lock(part);
+
+	struct mc_entry *entry = mc_table_lookup(part, hash, key, key_len);
+	if (entry != NULL)
+		entry->exp_time = command->params.val32;
+
+	mc_command_result_t rc;
+	if (command->noreply)
+		rc = MC_RESULT_BLANK;
+	else if (entry != NULL)
+		rc = MC_RESULT_TOUCHED;
+	else
+		rc = MC_RESULT_NOT_FOUND;
+
+	mc_table_unlock(part);
+
+	LEAVE();
+	return rc;
 }
 
 static mm_value_t

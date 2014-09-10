@@ -191,6 +191,7 @@ mc_parser_parse(struct mc_parser *parser)
 		S_DELETE_2,
 		S_TOUCH_1,
 		S_TOUCH_2,
+		S_TOUCH_3,
 		S_FLUSH_ALL_1,
 		S_VERBOSITY_1,
 		S_VAL32,
@@ -669,8 +670,21 @@ again:
 
 			case S_TOUCH_2:
 				state = S_NUM32;
-				shift = S_VAL32;
+				shift = S_TOUCH_3;
 				goto again;
+
+			case S_TOUCH_3:
+				command->params.val32 = mc_parser_exptime(num32);
+				ASSERT(c != ' ');
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_NOREPLY;
+					break;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
 
 			case S_FLUSH_ALL_1:
 				ASSERT(c != ' ');
