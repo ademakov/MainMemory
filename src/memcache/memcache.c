@@ -93,6 +93,10 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		mm_netbuf_append(&state->sock, SL("DELETED\r\n"));
 		break;
 
+	case MC_RESULT_TOUCHED:
+		mm_netbuf_append(&state->sock, SL("TOUCHED\r\n"));
+		break;
+
 	case MC_RESULT_NOT_FOUND:
 		mm_netbuf_append(&state->sock, SL("NOT_FOUND\r\n"));
 		break;
