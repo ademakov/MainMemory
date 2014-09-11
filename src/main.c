@@ -122,6 +122,7 @@ mm_server_init(void)
 	mm_core_register_server(mm_icmd_server);
 
 	struct mm_memcache_config memcache_config;
+	memcache_config.volume = 64 * 1024 * 1024;
 #if ENABLE_MEMCACHE_LOCKS
 	memcache_config.nparts = 1;
 #else

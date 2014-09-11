@@ -18,27 +18,30 @@
  */
 
 #ifndef MEMCACHE_H
-#define	MEMCACHE_H
+#define MEMCACHE_H
 
-#include "../common.h"
-#include "../bitset.h"
+#include "common.h"
+#include "bitset.h"
 
-#define ENABLE_MEMCACHE_LOCKS		1
+#define ENABLE_MEMCACHE_LOCKS	1
 
 #ifndef mc_hash
-# define mc_hash	mm_hash_murmur3_32
+# define mc_hash		mm_hash_murmur3_32
 #endif
+
+#define MC_TABLE_VOLUME_DEFAULT	(64 * 1024 * 1024)
 
 
 struct mm_memcache_config
 {
+	size_t volume;
+
 #if ENABLE_MEMCACHE_LOCKS
 	mm_core_t nparts;
 #else
 	struct mm_bitset affinity;
 #endif
 };
-
 
 void mm_memcache_init(const struct mm_memcache_config *config);
 

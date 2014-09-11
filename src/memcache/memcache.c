@@ -17,23 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "memcache.h"
+#include "memcache/memcache.h"
 
-#include "command.h"
-#include "entry.h"
-#include "parser.h"
-#include "state.h"
-#include "table.h"
+#include "memcache/command.h"
+#include "memcache/entry.h"
+#include "memcache/parser.h"
+#include "memcache/state.h"
+#include "memcache/table.h"
 
-#include "../alloc.h"
-#include "../bitops.h"
-#include "../chunk.h"
-#include "../core.h"
-#include "../future.h"
-#include "../list.h"
-#include "../log.h"
-#include "../pool.h"
-#include "../trace.h"
+#include "alloc.h"
+#include "bitops.h"
+#include "chunk.h"
+#include "core.h"
+#include "future.h"
+#include "list.h"
+#include "log.h"
+#include "pool.h"
+#include "trace.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -419,6 +419,16 @@ mm_memcache_init(const struct mm_memcache_config *config)
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
 						  "127.0.0.1", 11211);
 
+	mm_core_hook_start(mc_memcache_start);
+	mm_core_hook_stop(mc_memcache_stop);
+
+	// Determine the maximal data size in memcache table.
+	if (config != NULL && config->volume)
+		mc_config.volume = config->volume;
+	else
+		mc_config.volume = MC_TABLE_VOLUME_DEFAULT;
+
+	// Determine the required memcache table partitions.
 #if ENABLE_MEMCACHE_LOCKS
 	if (config != NULL && config->nparts)
 		mc_config.nparts = config->nparts;
@@ -431,9 +441,6 @@ mm_memcache_init(const struct mm_memcache_config *config)
 	if (!mm_bitset_any(&mc_config.affinity))
 		mm_bitset_set(&mc_config.affinity, 0);
 #endif
-
-	mm_core_hook_start(mc_memcache_start);
-	mm_core_hook_stop(mc_memcache_stop);
 
 	LEAVE();
 }

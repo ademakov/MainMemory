@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "table.h"
-#include "entry.h"
+#include "memcache/table.h"
+#include "memcache/entry.h"
 
-#include "../hash.h"
-#include "../log.h"
-#include "../task.h"
+#include "hash.h"
+#include "log.h"
+#include "task.h"
 
 #include <sys/mman.h>
 
@@ -34,7 +34,6 @@
 # define MC_TABLE_SIZE_MAX	((size_t) 512 * 1024 * 1024)
 #endif
 
-#define MC_TABLE_VOLUME_MAX	(64 * 1024 * 1024)
 #define MC_TABLE_VOLUME_RESERVE	(64 * 1024)
 
 struct mc_table mc_table;
@@ -302,7 +301,7 @@ mc_table_init(const struct mm_memcache_config *config)
 {
 	ENTER();
 
-	// Compute the number of table partitions. It has to be a power of 2.
+	// Round the number of table partitions to a power of 2.
 	mm_core_t nparts;
 #if ENABLE_MEMCACHE_LOCKS
 	nparts = config->nparts;
@@ -310,11 +309,27 @@ mc_table_init(const struct mm_memcache_config *config)
 	nparts = mm_bitset_count(&config->affinity);
 #endif
 	ASSERT(nparts > 0);
-	uint16_t nbits = 31 - mm_clz(nparts);
+	uint16_t nbits = sizeof(int) * 8 - 1 - mm_clz(nparts);
 	nparts = 1 << nbits;
 
+	mm_brief("memcache partitions: %d", nparts);
+	mm_brief("memcache partition bits: %d", nbits);
+
+	// Determine the size constraints for table partitions.
+	size_t volume = config->volume / nparts;
+	if (volume < MM_PAGE_SIZE)
+		volume = MM_PAGE_SIZE;
+	// Make a very liberal estimate that for an average table entry
+	// the combined size of key and data might be as small as 20 bytes.
+	size_t nentries_max = volume / (sizeof(struct mc_entry) + 20);
+	size_t nbuckets_max = 1 << (sizeof(int) * 8 - 1 - mm_clz(nentries_max));
+
+	mm_brief("memcache maximal volume per partition: %d", (int) volume);
+	mm_brief("memcache maximal entries per partition: %d", (int) nentries_max);
+	mm_brief("memcache maximal buckets per partition: %d", (int) nbuckets_max);
+
 	// Reserve the address space for the table.
-	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
+	size_t space = mc_table_space(nbuckets_max * nparts);
 	mm_brief("reserve %ld bytes of the address space for the memcache table.",
 		 (unsigned long) space);
 	void *address = mmap(NULL, space, PROT_NONE,
@@ -327,12 +342,9 @@ mc_table_init(const struct mm_memcache_config *config)
 	mc_table.address = address;
 	mc_table.part_bits = nbits;
 	mc_table.part_mask = nparts - 1;
-	mc_table.nbuckets_max = MC_TABLE_SIZE_MAX / nparts;
-	mc_table.nbytes_threshold = MC_TABLE_VOLUME_MAX / nparts;
+	mc_table.nbuckets_max = nbuckets_max;
+	mc_table.nbytes_threshold = volume;
 	mc_table.parts = mm_shared_calloc(nparts, sizeof(struct mc_tpart));
-
-	mm_brief("memcache partitions: %d", nparts);
-	mm_brief("memcache partition bits: %d", mc_table.part_bits);
 
 	// Compute the initial number of pages per partition.
 	uint32_t pages = nparts > 2 ? 2 : nparts == 2 ? 4 : 8;
@@ -346,6 +358,7 @@ mc_table_init(const struct mm_memcache_config *config)
 	}
 #else
 	mm_core_t index = 0;
+	ASSERT(nparts <= mm_core_getnum());
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		if (mm_bitset_test(&mc_config.affinity, core)) {
 			struct mc_entry **buckets = base + index * mc_table.nbuckets_max;
@@ -382,7 +395,7 @@ mc_table_term(void)
 	mm_shared_free(mc_table.parts);
 
 	// Compute the reserved address space size.
-	size_t space = mc_table_space(MC_TABLE_SIZE_MAX);
+	size_t space = mc_table_space(mc_table.nbuckets_max * mc_table.nparts);
 
 	// Release the reserved address space.
 	if (munmap(mc_table.address, space) < 0)
