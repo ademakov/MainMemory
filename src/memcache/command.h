@@ -20,7 +20,7 @@
 #ifndef MEMCACHE_COMMAND_H
 #define MEMCACHE_COMMAND_H
 
-#include "memcache.h"
+#include "memcache/memcache.h"
 #include "future.h"
 
 /**********************************************************************

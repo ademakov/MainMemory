@@ -20,7 +20,7 @@
 #ifndef MEMCACHE_PARSER_H
 #define MEMCACHE_PARSER_H
 
-#include "../buffer.h"
+#include "buffer.h"
 
 /* Forward declaration. */
 struct mc_state;

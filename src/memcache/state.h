@@ -20,10 +20,10 @@
 #ifndef MEMCACHE_STATE_H
 #define MEMCACHE_STATE_H
 
-#include "command.h"
+#include "memcache/command.h"
 
-#include "../netbuf.h"
-#include "../trace.h"
+#include "netbuf.h"
+#include "trace.h"
 
 struct mc_state
 {

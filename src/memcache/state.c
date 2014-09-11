@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "state.h"
+#include "memcache/state.h"
 
 struct mm_net_socket *
 mc_state_alloc(void)

@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "parser.h"
+#include "memcache/parser.h"
 
-#include "state.h"
+#include "memcache/state.h"
 
-#include "../netbuf.h"
+#include "netbuf.h"
 
 
 #define MC_KEY_LEN_MAX		250

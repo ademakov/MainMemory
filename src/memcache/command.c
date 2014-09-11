@@ -17,15 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "command.h"
-#include "entry.h"
-#include "table.h"
+#include "memcache/command.h"
 
-#include "../buffer.h"
-#include "../hash.h"
-#include "../net.h"
-#include "../task.h"
-#include "../trace.h"
+#include "memcache/entry.h"
+#include "memcache/table.h"
+
+#include "buffer.h"
+#include "hash.h"
+#include "net.h"
+#include "task.h"
+#include "trace.h"
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;

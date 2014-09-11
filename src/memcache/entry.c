@@ -17,11 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "entry.h"
+#include "memcache/entry.h"
 
-#include "../bitops.h"
-#include "../chunk.h"
-#include "../core.h"
+#include "chunk.h"
+#include "core.h"
 
 #include <ctype.h>
 
@@ -90,9 +89,8 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
 bool
 mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
 {
-	if (entry->value_len == 0) {
+	if (entry->value_len == 0)
 		return false;
-	}
 
 	char *p = mc_entry_getvalue(entry);
 	char *e = p + entry->value_len;
@@ -100,14 +98,12 @@ mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
 	uint64_t v = 0;
 	while (p < e) {
 		int c = *p++;
-		if (!isdigit(c)) {
+		if (!isdigit(c))
 			return false;
-		}
 
 		uint64_t vv = v * 10 + c - '0';
-		if (unlikely(vv < v)) {
+		if (unlikely(vv < v))
 			return false;
-		}
 
 		v = vv;
 	}

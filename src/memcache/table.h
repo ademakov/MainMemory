@@ -20,12 +20,12 @@
 #ifndef MEMCACHE_TABLE_H
 #define MEMCACHE_TABLE_H
 
-#include "memcache.h"
-#include "entry.h"
+#include "memcache/memcache.h"
+#include "memcache/entry.h"
 
-#include "../bitops.h"
-#include "../list.h"
-#include "../lock.h"
+#include "bitops.h"
+#include "list.h"
+#include "lock.h"
 
 /* A partition of table of memcache entries. */
 struct mc_tpart
@@ -39,7 +39,7 @@ struct mc_tpart
 	uint32_t nbuckets;
 	/* The number of used entries. */
 	uint32_t nentries;
-	/* The total data size in all entries. */
+	/* The total data size of all entries. */
 	size_t nbytes;
 
 #if ENABLE_MEMCACHE_LOCKS

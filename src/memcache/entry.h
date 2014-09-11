@@ -20,7 +20,8 @@
 #ifndef MEMCACHE_ENTRY_H
 #define MEMCACHE_ENTRY_H
 
-#include "memcache.h"
+#include "memcache/memcache.h"
+#include "arch/atomic.h"
 #include "list.h"
 
 struct mc_entry
@@ -93,7 +94,7 @@ static inline void
 mc_entry_ref(struct mc_entry *entry)
 {
 	uint32_t test;
-#if ENABLE_SMP
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKS
 	test = mm_atomic_uint32_inc_and_test(&entry->ref_count);
 #else
 	test = ++(entry->ref_count);
@@ -107,7 +108,7 @@ static inline void
 mc_entry_unref(struct mc_entry *entry)
 {
 	uint32_t test;
-#if ENABLE_SMP
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKS
 	test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
 #else
 	test = --(entry->ref_count);
