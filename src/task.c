@@ -421,16 +421,17 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 	      task->state, task->priority, priority);
 	ASSERT(task->core == mm_core);
 	ASSERT(task->priority < MM_PRIO_BOOT);
-	ASSERT(task->state != MM_TASK_INVALID && task->state != MM_TASK_RUNNING);
 
 	if (task->priority > priority) {
-		if (task->state != MM_TASK_PENDING)
-			task->state = MM_TASK_PENDING;
-		else
+		if (task->state == MM_TASK_PENDING) {
+			task->state = MM_TASK_BLOCKED;
 			mm_runq_delete(&mm_core->runq, task);
+		}
+
 		task->priority = priority;
-		mm_runq_put(&mm_core->runq, task);
-	} else if (task->state != MM_TASK_PENDING) {
+	}
+
+	if (task->state == MM_TASK_BLOCKED) {
 		task->state = MM_TASK_PENDING;
 		mm_runq_put(&mm_core->runq, task);
 	}
