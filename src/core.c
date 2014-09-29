@@ -163,19 +163,16 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 	ENTER();
 
 	// Get the destination core.
-	bool pinned;
 	struct mm_core *core;
 	if (core_id != MM_CORE_NONE) {
-		pinned = true;
 		core = mm_core_getptr(core_id);
 	} else {
-		pinned = false;
 		core = mm_core;
 	}
 
 	// Create a work item.
 	struct mm_work *work = mm_work_create();
-	mm_work_prepare(work, pinned, routine, routine_arg, MM_RESULT_UNWANTED);
+	mm_work_prepare(work, routine, routine_arg, MM_RESULT_UNWANTED);
 
 	// Dispatch the work item.
 	if (core == mm_core) {
@@ -373,16 +370,16 @@ mm_core_worker(mm_value_t arg)
 	for (;;) {
 		// Save the work data before it might be destroyed.
 		mm_routine_t routine = work->routine;
-		mm_value_t routine_arg = work->routine_arg;
+		mm_value_t argument = work->argument;
 
 		if (work->result == MM_RESULT_UNWANTED) {
 			// Destroy unneeded work data.
 			mm_work_destroy(work);
 			// Execute the work routine.
-			routine(routine_arg);
+			routine(argument);
 		} else {
 			// Execute the work routine and save the result.
-			work->result = routine(routine_arg);
+			work->result = routine(argument);
 		}
 
 		// Check to see if there is outstanding work.

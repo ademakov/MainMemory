@@ -21,6 +21,7 @@
 #define WORK_H
 
 #include "common.h"
+#include "arch/atomic.h"
 #include "core.h"
 #include "list.h"
 
@@ -30,16 +31,13 @@ struct mm_work
 	/* A link in the work queue. */
 	struct mm_link link;
 
-	/* The work is pinned to a specific core. */
-	bool pinned;
-
 	/* The work routine. */
 	mm_routine_t routine;
 	/* The work routine argument. */
-	mm_value_t routine_arg;
+	mm_value_t argument;
 
 	/* The work result. */
-	mm_value_t result;
+	mm_atomic_uintptr_t result;
 };
 
 /**********************************************************************
@@ -74,12 +72,11 @@ mm_work_destroy(struct mm_work *work)
  **********************************************************************/
 
 static inline void
-mm_work_prepare(struct mm_work *work, bool pinned,
-		mm_routine_t routine, mm_value_t routine_arg, mm_value_t result)
+mm_work_prepare(struct mm_work *work,
+		mm_routine_t routine, mm_value_t argument, mm_value_t result)
 {
-	work->pinned = pinned;
 	work->routine = routine;
-	work->routine_arg = routine_arg;
+	work->argument = argument;
 	work->result = result;
 }
 
