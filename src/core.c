@@ -32,6 +32,7 @@
 #include "task.h"
 #include "thread.h"
 #include "trace.h"
+#include "work.h"
 
 #include "dlmalloc/malloc.h"
 
@@ -50,21 +51,6 @@
 #else
 # define MM_CORE_IS_PRIMARY(core)	(true)
 #endif
-
-/* A work item. */
-struct mm_work
-{
-	/* A link in the work queue. */
-	struct mm_link link;
-
-	/* The work is pinned to a specific core. */
-	bool pinned;
-
-	/* The work routine. */
-	mm_routine_t routine;
-	/* The work routine argument. */
-	mm_value_t routine_arg;
-};
 
 // The core set.
 mm_core_t mm_core_num;
@@ -137,60 +123,6 @@ mm_core_poke(struct mm_core *core)
 }
 
 /**********************************************************************
- * Work pool.
- **********************************************************************/
-
-// The memory pool for work items.
-static struct mm_pool mm_core_work_pool;
-
-static void
-mm_core_start_work(void)
-{
-	ENTER();
-
-	mm_pool_prepare_shared(&mm_core_work_pool, "work", sizeof(struct mm_work));
-
-	LEAVE();
-}
-
-static void
-mm_core_stop_work(void)
-{
-	ENTER();
-
-	mm_pool_cleanup(&mm_core_work_pool);
-
-	LEAVE();
-}
-
-static void
-mm_core_init_work(void)
-{
-	ENTER();
-
-	mm_core_hook_start(mm_core_start_work);
-	mm_core_hook_stop(mm_core_stop_work);
-
-	LEAVE();
-}
-
-static inline struct mm_work *
-mm_core_create_work(struct mm_core *core, bool pinned, mm_routine_t routine, mm_value_t routine_arg)
-{
-	struct mm_work *work = mm_pool_shared_alloc_low(mm_core_getid(core), &mm_core_work_pool);
-	work->pinned = pinned;
-	work->routine = routine;
-	work->routine_arg = routine_arg;
-	return work;
-}
-
-static inline void
-mm_core_destroy_work(struct mm_core *core, struct mm_work *work)
-{
-	mm_pool_shared_free_low(mm_core_getid(core), &mm_core_work_pool, work);
-}
-
-/**********************************************************************
  * Work queue.
  **********************************************************************/
 
@@ -242,7 +174,10 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 	}
 
 	// Create a work item.
-	struct mm_work *work = mm_core_create_work(mm_core, pinned, routine, routine_arg);
+	struct mm_work *work = mm_work_create();
+	mm_work_prepare(work, pinned, routine, routine_arg);
+
+	// Dispatch the work item.
 	if (core == mm_core) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
@@ -438,7 +373,7 @@ mm_core_worker(mm_value_t arg)
 		// Save the work data and recycle the work item.
 		mm_routine_t routine = work->routine;
 		mm_value_t routine_arg = work->routine_arg;
-		mm_core_destroy_work(core, work);
+		mm_work_destroy(work);
 
 		// Execute the work routine.
 		routine(routine_arg);
@@ -859,18 +794,20 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 static void
 mm_core_term_work(struct mm_core *core)
 {
+	mm_core_t core_id = mm_core_getid(core);
 	while (mm_core_has_work(core)) {
 		struct mm_work *work = mm_core_get_work(core);
-		mm_core_destroy_work(core, work);
+		mm_work_destroy_low(core_id, work);
 	}
 }
 
 static void
 mm_core_term_inbox(struct mm_core *core)
 {
+	mm_core_t core_id = mm_core_getid(core);
 	struct mm_work *work = mm_ring_get(&core->inbox);
 	while (work != NULL) {
-		mm_core_destroy_work(core, work);
+		mm_work_destroy_low(core_id, work);
 		work = mm_ring_get(&core->inbox);
 	}
 }
@@ -975,7 +912,7 @@ mm_core_init(void)
 	mm_port_init();
 	mm_wait_init();
 	mm_future_init();
-	mm_core_init_work();
+	mm_work_init();
 
 	mm_core_set = mm_global_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
