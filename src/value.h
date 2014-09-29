@@ -35,4 +35,7 @@
 /* The result is unavailable as the future has not yet started. */
 #define MM_RESULT_DEFERRED	((mm_value_t) -3)
 
+/* The result is unavailable as not needed in the first place. */
+#define MM_RESULT_UNWANTED	((mm_value_t) -4)
+
 #endif /* VALUE_H */

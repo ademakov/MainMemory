@@ -37,6 +37,9 @@ struct mm_work
 	mm_routine_t routine;
 	/* The work routine argument. */
 	mm_value_t routine_arg;
+
+	/* The work result. */
+	mm_value_t result;
 };
 
 /**********************************************************************
@@ -72,11 +75,12 @@ mm_work_destroy(struct mm_work *work)
 
 static inline void
 mm_work_prepare(struct mm_work *work, bool pinned,
-	    mm_routine_t routine, mm_value_t routine_arg)
+		mm_routine_t routine, mm_value_t routine_arg, mm_value_t result)
 {
 	work->pinned = pinned;
 	work->routine = routine;
 	work->routine_arg = routine_arg;
+	work->result = result;
 }
 
 #endif /* WORK_H */

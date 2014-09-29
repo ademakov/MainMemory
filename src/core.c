@@ -175,7 +175,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 	// Create a work item.
 	struct mm_work *work = mm_work_create();
-	mm_work_prepare(work, pinned, routine, routine_arg);
+	mm_work_prepare(work, pinned, routine, routine_arg, MM_RESULT_UNWANTED);
 
 	// Dispatch the work item.
 	if (core == mm_core) {
@@ -361,6 +361,7 @@ mm_core_worker(mm_value_t arg)
 	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
 
+	// TODO: verify this again, perhaps it was a dumb compiler
 	// Cache thread-specific data. This gives a smallish speedup for
 	// the code emitted for the loop below on platforms with emulated
 	// thread specific data (that is on Darwin).
@@ -370,13 +371,19 @@ mm_core_worker(mm_value_t arg)
 	struct mm_work *work = (struct mm_work *) arg;
 
 	for (;;) {
-		// Save the work data and recycle the work item.
+		// Save the work data before it might be destroyed.
 		mm_routine_t routine = work->routine;
 		mm_value_t routine_arg = work->routine_arg;
-		mm_work_destroy(work);
 
-		// Execute the work routine.
-		routine(routine_arg);
+		if (work->result == MM_RESULT_UNWANTED) {
+			// Destroy unneeded work data.
+			mm_work_destroy(work);
+			// Execute the work routine.
+			routine(routine_arg);
+		} else {
+			// Execute the work routine and save the result.
+			work->result = routine(routine_arg);
+		}
 
 		// Check to see if there is outstanding work.
 		while (!mm_core_has_work(core)) {
