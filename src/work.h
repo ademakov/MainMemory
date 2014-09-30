@@ -25,6 +25,9 @@
 #include "core.h"
 #include "list.h"
 
+/* Completion notification routine for work items.  */
+typedef void (*mm_work_complete_t)(struct mm_work *work, mm_value_t result);
+
 /* A work item. */
 struct mm_work
 {
@@ -36,8 +39,8 @@ struct mm_work
 	/* The work routine argument. */
 	mm_value_t argument;
 
-	/* The work result. */
-	mm_atomic_uintptr_t result;
+	/* The work completion routine. */
+	mm_work_complete_t complete;
 };
 
 /**********************************************************************
@@ -73,11 +76,12 @@ mm_work_destroy(struct mm_work *work)
 
 static inline void
 mm_work_prepare(struct mm_work *work,
-		mm_routine_t routine, mm_value_t argument, mm_value_t result)
+		mm_routine_t routine, mm_value_t argument,
+		mm_work_complete_t complete)
 {
 	work->routine = routine;
 	work->argument = argument;
-	work->result = result;
+	work->complete = complete;
 }
 
 #endif /* WORK_H */

@@ -32,8 +32,9 @@
 struct mm_bitset;
 struct mm_chunk;
 struct mm_event_table;
-struct mm_task;
 struct mm_net_server;
+struct mm_task;
+struct mm_work;
 
 #define MM_CORE_SCHED_RING_SIZE		(1024)
 #define MM_CORE_INBOX_RING_SIZE		(1024)
@@ -130,6 +131,8 @@ void mm_core_start(void);
 void mm_core_stop(void);
 
 void mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
+	__attribute__((nonnull(2)));
+void mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	__attribute__((nonnull(2)));
 
 void mm_core_run_task(struct mm_task *task)

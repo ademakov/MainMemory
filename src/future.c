@@ -29,16 +29,18 @@
 static struct mm_pool mm_future_pool;
 
 static void
-mm_future_finish(struct mm_future *future, mm_value_t result)
+mm_future_finish(struct mm_work *work, mm_value_t result)
 {
 	ENTER();
+
+	struct mm_future *future = containerof(work, struct mm_future, work);
+	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
 
 	// Synchronize with waiters.
 	mm_task_lock(&future->lock);
 
 	// Store the result.
 	mm_memory_store(future->result, result);
-	mm_memory_store_fence();
 
 	// Wakeup all the waiters.
 	mm_waitset_broadcast(&future->waitset, &future->lock);
@@ -51,16 +53,6 @@ mm_future_finish(struct mm_future *future, mm_value_t result)
 	LEAVE();
 }
 
-static void
-mm_future_cleanup(struct mm_future *future)
-{
-	ENTER();
-
-	mm_future_finish(future, MM_RESULT_CANCELED);
-
-	LEAVE();
-}
-
 static mm_value_t
 mm_future_routine(mm_value_t arg)
 {
@@ -69,29 +61,22 @@ mm_future_routine(mm_value_t arg)
 	struct mm_future *future = (struct mm_future *) arg;
 	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
 
-	// Ensure cleanup on task exit/cancellation.
-	mm_task_cleanup_push(mm_future_cleanup, future);
-
 	// Advertise that the future task is running.
 	mm_memory_store(future->task, mm_task_self());
 	mm_memory_store_fence();
 
 	// Actually start the future unless already canceled.
-	bool cancel = mm_memory_load(future->cancel);
-	if (cancel) {
-		mm_future_finish(future, MM_RESULT_CANCELED);
+	mm_value_t result;
+	if (mm_memory_load(future->cancel)) {
+		result = MM_RESULT_CANCELED;
 	} else {
-		mm_value_t result = future->start(future->start_arg);
+		result = future->start(future->start_arg);
 		ASSERT(result != MM_RESULT_NOTREADY);
 		ASSERT(result != MM_RESULT_DEFERRED);
-		mm_future_finish(future, result);
 	}
 
-	// Cleanup on return is not needed.
-	mm_task_cleanup_pop(false);
-
 	LEAVE();
-	return 0;
+	return result;
 }
 
 static void
@@ -125,26 +110,21 @@ mm_future_init(void)
 	LEAVE();
 }
 
-void
-mm_future_term(void)
-{
-	ENTER();
-
-	LEAVE();
-}
-
 struct mm_future *
 mm_future_create(mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
 	struct mm_future *future = mm_pool_alloc(&mm_future_pool);
-	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	future->cancel = false;
-	future->result = MM_RESULT_DEFERRED;
+	mm_work_prepare(&future->work,
+			mm_future_routine, (mm_value_t) future,
+			mm_future_finish);
+	future->task = NULL;
 	future->start = start;
 	future->start_arg = start_arg;
-	future->task = NULL;
+	future->result = MM_RESULT_DEFERRED;
+	future->cancel = false;
+	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	mm_waitset_prepare(&future->waitset);
 
 	LEAVE();

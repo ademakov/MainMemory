@@ -24,11 +24,12 @@
 #include "lock.h"
 #include "task.h"
 #include "wait.h"
+#include "work.h"
 
 struct mm_future
 {
-	/* The future result. */
-	mm_atomic_uintptr_t result;
+	/* The future work item. */
+	struct mm_work work;
 
 	/* The future task if running. */
 	struct mm_task *task;
@@ -37,8 +38,11 @@ struct mm_future
 	mm_routine_t start;
 	mm_value_t start_arg;
 
+	/* The future result. */
+	mm_atomic_uintptr_t result;
+
 	/* A cancel request has been made. */
-	uint8_t cancel;
+	mm_atomic_uint8_t cancel;
 
 	/* The internal state lock. */
 	mm_task_lock_t lock;
@@ -48,7 +52,6 @@ struct mm_future
 };
 
 void mm_future_init(void);
-void mm_future_term(void);
 
 struct mm_future *mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	__attribute__((nonnull(1)));

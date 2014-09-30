@@ -158,21 +158,17 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 }
 
 void
-mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
+mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
 
-	// Get the destination core.
+	// Get the target core.
 	struct mm_core *core;
 	if (core_id != MM_CORE_NONE) {
 		core = mm_core_getptr(core_id);
 	} else {
 		core = mm_core;
 	}
-
-	// Create a work item.
-	struct mm_work *work = mm_work_create();
-	mm_work_prepare(work, routine, routine_arg, MM_RESULT_UNWANTED);
 
 	// Dispatch the work item.
 	if (core == mm_core) {
@@ -194,6 +190,21 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 			}
 		}
 	}
+
+	LEAVE();
+}
+
+void
+mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
+{
+	ENTER();
+
+	// Create a work item.
+	struct mm_work *work = mm_work_create();
+	mm_work_prepare(work, routine, routine_arg, NULL);
+
+	// Post it to specified core.
+	mm_core_post_work(core_id, work);
 
 	LEAVE();
 }
@@ -339,12 +350,52 @@ mm_core_destroy_chunks(struct mm_core *core)
  **********************************************************************/
 
 static void
+mm_core_worker_cancel(uintptr_t arg)
+{
+	ENTER();
+
+	// Notify that the work has been canceled.
+	struct mm_work *work = (struct mm_work *) arg;
+	(work->complete)(work, MM_RESULT_CANCELED);
+
+	LEAVE();
+}
+
+static void
+mm_core_worker_execute(struct mm_work *work)
+{
+	ENTER();
+
+	// Save the work data before it might be destroyed.
+	mm_routine_t routine = work->routine;
+	mm_value_t value = work->argument;
+
+	if (work->complete == NULL) {
+		// Destroy unneeded work data.
+		mm_work_destroy(work);
+		// Execute the work routine.
+		routine(value);
+	} else {
+		// Ensure completion notification on task cancellation.
+		mm_task_cleanup_push(mm_core_worker_cancel, work);
+
+		// Execute the work routine.
+		value = routine(value);
+		// Perform completion notification on return.
+		work->complete(work, value);
+
+		mm_task_cleanup_pop(false);
+	}
+
+	LEAVE();
+}
+
+static void
 mm_core_worker_cleanup(uintptr_t arg __attribute__((unused)))
 {
 	// Wake up the master possibly waiting for worker availability.
-	if (mm_core->nworkers == mm_core->nworkers_max) {
+	if (mm_core->nworkers == mm_core->nworkers_max)
 		mm_task_run(mm_core->master);
-	}
 
 	// Account for the exiting worker.
 	mm_core->nworkers--;
@@ -366,21 +417,8 @@ mm_core_worker(mm_value_t arg)
 
 	// Take the work item supplied by the master.
 	struct mm_work *work = (struct mm_work *) arg;
-
 	for (;;) {
-		// Save the work data before it might be destroyed.
-		mm_routine_t routine = work->routine;
-		mm_value_t argument = work->argument;
-
-		if (work->result == MM_RESULT_UNWANTED) {
-			// Destroy unneeded work data.
-			mm_work_destroy(work);
-			// Execute the work routine.
-			routine(argument);
-		} else {
-			// Execute the work routine and save the result.
-			work->result = routine(argument);
-		}
+		mm_core_worker_execute(work);
 
 		// Check to see if there is outstanding work.
 		while (!mm_core_has_work(core)) {
@@ -942,7 +980,6 @@ mm_core_term(void)
 	mm_task_term();
 	mm_port_term();
 	mm_wait_term();
-	mm_future_term();
 
 	mm_net_term();
 	mm_event_term();
