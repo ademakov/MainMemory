@@ -22,7 +22,7 @@
 
 #ifdef HAVE_XMMINTRIN_H
 
-#include "xmmintrin.h"
+#include <xmmintrin.h>
 
 #define mm_memory_strict_fence()	_mm_mfence()
 #define mm_memory_strict_load_fence()	_mm_lfence()
