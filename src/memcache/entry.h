@@ -21,39 +21,36 @@
 #define MEMCACHE_ENTRY_H
 
 #include "memcache/memcache.h"
+
 #include "arch/atomic.h"
+#include "chunk.h"
 #include "list.h"
+
+/* Forward declarations. */
+//struct mc_tpart;
+
+#define MC_ENTRY_FREE		0
+#define MC_ENTRY_USED_MIN	1
+#define MC_ENTRY_USED_MAX	32
+#define MC_ENTRY_NOT_USED	255
 
 struct mc_entry
 {
-	struct mm_link table_link;
-	struct mm_list evict_list;
+	struct mm_link link;
+	struct mm_link chunks;
 
-	uint64_t cas;
+	uint32_t hash;
+	uint32_t exp_time;
+	uint32_t flags;
 
-	mm_core_t chunk_core;
+	mm_atomic_uint16_t ref_count;
+
+	uint8_t state;
 
 	uint8_t key_len;
 	uint32_t value_len;
-
-	uint32_t exp_time;
-
-	uint32_t flags;
-	uint32_t hash;
-
-	mm_atomic_uint32_t ref_count;
-
-	char data[];
+	uint64_t cas;
 };
-
-struct mc_entry * mc_entry_create(uint8_t key_len, size_t value_len);
-
-void mc_entry_destroy(struct mc_entry *entry);
-
-struct mc_entry * mc_entry_create_u64(uint8_t key_len, uint64_t value);
-
-bool mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
-	__attribute__((nonnull(1, 2)));
 
 static inline size_t
 mc_entry_sum_length(uint8_t key_len, size_t value_len)
@@ -70,52 +67,32 @@ mc_entry_size(struct mc_entry *entry)
 static inline char *
 mc_entry_getkey(struct mc_entry *entry)
 {
-	return entry->data;
+	struct mm_link *link = mm_link_head(&entry->chunks);
+	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+	return chunk->data;
 }
 
 static inline char *
 mc_entry_getvalue(struct mc_entry *entry)
 {
-	return entry->data + entry->key_len;
+	struct mm_link *link = mm_link_head(&entry->chunks);
+	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+	return chunk->data + entry->key_len;
 }
 
-static inline void
-mc_entry_setmisc(struct mc_entry *entry, const char *key,
-	         uint32_t flags, uint32_t exp_time, uint32_t hash)
-{
-	char *entry_key = mc_entry_getkey(entry);
-	memcpy(entry_key, key, entry->key_len);
-	entry->flags = flags;
-	entry->exp_time = exp_time;
-	entry->hash = hash;
-}
+void mc_entry_set(struct mc_entry *entry, uint32_t hash,
+		  uint8_t key_len, const char *key,
+	          uint32_t flags, uint32_t exp_time,
+		  uint32_t data_len)
+	__attribute__((nonnull(1, 4)));
 
-static inline void
-mc_entry_ref(struct mc_entry *entry)
-{
-	uint32_t test;
-#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKS
-	test = mm_atomic_uint32_inc_and_test(&entry->ref_count);
-#else
-	test = ++(entry->ref_count);
-#endif
-	if (unlikely(!test)) {
-		ABORT();
-	}
-}
+void mc_entry_setnum(struct mc_entry *entry, uint32_t hash,
+		     uint8_t key_len, const char *key,
+	             uint32_t flags, uint32_t exp_time,
+		     uint64_t value)
+	__attribute__((nonnull(1)));
 
-static inline void
-mc_entry_unref(struct mc_entry *entry)
-{
-	uint32_t test;
-#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKS
-	test = mm_atomic_uint32_dec_and_test(&entry->ref_count);
-#else
-	test = --(entry->ref_count);
-#endif
-	if (!test) {
-		mc_entry_destroy(entry);
-	}
-}
+bool mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
+	__attribute__((nonnull(1, 2)));
 
 #endif /* MEMCACHE_ENTRY_H */

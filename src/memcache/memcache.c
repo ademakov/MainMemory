@@ -52,7 +52,7 @@ mc_transmit_unref(uintptr_t data)
 	ENTER();
 
 	struct mc_entry *entry = (struct mc_entry *) data;
-	mc_entry_unref(entry);
+	mc_table_unref_entry(mc_table_part(entry->hash), entry);
 
 	LEAVE();
 }
@@ -146,9 +146,11 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 				(unsigned long long) entry->cas);
 		}
 
-		mc_entry_ref(entry);
 		mm_netbuf_splice(&state->sock, value, value_len,
 				 mc_transmit_unref, (uintptr_t) entry);
+
+		// Prevent extra entry unref on command destruction.
+		command->result = MC_RESULT_BLANK;
 
 		if (command->params.last)
 			mm_netbuf_append(&state->sock, "\r\nEND\r\n", 7);
@@ -162,9 +164,11 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		char *value = mc_entry_getvalue(entry);
 		uint32_t value_len = entry->value_len;
 
-		mc_entry_ref(entry);
 		mm_netbuf_splice(&state->sock, value, value_len,
 				 mc_transmit_unref, (uintptr_t) entry);
+
+		// Prevent extra entry unref on command destruction.
+		command->result = MC_RESULT_BLANK;
 
 		mm_netbuf_append(&state->sock, "END\r\n", 5);
 		break;

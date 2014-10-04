@@ -18,57 +18,41 @@
  */
 
 #include "memcache/entry.h"
+#include "memcache/table.h"
 
-#include "chunk.h"
 #include "core.h"
 
 #include <ctype.h>
 
-static struct mc_entry *
-mc_entry_convert_chunk(struct mm_chunk *chunk)
+void
+mc_entry_set(struct mc_entry *entry, uint32_t hash,
+	     uint8_t key_len, const char *key,
+	     uint32_t flags, uint32_t exp_time,
+	     uint32_t value_len)
 {
-	mm_core_t core = chunk->base.core;
-	struct mc_entry *entry = (struct mc_entry *) chunk;
-	entry->chunk_core = core;
-	return entry;
-}
-
-static struct mm_chunk *
-mc_entry_restore_chunk(struct mc_entry *entry)
-{
-	mm_core_t core = entry->chunk_core;
-	struct mm_chunk *chunk = (struct mm_chunk *) entry;
-	chunk->base.core = core;
-	return chunk;
-}
-
-struct mc_entry *
-mc_entry_create(uint8_t key_len, size_t value_len)
-{
-	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
-
-	size_t size = mc_entry_sum_length(key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create(size - sizeof(struct mm_chunk));
-	struct mc_entry *entry = mc_entry_convert_chunk(chunk);
+	entry->hash = hash;
 	entry->key_len = key_len;
 	entry->value_len = value_len;
+	entry->flags = flags;
+	entry->exp_time = exp_time;
 	entry->ref_count = 1;
 
-	return entry;
+	mm_link_init(&entry->chunks);
+	size_t size = mc_entry_sum_length(key_len, value_len);
+	struct mm_chunk *chunk = mm_chunk_create(size);
+	mm_link_insert(&entry->chunks, &chunk->base.link);
+
+	char *entry_key = mc_entry_getkey(entry);
+	memcpy(entry_key, key, entry->key_len);
 }
 
 void
-mc_entry_destroy(struct mc_entry *entry)
-{
-	struct mm_chunk *chunk = mc_entry_restore_chunk(entry);
-	mm_core_reclaim_chunk(chunk);
-}
-
-struct mc_entry *
-mc_entry_create_u64(uint8_t key_len, uint64_t value)
+mc_entry_setnum(struct mc_entry *entry, uint32_t hash,
+		uint8_t key_len, const char *key,
+		uint32_t flags, uint32_t exp_time,
+		uint64_t value)
 {
 	char buffer[32];
-
 	size_t value_len = 0;
 	do {
 		int c = (int) (value % 10);
@@ -76,18 +60,17 @@ mc_entry_create_u64(uint8_t key_len, uint64_t value)
 		value /= 10;
 	} while (value);
 
-	struct mc_entry *entry = mc_entry_create(key_len, value_len);
+	mc_entry_set(entry, hash, key_len, key, flags, exp_time, value_len);
+
 	char *v = mc_entry_getvalue(entry);
 	do {
 		size_t i = entry->value_len - value_len--;
 		v[i] = buffer[value_len];
 	} while (value_len);
-
-	return entry;
 }
 
 bool
-mc_entry_value_u64(struct mc_entry *entry, uint64_t *value)
+mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
 {
 	if (entry->value_len == 0)
 		return false;

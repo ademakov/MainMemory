@@ -39,13 +39,21 @@
 struct mc_table mc_table;
 
 /**********************************************************************
- * Memcache table helper routines.
+ * Helper routines.
  **********************************************************************/
 
 static inline size_t
-mc_table_space(size_t nbuckets)
+mc_table_buckets_size(uint16_t nparts, uint32_t nbuckets)
 {
-	return nbuckets * sizeof(struct mm_link);
+	size_t space = nbuckets * sizeof(struct mm_link);
+	return nparts * mm_round_up(space, MM_PAGE_SIZE);
+}
+
+static inline size_t
+mc_table_entries_size(uint16_t nparts, uint32_t nentries)
+{
+	size_t space = nentries * sizeof(struct mc_entry);
+	return nparts * mm_round_up(space, MM_PAGE_SIZE);
 }
 
 static inline uint32_t
@@ -67,43 +75,108 @@ mc_table_index(struct mc_tpart *part, uint32_t hash)
 static inline bool
 mc_table_check_size(struct mc_tpart *part)
 {
-	uint32_t n = mm_memory_load(part->nbuckets);
-	return part->nentries > (n * 2) && n < mc_table.nbuckets_max;
+	uint32_t nb = mm_memory_load(part->nbuckets);
+	uint32_t ne = mm_memory_load(part->nentries);
+	ne -= mm_memory_load(part->nentries_free);
+	ne -= mm_memory_load(part->nentries_void);
+	return ne > (nb * 2) && nb < mc_table.nbuckets_max;
 }
 
 static inline bool
 mc_table_check_volume(struct mc_tpart *part, size_t reserve)
 {
-	uint32_t n = mm_memory_load(part->nbytes);
-	return (n + reserve) > mc_table.nbytes_threshold;
+	uint32_t n = mm_memory_load(part->volume);
+	return (n + reserve) > mc_table.volume_max;
 }
 
 /**********************************************************************
- * Memcache table growth.
+ * Table resize.
  **********************************************************************/
 
 static void
-mc_table_expand(struct mc_tpart *part, uint32_t old_size, uint32_t new_size)
+mc_table_resize(void *start, size_t old_size, size_t new_size)
+{
+	ASSERT(((intptr_t) start % MM_PAGE_SIZE) == 0);
+	ASSERT((old_size % MM_PAGE_SIZE) == 0);
+	ASSERT((new_size % MM_PAGE_SIZE) == 0);
+	ASSERT(old_size != new_size);
+
+	void *addr, *map_addr;
+	if (old_size > new_size) {
+		size_t diff = old_size - new_size;
+		addr = (char *) start + new_size;
+		map_addr = mmap(addr, diff, PROT_NONE,
+				MAP_ANON | MAP_FIXED | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+	} else {
+		size_t diff = new_size - old_size;
+		addr = (char *) start + old_size;
+		map_addr = mmap(addr, diff, PROT_READ | PROT_WRITE,
+				MAP_ANON | MAP_FIXED | MAP_PRIVATE, -1, 0);
+	}
+
+	if (map_addr == MAP_FAILED)
+		mm_fatal(errno, "mmap");
+	if (unlikely(map_addr != addr))
+		mm_fatal(0, "mmap returned wrong address");
+}
+
+static void
+mc_table_buckets_resize(struct mc_tpart *part,
+			uint32_t old_nbuckets,
+			uint32_t new_nbuckets)
 {
 	ENTER();
-	ASSERT(mm_is_pow2z(old_size));
-	ASSERT(mm_is_pow2(new_size));
+	ASSERT(mm_is_pow2z(old_nbuckets));
+	ASSERT(mm_is_pow2(new_nbuckets));
 
-	mm_brief("Set the size of memcache partition #%d: %ld",
-		 (int) (part - mc_table.parts), (unsigned long) new_size);
+	size_t old_size = mc_table_buckets_size(1, old_nbuckets);
+	size_t new_size = mc_table_buckets_size(1, new_nbuckets);
+	if (likely(old_size != new_size)) {
+		mm_brief("memcache enabled buckets for partition #%d: %u, %lu bytes",
+			 (int) (part - mc_table.parts), new_nbuckets,
+			 (unsigned long) new_size);
+		mc_table_resize(part->buckets, old_size, new_size);
+	}
 
-	size_t old_space = mc_table_space(old_size);
-	size_t new_space = mc_table_space(new_size);
+	LEAVE();
+}
 
-	void *address = (char *) part->buckets + old_space;
-	size_t nbytes = new_space - old_space;
+static void
+mc_table_entries_resize(struct mc_tpart *part,
+			uint32_t old_nentries,
+			uint32_t new_nentries)
+{
+	ENTER();
 
-	void *result_address = mmap(address, nbytes, PROT_READ | PROT_WRITE,
-				    MAP_ANON | MAP_PRIVATE | MAP_FIXED, -1, 0);
-	if (result_address == MAP_FAILED)
-		mm_fatal(errno, "mmap");
-	if (result_address != address)
-		mm_fatal(0, "mmap returned wrong address");
+	size_t old_size = mc_table_entries_size(1, old_nentries);
+	size_t new_size = mc_table_entries_size(1, new_nentries);
+	if (likely(old_size != new_size)) {
+		mm_brief("memcache enabled entries for partition #%d: %u, %lu bytes",
+			 (int) (part - mc_table.parts), new_nentries,
+			 (unsigned long) new_size);
+		mc_table_resize(part->entries, old_size, new_size);
+	}
+
+	LEAVE();
+}
+
+static void
+mc_table_expand(struct mc_tpart *part, uint32_t n)
+{
+	ENTER();
+
+	uint32_t old_nentries = part->nentries;
+	uint32_t new_nentries = old_nentries + n;
+	if (unlikely(new_nentries < old_nentries))
+		new_nentries = UINT32_MAX;
+	if (unlikely(new_nentries > mc_table.nentries_max))
+		new_nentries = mc_table.nentries_max;
+	n = new_nentries - old_nentries;
+
+	mc_table_entries_resize(part, old_nentries, new_nentries);
+
+	part->nentries_void += n;
+	part->nentries += n;
 
 	LEAVE();
 }
@@ -120,7 +193,7 @@ mc_table_stride(struct mc_tpart *part)
 	uint32_t half_size;
 	if (unlikely(mm_is_pow2z(used))) {
 		half_size = used;
-		mc_table_expand(part, used, used * 2);
+		mc_table_buckets_resize(part, used, used * 2);
 	} else {
 		half_size = 1 << (31 - mm_clz(used));
 	}
@@ -138,8 +211,7 @@ mc_table_stride(struct mc_tpart *part)
 		while (link != NULL) {
 			struct mm_link *next = link->next;
 
-			struct mc_entry *entry =
-				containerof(link, struct mc_entry, table_link);
+			struct mc_entry *entry = containerof(link, struct mc_entry, link);
 			uint32_t index = (entry->hash >> mc_table.part_bits) & mask;
 			if (index == source) {
 				mm_link_insert(&s_entries, link);
@@ -194,42 +266,66 @@ mc_table_start_striding(struct mc_tpart *part)
 }
 
 /**********************************************************************
- * Memcache table eviction.
+ * Entry eviction.
  **********************************************************************/
 
+static bool
+mc_table_is_eviction_victim(struct mc_entry *entry)
+{
+	if (entry->state == MC_ENTRY_USED_MIN)
+		return true;
+	if (entry->exp_time && entry->exp_time <= mm_core->time_manager.time)
+		return true;
+	return false;
+}
+
 bool
-mc_table_evict(struct mc_tpart *part, size_t nrequired)
+mc_table_evict(struct mc_tpart *part, uint32_t nrequired)
 {
 	ENTER();
 
-	size_t nvictims = 0;
+	uint32_t nvictims = 0;
 	struct mm_link victims;
 	mm_link_init(&victims);
 
 	mc_table_lock(part);
 
-	while (!mm_list_empty(&part->evict_list)) {
-		struct mm_list *link = mm_list_head(&part->evict_list);
-		struct mc_entry *entry = containerof(link, struct mc_entry, evict_list);
-		char *key = mc_entry_getkey(entry);
+	uint32_t navailable = part->nentries;
+	navailable -= part->nentries_free;
+	navailable -= part->nentries_void;
+	if (nrequired > navailable)
+		nrequired = navailable;
 
-		mc_table_remove(part, entry->hash, key, entry->key_len);
+	while (nvictims < nrequired) {
+		struct mc_entry *hand = part->clock_hand;
+		if (unlikely(hand == part->entries_end))
+			hand = part->entries;
 
-		mm_link_insert(&victims, &entry->table_link);
-		if (++nvictims == nrequired)
-			break;
+		uint8_t state = hand->state;
+		if (state >= MC_ENTRY_USED_MIN && state <= MC_ENTRY_USED_MAX) {
+			if (mc_table_is_eviction_victim(hand)) {
+				char *key = mc_entry_getkey(hand);
+				mc_table_remove(part, hand->hash, key, hand->key_len);
+				mm_link_insert(&victims, &hand->link);
+				++nvictims;
+			} else {
+				hand->state--;
+			}
+		}
+
+		part->clock_hand = hand + 1;
 	}
 
 	mc_table_unlock(part);
 
 	while (!mm_link_empty(&victims)) {
 		struct mm_link *link = mm_link_delete_head(&victims);
-		struct mc_entry *entry = containerof(link, struct mc_entry, table_link);
-		mc_entry_unref(entry);
+		struct mc_entry *entry = containerof(link, struct mc_entry, link);
+		mc_table_unref_entry(part, entry);
 	}
 
 	LEAVE();
-	return (nvictims == nrequired);
+	return (nvictims && nvictims == nrequired);
 }
 
 static mm_value_t
@@ -265,35 +361,54 @@ mc_table_start_evicting(struct mc_tpart *part)
 }
 
 /**********************************************************************
- * Memcache table initialization and termination.
+ * Table initialization and termination.
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core, struct mm_link *buckets, uint32_t pages)
+mc_table_init_part(mm_core_t index, mm_core_t core)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
+	char *buckets = ((char *) mc_table.buckets_base)
+			+ mc_table_buckets_size(index, mc_table.nbuckets_max);
+	char *entries = ((char *) mc_table.entries_base)
+			+ mc_table_entries_size(index, mc_table.nentries_max);
+
+	part->buckets = (struct mm_link *) buckets;
+	part->entries = (struct mc_entry *) entries;
+	part->entries_end = part->entries;
+
+	part->clock_hand = part->entries;
+
+	mm_link_init(&part->free_list);
+
+	part->nbuckets = 0;
+	part->nbuckets = 0;
+	part->nentries_free = 0;
+	part->nentries_void = 0;
+
+	part->volume = 0;
+
+	mm_waitset_prepare(&part->waitset);
+	mm_waitset_pin(&part->waitset, core);
+
 #if ENABLE_MEMCACHE_LOCKS
 	part->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	(void) core;
 #else
 	mm_verbose("bind partition %d to core %d", index, core);
 	part->core = core;
 #endif
+
 	part->evicting = false;
 	part->striding = false;
-	part->cas = index;
-	part->nentries = 0;
-	part->buckets = buckets;
-	mm_list_init(&part->evict_list);
-	part->nbytes = 0;
 
-	// Compute the initial table size
-	uint32_t size = pages * MM_PAGE_SIZE / sizeof(struct mc_entry *);
+	part->cas = index;
 
 	// Allocate initial space for the table.
-	mc_table_expand(part, 0, size);
-	part->nbuckets = size;
+	mc_table_expand(part, mc_table.nentries_increment);
+	uint32_t nbuckets = part->nentries / 2;
+	mc_table_buckets_resize(part, 0, nbuckets);
+	part->nbuckets = nbuckets;
 }
 
 void
@@ -324,46 +439,65 @@ mc_table_init(const struct mm_memcache_config *config)
 	size_t nentries_max = volume / (sizeof(struct mc_entry) + 20);
 	size_t nbuckets_max = 1 << (sizeof(int) * 8 - 1 - mm_clz(nentries_max));
 
-	mm_brief("memcache maximal volume per partition: %d", (int) volume);
-	mm_brief("memcache maximal entries per partition: %d", (int) nentries_max);
-	mm_brief("memcache maximal buckets per partition: %d", (int) nbuckets_max);
+	mm_brief("memcache maximum data volume per partition: %lu",
+		 (unsigned long) volume);
+	mm_brief("memcache maximum number of entries per partition: %lu",
+		 (unsigned long) nentries_max);
+	mm_brief("memcache maximum number of buckets per partition: %lu",
+		 (unsigned long) nbuckets_max);
+	if (nentries_max != (uint32_t) nentries_max)
+		mm_fatal(0, "too many entries");
+	if (nbuckets_max != (uint32_t) nbuckets_max)
+		mm_fatal(0, "too many buckets");
 
-	// Reserve the address space for the table.
-	size_t space = mc_table_space(nbuckets_max * nparts);
-	mm_brief("reserve %ld bytes of the address space for the memcache table.",
-		 (unsigned long) space);
-	void *address = mmap(NULL, space, PROT_NONE,
-			     MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
-	if (address == MAP_FAILED)
+	// Reserve address space for table entries.
+	size_t entries_size = mc_table_entries_size(nparts, nentries_max);
+	mm_brief("memcache reserved entries for table: %ld bytes",
+		 (unsigned long) entries_size);
+	void *entries_base = mmap(NULL, entries_size, PROT_NONE,
+				  MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+	if (entries_base == MAP_FAILED)
 		mm_fatal(errno, "mmap");
 
+	// Reserve address space for table buckets.
+	size_t buckets_size = mc_table_buckets_size(nparts, nbuckets_max);
+	mm_brief("memcache reserved buckets for table: %ld bytes",
+		 (unsigned long) buckets_size);
+	void *buckets_base = mmap(NULL, buckets_size, PROT_NONE,
+				  MAP_ANON | MAP_PRIVATE | MAP_NORESERVE, -1, 0);
+	if (buckets_base == MAP_FAILED)
+		mm_fatal(errno, "mmap");
+
+	// Compute the number of entries added on expansion.
+	uint32_t nentries_increment = 4 * 1024;
+	if (nparts == 1)
+		nentries_increment *= 4;
+	else if (nparts == 2)
+		nentries_increment *= 2;
+
 	// Initialize the table.
+	mc_table.parts = mm_shared_calloc(nparts, sizeof(struct mc_tpart));
 	mc_table.nparts = nparts;
-	mc_table.address = address;
 	mc_table.part_bits = nbits;
 	mc_table.part_mask = nparts - 1;
+	mc_table.volume_max = volume;
 	mc_table.nbuckets_max = nbuckets_max;
-	mc_table.nbytes_threshold = volume;
-	mc_table.parts = mm_shared_calloc(nparts, sizeof(struct mc_tpart));
-
-	// Compute the initial number of pages per partition.
-	uint32_t pages = nparts > 2 ? 2 : nparts == 2 ? 4 : 8;
+	mc_table.nentries_max = nentries_max;
+	mc_table.nentries_increment = nentries_increment;
+	mc_table.buckets_base = buckets_base;
+	mc_table.entries_base = entries_base;
 
 	// Initialize the table partitions.
-	struct mm_link *base = address;
 #if ENABLE_MEMCACHE_LOCKS
 	for (mm_core_t index = 0; index < nparts; index++) {
-		struct mm_link *buckets = base + index * mc_table.nbuckets_max;
-		mc_table_init_part(index, MM_CORE_NONE, buckets, pages);
+		mc_table_init_part(index, MM_CORE_NONE);
 	}
 #else
 	mm_core_t index = 0;
 	ASSERT(nparts <= mm_core_getnum());
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		if (mm_bitset_test(&mc_config.affinity, core)) {
-			struct mc_entry **buckets = base + index * mc_table.nbuckets_max;
-			mc_table_init_part(index, core, buckets, pages);
-			++index;
+			mc_table_init_part(index++, core);
 		}
 	}
 #endif
@@ -383,10 +517,10 @@ mc_table_term(void)
 			struct mm_link *link = mm_link_head(&part->buckets[i]);
 			while (link != NULL) {
 				struct mc_entry *entry =
-					containerof(link, struct mc_entry, table_link);
+					containerof(link, struct mc_entry, link);
 				link = link->next;
 
-				mc_entry_destroy(entry);
+				mc_table_destroy_entry(part, entry);
 			}
 		}
 	}
@@ -395,18 +529,81 @@ mc_table_term(void)
 	mm_shared_free(mc_table.parts);
 
 	// Compute the reserved address space size.
-	size_t space = mc_table_space(mc_table.nbuckets_max * mc_table.nparts);
+	size_t space = mc_table_buckets_size(mc_table.nparts, mc_table.nbuckets_max);
+	size_t entry_space = mc_table_entries_size(mc_table.nparts, mc_table.nentries_max);
 
 	// Release the reserved address space.
-	if (munmap(mc_table.address, space) < 0)
+	if (munmap(mc_table.buckets_base, space) < 0)
+		mm_error(errno, "munmap");
+	if (munmap(mc_table.entries_base, entry_space) < 0)
 		mm_error(errno, "munmap");
 
 	LEAVE();
 }
 
 /**********************************************************************
- * Memcache table access routines.
+ * Table entry creation and destruction routines.
  **********************************************************************/
+
+struct mc_entry *
+mc_table_create_entry(struct mc_tpart *part)
+{
+	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
+
+	struct mc_entry *entry = NULL;
+
+again:
+	if (!mm_link_empty(&part->free_list)) {
+		struct mm_link *link = mm_link_delete_head(&part->free_list);
+		ASSERT(part->nentries_free);
+		part->nentries_free--;
+		entry = containerof(link, struct mc_entry, link);
+	} else if (part->nentries_void) {
+		part->nentries_void--;
+		entry = part->entries_end++;
+	} else {
+		// TODO: optimize this case, unlock before table expansion
+		// allowing concurrent lookup & remove calls.
+		mc_table_expand(part, mc_table.nentries_increment);
+		if (!part->nentries_void) {
+			mc_table_unlock(part);
+			mc_table_evict(part, 1);
+			mc_table_lock(part);
+		}
+		goto again;
+	}
+
+	entry->state = MC_ENTRY_NOT_USED;
+
+	return entry;
+}
+
+void
+mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
+{
+	struct mm_link *link = mm_link_head(&entry->chunks);
+	struct mm_chunk *chunks = containerof(link, struct mm_chunk, base.link);
+	mm_core_reclaim_chain(chunks);
+
+	ASSERT(entry->state == MC_ENTRY_NOT_USED);
+	entry->state = MC_ENTRY_FREE;
+
+	mm_link_insert(&part->free_list, &entry->link);
+	part->nentries_free++;
+}
+
+/**********************************************************************
+ * Table entry access routines.
+ **********************************************************************/
+
+static inline void
+mc_table_access(struct mc_tpart *part __attribute__((unused)),
+		     struct mc_entry *entry)
+{
+	uint8_t state = mm_memory_load(entry->state);
+	if (state >= MC_ENTRY_USED_MIN && state < MC_ENTRY_USED_MAX)
+		mm_memory_store(entry->state, state + 1);
+}
 
 struct mc_entry *
 mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
@@ -419,11 +616,12 @@ mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 
 	struct mm_link *link = mm_link_head(bucket);
 	while (link != NULL) {
-		struct mc_entry *entry = containerof(link, struct mc_entry, table_link);
+		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		char *entry_key = mc_entry_getkey(entry);
 		if (hash == entry->hash
 		    && key_len == entry->key_len
 		    && !memcmp(key, entry_key, key_len)) {
+			mc_table_access(part, entry);
 			found_entry = entry;
 			break;
 		}
@@ -445,17 +643,16 @@ mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 
 	while (!mm_link_is_last(pred)) {
 		struct mm_link *link = pred->next;
-		struct mc_entry *entry = containerof(link, struct mc_entry, table_link);
+		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 
 		char *entry_key = mc_entry_getkey(entry);
 		if (hash == entry->hash
 		    && key_len == entry->key_len
 		    && !memcmp(key, entry_key, key_len)) {
-			mm_list_delete(&entry->evict_list);
 			mm_link_cleave(pred, link->next);
+			entry->state = MC_ENTRY_NOT_USED;
 
-			part->nbytes -= mc_entry_size(entry);
-			part->nentries--;
+			part->volume -= mc_entry_size(entry);
 
 			found_entry = entry;
 			break; 
@@ -469,22 +666,21 @@ mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 }
 
 void
-mc_table_insert(struct mc_tpart *part, uint32_t hash, struct mc_entry *entry)
+mc_table_insert(struct mc_tpart *part, uint32_t hash,
+		struct mc_entry *entry, uint8_t state)
 {
 	ENTER();
 
 	uint32_t index = mc_table_index(part, hash);
 	struct mm_link *bucket = &part->buckets[index];
 
-	mm_link_insert(bucket, &entry->table_link);
-	mm_list_append(&part->evict_list, &entry->evict_list);
-
-	part->nbytes += mc_entry_size(entry);
-	part->nentries++;
+	mm_link_insert(bucket, &entry->link);
+	entry->state = state;
 
 	entry->cas = part->cas;
 	part->cas += mc_table.nparts;
 
+	part->volume += mc_entry_size(entry);
 	if (!part->evicting && mc_table_check_volume(part, 0)) {
 		part->evicting = true;
 		mc_table_start_evicting(part);

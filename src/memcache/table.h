@@ -26,21 +26,35 @@
 #include "bitops.h"
 #include "list.h"
 #include "lock.h"
+#include "wait.h"
 
 /* A partition of table of memcache entries. */
 struct mc_tpart
 {
 	/* The hash table buckets. */
 	struct mm_link *buckets;
-	/* The LRU list of entries. */
-	struct mm_list evict_list;
+
+	/* The pool of all table entries. */
+	struct mc_entry *entries;
+	struct mc_entry *entries_end;
+
+	/* Current eviction pointer. */
+	struct mc_entry *clock_hand;
+
+	/* The list of unused entries. */
+	struct mm_link free_list;
 
 	/* The number of buckets. */
 	uint32_t nbuckets;
-	/* The number of used entries. */
+	/* The number of entries. */
 	uint32_t nentries;
+	uint32_t nentries_void;
+	uint32_t nentries_free;
+
 	/* The total data size of all entries. */
-	size_t nbytes;
+	size_t volume;
+
+	struct mm_waitset waitset;
 
 #if ENABLE_MEMCACHE_LOCKS
 	mm_task_lock_t lock;
@@ -63,15 +77,23 @@ struct mc_table
 	struct mc_tpart *parts;
 	/* The number of table partitions. */
 	mm_core_t nparts;
+
 	/* The hash value bits that identify partition. */
 	uint16_t part_bits;
 	uint32_t part_mask;
-	/* The data size per partition that causes data eviction. */
-	uint32_t nbytes_threshold;
+
 	/* The maximum number of buckets per partition. */
-	size_t nbuckets_max;
-	/* Base table address. */
-	void *address;
+	uint32_t nbuckets_max;
+	/* The maximum number of entries per partition. */
+	uint32_t nentries_max;
+	/* The number of entries added on expansion. */
+	uint32_t nentries_increment;
+	/* The data size per partition that causes data eviction. */
+	size_t volume_max;
+
+	/* Base table addresses. */
+	void *buckets_base;
+	void *entries_base;
 };
 
 extern struct mc_table mc_table;
@@ -86,7 +108,7 @@ void mc_table_init(const struct mm_memcache_config *config)
 void mc_table_term(void);
 
 /**********************************************************************
- * Memcache table access routines.
+ * Memcache general table routines.
  **********************************************************************/
 
 static inline struct mc_tpart *
@@ -115,23 +137,56 @@ mc_table_unlock(struct mc_tpart *part)
 #endif
 }
 
+/**********************************************************************
+ * Table entry creation and destruction routines.
+ **********************************************************************/
+
+bool mc_table_evict(struct mc_tpart *part, uint32_t nrequired)
+	__attribute__((nonnull(1)));
+
+struct mc_entry * mc_table_create_entry(struct mc_tpart *part)
+	__attribute__((nonnull(1)));
+
+void mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
+	__attribute__((nonnull(1, 2)));
+
+static inline void
+mc_table_ref_entry(struct mc_entry *entry)
+{
+	uint32_t test;
+#if ENABLE_SMP
+	test = mm_atomic_uint16_inc_and_test(&entry->ref_count);
+#else
+	test = ++(entry->ref_count);
+#endif
+	if (unlikely(!test))
+		ABORT();
+}
+
+static inline void
+mc_table_unref_entry(struct mc_tpart *part, struct mc_entry *entry)
+{
+	uint32_t test;
+#if ENABLE_SMP
+	test = mm_atomic_uint16_dec_and_test(&entry->ref_count);
+#else
+	test = --(entry->ref_count);
+#endif
+	if (!test)
+		mc_table_destroy_entry(part, entry);
+}
+
+/**********************************************************************
+ * Table entry access routines.
+ **********************************************************************/
+
 struct mc_entry * mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
 	__attribute__((nonnull(1)));
 
 struct mc_entry * mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
 	__attribute__((nonnull(1)));
 
-void mc_table_insert(struct mc_tpart *part, uint32_t hash, struct mc_entry *entry)
+void mc_table_insert(struct mc_tpart *part, uint32_t hash, struct mc_entry *entry, uint8_t state)
 	__attribute__((nonnull(1)));
-
-static inline void
-mc_table_touch(struct mc_tpart *part, struct mc_entry *entry)
-{
-	// Maintain the LRU order.
-	mm_list_delete(&entry->evict_list);
-	mm_list_append(&part->evict_list, &entry->evict_list);
-}
-
-bool mc_table_evict(struct mc_tpart *part, size_t nrequired);
 
 #endif /* MEMCACHE_TABLE_H */
