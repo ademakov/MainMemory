@@ -45,16 +45,26 @@
 		void *name##_store[size - 1];	\
 	};
 
+#define MM_RING_SHARED_PUT	1
+#define MM_RING_GLOBAL_PUT	2
+#define MM_RING_SHARED_GET	4
+#define MM_RING_GLOBAL_GET	8
+
 struct mm_ring
 {
 	/* Consumer data. */
 	size_t head __align(MM_CACHELINE);
+	union
+	{
+		mm_task_lock_t shared;
+		mm_thread_lock_t global;
+	} head_lock;
 
 	/* Producer data. */
 	size_t tail __align(MM_CACHELINE);
 	union
 	{
-		mm_task_lock_t core;
+		mm_task_lock_t shared;
 		mm_thread_lock_t global;
 	} tail_lock;
 
@@ -66,7 +76,11 @@ struct mm_ring
 
 } __align(MM_CACHELINE);
 
-void mm_ring_prepare(struct mm_ring *ring, size_t size);
+void mm_ring_prepare(struct mm_ring *ring, size_t size)
+	__attribute__((nonnull(1)));
+
+void mm_ring_prepare_synch(struct mm_ring *ring, size_t size, uint8_t flags)
+	__attribute__((nonnull(1)));
 
 /* Single-consumer dequeue operation. */
 static inline void *
@@ -84,75 +98,124 @@ mm_ring_get(struct mm_ring *ring)
 
 /* Single-producer enqueue operation. */
 static inline bool
-mm_ring_put(struct mm_ring *ring, void *new_data)
+mm_ring_put(struct mm_ring *ring, void *data)
 {
 	size_t tail = ring->tail;
-	void *old_data = mm_memory_load(ring->ring[tail]);
-	if (old_data == NULL)
+	void *prev = mm_memory_load(ring->ring[tail]);
+	if (prev == NULL)
 	{
-		mm_memory_store(ring->ring[tail], new_data);
+		mm_memory_store(ring->ring[tail], data);
 		ring->tail = ((tail + 1) & ring->mask);
 		return true;
 	}
 	return false;
 }
 
+/* Multi-consumer task synchronization. */
 static inline bool
-mm_ring_shared_trylock(struct mm_ring *ring)
+mm_ring_shared_get_trylock(struct mm_ring *ring)
 {
-	return mm_task_trylock(&ring->tail_lock.core);
+	return mm_task_trylock(&ring->head_lock.shared);
 }
-
 static inline void
-mm_ring_shared_lock(struct mm_ring *ring)
+mm_ring_shared_get_lock(struct mm_ring *ring)
 {
-	mm_task_lock(&ring->tail_lock.core);
+	mm_task_lock(&ring->head_lock.shared);
 }
-
 static inline void
-mm_ring_shared_unlock(struct mm_ring *ring)
+mm_ring_shared_get_unlock(struct mm_ring *ring)
 {
-	mm_task_unlock(&ring->tail_lock.core);
+	mm_task_unlock(&ring->head_lock.shared);
 }
 
+/* Multi-producer task synchronization. */
 static inline bool
-mm_ring_global_trylock(struct mm_ring *ring)
+mm_ring_shared_put_trylock(struct mm_ring *ring)
+{
+	return mm_task_trylock(&ring->tail_lock.shared);
+}
+static inline void
+mm_ring_shared_put_lock(struct mm_ring *ring)
+{
+	mm_task_lock(&ring->tail_lock.shared);
+}
+static inline void
+mm_ring_shared_put_unlock(struct mm_ring *ring)
+{
+	mm_task_unlock(&ring->tail_lock.shared);
+}
+
+/* Multi-consumer thread synchronization. */
+static inline bool
+mm_ring_global_get_trylock(struct mm_ring *ring)
+{
+	return mm_thread_trylock(&ring->head_lock.global);
+}
+static inline void
+mm_ring_global_get_lock(struct mm_ring *ring)
+{
+	mm_thread_lock(&ring->head_lock.global);
+}
+static inline void
+mm_ring_global_get_unlock(struct mm_ring *ring)
+{
+	mm_thread_unlock(&ring->head_lock.global);
+}
+
+/* Multi-producer thread synchronization. */
+static inline bool
+mm_ring_global_put_trylock(struct mm_ring *ring)
 {
 	return mm_thread_trylock(&ring->tail_lock.global);
 }
-
 static inline void
-mm_ring_global_lock(struct mm_ring *ring)
+mm_ring_global_put_lock(struct mm_ring *ring)
 {
 	mm_thread_lock(&ring->tail_lock.global);
 }
-
 static inline void
-mm_ring_global_unlock(struct mm_ring *ring)
+mm_ring_global_put_unlock(struct mm_ring *ring)
 {
 	mm_thread_unlock(&ring->tail_lock.global);
 }
 
-/* Multi-producer enqueue operation with synchronization for core threads. */
-static inline bool
-mm_ring_shared_put(struct mm_ring *ring, void *new_data)
+/* Multi-producer dequeue operation with synchronization for tasks. */
+static inline void *
+mm_ring_shared_get(struct mm_ring *ring)
 {
-	bool rc;
-	mm_ring_shared_lock(ring);
-	rc = mm_ring_put(ring, new_data);
-	mm_ring_shared_unlock(ring);
+	mm_ring_shared_get_lock(ring);
+	void *data = mm_ring_get(ring);
+	mm_ring_shared_get_unlock(ring);
+	return data;
+}
+
+/* Multi-producer enqueue operation with synchronization for tasks. */
+static inline bool
+mm_ring_shared_put(struct mm_ring *ring, void *data)
+{
+	mm_ring_shared_put_lock(ring);
+	bool rc = mm_ring_put(ring, data);
+	mm_ring_shared_put_unlock(ring);
 	return rc;
 }
 
-/* Multi-producer enqueue operation with synchronization for core and auxiliary
-   threads. */
-static inline bool
-mm_ring_global_put(struct mm_ring *ring, void *new_data)
+/* Multi-producer dequeue operation with synchronization for threads. */
+static inline void *
+mm_ring_global_get(struct mm_ring *ring)
 {
-	bool rc;
-	mm_ring_global_lock(ring);
-	rc = mm_ring_put(ring, new_data);
-	mm_ring_global_unlock(ring);
+	mm_ring_global_get_lock(ring);
+	void *data = mm_ring_get(ring);
+	mm_ring_global_get_unlock(ring);
+	return data;
+}
+
+/* Multi-producer enqueue operation with synchronization for threads. */
+static inline bool
+mm_ring_global_put(struct mm_ring *ring, void *data)
+{
+	mm_ring_global_put_lock(ring);
+	bool rc = mm_ring_put(ring, data);
+	mm_ring_global_put_unlock(ring);
 	return rc;
 }
 
