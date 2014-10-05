@@ -24,7 +24,7 @@
 #include "thread.h"
 
 uint32_t
-mm_thread_backoff_slow(uint32_t count)
+mm_backoff_slow(uint32_t count)
 {
 	if (count > 0xffff) {
 		mm_thread_yield();

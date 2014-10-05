@@ -309,7 +309,7 @@ mm_pool_shared_alloc_low(mm_core_t core, struct mm_pool *pool)
 		// Get an item form the shared free list.
 		struct mm_link *head = mm_link_head(&pool->free_list);
 		if (head != NULL) {
-			for (uint32_t count = 0; ; count = mm_task_backoff(count)) {
+			for (uint32_t count = 0; ; count = mm_backoff(count)) {
 				// Prevent ABA-problem.
 				mm_memory_store(cdata->item_guard, head);
 
@@ -423,7 +423,7 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 			// wrt the CAS below.
 			mm_memory_fence();
 
-			for (uint32_t count = 0; ; count = mm_task_backoff(count)) {
+			for (uint32_t count = 0; ; count = mm_backoff(count)) {
 				struct mm_link *old_head = mm_link_shared_head(&pool->free_list);
 				tail->next = old_head;
 				if (mm_link_cas_head(&pool->free_list, old_head, head) == old_head)

@@ -23,36 +23,17 @@
 #include "common.h"
 #include "arch/spin.h"
 
-uint32_t mm_thread_backoff_slow(uint32_t count);
+uint32_t mm_backoff_slow(uint32_t count);
 
 static inline uint32_t
-mm_task_backoff(uint32_t count)
-{
-#if ENABLE_SMP
-	void mm_task_yield(void);
-
-	if (count < 0xff) {
-		for (uint32_t n = count; n; n--)
-			mm_spin_pause();
-		return count * 2 + 1;
-	} else {
-		mm_task_yield();
-		return 0;
-	}
-#else
-	return count;
-#endif
-}
-
-static inline uint32_t
-mm_thread_backoff(uint32_t count)
+mm_backoff(uint32_t count)
 {
 	if (count < 0xff) {
 		for (uint32_t n = count; n; n--)
 			mm_spin_pause();
 		return count * 2 + 1;
 	} else {
-		return mm_thread_backoff_slow(count);
+		return mm_backoff_slow(count);
 	}
 }
 

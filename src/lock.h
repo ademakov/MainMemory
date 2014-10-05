@@ -107,7 +107,7 @@ mm_task_lock(mm_task_lock_t *lock)
 # if ENABLE_LOCK_STATS
 			++fail;
 # endif
-			backoff = mm_task_backoff(backoff);
+			backoff = mm_backoff(backoff);
 		} while (mm_memory_load(lock->lock.locked));
 	}
 
@@ -151,7 +151,7 @@ mm_thread_lock(mm_thread_lock_t *lock)
 	uint32_t backoff = 0;
 	while (mm_lock_acquire(&lock->lock)) {
 		do
-			backoff = mm_thread_backoff(backoff);
+			backoff = mm_backoff(backoff);
 		while (mm_memory_load(lock->lock.locked));
 	}
 }
