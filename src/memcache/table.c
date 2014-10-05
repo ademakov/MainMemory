@@ -548,8 +548,6 @@ mc_table_term(void)
 struct mc_entry *
 mc_table_create_entry(struct mc_tpart *part)
 {
-	DEBUG("key_len = %d, value_len = %ld", key_len, (long) value_len);
-
 	struct mc_entry *entry = NULL;
 
 again:
