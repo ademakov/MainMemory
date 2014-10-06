@@ -142,13 +142,13 @@ mm_ring_globalget_unlock(struct mm_ring_base *ring)
  * consumers with spinlock protection.
  */
 
-#define MM_RING_SPSC(name, size)					\
-	union {								\
-		struct mm_ring_spsc name;					\
-		struct {						\
-			struct mm_ring_base base;			\
-			void *ring[size];				\
-		} name##_store;						\
+#define MM_RING_SPSC(name, size)				\
+	union {							\
+		struct mm_ring_spsc name;			\
+		struct {					\
+			struct mm_ring_base base;		\
+			void *ring[size];			\
+		} name##_store;					\
 	}
 
 struct mm_ring_spsc
@@ -257,13 +257,13 @@ mm_ring_global_get(struct mm_ring_spsc *ring, void **data_ptr)
  * Architectures.
  */
 
-#define MM_RING_MPMC(name, size)					\
-	union {								\
-		struct mm_ring_mpmc name;				\
-		struct {						\
-			struct mm_ring_base base;			\
-			struct mm_ring_node name##_store[size - 1];	\
-		} name##_store;						\
+#define MM_RING_MPMC(name, size)				\
+	union {							\
+		struct mm_ring_mpmc name;			\
+		struct {					\
+			struct mm_ring_base base;		\
+			struct mm_ring_node name##_store[size];	\
+		} name##_store;					\
 	}
 
 struct mm_ring_node
