@@ -101,13 +101,13 @@ struct mm_core
 	struct mm_synch *synch;
 
 	/* Tasks to be scheduled. */
-	MM_RING(sched, MM_CORE_SCHED_RING_SIZE);
+	MM_RING_SPSC(sched, MM_CORE_SCHED_RING_SIZE);
 
 	/* Submitted work items. */
-	MM_RING(inbox, MM_CORE_INBOX_RING_SIZE);
+	MM_RING_SPSC(inbox, MM_CORE_INBOX_RING_SIZE);
 
 	/* The memory chunks freed by other threads. */
-	MM_RING(chunks, MM_CORE_CHUNK_RING_SIZE);
+	MM_RING_SPSC(chunks, MM_CORE_CHUNK_RING_SIZE);
 
 } __align(MM_CACHELINE);
 

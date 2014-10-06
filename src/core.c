@@ -215,11 +215,9 @@ mm_core_receive_work(struct mm_core *core)
 {
 	ENTER();
 
-	struct mm_work *work = mm_ring_get(&core->inbox);
-	while (work != NULL) {
+	struct mm_work *work;
+	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
 		mm_core_add_work(core, work);
-		work = mm_ring_get(&core->inbox);
-	} 
 
 	LEAVE();
 }
@@ -265,11 +263,9 @@ mm_core_receive_tasks(struct mm_core *core)
 {
 	ENTER();
 
-	struct mm_task *task = mm_ring_get(&core->sched);
-	while (task != NULL) {
+	struct mm_task *task;
+	while (mm_ring_spsc_get(&core->sched, (void **) &task))
 		mm_task_run(task);
-		task = mm_ring_get(&core->sched);
-	}
 
 	LEAVE();
 }
@@ -336,11 +332,9 @@ mm_core_destroy_chunks(struct mm_core *core)
 {
 	ENTER();
 
-	struct mm_chunk *chunk = mm_ring_get(&core->chunks);
-	while (chunk != NULL) {
+	struct mm_chunk *chunk;
+	while (mm_ring_spsc_get(&core->chunks, (void **) &chunk))
 		mm_chunk_destroy(chunk);
-		chunk = mm_ring_get(&core->chunks);
-	}
 
 	LEAVE();
 }
@@ -817,9 +811,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->stop = false;
 	core->synch = NULL;
 
-	mm_ring_prepare_synch(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_SHARED_PUT);
-	mm_ring_prepare_synch(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_SHARED_PUT);
-	mm_ring_prepare_synch(&core->chunks, MM_CORE_CHUNK_RING_SIZE, MM_RING_SHARED_PUT);
+	mm_ring_prepare_locked(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_SHARED_PUT);
+	mm_ring_prepare_locked(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_SHARED_PUT);
+	mm_ring_prepare_locked(&core->chunks, MM_CORE_CHUNK_RING_SIZE, MM_RING_SHARED_PUT);
 
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
@@ -847,11 +841,10 @@ static void
 mm_core_term_inbox(struct mm_core *core)
 {
 	mm_core_t core_id = mm_core_getid(core);
-	struct mm_work *work = mm_ring_get(&core->inbox);
-	while (work != NULL) {
+
+	struct mm_work *work;
+	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
 		mm_work_destroy_low(core_id, work);
-		work = mm_ring_get(&core->inbox);
-	}
 }
 
 static void
