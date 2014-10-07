@@ -55,6 +55,9 @@ struct mm_ring_base
 	uintptr_t mask __align(MM_CACHELINE);
 };
 
+void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t flags)
+	__attribute__((nonnull(1)));
+
 /* Multi-producer task synchronization. */
 static inline bool
 mm_ring_sharedput_trylock(struct mm_ring_base *ring)
@@ -332,7 +335,7 @@ mm_ring_mpmc_get(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 }
 
 /* Multi-Producer enqueue operation with busy wait. */
-static inline bool
+static inline void
 mm_ring_mpmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
 {
 	uintptr_t tail = mm_atomic_uintptr_fetch_and_add(&ring->base.tail, 1);
@@ -343,12 +346,10 @@ mm_ring_mpmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
 	mm_memory_store(node->data, data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
-
-	return true;
 }
 
 /* Multi-Consumer dequeue operation with busy wait. */
-static inline bool
+static inline void
 mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 {
 	uintptr_t head = mm_atomic_uintptr_fetch_and_add(&ring->base.head, 1);
@@ -359,8 +360,6 @@ mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 	*data_ptr = mm_memory_load(node->data);
 	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
-
-	return true;
 }
 
 /**********************************************************************
@@ -411,7 +410,7 @@ mm_ring_relaxed_get(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 }
 
 /* Single-Producer enqueue operation for MPMC ring with busy wait. */
-static inline bool
+static inline void
 mm_ring_relaxed_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
 {
 	uintptr_t tail = ring->base.tail++;
@@ -422,12 +421,10 @@ mm_ring_relaxed_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
 	mm_memory_store(node->data, data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
-
-	return true;
 }
 
 /* Single-Consumer dequeue operation for MPMC ring with busy wait. */
-static inline bool
+static inline void
 mm_ring_relaxed_dequeue(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 {
 	uintptr_t head = ring->base.head++;
@@ -438,8 +435,6 @@ mm_ring_relaxed_dequeue(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 	*data_ptr = mm_memory_load(node->data);
 	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
-
-	return true;
 }
 
 #endif /* RING_H */

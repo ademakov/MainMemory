@@ -72,6 +72,7 @@ typedef enum {
 #define MM_TASK_READING			0x10
 #define MM_TASK_WRITING			0x20
 #define MM_TASK_WAITING			0x40
+#define MM_TASK_COMBINING		0x80
 
 /* Task flags type. */
 typedef uint8_t			mm_task_flags_t;

@@ -36,7 +36,7 @@ mm_ring_base_prepare(struct mm_ring_base *ring, size_t size)
 	ring->mask = mask;
 }
 
-static void
+void
 mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t flags)
 {
 	if ((flags & MM_RING_SHARED_GET) != 0)
