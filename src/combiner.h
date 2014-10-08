@@ -30,6 +30,7 @@ typedef void (*mm_combiner_routine_t)(uintptr_t data);
 struct mm_combiner
 {
 	mm_combiner_routine_t routine __align(MM_CACHELINE);
+
 	size_t handoff;
 
 	/* Per-core wait list of pending requests. */
@@ -57,6 +58,9 @@ bool mm_combiner_combine(struct mm_combiner *combiner)
 void mm_combiner_enqueue(struct mm_combiner *combiner, uintptr_t data, bool wait)
 	__attribute__((nonnull(1)));
 
+void mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data, bool wait)
+	__attribute__((nonnull(1)));
+
 static inline bool
 mm_combiner_trylock(struct mm_combiner *combiner)
 {
@@ -73,18 +77,6 @@ static inline void
 mm_combiner_unlock(struct mm_combiner *combiner)
 {
 	mm_ring_sharedget_unlock(&combiner->ring.base);
-}
-
-static inline void
-mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data, bool wait)
-{
-	if (mm_combiner_trylock(combiner)) {
-		combiner->routine(data);
-		mm_combiner_combine(combiner);
-		mm_combiner_unlock(combiner);
-	} else {
-		mm_combiner_enqueue(combiner, data, wait);
-	}
 }
 
 #endif /* COMBINER_H */
