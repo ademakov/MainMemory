@@ -6,6 +6,12 @@
 
 __thread struct mm_core *mm_core = NULL;
 
+void *
+mm_global_alloc(size_t size)
+{
+	return malloc(size);
+}
+
 void
 mm_task_yield(void)
 {

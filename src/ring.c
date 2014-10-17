@@ -18,6 +18,8 @@
  */
 
 #include "ring.h"
+
+#include "alloc.h"
 #include "trace.h"
 
 /**********************************************************************
@@ -27,26 +29,25 @@
 static void
 mm_ring_base_prepare(struct mm_ring_base *ring, size_t size)
 {
-	size_t mask = size - 1;
 	// The size must be a power of 2.
-	ASSERT(size && (size & mask) == 0);
+	ASSERT(mm_is_pow2(size));
 
 	ring->head = 0;
 	ring->tail = 0;
-	ring->mask = mask;
+	ring->mask = size - 1;
 }
 
 void
-mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t flags)
+mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 {
-	if ((flags & MM_RING_SHARED_GET) != 0)
+	if ((locks & MM_RING_SHARED_GET) != 0)
 		ring->head_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	else if ((flags & MM_RING_GLOBAL_GET) != 0)
+	else if ((locks & MM_RING_GLOBAL_GET) != 0)
 		ring->head_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
-	if ((flags & MM_RING_SHARED_PUT) != 0)
+	if ((locks & MM_RING_SHARED_PUT) != 0)
 		ring->tail_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	else if ((flags & MM_RING_GLOBAL_PUT) != 0)
+	else if ((locks & MM_RING_GLOBAL_PUT) != 0)
 		ring->tail_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 }
 
@@ -54,10 +55,25 @@ mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t flags)
  * Single-Producer Single-Consumer Ring Buffer.
  **********************************************************************/
 
+struct mm_ring_spsc *
+mm_ring_spsc_create(size_t size, uint8_t locks)
+{
+	// Find the required ring size in bytes.
+	size_t nbytes = sizeof(struct mm_ring_spsc);
+	nbytes += size * sizeof(void *);
+
+	// Create the ring.
+	struct mm_ring_spsc *ring = mm_global_alloc(size);
+	mm_ring_spsc_prepare(ring, size, locks);
+
+	return ring;
+}
+
 void
-mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size)
+mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks)
 {
 	mm_ring_base_prepare(&ring->base, size);
+	mm_ring_base_prepare_locks(&ring->base, locks);
 
 	for (size_t i = 0; i < size; i++) {
 		ring->ring[i] = NULL;
@@ -65,19 +81,22 @@ mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size)
 }
 
 /**********************************************************************
- * Spinlock-Protected Multi-Producer Multi-Consumer Ring Buffer.
- **********************************************************************/
-
-void
-mm_ring_prepare_locked(struct mm_ring_spsc *ring, size_t size, uint8_t flags)
-{
-	mm_ring_spsc_prepare(ring, size);
-	mm_ring_base_prepare_locks(&ring->base, flags);
-}
-
-/**********************************************************************
  * Non-Blocking Multiple Producer Multiple Consumer Ring Buffer.
  **********************************************************************/
+
+struct mm_ring_mpmc *
+mm_ring_mpmc_create(size_t size)
+{
+	// Find the required ring size in bytes.
+	size_t nbytes = sizeof(struct mm_ring_mpmc);
+	nbytes += size * sizeof(struct mm_ring_node);
+
+	// Create the ring.
+	struct mm_ring_mpmc *ring = mm_global_alloc(size);
+	mm_ring_mpmc_prepare(ring, size);
+
+	return ring;
+}
 
 void
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)

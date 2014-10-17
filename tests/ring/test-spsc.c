@@ -8,8 +8,8 @@ MM_RING_SPSC(ring, RING_SIZE) g_ring;
 void
 init(void)
 {
-	mm_ring_prepare_locked(&g_ring.ring, RING_SIZE,
-			       MM_RING_GLOBAL_PUT | MM_RING_GLOBAL_GET);
+	mm_ring_spsc_prepare(&g_ring.ring, RING_SIZE,
+			     MM_RING_GLOBAL_PUT | MM_RING_GLOBAL_GET);
 }
 
 void

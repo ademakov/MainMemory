@@ -55,10 +55,15 @@ struct mm_ring_base
 	uintptr_t mask __align(MM_CACHELINE);
 };
 
-void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t flags)
+void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 	__attribute__((nonnull(1)));
 
 /* Multi-producer task synchronization. */
+static inline bool
+mm_ring_sharedput_locked(struct mm_ring_base *ring)
+{
+	return mm_task_is_locked(&ring->tail_lock.shared);
+}
 static inline bool
 mm_ring_sharedput_trylock(struct mm_ring_base *ring)
 {
@@ -77,6 +82,11 @@ mm_ring_sharedput_unlock(struct mm_ring_base *ring)
 
 /* Multi-consumer task synchronization. */
 static inline bool
+mm_ring_sharedget_locked(struct mm_ring_base *ring)
+{
+	return mm_task_is_locked(&ring->head_lock.shared);
+}
+static inline bool
 mm_ring_sharedget_trylock(struct mm_ring_base *ring)
 {
 	return mm_task_trylock(&ring->head_lock.shared);
@@ -94,6 +104,11 @@ mm_ring_sharedget_unlock(struct mm_ring_base *ring)
 
 /* Multi-producer thread synchronization. */
 static inline bool
+mm_ring_globalput_locked(struct mm_ring_base *ring)
+{
+	return mm_thread_is_locked(&ring->tail_lock.global);
+}
+static inline bool
 mm_ring_globalput_trylock(struct mm_ring_base *ring)
 {
 	return mm_thread_trylock(&ring->tail_lock.global);
@@ -110,6 +125,11 @@ mm_ring_globalput_unlock(struct mm_ring_base *ring)
 }
 
 /* Multi-consumer thread synchronization. */
+static inline bool
+mm_ring_globalget_locked(struct mm_ring_base *ring)
+{
+	return mm_thread_is_locked(&ring->head_lock.global);
+}
 static inline bool
 mm_ring_globalget_trylock(struct mm_ring_base *ring)
 {
@@ -162,7 +182,9 @@ struct mm_ring_spsc
 	void *ring[0];
 };
 
-void mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size)
+struct mm_ring_spsc * mm_ring_spsc_create(size_t size, uint8_t locks);
+
+void mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks)
 	__attribute__((nonnull(1)));
 
 /* Single-producer enqueue operation. */
@@ -199,9 +221,6 @@ mm_ring_spsc_get(struct mm_ring_spsc *ring, void **data_ptr)
 /**********************************************************************
  * Spinlock-Protected Multi-Producer Multi-Consumer Ring Buffer.
  **********************************************************************/
-
-void mm_ring_prepare_locked(struct mm_ring_spsc *ring, size_t size, uint8_t flags)
-	__attribute__((nonnull(1)));
 
 /* Multi-producer enqueue operation with synchronization for tasks. */
 static inline bool
@@ -282,6 +301,8 @@ struct mm_ring_mpmc
 	/* Ring buffer. */
 	struct mm_ring_node ring[0];
 };
+
+struct mm_ring_mpmc * mm_ring_mpmc_create(size_t size);
 
 void mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 	__attribute__((nonnull(1)));
