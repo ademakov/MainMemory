@@ -22,12 +22,12 @@
 
 #define MM_LOCK_INIT	{0}
 
-typedef struct { char locked; } mm_lock_t;
+typedef struct { uint8_t locked; } mm_lock_t;
 
-static inline int
+static inline uint8_t
 mm_lock_acquire(mm_lock_t *lock)
 {
-	char locked;
+	uint8_t locked;
 	asm volatile("xchgb %0,%1"
 		     : "=q"(locked), "+m"(lock->locked)
 		     : "0"(1)
@@ -40,6 +40,12 @@ mm_lock_release(mm_lock_t *lock)
 {
 	mm_memory_store_fence();
 	mm_memory_store(lock->locked, 0);
+}
+
+static inline bool
+mm_lock_is_acquired(mm_lock_t *lock)
+{
+	return mm_memory_load(lock->locked) != 0;
 }
 
 #endif /* ARCH_X86_LOCK_H */

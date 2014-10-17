@@ -22,9 +22,9 @@
 
 #define MM_LOCK_INIT	{0}
 
-typedef struct { char locked; } mm_lock_t;
+typedef struct { uint8_t locked; } mm_lock_t;
 
-static inline int
+static inline uint8_t
 mm_lock_acquire(mm_lock_t *lock)
 {
 	return __sync_lock_test_and_set(&lock->locked, 1);
@@ -34,6 +34,12 @@ static inline void
 mm_lock_release(mm_lock_t *lock)
 {
 	__sync_lock_release(&lock->locked);
+}
+
+static inline bool
+mm_lock_is_acquired(mm_lock_t *lock)
+{
+	return mm_memory_load(lock->locked) != 0;
 }
 
 #endif /* ARCH_GENERIC_LOCK_H */

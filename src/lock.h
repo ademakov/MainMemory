@@ -131,6 +131,12 @@ mm_task_unlock(mm_task_lock_t *lock)
 #endif
 }
 
+static inline bool
+mm_task_is_locked(mm_task_lock_t *lock)
+{
+	return mm_lock_is_acquired(&lock->lock);
+}
+
 /**********************************************************************
  * Synchronization between different threads.
  **********************************************************************/
@@ -160,6 +166,12 @@ static inline void
 mm_thread_unlock(mm_thread_lock_t *lock)
 {
 	mm_lock_release(&lock->lock);
+}
+
+static inline bool
+mm_thread_is_locked(mm_thread_lock_t *lock)
+{
+	return mm_lock_is_acquired(&lock->lock);
 }
 
 /**********************************************************************
