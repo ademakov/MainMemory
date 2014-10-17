@@ -1,2 +1,2 @@
 
-SUBDIRS = combiner
+SUBDIRS = combiner ring
