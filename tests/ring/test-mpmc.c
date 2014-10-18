@@ -1,6 +1,7 @@
 #include "ring.h"
 #include "params.h"
 #include "runner.h"
+
 #include <stdlib.h>
 
 #if TEST_STATIC_RING

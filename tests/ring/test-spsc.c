@@ -1,6 +1,7 @@
 #include "ring.h"
 #include "params.h"
 #include "runner.h"
+
 #include <stdlib.h>
 
 #define LOCKS (MM_RING_GLOBAL_PUT | MM_RING_GLOBAL_GET)
