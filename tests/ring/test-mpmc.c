@@ -40,6 +40,18 @@ producer(void *arg)
 }
 
 void
+single_producer(void *arg)
+{
+	struct mm_ring_mpmc *ring = arg;
+	size_t i;
+
+	for (i = 0; i < g_producer_data_size; i++) {
+		delay_producer();
+		mm_ring_relaxed_enqueue(ring, 1);
+	}
+}
+
+void
 consumer(void *arg)
 {
 	struct mm_ring_mpmc *ring = arg;
@@ -54,11 +66,28 @@ consumer(void *arg)
 	}
 }
 
+void
+single_consumer(void *arg)
+{
+	struct mm_ring_mpmc *ring = arg;
+	volatile uintptr_t result = 0;
+	size_t i;
+
+	for (i = 0; i < g_consumer_data_size; i++) {
+		uintptr_t data;
+		mm_ring_relaxed_dequeue(ring, &data);
+		result += data;
+		delay_consumer();
+	}
+}
+
 int
 main(int ac, char **av)
 {
 	set_params(ac, av);
 	init();
-	test(g_ring, producer, consumer);
+	test(g_ring,
+	     g_producers == 1 && g_optimize ? single_producer : producer,
+	     g_consumers == 1 && g_optimize ? single_consumer : consumer);
 	return EXIT_SUCCESS;
 }

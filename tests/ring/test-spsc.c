@@ -43,6 +43,19 @@ producer(void *arg)
 }
 
 void
+single_producer(void *arg)
+{
+	struct mm_ring_spsc *ring = arg;
+	size_t i;
+
+	for (i = 0; i < g_producer_data_size; i++) {
+		delay_producer();
+		while (!mm_ring_spsc_put(ring, (void *) 1))
+			;
+	}
+}
+
+void
 consumer(void *arg)
 {
 	struct mm_ring_spsc *ring = arg;
@@ -58,11 +71,29 @@ consumer(void *arg)
 	}
 }
 
+void
+single_consumer(void *arg)
+{
+	struct mm_ring_spsc *ring = arg;
+	volatile uintptr_t result = 0;
+	size_t i;
+
+	for (i = 0; i < g_consumer_data_size; i++) {
+		void *data;
+		while (!mm_ring_spsc_get(ring, &data))
+			;
+		result += (uintptr_t) data;
+		delay_consumer();
+	}
+}
+
 int
 main(int ac, char **av)
 {
 	set_params(ac, av);
 	init();
-	test(g_ring, producer, consumer);
+	test(g_ring,
+	     g_producers == 1 && g_optimize ? single_producer : producer,
+	     g_consumers == 1 && g_optimize ? single_consumer : consumer);
 	return EXIT_SUCCESS;
 }

@@ -20,6 +20,8 @@ unsigned long g_consumer_data_size = DEFAULT_DATA_SIZE / DEFAULT_CONSUMERS;
 unsigned long g_producer_delay = DEFAULT_PRODUCER_DELAY;
 unsigned long g_consumer_delay = DEFAULT_CONSUMER_DELAY;
 
+int g_optimize = 0;
+
 static void
 usage(char *prog_name, char *message)
 {
@@ -60,9 +62,9 @@ void
 set_params(int ac, char **av)
 {
 #if TEST_STATIC_RING
-	static const char *options = ":p:c:n:e:d:";
+	static const char *options = ":p:c:n:e:d:o";
 #else
-	static const char *options = ":p:c:r:n:e:d:";
+	static const char *options = ":p:c:r:n:e:d:o";
 #endif
 	int c;
 
@@ -88,6 +90,9 @@ set_params(int ac, char **av)
 		case 'd':
 			g_consumer_delay = getnum(av[0], optarg, 0, 1);
 			break;
+		case 'o':
+			g_optimize = 1;
+			break;
 		case ':':
 			usage(av[0], "missing option value");
 		default:
@@ -109,7 +114,9 @@ set_params(int ac, char **av)
 		"ring size: %d\n"
 		"repeat count: %lu\n"
 		"producer delay: %lu\n"
-		"consumer delay: %lu\n",
+		"consumer delay: %lu\n"
+		"optimize for single thread: %s\n",
 		g_producers, g_consumers, RING_SIZE, g_data_size,
-		g_producer_delay, g_consumer_delay);
+		g_producer_delay, g_consumer_delay,
+		g_optimize ? "yes" : "no");
 }
