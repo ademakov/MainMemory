@@ -1,4 +1,8 @@
 
+/* If this macro is set to 0 then hard-coded values are used
+   otherwise command line arguments let override them. Also
+   in the first case the rings reside in the data segment while
+   in the second case allocated on the heap. */
 #define SET_PARAMS		1
 
 #define DEFAULT_PRODUCERS	4
@@ -22,6 +26,7 @@ extern int g_ring_size;
 extern unsigned long g_data_size;
 extern unsigned long g_producer_data_size;
 extern unsigned long g_consumer_data_size;
+
 #else
 
 #define PRODUCERS		DEFAULT_PRODUCERS
