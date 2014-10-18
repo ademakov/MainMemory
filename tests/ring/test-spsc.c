@@ -5,17 +5,7 @@
 
 #define LOCKS (MM_RING_GLOBAL_PUT | MM_RING_GLOBAL_GET)
 
-#if SET_PARAMS
-
-struct mm_ring_spsc *g_ring;
-
-void
-init(void)
-{
-	g_ring = mm_ring_spsc_create(RING_SIZE, LOCKS);
-}
-
-#else
+#if TEST_STATIC_RING
 
 MM_RING_SPSC(ring, RING_SIZE) _g_ring;
 struct mm_ring_spsc *g_ring = &_g_ring.ring;
@@ -26,6 +16,16 @@ init(void)
 	mm_ring_spsc_prepare(g_ring, RING_SIZE, LOCKS);
 }
 
+#else
+
+struct mm_ring_spsc *g_ring;
+
+void
+init(void)
+{
+	g_ring = mm_ring_spsc_create(RING_SIZE, LOCKS);
+}
+
 #endif
 
 void
@@ -34,7 +34,8 @@ producer(void *arg)
 	struct mm_ring_spsc *ring = arg;
 	size_t i;
 
-	for (i = 0; i < PRODUCER_DATA_SIZE; i++) {
+	for (i = 0; i < g_producer_data_size; i++) {
+		delay_producer();
 		while (!mm_ring_global_put(ring, (void *) 1))
 			;
 	}
@@ -47,11 +48,12 @@ consumer(void *arg)
 	volatile uintptr_t result = 0;
 	size_t i;
 
-	for (i = 0; i < CONSUMER_DATA_SIZE; i++) {
+	for (i = 0; i < g_consumer_data_size; i++) {
 		void *data;
 		while (!mm_ring_global_get(ring, &data))
 			;
 		result += (uintptr_t) data;
+		delay_consumer();
 	}
 }
 

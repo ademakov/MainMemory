@@ -1,42 +1,30 @@
 
-/* If this macro is set to 0 then hard-coded values are used
-   otherwise command line arguments let override them. Also
-   in the first case the rings reside in the data segment while
-   in the second case allocated on the heap. */
-#define SET_PARAMS		1
-
 #define DEFAULT_PRODUCERS	4
 #define DEFAULT_CONSUMERS	4
 #define DEFAULT_RING_SIZE	128
 #define DEFAULT_DATA_SIZE	((unsigned long) 100 * 1000 * 1000)
 
-#if SET_PARAMS
+#define DEFAILT_PRODUCER_DELAY	0
+#define DEFAULT_CONSUMER_DELAY  0
 
-#define PRODUCERS		g_producers
-#define CONSUMERS		g_consumers
+#ifndef TEST_STATIC_RING
+# define TEST_STATIC_RING	0
+#endif
+#if TEST_STATIC_RING
+#define RING_SIZE		DEFAULT_RING_SIZE
+#else
 #define RING_SIZE		g_ring_size
-#define DATA_SIZE		g_data_size
-
-#define PRODUCER_DATA_SIZE	g_producer_data_size
-#define CONSUMER_DATA_SIZE	g_consumer_data_size
+extern int g_ring_size;
+#endif
 
 extern int g_producers;
 extern int g_consumers;
-extern int g_ring_size;
+
 extern unsigned long g_data_size;
 extern unsigned long g_producer_data_size;
 extern unsigned long g_consumer_data_size;
 
-#else
-
-#define PRODUCERS		DEFAULT_PRODUCERS
-#define CONSUMERS		DEFAULT_CONSUMERS
-#define RING_SIZE		DEFAULT_RING_SIZE
-#define DATA_SIZE		DEFAULT_DATA_SIZE
-
-#define PRODUCER_DATA_SIZE	(DATA_SIZE / PRODUCERS)
-#define CONSUMER_DATA_SIZE	(DATA_SIZE / CONSUMERS)
-
-#endif
+extern unsigned long g_producer_delay;
+extern unsigned long g_consumer_delay;
 
 void set_params(int ac, char **av);

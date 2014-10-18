@@ -3,17 +3,7 @@
 #include "runner.h"
 #include <stdlib.h>
 
-#if SET_PARAMS
-
-struct mm_ring_mpmc *g_ring;
-
-void
-init(void)
-{
-	g_ring = mm_ring_mpmc_create(RING_SIZE);
-}
-
-#else
+#if TEST_STATIC_RING
 
 MM_RING_MPMC(ring, RING_SIZE) _g_ring;
 struct mm_ring_mpmc *g_ring = &_g_ring.ring;
@@ -24,6 +14,16 @@ init(void)
 	mm_ring_mpmc_prepare(g_ring, RING_SIZE);
 }
 
+#else
+
+struct mm_ring_mpmc *g_ring;
+
+void
+init(void)
+{
+	g_ring = mm_ring_mpmc_create(RING_SIZE);
+}
+
 #endif
 
 void
@@ -32,7 +32,8 @@ producer(void *arg)
 	struct mm_ring_mpmc *ring = arg;
 	size_t i;
 
-	for (i = 0; i < PRODUCER_DATA_SIZE; i++) {
+	for (i = 0; i < g_producer_data_size; i++) {
+		delay_producer();
 		mm_ring_mpmc_enqueue(ring, 1);
 	}
 }
@@ -44,10 +45,11 @@ consumer(void *arg)
 	volatile uintptr_t result = 0;
 	size_t i;
 
-	for (i = 0; i < CONSUMER_DATA_SIZE; i++) {
+	for (i = 0; i < g_consumer_data_size; i++) {
 		uintptr_t data;
 		mm_ring_mpmc_dequeue(ring, &data);
 		result += data;
+		delay_consumer();
 	}
 }
 

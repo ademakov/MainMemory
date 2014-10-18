@@ -5,25 +5,19 @@
 #include <string.h>
 #include <unistd.h>
 
-static void
-info(void)
-{
-	fprintf(stderr,
-		"producers: %d\n"
-		"consumers: %d\n"
-		"ring size: %d\n"
-		"repeat count: %lu\n",
-		PRODUCERS, CONSUMERS, RING_SIZE, DATA_SIZE);
-}
-
-#if SET_PARAMS
-
 int g_producers = DEFAULT_PRODUCERS;
 int g_consumers = DEFAULT_CONSUMERS;
+
+#if !TEST_STATIC_RING
 int g_ring_size = DEFAULT_RING_SIZE;
+#endif
+
 unsigned long g_data_size = DEFAULT_DATA_SIZE;
 unsigned long g_producer_data_size = DEFAULT_DATA_SIZE / DEFAULT_PRODUCERS;
 unsigned long g_consumer_data_size = DEFAULT_DATA_SIZE / DEFAULT_CONSUMERS;
+
+unsigned long g_producer_delay;
+unsigned long g_consumer_delay;
 
 static void
 usage(char *prog_name, char *message)
@@ -37,7 +31,11 @@ usage(char *prog_name, char *message)
 
 	fprintf(stderr,
 		"Usage:\n\t"
-		"%s [-p <producers>] [-c <consumers>] [-r <ring-size>] [-n <repeat-count>]\n",
+		"%s [-p <producers>] [-c <consumers>] [-n <repeat-count>]"
+#if !TEST_STATIC_RING
+		" [-r <ring-size>]"
+#endif
+		" [-e <producer-delay>] [-d <consumer-delay>]\n",
 		prog_name);
 
 	exit(EXIT_FAILURE);
@@ -58,8 +56,14 @@ getnum(char *prog_name, const char *s, int is_int)
 void
 set_params(int ac, char **av)
 {
+#if TEST_STATIC_RING
+	static const char *options = ":p:c:n:e:d:";
+#else
+	static const char *options = ":p:c:r:n:e:d:";
+#endif
 	int c;
-	while ((c = getopt (ac, av, ":p:c:r:n:")) != -1) {
+
+	while ((c = getopt (ac, av, options)) != -1) {
 		switch (c) {
 		case 'p':
 			g_producers = getnum(av[0], optarg, 1);
@@ -67,34 +71,42 @@ set_params(int ac, char **av)
 		case 'c':
 			g_consumers = getnum(av[0], optarg, 1);
 			break;
+#if !TEST_STATIC_RING
 		case 'r':
 			g_ring_size = getnum(av[0], optarg, 1);
 			break;
+#endif
 		case 'n':
 			g_data_size = getnum(av[0], optarg, 0);
 			break;
+		case 'e':
+			g_producer_delay = getnum(av[0], optarg, 0);
+			break;
+		case 'd':
+			g_consumer_delay = getnum(av[0], optarg, 0);
+			break;
+		case ':':
+			usage(av[0], "missing option value");
 		default:
 			usage(av[0], "invalid option");
 		}
 	}
 
-	info();
-
-	if (!mm_is_pow2(g_ring_size))
+	if (!mm_is_pow2(RING_SIZE))
 		usage(av[0], "ring size must be a power of two");
 
 	g_producer_data_size = g_data_size / g_producers;
 	g_consumer_data_size = g_data_size / g_consumers;
 	if (g_producer_data_size * g_producers != g_consumer_data_size * g_consumers)
 		usage(av[0], "odd distribution between consumers and producers");
+
+	fprintf(stderr,
+		"producers: %d\n"
+		"consumers: %d\n"
+		"ring size: %d\n"
+		"repeat count: %lu\n"
+		"producer delay: %lu\n"
+		"consumer delay: %lu\n",
+		g_producers, g_consumers, RING_SIZE, g_data_size,
+		g_producer_delay, g_consumer_delay);
 }
-
-#else
-
-void
-set_params(int ac __attribute__((unused)), char **av __attribute__((unused)))
-{
-	info();
-}
-
-#endif
