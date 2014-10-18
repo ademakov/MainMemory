@@ -1,5 +1,6 @@
 #include "params.h"
 #include "bitops.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -16,8 +17,8 @@ unsigned long g_data_size = DEFAULT_DATA_SIZE;
 unsigned long g_producer_data_size = DEFAULT_DATA_SIZE / DEFAULT_PRODUCERS;
 unsigned long g_consumer_data_size = DEFAULT_DATA_SIZE / DEFAULT_CONSUMERS;
 
-unsigned long g_producer_delay;
-unsigned long g_consumer_delay;
+unsigned long g_producer_delay = DEFAULT_PRODUCER_DELAY;
+unsigned long g_consumer_delay = DEFAULT_CONSUMER_DELAY;
 
 static void
 usage(char *prog_name, char *message)
