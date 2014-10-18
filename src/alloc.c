@@ -95,7 +95,7 @@ mm_local_alloc(size_t size)
 }
 
 void *
-mm_local_alloc_aligned(size_t align, size_t size)
+mm_local_aligned_alloc(size_t align, size_t size)
 {
 	void *ptr = mspace_memalign(mm_core->arena, align, size);
 
@@ -189,7 +189,7 @@ mm_shared_alloc(size_t size)
 }
 
 void *
-mm_shared_alloc_aligned(size_t align, size_t size)
+mm_shared_aligned_alloc(size_t align, size_t size)
 {
 	mm_task_lock(&mm_shared_alloc_lock);
 	void *ptr = mspace_memalign(mm_shared_space, align, size);
@@ -269,7 +269,7 @@ mm_global_alloc(size_t size)
 }
 
 void *
-mm_global_alloc_aligned(size_t align, size_t size)
+mm_global_aligned_alloc(size_t align, size_t size)
 {
 	mm_thread_lock(&mm_global_alloc_lock);
 	void *ptr = dlmemalign(align, size);

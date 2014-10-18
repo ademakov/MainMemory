@@ -63,7 +63,7 @@ void mm_alloc_term(void);
 void * mm_local_alloc(size_t size)
 	__attribute__((malloc));
 
-void * mm_local_alloc_aligned(size_t align, size_t size)
+void * mm_local_aligned_alloc(size_t align, size_t size)
 	__attribute__((malloc));
 
 void * mm_local_calloc(size_t count, size_t size)
@@ -89,7 +89,7 @@ size_t mm_local_alloc_size(const void *ptr);
 void * mm_shared_alloc(size_t size)
 	__attribute__((malloc));
 
-void * mm_shared_alloc_aligned(size_t align, size_t size)
+void * mm_shared_aligned_alloc(size_t align, size_t size)
 	__attribute__((malloc));
 
 void * mm_shared_calloc(size_t count, size_t size)
@@ -115,7 +115,7 @@ size_t mm_shared_alloc_size(const void *ptr);
 void * mm_global_alloc(size_t size)
 	__attribute__((malloc));
 
-void * mm_global_alloc_aligned(size_t align, size_t size)
+void * mm_global_aligned_alloc(size_t align, size_t size)
 	__attribute__((malloc));
 
 void * mm_global_calloc(size_t count, size_t size)

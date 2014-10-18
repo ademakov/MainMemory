@@ -949,7 +949,7 @@ mm_core_init(void)
 	mm_future_init();
 	mm_work_init();
 
-	mm_core_set = mm_global_alloc_aligned(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
+	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
 
