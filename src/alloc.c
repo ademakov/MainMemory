@@ -124,6 +124,18 @@ mm_local_realloc(void *ptr, size_t size)
 	return ptr;
 }
 
+void *
+mm_local_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_local_alloc(size), ptr, size);
+}
+
+char *
+mm_local_strdup(const char *ptr)
+{
+	return mm_local_memdup(ptr, strlen(ptr) + 1);
+}
+
 void
 mm_local_free(void *ptr)
 {
@@ -212,6 +224,18 @@ mm_shared_realloc(void *ptr, size_t size)
 	return ptr;
 }
 
+void *
+mm_shared_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_shared_alloc(size), ptr, size);
+}
+
+char *
+mm_shared_strdup(const char *ptr)
+{
+	return mm_shared_memdup(ptr, strlen(ptr) + 1);
+}
+
 void
 mm_shared_free(void *ptr)
 {
@@ -278,6 +302,18 @@ mm_global_realloc(void *ptr, size_t size)
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
+}
+
+void *
+mm_global_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_global_alloc(size), ptr, size);
+}
+
+char *
+mm_global_strdup(const char *ptr)
+{
+	return mm_global_memdup(ptr, strlen(ptr) + 1);
 }
 
 void

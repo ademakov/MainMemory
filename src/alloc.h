@@ -69,6 +69,13 @@ void * mm_local_alloc_aligned(size_t align, size_t size)
 void * mm_local_calloc(size_t count, size_t size)
 	__attribute__((malloc));
 
+void * mm_local_memdup(const void *ptr, size_t size)
+	__attribute__((malloc));
+
+char * mm_local_strdup(const char *ptr)
+	__attribute__((nonnull(1)))
+	__attribute__((malloc));
+
 void * mm_local_realloc(void *ptr, size_t size);
 
 void mm_local_free(void *ptr);
@@ -90,6 +97,13 @@ void * mm_shared_calloc(size_t count, size_t size)
 
 void * mm_shared_realloc(void *ptr, size_t size);
 
+void * mm_shared_memdup(const void *ptr, size_t size)
+	__attribute__((malloc));
+
+char * mm_shared_strdup(const char *ptr)
+	__attribute__((nonnull(1)))
+	__attribute__((malloc));
+
 void mm_shared_free(void *ptr);
 
 size_t mm_shared_alloc_size(const void *ptr);
@@ -108,6 +122,13 @@ void * mm_global_calloc(size_t count, size_t size)
 	__attribute__((malloc));
 
 void * mm_global_realloc(void *ptr, size_t size);
+
+void * mm_global_memdup(const void *ptr, size_t size)
+	__attribute__((malloc));
+
+char * mm_global_strdup(const char *ptr)
+	__attribute__((nonnull(1)))
+	__attribute__((malloc));
 
 void mm_global_free(void *ptr);
 
