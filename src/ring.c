@@ -63,7 +63,7 @@ mm_ring_spsc_create(size_t size, uint8_t locks)
 	nbytes += size * sizeof(void *);
 
 	// Create the ring.
-	struct mm_ring_spsc *ring = mm_global_alloc(size);
+	struct mm_ring_spsc *ring = mm_global_alloc(nbytes);
 	mm_ring_spsc_prepare(ring, size, locks);
 
 	return ring;
@@ -92,7 +92,7 @@ mm_ring_mpmc_create(size_t size)
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the ring.
-	struct mm_ring_mpmc *ring = mm_global_alloc(size);
+	struct mm_ring_mpmc *ring = mm_global_alloc(nbytes);
 	mm_ring_mpmc_prepare(ring, size);
 
 	return ring;
