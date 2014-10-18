@@ -25,7 +25,7 @@ unsigned long g_data_size = DEFAULT_DATA_SIZE;
 unsigned long g_producer_data_size = DEFAULT_DATA_SIZE / DEFAULT_PRODUCERS;
 unsigned long g_consumer_data_size = DEFAULT_DATA_SIZE / DEFAULT_CONSUMERS;
 
-void
+static void
 usage(char *prog_name, char *message)
 {
 	char *slash = strrchr(prog_name, '/');
@@ -43,7 +43,7 @@ usage(char *prog_name, char *message)
 	exit(EXIT_FAILURE);
 }
 
-unsigned long
+static unsigned long
 getnum(char *prog_name, const char *s, int is_int)
 {
 	char *end;
