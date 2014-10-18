@@ -113,7 +113,7 @@ mm_cdata_alloc(const char *name, size_t size)
 
 	// Allocate the info entry.
 	struct mm_cdata_entry *entry = mm_global_alloc(sizeof(struct mm_cdata_entry));
-	entry->name = mm_strdup(&mm_alloc_global, name);
+	entry->name = mm_global_strdup(name);
 	entry->size = size;
 
 	// Round the size to maintain the required alignment.

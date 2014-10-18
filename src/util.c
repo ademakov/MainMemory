@@ -56,13 +56,6 @@ mm_libc_call(const char *name)
 #include "alloc.h"
 
 char *
-mm_strdup(const struct mm_allocator *alloc, const char *s)
-{
-	size_t len = strlen(s) + 1;
-	return memcpy(alloc->alloc(len), s, len);
-}
-
-char *
 mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
 {
 	int len;

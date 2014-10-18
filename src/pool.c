@@ -132,7 +132,7 @@ mm_pool_prepare_low(struct mm_pool *pool,
 
 	mm_link_init(&pool->free_list);
 
-	pool->pool_name = mm_strdup(&mm_alloc_global, pool_name);
+	pool->pool_name = mm_global_strdup(pool_name);
 }
 
 void

@@ -27,9 +27,6 @@ void mm_set_nonblocking(int fd);
 
 void mm_libc_call(const char *name);
 
-char * mm_strdup(const struct mm_allocator *alloc, const char *s)
-	__attribute__((nonnull(1)));
-
 char * mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
 	__attribute__((format(printf, 2, 3)))
 	__attribute__((nonnull(1, 2)));
