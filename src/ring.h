@@ -36,7 +36,7 @@
 struct mm_ring_base
 {
 	/* Consumer data. */
-	mm_atomic_uintptr_t head __align(MM_CACHELINE);
+	mm_atomic_uintptr_t head __align_cacheline;
 	union
 	{
 		mm_task_lock_t shared;
@@ -44,7 +44,7 @@ struct mm_ring_base
 	} head_lock;
 
 	/* Producer data. */
-	mm_atomic_uintptr_t tail __align(MM_CACHELINE);
+	mm_atomic_uintptr_t tail __align_cacheline;
 	union
 	{
 		mm_task_lock_t shared;
@@ -52,7 +52,7 @@ struct mm_ring_base
 	} tail_lock;
 
 	/* Shared data. */
-	uintptr_t mask __align(MM_CACHELINE);
+	uintptr_t mask __align_cacheline;
 };
 
 void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)

@@ -61,10 +61,11 @@
  * Compiler Shortcuts.
  **********************************************************************/
 
-#define likely(x)	__builtin_expect(!!(x), 1)
-#define unlikely(x)	__builtin_expect(!!(x), 0)
+#define likely(x)		__builtin_expect(!!(x), 1)
+#define unlikely(x)		__builtin_expect(!!(x), 0)
 
-#define __align(x)	__attribute__((aligned (x)))
+#define __align(x)		__attribute__((aligned(x)))
+#define __align_cacheline	__align(MM_CACHELINE)
 
 /**********************************************************************
  * Compiler Memory Ordering.
