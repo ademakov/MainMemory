@@ -43,11 +43,13 @@ usage(char *prog_name, char *message)
 }
 
 static unsigned long
-getnum(char *prog_name, const char *s, int is_int)
+getnum(char *prog_name, const char *s, int is_int, int allow_zero)
 {
 	char *end;
 	unsigned long value = strtoul(s, &end, 0);
-	if (value == 0 || *end != 0)
+	if (*end != 0)
+		usage(prog_name, "invalid value");
+	if (value == 0 && !allow_zero)
 		usage(prog_name, "invalid value");
 	if (is_int && value != ((long) ((int) value)))
 		usage(prog_name, "too large value ");
@@ -67,24 +69,24 @@ set_params(int ac, char **av)
 	while ((c = getopt (ac, av, options)) != -1) {
 		switch (c) {
 		case 'p':
-			g_producers = getnum(av[0], optarg, 1);
+			g_producers = getnum(av[0], optarg, 1, 0);
 			break;
 		case 'c':
-			g_consumers = getnum(av[0], optarg, 1);
+			g_consumers = getnum(av[0], optarg, 1, 0);
 			break;
 #if !TEST_STATIC_RING
 		case 'r':
-			g_ring_size = getnum(av[0], optarg, 1);
+			g_ring_size = getnum(av[0], optarg, 1, 0);
 			break;
 #endif
 		case 'n':
-			g_data_size = getnum(av[0], optarg, 0);
+			g_data_size = getnum(av[0], optarg, 0, 0);
 			break;
 		case 'e':
-			g_producer_delay = getnum(av[0], optarg, 0);
+			g_producer_delay = getnum(av[0], optarg, 0, 1);
 			break;
 		case 'd':
-			g_consumer_delay = getnum(av[0], optarg, 0);
+			g_consumer_delay = getnum(av[0], optarg, 0, 1);
 			break;
 		case ':':
 			usage(av[0], "missing option value");
