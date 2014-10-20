@@ -50,7 +50,7 @@ mm_combiner_create(const char *name,
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the combiner.
-	struct mm_combiner *combiner = mm_global_alloc_aligned(MM_CACHELINE, nbytes);
+	struct mm_combiner *combiner = mm_global_aligned_alloc(MM_CACHELINE, nbytes);
 	mm_combiner_prepare(combiner, name, routine, size, handoff);
 
 	LEAVE();

@@ -7,9 +7,11 @@
 __thread struct mm_core *mm_core = NULL;
 
 void *
-mm_global_alloc(size_t size)
+mm_global_aligned_alloc(size_t align, size_t size)
 {
-	return malloc(size);
+	void *ptr;
+	posix_memalign(&ptr, align, size);
+	return ptr;
 }
 
 void
