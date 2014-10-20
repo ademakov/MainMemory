@@ -28,17 +28,19 @@
  **********************************************************************/
 
 static inline uint32_t
-mm_hash_djb(const void *data, size_t size)
+mm_hash_djb_with_seed(const void *data, size_t size, uint32_t h)
 {
-	uint32_t h = 0;
-
 	const uint8_t *p = (uint8_t *) data;
 	const uint8_t *e = (uint8_t *) data + size;
-	while (p < e) {
+	while (p < e) 
 		h = 33 * h ^ *p++;
-	}
-
 	return h;
+}
+
+static inline uint32_t
+mm_hash_djb(const void *data, size_t size)
+{
+	return mm_hash_djb_with_seed(data, size, 5381);
 }
 
 /**********************************************************************
@@ -53,24 +55,33 @@ mm_hash_djb(const void *data, size_t size)
 #define MM_HASH_FNV_32_PRIME ((uint32_t) 0x01000193)
 
 static inline uint32_t
-mm_hash_fnv(const void *data, size_t size)
+mm_hash_fnv_with_seed(const void *data, size_t size, uint32_t h)
 {
-	uint32_t h = MM_HASH_FNV1_32_INIT;
-
 	const uint8_t *p = (uint8_t *) data;
 	const uint8_t *e = (uint8_t *) data + size;
 	while (p < e) {
 		h ^= (uint32_t) *p++;
 		h *= MM_HASH_FNV_32_PRIME;
 	}
-
 	return h;
+}
+
+static inline uint32_t
+mm_hash_fnv(const void *data, size_t size)
+{
+	return mm_hash_fnv_with_seed(data, size, MM_HASH_FNV1_32_INIT);
 }
 
 /**********************************************************************
  * MurmurHash3 32-bit function.
  **********************************************************************/
 
-uint32_t mm_hash_murmur3_32(const void *data, size_t size);
+uint32_t mm_hash_murmur3_32_with_seed(const void *data, size_t size, uint32_t h);
+
+static inline uint32_t
+mm_hash_murmur3_32(const void *data, size_t size)
+{
+	return mm_hash_murmur3_32_with_seed(data, size, 0);
+}
 
 #endif /* HASH_H */

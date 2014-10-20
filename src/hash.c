@@ -27,10 +27,8 @@
 #define MM_HASH_MURMUR_C2 ((uint32_t) 0x1b873593)
 
 uint32_t
-mm_hash_murmur3_32(const void *data, size_t size)
+mm_hash_murmur3_32_with_seed(const void *data, size_t size, uint32_t h)
 {
-	uint32_t h = 0;
-
 	const uint32_t *b = (const uint32_t *) data;
 	const uint32_t *e = b + size / 4;
 	while (b < e) {
@@ -54,13 +52,12 @@ mm_hash_murmur3_32(const void *data, size_t size)
 		k ^= t[1] << 8;
 	case 1:
 		k ^= t[0];
+		k *= MM_HASH_MURMUR_C1;
+		k = mm_rotl32(k, 15);
+		k *= MM_HASH_MURMUR_C2;
+		h ^= k;
 	};
 
-	k *= MM_HASH_MURMUR_C1;
-	k = mm_rotl32(k, 15);
-	k *= MM_HASH_MURMUR_C2;
-
-	h ^= k;
 	h ^= size;
 	h ^= h >> 16;
 	h *= 0x85ebca6b;
