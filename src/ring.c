@@ -20,6 +20,7 @@
 #include "ring.h"
 
 #include "alloc.h"
+#include "bitops.h"
 #include "trace.h"
 
 /**********************************************************************
@@ -40,15 +41,11 @@ mm_ring_base_prepare(struct mm_ring_base *ring, size_t size)
 void
 mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 {
-	if ((locks & MM_RING_SHARED_GET) != 0)
-		ring->head_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	else if ((locks & MM_RING_GLOBAL_GET) != 0)
-		ring->head_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	if ((locks & MM_RING_LOCKED_GET) != 0)
+		ring->head_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 
-	if ((locks & MM_RING_SHARED_PUT) != 0)
-		ring->tail_lock.shared = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	else if ((locks & MM_RING_GLOBAL_PUT) != 0)
-		ring->tail_lock.global = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	if ((locks & MM_RING_LOCKED_PUT) != 0)
+		ring->tail_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 }
 
 /**********************************************************************

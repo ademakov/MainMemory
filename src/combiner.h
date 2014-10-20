@@ -64,19 +64,19 @@ void mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data, bool wait
 static inline bool
 mm_combiner_trylock(struct mm_combiner *combiner)
 {
-	return mm_ring_sharedget_trylock(&combiner->ring.base);
+	return mm_ring_consumer_trylock(&combiner->ring.base);
 }
 
 static inline void
 mm_combiner_lock(struct mm_combiner *combiner)
 {
-	mm_ring_sharedget_lock(&combiner->ring.base);
+	mm_ring_consumer_lock(&combiner->ring.base);
 }
 
 static inline void
 mm_combiner_unlock(struct mm_combiner *combiner)
 {
-	mm_ring_sharedget_unlock(&combiner->ring.base);
+	mm_ring_consumer_unlock(&combiner->ring.base);
 }
 
 #endif /* COMBINER_H */

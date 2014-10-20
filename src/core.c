@@ -162,6 +162,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
 
+#if ENABLE_SMP
 	// Get the target core.
 	struct mm_core *core;
 	if (core_id != MM_CORE_NONE) {
@@ -177,7 +178,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	} else {
 		// Put the item to the target core inbox.
 		for (;;) {
-			bool ok = mm_ring_shared_put(&core->inbox, work);
+			bool ok = mm_ring_spsc_locked_put(&core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
 			mm_synch_signal(core->synch);
@@ -190,6 +191,10 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 			}
 		}
 	}
+#else
+	(void) core_id;
+	mm_core_add_work(mm_core, work);
+#endif
 
 	LEAVE();
 }
@@ -234,13 +239,14 @@ mm_core_run_task(struct mm_task *task)
 {
 	ENTER();
 
+#if ENABLE_SMP
 	if (task->core == mm_core) {
 		// Put the task to the core run queue directly.
 		mm_task_run(task);
 	} else {
 		// Put the task to the target core sched ring.
 		for (;;) {
-			bool ok = mm_ring_shared_put(&task->core->sched, task);
+			bool ok = mm_ring_spsc_locked_put(&task->core->sched, task);
 
 			// Wakeup the target core if it is asleep.
 			mm_synch_signal(task->core->synch);
@@ -253,6 +259,9 @@ mm_core_run_task(struct mm_task *task)
 			}
 		}
 	}
+#else
+	mm_task_run(task);
+#endif
 
 	LEAVE();
 }
@@ -289,7 +298,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 		// Put the chunk to the target core chunks ring.
 		struct mm_core *core = mm_core_getptr(chunk->base.core);
 		for (;;) {
-			bool ok = mm_ring_global_put(&core->chunks, chunk);
+			bool ok = mm_ring_spsc_locked_put(&core->chunks, chunk);
 
 			// Actual reclamation may wait a little bit so
 			// don't wakeup the core unless the ring is full.
@@ -811,9 +820,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->stop = false;
 	core->synch = NULL;
 
-	mm_ring_spsc_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_SHARED_PUT);
-	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_SHARED_PUT);
-	mm_ring_spsc_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE, MM_RING_SHARED_PUT);
+	mm_ring_spsc_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_LOCKED_PUT);
+	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_LOCKED_PUT);
+	mm_ring_spsc_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE, MM_RING_LOCKED_PUT);
 
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;

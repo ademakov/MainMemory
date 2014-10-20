@@ -28,28 +28,18 @@
  * Common Ring Buffer Header.
  **********************************************************************/
 
-#define MM_RING_SHARED_PUT	1
-#define MM_RING_GLOBAL_PUT	2
-#define MM_RING_SHARED_GET	4
-#define MM_RING_GLOBAL_GET	8
+#define MM_RING_LOCKED_PUT	1
+#define MM_RING_LOCKED_GET	2
 
 struct mm_ring_base
 {
 	/* Consumer data. */
 	mm_atomic_uintptr_t head __align_cacheline;
-	union
-	{
-		mm_task_lock_t shared;
-		mm_thread_lock_t global;
-	} head_lock;
+	mm_thread_lock_t head_lock;
 
 	/* Producer data. */
 	mm_atomic_uintptr_t tail __align_cacheline;
-	union
-	{
-		mm_task_lock_t shared;
-		mm_thread_lock_t global;
-	} tail_lock;
+	mm_thread_lock_t tail_lock;
 
 	/* Shared data. */
 	uintptr_t mask __align_cacheline;
@@ -60,90 +50,46 @@ void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 
 /* Multi-producer task synchronization. */
 static inline bool
-mm_ring_sharedput_locked(struct mm_ring_base *ring)
+mm_ring_producer_locked(struct mm_ring_base *ring)
 {
-	return mm_task_is_locked(&ring->tail_lock.shared);
+	return mm_thread_is_locked(&ring->tail_lock);
 }
 static inline bool
-mm_ring_sharedput_trylock(struct mm_ring_base *ring)
+mm_ring_producer_trylock(struct mm_ring_base *ring)
 {
-	return mm_task_trylock(&ring->tail_lock.shared);
+	return mm_thread_trylock(&ring->tail_lock);
 }
 static inline void
-mm_ring_sharedput_lock(struct mm_ring_base *ring)
+mm_ring_producer_lock(struct mm_ring_base *ring)
 {
-	mm_task_lock(&ring->tail_lock.shared);
+	mm_thread_lock(&ring->tail_lock);
 }
 static inline void
-mm_ring_sharedput_unlock(struct mm_ring_base *ring)
+mm_ring_producer_unlock(struct mm_ring_base *ring)
 {
-	mm_task_unlock(&ring->tail_lock.shared);
+	mm_thread_unlock(&ring->tail_lock);
 }
 
 /* Multi-consumer task synchronization. */
 static inline bool
-mm_ring_sharedget_locked(struct mm_ring_base *ring)
+mm_ring_consumer_locked(struct mm_ring_base *ring)
 {
-	return mm_task_is_locked(&ring->head_lock.shared);
+	return mm_thread_is_locked(&ring->head_lock);
 }
 static inline bool
-mm_ring_sharedget_trylock(struct mm_ring_base *ring)
+mm_ring_consumer_trylock(struct mm_ring_base *ring)
 {
-	return mm_task_trylock(&ring->head_lock.shared);
+	return mm_thread_trylock(&ring->head_lock);
 }
 static inline void
-mm_ring_sharedget_lock(struct mm_ring_base *ring)
+mm_ring_consumer_lock(struct mm_ring_base *ring)
 {
-	mm_task_lock(&ring->head_lock.shared);
+	mm_thread_lock(&ring->head_lock);
 }
 static inline void
-mm_ring_sharedget_unlock(struct mm_ring_base *ring)
+mm_ring_consumer_unlock(struct mm_ring_base *ring)
 {
-	mm_task_unlock(&ring->head_lock.shared);
-}
-
-/* Multi-producer thread synchronization. */
-static inline bool
-mm_ring_globalput_locked(struct mm_ring_base *ring)
-{
-	return mm_thread_is_locked(&ring->tail_lock.global);
-}
-static inline bool
-mm_ring_globalput_trylock(struct mm_ring_base *ring)
-{
-	return mm_thread_trylock(&ring->tail_lock.global);
-}
-static inline void
-mm_ring_globalput_lock(struct mm_ring_base *ring)
-{
-	mm_thread_lock(&ring->tail_lock.global);
-}
-static inline void
-mm_ring_globalput_unlock(struct mm_ring_base *ring)
-{
-	mm_thread_unlock(&ring->tail_lock.global);
-}
-
-/* Multi-consumer thread synchronization. */
-static inline bool
-mm_ring_globalget_locked(struct mm_ring_base *ring)
-{
-	return mm_thread_is_locked(&ring->head_lock.global);
-}
-static inline bool
-mm_ring_globalget_trylock(struct mm_ring_base *ring)
-{
-	return mm_thread_trylock(&ring->head_lock.global);
-}
-static inline void
-mm_ring_globalget_lock(struct mm_ring_base *ring)
-{
-	mm_thread_lock(&ring->head_lock.global);
-}
-static inline void
-mm_ring_globalget_unlock(struct mm_ring_base *ring)
-{
-	mm_thread_unlock(&ring->head_lock.global);
+	mm_thread_unlock(&ring->head_lock);
 }
 
 /**********************************************************************
@@ -218,47 +164,23 @@ mm_ring_spsc_get(struct mm_ring_spsc *ring, void **data_ptr)
 	return false;
 }
 
-/**********************************************************************
- * Spinlock-Protected Multi-Producer Multi-Consumer Ring Buffer.
- **********************************************************************/
-
 /* Multi-producer enqueue operation with synchronization for tasks. */
 static inline bool
-mm_ring_shared_put(struct mm_ring_spsc *ring, void *data)
+mm_ring_spsc_locked_put(struct mm_ring_spsc *ring, void *data)
 {
-	mm_ring_sharedput_lock(&ring->base);
+	mm_ring_producer_lock(&ring->base);
 	bool rc = mm_ring_spsc_put(ring, data);
-	mm_ring_sharedput_unlock(&ring->base);
+	mm_ring_producer_unlock(&ring->base);
 	return rc;
 }
 
 /* Multi-producer dequeue operation with synchronization for tasks. */
 static inline bool
-mm_ring_shared_get(struct mm_ring_spsc *ring, void **data_ptr)
+mm_ring_spsc_locked_get(struct mm_ring_spsc *ring, void **data_ptr)
 {
-	mm_ring_sharedget_lock(&ring->base);
+	mm_ring_consumer_lock(&ring->base);
 	bool rc = mm_ring_spsc_get(ring, data_ptr);
-	mm_ring_sharedget_unlock(&ring->base);
-	return rc;
-}
-
-/* Multi-producer enqueue operation with synchronization for threads. */
-static inline bool
-mm_ring_global_put(struct mm_ring_spsc *ring, void *data)
-{
-	mm_ring_globalput_lock(&ring->base);
-	bool rc = mm_ring_spsc_put(ring, data);
-	mm_ring_globalput_unlock(&ring->base);
-	return rc;
-}
-
-/* Multi-producer dequeue operation with synchronization for threads. */
-static inline bool
-mm_ring_global_get(struct mm_ring_spsc *ring, void **data_ptr)
-{
-	mm_ring_globalget_lock(&ring->base);
-	bool rc = mm_ring_spsc_get(ring, data_ptr);
-	mm_ring_globalget_unlock(&ring->base);
+	mm_ring_consumer_unlock(&ring->base);
 	return rc;
 }
 

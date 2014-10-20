@@ -87,7 +87,7 @@ mm_combiner_prepare(struct mm_combiner *combiner,
 	}
 
 	mm_ring_mpmc_prepare(&combiner->ring, size);
-	mm_ring_base_prepare_locks(&combiner->ring.base, MM_RING_SHARED_GET);
+	mm_ring_base_prepare_locks(&combiner->ring.base, MM_RING_LOCKED_GET);
 
 	LEAVE();
 }

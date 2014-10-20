@@ -22,6 +22,7 @@
 #include "core.h"
 #include "lock.h"
 #include "log.h"
+#include "trace.h"
 #include "util.h"
 
 #include "dlmalloc/malloc.h"
@@ -254,14 +255,14 @@ mm_shared_alloc_size(const void *ptr)
  * Global memory allocation routines.
  **********************************************************************/
 
-static mm_thread_lock_t mm_global_alloc_lock = MM_THREAD_LOCK_INIT;
+static mm_lock_t mm_global_alloc_lock = MM_LOCK_INIT;
 
 void *
 mm_global_alloc(size_t size)
 {
-	mm_thread_lock(&mm_global_alloc_lock);
+	mm_global_lock(&mm_global_alloc_lock);
 	void *ptr = dlmalloc(size);
-	mm_thread_unlock(&mm_global_alloc_lock);
+	mm_global_unlock(&mm_global_alloc_lock);
 
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -271,9 +272,9 @@ mm_global_alloc(size_t size)
 void *
 mm_global_aligned_alloc(size_t align, size_t size)
 {
-	mm_thread_lock(&mm_global_alloc_lock);
+	mm_global_lock(&mm_global_alloc_lock);
 	void *ptr = dlmemalign(align, size);
-	mm_thread_unlock(&mm_global_alloc_lock);
+	mm_global_unlock(&mm_global_alloc_lock);
 
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -283,9 +284,9 @@ mm_global_aligned_alloc(size_t align, size_t size)
 void *
 mm_global_calloc(size_t count, size_t size)
 {
-	mm_thread_lock(&mm_global_alloc_lock);
+	mm_global_lock(&mm_global_alloc_lock);
 	void *ptr = dlcalloc(count, size);
-	mm_thread_unlock(&mm_global_alloc_lock);
+	mm_global_unlock(&mm_global_alloc_lock);
 
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
@@ -295,9 +296,9 @@ mm_global_calloc(size_t count, size_t size)
 void *
 mm_global_realloc(void *ptr, size_t size)
 {
-	mm_thread_lock(&mm_global_alloc_lock);
+	mm_global_lock(&mm_global_alloc_lock);
 	ptr = dlrealloc(ptr, size);
-	mm_thread_unlock(&mm_global_alloc_lock);
+	mm_global_unlock(&mm_global_alloc_lock);
 
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
@@ -319,9 +320,9 @@ mm_global_strdup(const char *ptr)
 void
 mm_global_free(void *ptr)
 {
-	mm_thread_lock(&mm_global_alloc_lock);
+	mm_global_lock(&mm_global_alloc_lock);
 	dlfree(ptr);
-	mm_thread_unlock(&mm_global_alloc_lock);
+	mm_global_unlock(&mm_global_alloc_lock);
 }
 
 size_t
