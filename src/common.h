@@ -58,6 +58,15 @@
 	((type *) ((char *)(field_ptr) - offsetof(type, field)))
 
 /**********************************************************************
+ * Macro Expansion Magic.
+ **********************************************************************/
+
+#define stringify_verbatim(x)	#x
+#define stringify_expanded(x)	stringify_verbatim(x)
+
+#define __FILE_LINE__		__FILE__ ":" stringify_expanded(__LINE__)
+
+/**********************************************************************
  * Compiler Shortcuts.
  **********************************************************************/
 
