@@ -251,11 +251,12 @@ mm_pool_local_free(struct mm_pool *pool, void *item)
 }
 
 void
-mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
+mm_pool_prepare(struct mm_pool *pool, const char *name,
+		const struct mm_arena *arena, uint32_t item_size)
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_local_arena, item_size);
+	mm_pool_prepare_low(pool, name, arena, item_size);
 
 	pool->shared = false;
 	pool->global = false;

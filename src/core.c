@@ -675,7 +675,7 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
  **********************************************************************/
 
 static void *
-mm_core_arena_alloc(struct mm_arena const *arena, size_t size)
+mm_core_arena_alloc(mm_arena_t arena, size_t size)
 {
 	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
@@ -683,7 +683,7 @@ mm_core_arena_alloc(struct mm_arena const *arena, size_t size)
 }
 
 static void *
-mm_core_arena_calloc(struct mm_arena const *arena, size_t count, size_t size)
+mm_core_arena_calloc(mm_arena_t arena, size_t count, size_t size)
 {
 	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
@@ -691,7 +691,7 @@ mm_core_arena_calloc(struct mm_arena const *arena, size_t count, size_t size)
 }
 
 static void *
-mm_core_arena_realloc(struct mm_arena const *arena, void *ptr, size_t size)
+mm_core_arena_realloc(mm_arena_t arena, void *ptr, size_t size)
 {
 	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
@@ -699,7 +699,7 @@ mm_core_arena_realloc(struct mm_arena const *arena, void *ptr, size_t size)
 }
 
 static void
-mm_core_arena_free(struct mm_arena const *arena, void *ptr)
+mm_core_arena_free(mm_arena_t arena, void *ptr)
 {
 	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
@@ -718,7 +718,7 @@ mm_core_init_arena(struct mm_core *core)
 {
 	core->space = mm_mspace_create();
 
-	core->arena.vtable = &mm_core_arena_vtable;
+	core->arena.arena.vtable = &mm_core_arena_vtable;
 	core->arena.space = core->space;
 
 #if ENABLE_DEBUG
@@ -769,7 +769,7 @@ mm_core_boot_init(struct mm_core *core)
 	if (!MM_CORE_IS_PRIMARY(core))
 		mm_synch_wait(core->synch);
 
-	mm_timer_init(&core->time_manager);
+	mm_timer_init(&core->time_manager, &core->arena.arena);
 
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {

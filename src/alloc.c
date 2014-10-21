@@ -413,31 +413,6 @@ mm_mspace_getallocsize(const void *ptr)
  **********************************************************************/
 
 static void *
-mm_local_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
-		      size_t size)
-{
-	return mm_local_alloc(size);
-}
-static void *
-mm_local_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
-		       size_t count, size_t size)
-{
-	return mm_local_calloc(count, size);
-}
-static void *
-mm_local_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
-			void *ptr, size_t size)
-{
-	return mm_local_realloc(ptr, size);
-}
-static void
-mm_local_arena_free(const struct mm_arena *arena __attribute__((unused)),
-		     void *ptr)
-{
-	mm_local_free(ptr);
-}
-
-static void *
 mm_shared_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
 		      size_t size)
 {
@@ -487,13 +462,6 @@ mm_global_arena_free(const struct mm_arena *arena __attribute__((unused)),
 	mm_global_free(ptr);
 }
 
-static const struct mm_arena_vtable mm_local_arena_vtable = {
-	mm_local_arena_alloc,
-	mm_local_arena_calloc,
-	mm_local_arena_realloc,
-	mm_local_arena_free
-};
-
 static const struct mm_arena_vtable mm_shared_arena_vtable = {
 	mm_shared_arena_alloc,
 	mm_shared_arena_calloc,
@@ -508,7 +476,6 @@ static const struct mm_arena_vtable mm_global_arena_vtable = {
 	mm_global_arena_free
 };
 
-const struct mm_arena mm_local_arena = { .vtable = &mm_local_arena_vtable };
 const struct mm_arena mm_shared_arena = { .vtable = &mm_shared_arena_vtable };
 const struct mm_arena mm_global_arena = { .vtable = &mm_global_arena_vtable };
 

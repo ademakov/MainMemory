@@ -44,7 +44,7 @@ struct mm_work;
 
 struct mm_core_arena
 {
-	mm_arena_vtable_t vtable;
+	struct mm_arena arena;
 	mm_mspace_t space;
 
 #if ENABLE_DEBUG

@@ -21,6 +21,7 @@
 #define TIMER_H
 
 #include "common.h"
+#include "alloc.h"
 #include "clock.h"
 #include "pool.h"
 #include "timeq.h"
@@ -46,7 +47,7 @@ struct mm_time_manager
 	struct mm_pool timer_pool;
 };
 
-void mm_timer_init(struct mm_time_manager *manager)
+void mm_timer_init(struct mm_time_manager *manager, mm_arena_t arena)
 	__attribute__((nonnull(1)));
 
 void mm_timer_term(struct mm_time_manager *manager)

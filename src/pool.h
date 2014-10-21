@@ -26,7 +26,7 @@
 #include "lock.h"
 
 /* Forward declaration. */
-struct mm_allocator;
+struct mm_arena;
 
 #define MM_POOL_INDEX_INVALID	((uint32_t) -1)
 
@@ -83,8 +83,9 @@ struct mm_pool
 	char *pool_name;
 };
 
-void mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
-	__attribute__((nonnull(1, 2)));
+void mm_pool_prepare(struct mm_pool *pool, const char *name,
+		     const struct mm_arena *arena, uint32_t item_size)
+	__attribute__((nonnull(1, 2, 3)));
 
 void mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_size)
 	__attribute__((nonnull(1, 2)));

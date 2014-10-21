@@ -94,7 +94,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 }
 
 void
-mm_timer_init(struct mm_time_manager *manager)
+mm_timer_init(struct mm_time_manager *manager, mm_arena_t arena)
 {
 	ENTER();
 
@@ -107,7 +107,7 @@ mm_timer_init(struct mm_time_manager *manager)
 	mm_timeq_set_max_bucket_width(manager->time_queue, MM_TIMER_QUEUE_MAX_WIDTH);
 	mm_timeq_set_max_bucket_count(manager->time_queue, MM_TIMER_QUEUE_MAX_COUNT);
 
-	mm_pool_prepare(&manager->timer_pool, "timer", sizeof (struct mm_timer));
+	mm_pool_prepare(&manager->timer_pool, "timer", arena, sizeof (struct mm_timer));
 
 	LEAVE();
 }
