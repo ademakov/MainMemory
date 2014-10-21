@@ -21,6 +21,7 @@
 #define CORE_H
 
 #include "common.h"
+#include "alloc.h"
 #include "debug.h"
 #include "list.h"
 #include "pool.h"
@@ -73,8 +74,8 @@ struct mm_core
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
 
-	/* Private memory arena. */
-	void *arena;
+	/* Private memory space. */
+	mm_mspace_t space;
 
 	/* Master task. */
 	struct mm_task *master;

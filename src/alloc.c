@@ -67,41 +67,42 @@ free(void *ptr)
 void *
 mm_local_alloc(size_t size)
 {
-	void *ptr = mspace_malloc(mm_core->arena, size);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xalloc(core->space, size);
 }
 
 void *
 mm_local_aligned_alloc(size_t align, size_t size)
 {
-	void *ptr = mspace_memalign(mm_core->arena, align, size);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_aligned_xalloc(core->space, align, size);
 }
 
 void *
 mm_local_calloc(size_t count, size_t size)
 {
-	void *ptr = mspace_calloc(mm_core->arena, count, size);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	return ptr;
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xcalloc(core->space, count, size);
 }
 
 void *
 mm_local_realloc(void *ptr, size_t size)
 {
-	ptr = mspace_realloc(mm_core->arena, ptr, size);
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xrealloc(core->space, ptr, size);
+}
 
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+void
+mm_local_free(void *ptr)
+{
+	struct mm_core *core = mm_core_self();
+	mm_mspace_free(core->space, ptr);
+}
+
+size_t
+mm_local_alloc_size(const void *ptr)
+{
+	return mm_mspace_getallocsize(ptr);
 }
 
 void *
@@ -114,18 +115,6 @@ char *
 mm_local_strdup(const char *ptr)
 {
 	return mm_local_memdup(ptr, strlen(ptr) + 1);
-}
-
-void
-mm_local_free(void *ptr)
-{
-	mspace_free(mm_core->arena, ptr);
-}
-
-size_t
-mm_local_alloc_size(const void *ptr)
-{
-	return mspace_usable_size(ptr);
 }
 
 /**********************************************************************

@@ -19,7 +19,6 @@
 
 #include "core.h"
 
-#include "alloc.h"
 #include "bitset.h"
 #include "cdata.h"
 #include "chunk.h"
@@ -33,8 +32,6 @@
 #include "thread.h"
 #include "trace.h"
 #include "work.h"
-
-#include "dlmalloc/malloc.h"
 
 #include <stdio.h>
 #include <unistd.h>
@@ -797,7 +794,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	core->arena = create_mspace(0, 0);
+	core->space = mm_mspace_create();
 
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
@@ -873,7 +870,7 @@ mm_core_term_single(struct mm_core *core)
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
-	destroy_mspace(core->arena);
+	mm_mspace_destroy(core->space);
 
 	LEAVE();
 }
