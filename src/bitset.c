@@ -19,6 +19,7 @@
 
 #include "bitset.h"
 
+#include "alloc.h"
 #include "bitops.h"
 
 void

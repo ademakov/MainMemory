@@ -1,7 +1,7 @@
 /*
  * exit.h - MainMemory exit handling.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -54,12 +54,13 @@ void mm_exit(int status)
  * Abnormal Termination.
  **********************************************************************/
 
-#define ABORT() mm_abort(__FILE__, __LINE__, __FUNCTION__, "ABORT")
+#define ABORT() mm_abort(__LOCATION__, __FUNCTION__, "ABORT")
 
-void mm_abort(const char *file, int line, const char *func,
+void mm_abort(const char *restrict location,
+	      const char *restrict function,
 	      const char *restrict msg, ...)
-	__attribute__((format(printf, 4, 5)))
-	__attribute__((nonnull(4)))
+	__attribute__((format(printf, 3, 4)))
+	__attribute__((nonnull(1, 2, 3)))
 	__attribute__((noreturn));
 
 #endif /* EXIT_H */

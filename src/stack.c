@@ -20,14 +20,13 @@
 #include "stack.h"
 
 #include "log.h"
-#include "trace.h"
+#include "debug.h"
 
 #include <sys/mman.h>
 
 void *
 mm_stack_create(uint32_t stack_size, uint32_t guard_size)
 {
-	ENTER();
 	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
 	ASSERT((guard_size % MM_PAGE_SIZE) == 0);
 	ASSERT(guard_size < stack_size);
@@ -45,19 +44,15 @@ mm_stack_create(uint32_t stack_size, uint32_t guard_size)
 		}
 	}
 
-	LEAVE();
 	return stack;
 }
 
 void
 mm_stack_destroy(void *stack, uint32_t stack_size)
 {
-	ENTER();
 	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
 
 	if (unlikely(munmap(stack, stack_size) < 0)) {
 		mm_error(errno, "failed to release a stack");
 	}
-
-	LEAVE();
 }

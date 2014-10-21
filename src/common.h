@@ -64,7 +64,7 @@
 #define stringify_verbatim(x)	#x
 #define stringify_expanded(x)	stringify_verbatim(x)
 
-#define __FILE_LINE__		__FILE__ ":" stringify_expanded(__LINE__)
+#define __LOCATION__		__FILE__ ":" stringify_expanded(__LINE__)
 
 /**********************************************************************
  * Compiler Shortcuts.

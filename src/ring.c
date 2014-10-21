@@ -20,8 +20,8 @@
 #include "ring.h"
 
 #include "alloc.h"
+#include "debug.h"
 #include "bitops.h"
-#include "trace.h"
 
 /**********************************************************************
  * Common Ring Buffer Header.

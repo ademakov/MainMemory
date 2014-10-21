@@ -57,7 +57,7 @@ mm_global_unlock(mm_lock_t *lock)
 #if ENABLE_LOCK_STATS
 
 #define MM_LOCK_STAT_INIT	{ .stat = NULL,			\
-				  .location = __FILE_LINE__,	\
+				  .location = __LOCATION__,	\
 				  .moreinfo = NULL }
 
 /* Per-thread statistics entry for a lock. */

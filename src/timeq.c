@@ -20,7 +20,7 @@
 #include "timeq.h"
 
 #include "alloc.h"
-#include "trace.h"
+#include "debug.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1
 #define MM_TIMEQ_T1_COUNT_MIN	4
@@ -63,8 +63,6 @@ struct mm_timeq
 struct mm_timeq *
 mm_timeq_create(void)
 {
-	ENTER();
-
 	struct mm_timeq *timeq = mm_local_alloc(sizeof(struct mm_timeq));
 
 	mm_list_init(&timeq->fe);
@@ -86,22 +84,18 @@ mm_timeq_create(void)
 	timeq->t1_count_min = MM_TIMEQ_T1_COUNT_MIN;
 	timeq->t1_count_max = 0;
 
-	LEAVE();
 	return timeq;
 }
 
 void
 mm_timeq_destroy(struct mm_timeq *timeq)
 {
-	ENTER();
 //	ASSERT(mm_list_empty(&timeq->fe));
 //	ASSERT(timeq->t1_index <= timeq->t1_count);
 //	ASSERT(mm_list_empty(&timeq->t2));
 
 	mm_local_free(timeq->t1);
 	mm_local_free(timeq);
-
-	LEAVE();
 }
 
 void
@@ -180,7 +174,6 @@ mm_timeq_insert_t2(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 void
 mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
-	ENTER();
 	ASSERT(entry->index == MM_TIMEQ_INDEX_NO);
 
 	if (timeq->t2_start <= entry->value) {
@@ -190,14 +183,11 @@ mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	} else {
 		mm_timeq_insert_fe(timeq, entry);
 	}
-
-	LEAVE();
 }
 
 void
 mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
-	ENTER();
 	DEBUG("entry: %p", entry);
 	ASSERT(entry->index != MM_TIMEQ_INDEX_NO);
 
@@ -211,15 +201,11 @@ mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 
 	mm_list_delete(&entry->queue);
 	entry->index = MM_TIMEQ_INDEX_NO;
-
-	LEAVE();
 }
 
 struct mm_timeq_entry *
 mm_timeq_getmin(struct mm_timeq *timeq)
 {
-	ENTER();
-
 	struct mm_timeq_entry *entry;
 
 restart:
@@ -342,6 +328,5 @@ restart:
 		}
 	}
 
-	LEAVE();
 	return entry;
 }

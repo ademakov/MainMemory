@@ -22,10 +22,10 @@
 #include "alloc.h"
 #include "bitops.h"
 #include "core.h"
+#include "debug.h"
 #include "list.h"
 #include "lock.h"
 #include "log.h"
-#include "trace.h"
 #include "util.h"
 
 #define MM_CDATA_ALIGN		(8)

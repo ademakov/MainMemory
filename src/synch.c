@@ -22,6 +22,7 @@
 #include "alloc.h"
 #include "clock.h"
 #include "event.h"
+#include "exit.h"
 #include "log.h"
 #include "trace.h"
 

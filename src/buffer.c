@@ -22,6 +22,7 @@
 #include "alloc.h"
 #include "chunk.h"
 #include "log.h"
+#include "trace.h"
 
 #include <stdarg.h>
 #include <stdio.h>

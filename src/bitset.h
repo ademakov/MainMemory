@@ -21,8 +21,10 @@
 #define BITSET_H
 
 #include "common.h"
-#include "alloc.h"
-#include "trace.h"
+#include "debug.h"
+
+/* Forward declarations. */
+struct mm_allocator;
 
 #define MM_BITSET_UNIT		(sizeof(uintptr_t) * 8)
 

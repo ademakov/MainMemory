@@ -21,7 +21,6 @@
 
 #include "hook.h"
 #include "log.h"
-#include "core.h"
 #include "trace.h"
 
 #include <stdlib.h>
@@ -66,10 +65,11 @@ mm_exit(int status)
  **********************************************************************/
 
 void
-mm_abort(const char *file, int line, const char *func,
+mm_abort(const char *restrict location,
+	 const char *restrict function,
 	 const char *restrict msg, ...)
 {
-	mm_where(file, line, func);
+	mm_where(location, function);
 
 	va_list va;
 	va_start(va, msg);

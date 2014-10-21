@@ -20,7 +20,7 @@
 #include "clock.h"
 
 #include "log.h"
-#include "trace.h"
+#include "debug.h"
 
 #ifdef HAVE_MACH_MACH_TIME_H
 # include <mach/mach_time.h>
@@ -37,15 +37,11 @@
 void
 mm_clock_init(void)
 {
-	ENTER();
-
 	struct timespec ts;
 	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
 		mm_fatal(0, "clock_gettime(CLOCK_REALTIME, ...) does not seem to work");
 	if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
 		mm_fatal(0, "clock_gettime(CLOCK_MONOTONIC, ...) does not seem to work");
-
-	LEAVE();
 }
 
 mm_timeval_t
@@ -72,16 +68,12 @@ static mm_timeval_t mm_abstime_denom;
 void
 mm_clock_init(void)
 {
-	ENTER();
-
 	mach_timebase_info_data_t timebase_info;
 	(void) mach_timebase_info(&timebase_info);
 	ASSERT(timebase_info.denom != 0);
 
 	mm_abstime_numer = timebase_info.numer;
 	mm_abstime_denom = timebase_info.denom * 1000LL;
-
-	LEAVE();
 }
 
 mm_timeval_t

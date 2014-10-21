@@ -18,6 +18,7 @@
  */
 
 #include "common.h"
+#include "alloc.h"
 #include "bitset.h"
 #include "core.h"
 #include "event.h"

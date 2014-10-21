@@ -22,8 +22,8 @@
 
 #include "common.h"
 #include "alloc.h"
+#include "debug.h"
 #include "list.h"
-#include "trace.h"
 
 #define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + MM_ALLOC_OVERHEAD)
 

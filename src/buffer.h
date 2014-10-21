@@ -21,7 +21,7 @@
 #define BUFFER_H
 
 #include "common.h"
-#include "trace.h"
+#include "debug.h"
 #include <stdarg.h>
 
 /*

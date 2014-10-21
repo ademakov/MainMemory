@@ -21,6 +21,7 @@
 #define CORE_H
 
 #include "common.h"
+#include "debug.h"
 #include "list.h"
 #include "pool.h"
 #include "ring.h"

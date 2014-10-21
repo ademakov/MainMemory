@@ -1,7 +1,7 @@
 /*
- * trace.c - MainMemory debug & trace.
+ * trace.c - MainMemory trace utilities.
  *
- * Copyright (C) 2012-2013  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -90,7 +90,6 @@ mm_trace_prefix(void)
 	}
 }
 
-
 #endif
 
 /**********************************************************************
@@ -98,40 +97,24 @@ mm_trace_prefix(void)
  **********************************************************************/
 
 void
-mm_where(const char *file, int line, const char *func)
+mm_where(const char *restrict location, const char *function)
 {
 	mm_trace_prefix();
-	mm_log_fmt("%s(%s:%d): ", func, file, line);
+	mm_log_fmt("%s(%s): ", function, location);
 }
-
-#if ENABLE_DEBUG
-
-void
-mm_debug(const char *file, int line, const char *func,
-	 const char *restrict msg, ...)
-{
-	mm_where(file, line, func);
-
-	va_list va;
-	va_start(va, msg);
-	mm_log_vfmt(msg, va);
-	va_end(va);
-
-	mm_log_str("\n");
-}
-
-#endif
 
 #if ENABLE_TRACE
 
 void
-mm_trace(int level, const char *file, int line, const char *func, 
+mm_trace(int level,
+	 const char *restrict location,
+	 const char *restrict function, 
 	 const char *restrict msg, ...)
 {
 	if (!mm_trace_enter(level))
 		return;
 
-	mm_where(file, line, func);
+	mm_where(location, function);
 
 	va_list va;
 	va_start(va, msg);

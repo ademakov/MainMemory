@@ -21,6 +21,7 @@
 
 #include "memcache/state.h"
 
+#include "alloc.h"
 #include "netbuf.h"
 
 
