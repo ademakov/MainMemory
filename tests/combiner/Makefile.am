@@ -1,4 +1,4 @@
 
-noinst_PROGRAMS = test
+#noinst_PROGRAMS = test
 
 
