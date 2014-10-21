@@ -19,7 +19,6 @@
 
 #include "chunk.h"
 
-#include "alloc.h"
 #include "core.h"
 #include "trace.h"
 
@@ -31,7 +30,7 @@ struct mm_chunk *
 mm_chunk_create(size_t size)
 {
 	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_local_alloc(size);
+	struct mm_chunk *chunk = mm_core_alloc(size);
 	chunk->base.core = mm_core_selfid();
 	mm_link_init(&chunk->base.link);
 	return chunk;
@@ -43,7 +42,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	ASSERT(chunk->base.core != MM_CORE_NONE);
 	ASSERT(chunk->base.core == mm_core_selfid());
 
-	mm_local_free(chunk);
+	mm_core_free(chunk);
 }
 
 void

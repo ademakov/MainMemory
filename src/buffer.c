@@ -19,8 +19,8 @@
 
 #include "buffer.h"
 
-#include "alloc.h"
 #include "chunk.h"
+#include "core.h"
 #include "log.h"
 #include "trace.h"
 
@@ -38,7 +38,7 @@ mm_buffer_segment_create(char *data, size_t size,
 {
 	ENTER();
 
-	struct mm_buffer_segment *seg = mm_local_alloc(sizeof *seg);
+	struct mm_buffer_segment *seg = mm_core_alloc(sizeof *seg);
 	seg->data = data;
 	seg->size = size;
 	seg->next = NULL;
@@ -56,7 +56,7 @@ mm_buffer_segment_destroy(struct mm_buffer_segment *seg)
 
 	if (seg->release != NULL)
 		(*seg->release)(seg->release_data);
-	mm_local_free(seg);
+	mm_core_free(seg);
 
 	LEAVE();
 }
@@ -258,12 +258,12 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 	} else if ((unsigned) len < n) {
 		buf->in_off += len;
 	} else {
-		char *ptr = mm_local_alloc(len + 1);
+		char *ptr = mm_core_alloc(len + 1);
 		len = vsnprintf(ptr, len + 1, fmt, va);
 
 		mm_buffer_append(buf, ptr, len);
 
-		mm_local_free(ptr);
+		mm_core_free(ptr);
 	}
 
 	LEAVE();

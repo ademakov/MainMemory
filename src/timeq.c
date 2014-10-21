@@ -19,7 +19,7 @@
 
 #include "timeq.h"
 
-#include "alloc.h"
+#include "core.h"
 #include "debug.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1
@@ -63,7 +63,7 @@ struct mm_timeq
 struct mm_timeq *
 mm_timeq_create(void)
 {
-	struct mm_timeq *timeq = mm_local_alloc(sizeof(struct mm_timeq));
+	struct mm_timeq *timeq = mm_core_alloc(sizeof(struct mm_timeq));
 
 	mm_list_init(&timeq->fe);
 
@@ -94,8 +94,8 @@ mm_timeq_destroy(struct mm_timeq *timeq)
 //	ASSERT(timeq->t1_index <= timeq->t1_count);
 //	ASSERT(mm_list_empty(&timeq->t2));
 
-	mm_local_free(timeq->t1);
-	mm_local_free(timeq);
+	mm_core_free(timeq->t1);
+	mm_core_free(timeq);
 }
 
 void
@@ -282,7 +282,7 @@ restart:
 
 			if (timeq->t1_count < count) {
 				DEBUG("t1 resize %d to %d", timeq->t1_count, count);
-				timeq->t1 = mm_local_realloc(timeq->t1, count * sizeof(struct mm_list));
+				timeq->t1 = mm_core_realloc(timeq->t1, count * sizeof(struct mm_list));
 				// After realloc all lists need to be initialized
 				// including re-initialization of the lists that
 				// there were before as the next and prev fields

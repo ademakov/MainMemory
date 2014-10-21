@@ -61,63 +61,6 @@ free(void *ptr)
 }
 
 /**********************************************************************
- * Intra-core memory allocation routines.
- **********************************************************************/
-
-void *
-mm_local_alloc(size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_mspace_xalloc(core->space, size);
-}
-
-void *
-mm_local_aligned_alloc(size_t align, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_mspace_aligned_xalloc(core->space, align, size);
-}
-
-void *
-mm_local_calloc(size_t count, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_mspace_xcalloc(core->space, count, size);
-}
-
-void *
-mm_local_realloc(void *ptr, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_mspace_xrealloc(core->space, ptr, size);
-}
-
-void
-mm_local_free(void *ptr)
-{
-	struct mm_core *core = mm_core_self();
-	mm_mspace_free(core->space, ptr);
-}
-
-size_t
-mm_local_alloc_size(const void *ptr)
-{
-	return mm_mspace_getallocsize(ptr);
-}
-
-void *
-mm_local_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_local_alloc(size), ptr, size);
-}
-
-char *
-mm_local_strdup(const char *ptr)
-{
-	return mm_local_memdup(ptr, strlen(ptr) + 1);
-}
-
-/**********************************************************************
  * Cross-core memory allocation routines.
  **********************************************************************/
 

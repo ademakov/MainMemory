@@ -164,7 +164,7 @@ mm_task_free_chunks(struct mm_task *task)
 
 	while (!mm_list_empty(&task->chunks)) {
 		struct mm_list *link = mm_list_delete_head(&task->chunks);
-		mm_local_free(link);
+		mm_core_free(link);
 	}
 
 	LEAVE();
@@ -600,7 +600,7 @@ mm_task_alloc(size_t size)
 	ASSERT(size > 0);
 
 	/* Allocate the requested memory plus some extra for the list link. */
-	void *ptr = mm_local_alloc(size + sizeof(struct mm_list));
+	void *ptr = mm_core_alloc(size + sizeof(struct mm_list));
 
 	/* Keep the allocated memory in the task's chunk list. */
 	struct mm_task *task = mm_task_self();
@@ -626,7 +626,7 @@ mm_task_free(void *ptr)
 		mm_list_delete(link);
 
 		/* Free the memory. */
-		mm_local_free(link);
+		mm_core_free(link);
 	}
 
 	LEAVE();

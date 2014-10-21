@@ -49,7 +49,7 @@ static inline size_t
 mm_chunk_base_size(const struct mm_chunk_base *chunk)
 {
 	ASSERT(chunk->core != MM_CORE_NONE);
-	return mm_local_alloc_size(chunk) - sizeof(struct mm_chunk);
+	return mm_mspace_getallocsize(chunk) - sizeof(struct mm_chunk);
 }
 
 static inline size_t

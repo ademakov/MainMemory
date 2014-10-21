@@ -674,10 +674,12 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
  * Core Memory Arena.
  **********************************************************************/
 
+typedef const struct mm_core_arena *mm_core_arena_t;
+
 static void *
 mm_core_arena_alloc(mm_arena_t arena, size_t size)
 {
-	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
 	return mm_mspace_xalloc(core_arena->space, size);
 }
@@ -685,7 +687,7 @@ mm_core_arena_alloc(mm_arena_t arena, size_t size)
 static void *
 mm_core_arena_calloc(mm_arena_t arena, size_t count, size_t size)
 {
-	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
 	return mm_mspace_xcalloc(core_arena->space, count, size);
 }
@@ -693,7 +695,7 @@ mm_core_arena_calloc(mm_arena_t arena, size_t count, size_t size)
 static void *
 mm_core_arena_realloc(mm_arena_t arena, void *ptr, size_t size)
 {
-	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
 	return mm_mspace_xrealloc(core_arena->space, ptr, size);
 }
@@ -701,7 +703,7 @@ mm_core_arena_realloc(mm_arena_t arena, void *ptr, size_t size)
 static void
 mm_core_arena_free(mm_arena_t arena, void *ptr)
 {
-	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
 	ASSERT(core_arena->core == mm_core_selfid());
 	mm_mspace_free(core_arena->space, ptr);
 }
@@ -716,10 +718,8 @@ static const struct mm_arena_vtable mm_core_arena_vtable = {
 static void
 mm_core_init_arena(struct mm_core *core)
 {
-	core->space = mm_mspace_create();
-
+	core->arena.space = mm_mspace_create();
 	core->arena.arena.vtable = &mm_core_arena_vtable;
-	core->arena.space = core->space;
 
 #if ENABLE_DEBUG
 	core->arena.core = mm_core_getid(core);
@@ -729,7 +729,7 @@ mm_core_init_arena(struct mm_core *core)
 static void
 mm_core_term_arena(struct mm_core *core)
 {
-	mm_mspace_destroy(core->space);
+	mm_mspace_destroy(core->arena.space);
 }
 
 /**********************************************************************

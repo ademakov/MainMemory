@@ -84,8 +84,7 @@ struct mm_core
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
 
-	/* Private memory space. */
-	mm_mspace_t space;
+	/* Private memory arena. */
 	struct mm_core_arena arena;
 
 	/* Master task. */
@@ -155,7 +154,7 @@ void mm_core_reclaim_chunk(struct mm_chunk *chunk);
 void mm_core_reclaim_chain(struct mm_chunk *chunk);
 
 /**********************************************************************
- * Core information.
+ * Core Information.
  **********************************************************************/
 
 extern mm_core_t mm_core_num;
@@ -198,6 +197,57 @@ static inline mm_core_t
 mm_core_selfid(void)
 {
 	return mm_core_getid(mm_core_self());
+}
+
+/**********************************************************************
+ * Core Memory Allocation Routines.
+ **********************************************************************/
+
+static inline void *
+mm_core_alloc(size_t size)
+{
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xalloc(core->arena.space, size);
+}
+
+static inline void *
+mm_core_aligned_alloc(size_t align, size_t size)
+{
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_aligned_xalloc(core->arena.space, align, size);
+}
+
+static inline void *
+mm_core_calloc(size_t count, size_t size)
+{
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xcalloc(core->arena.space, count, size);
+}
+
+static inline void *
+mm_core_realloc(void *ptr, size_t size)
+{
+	struct mm_core *core = mm_core_self();
+	return mm_mspace_xrealloc(core->arena.space, ptr, size);
+}
+
+static inline void
+mm_core_free(void *ptr)
+{
+	struct mm_core *core = mm_core_self();
+	mm_mspace_free(core->arena.space, ptr);
+}
+
+static inline void *
+mm_core_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_core_alloc(size), ptr, size);
+}
+
+static inline char *
+mm_core_strdup(const char *ptr)
+{
+	return mm_core_memdup(ptr, strlen(ptr) + 1);
 }
 
 #endif /* CORE_H */

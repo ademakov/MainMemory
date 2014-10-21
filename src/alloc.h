@@ -45,32 +45,6 @@ void mm_alloc_init(void);
 void mm_alloc_term(void);
 
 /**********************************************************************
- * Intra-core memory allocation routines.
- **********************************************************************/
-
-void * mm_local_alloc(size_t size)
-	__attribute__((malloc));
-
-void * mm_local_aligned_alloc(size_t align, size_t size)
-	__attribute__((malloc));
-
-void * mm_local_calloc(size_t count, size_t size)
-	__attribute__((malloc));
-
-void * mm_local_memdup(const void *ptr, size_t size)
-	__attribute__((malloc));
-
-char * mm_local_strdup(const char *ptr)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
-
-void * mm_local_realloc(void *ptr, size_t size);
-
-void mm_local_free(void *ptr);
-
-size_t mm_local_alloc_size(const void *ptr);
-
-/**********************************************************************
  * Cross-core memory allocation routines.
  **********************************************************************/
 
