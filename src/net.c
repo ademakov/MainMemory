@@ -237,7 +237,7 @@ mm_net_free_server_table(void)
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
-		mm_bitset_cleanup(&srv->affinity, &mm_alloc_global);
+		mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
 		mm_global_free(srv->name);
 	}
 
@@ -267,7 +267,7 @@ mm_net_alloc_server(void)
 	srv->core_num = 0;
 	srv->per_core = NULL;
 
-	mm_bitset_prepare(&srv->affinity, &mm_alloc_global, mm_core_getnum());
+	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
 
 	LEAVE();
 	return srv;
@@ -1144,7 +1144,7 @@ mm_net_create_unix_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s)", name, path);
+	srv->name = mm_asprintf(&mm_global_arena, "%s (%s)", name, path);
 	srv->proto = proto;
 
 	if (mm_net_set_un_addr(&srv->addr, path) < 0)
@@ -1163,7 +1163,7 @@ mm_net_create_inet_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_asprintf(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
 	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
@@ -1182,7 +1182,7 @@ mm_net_create_inet6_server(const char *name,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_asprintf(&mm_alloc_global, "%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_asprintf(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
 	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)

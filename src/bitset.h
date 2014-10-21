@@ -23,8 +23,8 @@
 #include "common.h"
 #include "debug.h"
 
-/* Forward declarations. */
-struct mm_allocator;
+/* Forward declaration. */
+struct mm_arena;
 
 #define MM_BITSET_UNIT		(sizeof(uintptr_t) * 8)
 
@@ -38,11 +38,11 @@ struct mm_bitset
 	};
 };
 
-void mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
+void mm_bitset_prepare(struct mm_bitset *set, const struct mm_arena *arena,
 		       size_t size)
 	__attribute__((nonnull(1)));
 
-void mm_bitset_cleanup(struct mm_bitset *set, const struct mm_allocator *alloc)
+void mm_bitset_cleanup(struct mm_bitset *set, const struct mm_arena *arena)
 	__attribute__((nonnull(1)));
 
 static inline bool

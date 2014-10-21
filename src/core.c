@@ -942,7 +942,7 @@ mm_core_init(void)
 		mm_brief("Running on 1 core.");
 	else
 		mm_brief("Running on %d cores.", mm_core_num);
-	mm_bitset_prepare(&mm_core_event_affinity, &mm_alloc_global, mm_core_num);
+	mm_bitset_prepare(&mm_core_event_affinity, &mm_global_arena, mm_core_num);
 
 	mm_alloc_init();
 	mm_cdata_init();
@@ -971,7 +971,7 @@ mm_core_term(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	mm_bitset_cleanup(&mm_core_event_affinity, &mm_alloc_global);
+	mm_bitset_cleanup(&mm_core_event_affinity, &mm_global_arena);
 
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);

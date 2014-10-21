@@ -99,7 +99,7 @@ mm_server_init(void)
 
 	// Assign event loops to first three cores.
 	struct mm_bitset event_loop_cores;
-	mm_bitset_prepare(&event_loop_cores, &mm_alloc_global, 4);
+	mm_bitset_prepare(&event_loop_cores, &mm_global_arena, 4);
 	mm_bitset_set(&event_loop_cores, 0);
 	mm_bitset_set(&event_loop_cores, 1);
 	mm_bitset_set(&event_loop_cores, 2);

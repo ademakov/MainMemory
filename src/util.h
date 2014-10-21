@@ -21,13 +21,13 @@
 #define UTIL_H
 
 /* Forward declaration. */
-struct mm_allocator;
+struct mm_arena;
 
 void mm_set_nonblocking(int fd);
 
 void mm_libc_call(const char *name);
 
-char * mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
+char * mm_asprintf(const struct mm_arena *arena, const char *restrict fmt, ...)
 	__attribute__((format(printf, 2, 3)))
 	__attribute__((nonnull(1, 2)));
 

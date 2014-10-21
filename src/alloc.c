@@ -27,27 +27,6 @@
 
 #include "dlmalloc/malloc.h"
 
-const struct mm_allocator mm_alloc_local = {
-	mm_local_alloc,
-	mm_local_calloc,
-	mm_local_realloc,
-	mm_local_free
-};
-
-const struct mm_allocator mm_alloc_shared = {
-	mm_shared_alloc,
-	mm_shared_calloc,
-	mm_shared_realloc,
-	mm_shared_free
-};
-
-const struct mm_allocator mm_alloc_global = {
-	mm_global_alloc,
-	mm_global_calloc,
-	mm_global_realloc,
-	mm_global_free
-};
-
 /**********************************************************************
  * Stubs for LIBC Memory Allocation Routines.
  **********************************************************************/
@@ -330,6 +309,110 @@ mm_global_alloc_size(const void *ptr)
 {
 	return dlmalloc_usable_size(ptr);
 }
+
+/**********************************************************************
+ * Simple Memory Arenas.
+ **********************************************************************/
+
+static void *
+mm_local_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
+		      size_t size)
+{
+	return mm_local_alloc(size);
+}
+static void *
+mm_local_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
+		       size_t count, size_t size)
+{
+	return mm_local_calloc(count, size);
+}
+static void *
+mm_local_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
+			void *ptr, size_t size)
+{
+	return mm_local_realloc(ptr, size);
+}
+static void
+mm_local_arena_free(const struct mm_arena *arena __attribute__((unused)),
+		     void *ptr)
+{
+	mm_local_free(ptr);
+}
+
+static void *
+mm_shared_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
+		      size_t size)
+{
+	return mm_shared_alloc(size);
+}
+static void *
+mm_shared_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
+		       size_t count, size_t size)
+{
+	return mm_shared_calloc(count, size);
+}
+static void *
+mm_shared_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
+			void *ptr, size_t size)
+{
+	return mm_shared_realloc(ptr, size);
+}
+static void
+mm_shared_arena_free(const struct mm_arena *arena __attribute__((unused)),
+		     void *ptr)
+{
+	mm_shared_free(ptr);
+}
+
+static void *
+mm_global_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
+		      size_t size)
+{
+	return mm_global_alloc(size);
+}
+static void *
+mm_global_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
+		       size_t count, size_t size)
+{
+	return mm_global_calloc(count, size);
+}
+static void *
+mm_global_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
+			void *ptr, size_t size)
+{
+	return mm_global_realloc(ptr, size);
+}
+static void
+mm_global_arena_free(const struct mm_arena *arena __attribute__((unused)),
+		     void *ptr)
+{
+	mm_global_free(ptr);
+}
+
+static const struct mm_arena_vtable mm_local_arena_vtable = {
+	mm_local_arena_alloc,
+	mm_local_arena_calloc,
+	mm_local_arena_realloc,
+	mm_local_arena_free
+};
+
+static const struct mm_arena_vtable mm_shared_arena_vtable = {
+	mm_shared_arena_alloc,
+	mm_shared_arena_calloc,
+	mm_shared_arena_realloc,
+	mm_shared_arena_free
+};
+
+static const struct mm_arena_vtable mm_global_arena_vtable = {
+	mm_global_arena_alloc,
+	mm_global_arena_calloc,
+	mm_global_arena_realloc,
+	mm_global_arena_free
+};
+
+const struct mm_arena mm_local_arena = { .vtable = &mm_local_arena_vtable };
+const struct mm_arena mm_shared_arena = { .vtable = &mm_shared_arena_vtable };
+const struct mm_arena mm_global_arena = { .vtable = &mm_global_arena_vtable };
 
 /**********************************************************************
  * Memory subsystem initialization and termination.

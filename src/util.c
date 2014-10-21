@@ -56,7 +56,7 @@ mm_libc_call(const char *name)
 #include "alloc.h"
 
 char *
-mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
+mm_asprintf(const struct mm_arena *arena, const char *restrict fmt, ...)
 {
 	int len;
 	va_list va;
@@ -66,11 +66,10 @@ mm_asprintf(const struct mm_allocator *alloc, const char *restrict fmt, ...)
 	len = vsnprintf(dummy, sizeof dummy, fmt, va);
 	va_end(va);
 
-	if (unlikely(len < 0)) {
+	if (unlikely(len < 0))
 		mm_fatal(errno, "invalid format string");
-	}
 
-	char *ptr = alloc->alloc(++len);
+	char *ptr = mm_arena_alloc(arena, ++len);
 
 	va_start(va, fmt);
 	vsnprintf(ptr, len, fmt, va);

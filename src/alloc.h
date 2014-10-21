@@ -37,18 +37,6 @@
 # endif
 #endif
 
-struct mm_allocator
-{
-	void * (*alloc)(size_t size);
-	void * (*calloc)(size_t count, size_t size);
-	void * (*realloc)(void *ptr, size_t size);
-	void (*free)(void *ptr);
-};
-
-extern const struct mm_allocator mm_alloc_local;
-extern const struct mm_allocator mm_alloc_shared;
-extern const struct mm_allocator mm_alloc_global;
-
 /**********************************************************************
  * Memory subsystem initialization and termination.
  **********************************************************************/
@@ -133,5 +121,69 @@ char * mm_global_strdup(const char *ptr)
 void mm_global_free(void *ptr);
 
 size_t mm_global_alloc_size(const void *ptr);
+
+/**********************************************************************
+ * Abstract Memory Arena.
+ **********************************************************************/
+
+/* Forward declaration. */
+struct mm_arena;
+
+struct mm_arena_vtable
+{
+	void * (*alloc)(const struct mm_arena *arena, size_t size);
+	void * (*calloc)(const struct mm_arena *arena, size_t count, size_t size);
+	void * (*realloc)(const struct mm_arena *arena, void *ptr, size_t size);
+	void (*free)(const struct mm_arena *arena, void *ptr);
+};
+
+struct mm_arena
+{
+	struct mm_arena_vtable const *const vtable;
+};
+
+static inline void *
+mm_arena_alloc(const struct mm_arena *arena, size_t size)
+{
+	return (arena->vtable->alloc)(arena, size);
+}
+
+static inline void *
+mm_arena_calloc(const struct mm_arena *arena, size_t count, ssize_t size)
+{
+	return (arena->vtable->calloc)(arena, count, size);
+}
+
+static inline void *
+mm_arena_realloc(const struct mm_arena *arena, void *ptr, size_t size)
+{
+	return (arena->vtable->realloc)(arena, ptr, size);
+}
+
+static inline void
+mm_arena_free(const struct mm_arena *arena, void *ptr)
+{
+	(arena->vtable->free)(arena, ptr);
+}
+
+static inline void *
+mm_arena_memdup(const struct mm_arena *arena, const void *ptr, size_t size)
+{
+	return memcpy(mm_arena_alloc(arena, size), ptr, size);
+}
+
+static inline char *
+mm_arena_strdup(const struct mm_arena *arena, const char *ptr)
+{
+	return mm_arena_memdup(arena, ptr, strlen(ptr) + 1);
+}
+
+/**********************************************************************
+ * Simple Memory Arenas.
+ **********************************************************************/
+
+extern const struct mm_arena mm_local_arena;
+extern const struct mm_arena mm_shared_arena;
+extern const struct mm_arena mm_global_arena;
 
 #endif /* ALLOC_H */

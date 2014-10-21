@@ -23,7 +23,7 @@
 #include "bitops.h"
 
 void
-mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
+mm_bitset_prepare(struct mm_bitset *set, const struct mm_arena *arena,
 		  size_t size)
 {
 	set->size = size;
@@ -31,17 +31,17 @@ mm_bitset_prepare(struct mm_bitset *set, const struct mm_allocator *alloc,
 		set->small_set = 0;
 	} else {
 		size_t words = (size + MM_BITSET_UNIT - 1) / MM_BITSET_UNIT;
-		set->large_set = (alloc->calloc)(words, sizeof(uintptr_t));
+		set->large_set = mm_arena_calloc(arena, words, sizeof(uintptr_t));
 	}
 }
 
 void
-mm_bitset_cleanup(struct mm_bitset *set, const struct mm_allocator *alloc)
+mm_bitset_cleanup(struct mm_bitset *set, const struct mm_arena *arena)
 {
 	if (mm_bitset_is_small(set)) {
 		// Nothing to do.
 	} else {
-		(alloc->free)(set->large_set);
+		mm_arena_free(arena, set->large_set);
 	}
 }
 

@@ -70,23 +70,24 @@ mm_pool_grow(struct mm_pool *pool)
 		else
 			pool->block_array_size = 4;
 
-		pool->block_array = pool->alloc->realloc(
+		pool->block_array = mm_arena_realloc(
+			pool->arena,
 			pool->block_array,
 			pool->block_array_size * sizeof(char *));
 	}
 
 	// Allocate a new memory block.
-	char *block = pool->alloc->alloc(MM_POOL_BLOCK_SIZE);
+	char *block = mm_arena_alloc(pool->arena, MM_POOL_BLOCK_SIZE);
 	pool->block_array[pool->block_array_used] = block;
 	pool->block_array_used++;
 
 	pool->block_cur_ptr = block;
 	pool->block_end_ptr = block + pool->block_capacity * pool->item_size;
 
-	mm_brief("grow the '%s' memory pool to %u elements, occupy %lu bytes",
-		 pool->pool_name,
-		 pool->block_capacity * pool->block_array_used,
-		 (unsigned long) MM_POOL_BLOCK_SIZE * pool->block_array_used);
+	mm_verbose("grow the '%s' memory pool to %u elements, occupy %lu bytes",
+		   pool->pool_name,
+		   pool->block_capacity * pool->block_array_used,
+		   (unsigned long) MM_POOL_BLOCK_SIZE * pool->block_array_used);
 
 	LEAVE();
 }
@@ -107,7 +108,7 @@ mm_pool_alloc_new(struct mm_pool *pool)
 static void
 mm_pool_prepare_low(struct mm_pool *pool,
 		    const char *pool_name,
-		    const struct mm_allocator *alloc,
+		    const struct mm_arena *arena,
 		    uint32_t item_size)
 {
 	ASSERT(item_size < 0x200);
@@ -115,8 +116,8 @@ mm_pool_prepare_low(struct mm_pool *pool,
 	if (item_size < sizeof(struct mm_link))
 		item_size = sizeof(struct mm_link);
 
-	mm_brief("make the '%s' memory pool with element size %u",
-		 pool_name, item_size);
+	mm_verbose("make the '%s' memory pool with element size %u",
+		   pool_name, item_size);
 
 	pool->item_last = 0;
 	pool->item_size = item_size;
@@ -125,7 +126,7 @@ mm_pool_prepare_low(struct mm_pool *pool,
 	pool->block_array_used = 0;
 	pool->block_array_size = 0;
 
-	pool->alloc = alloc;
+	pool->arena = arena;
 	pool->block_array = NULL;
 	pool->block_cur_ptr = NULL;
 	pool->block_end_ptr = NULL;
@@ -141,8 +142,8 @@ mm_pool_cleanup(struct mm_pool *pool)
 	ENTER();
 
 	for (uint32_t i = 0; i < pool->block_array_used; i++)
-		pool->alloc->free(pool->block_array[i]);
-	pool->alloc->free(pool->block_array);
+		mm_arena_free(pool->arena, pool->block_array[i]);
+	mm_arena_free(pool->arena, pool->block_array);
 
 	mm_global_free(pool->pool_name);
 
@@ -254,7 +255,7 @@ mm_pool_prepare(struct mm_pool *pool, const char *name, uint32_t item_size)
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_alloc_local, item_size);
+	mm_pool_prepare_low(pool, name, &mm_local_arena, item_size);
 
 	pool->shared = false;
 	pool->global = false;
@@ -309,7 +310,7 @@ mm_pool_shared_alloc_low(mm_core_t core, struct mm_pool *pool)
 		// Get an item form the shared free list.
 		struct mm_link *head = mm_link_head(&pool->free_list);
 		if (head != NULL) {
-			for (uint32_t count = 0; ; count = mm_backoff(count)) {
+			for (uint32_t b = 0; ; b = mm_backoff(b)) {
 				// Prevent ABA-problem.
 				mm_memory_store(cdata->item_guard, head);
 
@@ -423,11 +424,14 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 			// wrt the CAS below.
 			mm_memory_fence();
 
-			for (uint32_t count = 0; ; count = mm_backoff(count)) {
-				struct mm_link *old_head = mm_link_shared_head(&pool->free_list);
+			struct mm_link *old_head = mm_link_shared_head(&pool->free_list);
+			for (uint32_t b = 0; ; b = mm_backoff(b)) {
 				tail->next = old_head;
-				if (mm_link_cas_head(&pool->free_list, old_head, head) == old_head)
+				struct mm_link *cur_head
+					= mm_link_cas_head(&pool->free_list, old_head, head);
+				if (cur_head == old_head)
 					break;
+				old_head = cur_head;
 			}
 		}
 	}
@@ -454,7 +458,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_alloc_shared, item_size);
+	mm_pool_prepare_low(pool, name, &mm_shared_arena, item_size);
 
 	pool->shared = true;
 	pool->global = false;
@@ -533,7 +537,7 @@ mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_siz
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_alloc_global, item_size);
+	mm_pool_prepare_low(pool, name, &mm_global_arena, item_size);
 
 	pool->shared = false;
 	pool->global = true;

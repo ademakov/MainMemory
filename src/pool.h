@@ -75,7 +75,7 @@ struct mm_pool
 		struct mm_pool_global global_data;
 	};
 
-	const struct mm_allocator *alloc;
+	const struct mm_arena *arena;
 
 	void * (*alloc_item)(struct mm_pool *pool);
 	void (*free_item)(struct mm_pool *pool, void *item);
