@@ -21,7 +21,9 @@
 #define HOOK_H
 
 #include "common.h"
-#include "list.h"
+
+/* Forward declaration. */
+struct mm_queue;
 
 typedef void (*mm_hook_rtn0)(void);
 typedef void (*mm_hook_rtn1)(void *);

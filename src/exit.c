@@ -20,6 +20,7 @@
 #include "exit.h"
 
 #include "hook.h"
+#include "list.h"
 #include "log.h"
 #include "trace.h"
 

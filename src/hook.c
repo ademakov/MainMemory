@@ -20,6 +20,7 @@
 #include "hook.h"
 
 #include "alloc.h"
+#include "list.h"
 #include "trace.h"
 
 struct mm_hook_link0
