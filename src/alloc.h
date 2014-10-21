@@ -97,8 +97,13 @@ void mm_shared_free(void *ptr);
 size_t mm_shared_alloc_size(const void *ptr);
 
 /**********************************************************************
- * Global memory allocation routines.
+ * Global Memory Allocation Routines.
  **********************************************************************/
+
+/*
+ * The global memory allocation functions should only be used to create
+ * few key global data structures.
+ */
 
 void * mm_global_alloc(size_t size)
 	__attribute__((malloc));
@@ -121,6 +126,47 @@ char * mm_global_strdup(const char *ptr)
 void mm_global_free(void *ptr);
 
 size_t mm_global_alloc_size(const void *ptr);
+
+/**********************************************************************
+ * Memory Space Allocation Routines.
+ **********************************************************************/
+
+typedef void * mm_mspace_t;
+
+mm_mspace_t mm_mspace_create(void);
+
+void mm_mspace_destroy(mm_mspace_t space);
+
+void * mm_mspace_alloc(mm_mspace_t space, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_xalloc(mm_mspace_t space, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_aligned_xalloc(mm_mspace_t space, size_t align, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_xcalloc(mm_mspace_t space, size_t count, size_t size)
+	__attribute__((malloc));
+
+void * mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
+
+void * mm_mspace_xrealloc(mm_mspace_t space, void *ptr, size_t size);
+
+void mm_mspace_free(mm_mspace_t space, void *ptr);
+
+size_t mm_mspace_getfootprint(mm_mspace_t space);
+
+size_t mm_mspace_getfootprint_limit(mm_mspace_t space);
+size_t mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
+
+size_t mm_mspace_getallocsize(const void *ptr);
 
 /**********************************************************************
  * Abstract Memory Arena.

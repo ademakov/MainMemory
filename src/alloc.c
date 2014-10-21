@@ -311,6 +311,115 @@ mm_global_alloc_size(const void *ptr)
 }
 
 /**********************************************************************
+ * Memory Space Allocation Routines.
+ **********************************************************************/
+
+mm_mspace_t
+mm_mspace_create(void)
+{
+	mm_mspace_t space = create_mspace(0, 0);
+	if (space == NULL)
+		mm_fatal(errno, "failed to create mspace");
+	return space;
+}
+
+void
+mm_mspace_destroy(mm_mspace_t space)
+{
+	destroy_mspace(space);
+}
+
+void *
+mm_mspace_alloc(mm_mspace_t space, size_t size)
+{
+	return mspace_malloc(space, size);
+}
+
+void *
+mm_mspace_xalloc(mm_mspace_t space, size_t size)
+{
+	void *ptr = mm_mspace_alloc(space, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void *
+mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size)
+{
+	return mspace_memalign(space, align, size);
+}
+
+void *
+mm_mspace_aligned_xalloc(mm_mspace_t space, size_t align, size_t size)
+{
+	void *ptr = mm_mspace_aligned_alloc(space, align, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void *
+mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size)
+{
+	return mspace_calloc(space, count, size);
+}
+
+void *
+mm_mspace_xcalloc(mm_mspace_t space, size_t count, size_t size)
+{
+	void *ptr = mm_mspace_calloc(space, count, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	return ptr;
+}
+
+void *
+mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size)
+{
+	return mspace_realloc(space, ptr, size);
+}
+
+void *
+mm_mspace_xrealloc(mm_mspace_t space, void *ptr, size_t size)
+{
+	ptr = mm_mspace_realloc(space, ptr, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void
+mm_mspace_free(mm_mspace_t space, void *ptr)
+{
+	mspace_free(space, ptr);
+}
+
+size_t
+mm_mspace_getfootprint(mm_mspace_t space)
+{
+	return mspace_footprint(space);
+}
+
+size_t
+mm_mspace_getfootprint_limit(mm_mspace_t space)
+{
+	return mspace_footprint_limit(space);
+}
+
+size_t
+mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size)
+{
+	return mspace_set_footprint_limit(space, size);
+}
+
+size_t
+mm_mspace_getallocsize(const void *ptr)
+{
+	return mspace_usable_size(ptr);
+}
+
+/**********************************************************************
  * Simple Memory Arenas.
  **********************************************************************/
 
