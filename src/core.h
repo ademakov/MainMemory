@@ -42,6 +42,16 @@ struct mm_work;
 #define MM_CORE_INBOX_RING_SIZE		(1024)
 #define MM_CORE_CHUNK_RING_SIZE		(1024)
 
+struct mm_core_arena
+{
+	mm_arena_vtable_t vtable;
+	mm_mspace_t space;
+
+#if ENABLE_DEBUG
+	mm_core_t core;
+#endif
+};
+
 /* Virtual core state. */
 struct mm_core
 {
@@ -76,6 +86,7 @@ struct mm_core
 
 	/* Private memory space. */
 	mm_mspace_t space;
+	struct mm_core_arena arena;
 
 	/* Master task. */
 	struct mm_task *master;

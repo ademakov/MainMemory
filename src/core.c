@@ -671,6 +671,68 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
 }
 
 /**********************************************************************
+ * Core Memory Arena.
+ **********************************************************************/
+
+static void *
+mm_core_arena_alloc(struct mm_arena const *arena, size_t size)
+{
+	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	ASSERT(core_arena->core == mm_core_selfid());
+	return mm_mspace_xalloc(core_arena->space, size);
+}
+
+static void *
+mm_core_arena_calloc(struct mm_arena const *arena, size_t count, size_t size)
+{
+	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	ASSERT(core_arena->core == mm_core_selfid());
+	return mm_mspace_xcalloc(core_arena->space, count, size);
+}
+
+static void *
+mm_core_arena_realloc(struct mm_arena const *arena, void *ptr, size_t size)
+{
+	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	ASSERT(core_arena->core == mm_core_selfid());
+	return mm_mspace_xrealloc(core_arena->space, ptr, size);
+}
+
+static void
+mm_core_arena_free(struct mm_arena const *arena, void *ptr)
+{
+	struct mm_core_arena const* core_arena = (struct mm_core_arena const*) arena;
+	ASSERT(core_arena->core == mm_core_selfid());
+	mm_mspace_free(core_arena->space, ptr);
+}
+
+static const struct mm_arena_vtable mm_core_arena_vtable = {
+	.alloc = mm_core_arena_alloc,
+	.calloc = mm_core_arena_calloc,
+	.realloc = mm_core_arena_realloc,
+	.free = mm_core_arena_free
+};
+
+static void
+mm_core_init_arena(struct mm_core *core)
+{
+	core->space = mm_mspace_create();
+
+	core->arena.vtable = &mm_core_arena_vtable;
+	core->arena.space = core->space;
+
+#if ENABLE_DEBUG
+	core->arena.core = mm_core_getid(core);
+#endif
+}
+
+static void
+mm_core_term_arena(struct mm_core *core)
+{
+	mm_mspace_destroy(core->space);
+}
+
+/**********************************************************************
  * Core initialization and termination.
  **********************************************************************/
 
@@ -794,7 +856,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	core->space = mm_mspace_create();
+	mm_core_init_arena(core);
 
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
@@ -870,7 +932,7 @@ mm_core_term_single(struct mm_core *core)
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
-	mm_mspace_destroy(core->space);
+	mm_core_term_arena(core);
 
 	LEAVE();
 }
