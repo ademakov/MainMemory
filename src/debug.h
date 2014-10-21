@@ -28,7 +28,7 @@
 # define ASSERT(e)	(likely(e) ? (void)0 : mm_abort(__LOCATION__, __FUNCTION__, "failed assertion: %s", #e))
 # define DEBUG(...)	mm_debug(__LOCATION__, __FUNCTION__, __VA_ARGS__)
 #else
-# define ASSERT(e)	((void) e)
+# define ASSERT(e)	((void) 0)
 # define DEBUG(...)	((void) 0)
 #endif
 
