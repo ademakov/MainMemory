@@ -1,4 +1,5 @@
-#include "ring.h"
+#include "base/ring.h"
+
 #include "params.h"
 #include "runner.h"
 

@@ -22,8 +22,8 @@
 
 #include "memcache/command.h"
 
-#include "netbuf.h"
-#include "trace.h"
+#include "base/log/trace.h"
+#include "net/netbuf.h"
 
 struct mc_state
 {

@@ -4,7 +4,7 @@ dnl Initialize autoconf.
 AC_PREREQ(2.68)
 AC_INIT([MainMemory], [0.0], [ademakov@gmail.com])
 AC_CONFIG_AUX_DIR([config])
-AC_CONFIG_SRCDIR([src/dlmalloc/malloc.c])
+AC_CONFIG_SRCDIR([src/core/runq.c])
 AC_CONFIG_HEADERS([src/config.h])
 
 dnl Initialize automake.

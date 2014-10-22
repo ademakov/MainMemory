@@ -20,9 +20,12 @@
 #include "memcache/table.h"
 #include "memcache/entry.h"
 
-#include "hash.h"
-#include "log.h"
-#include "task.h"
+#include "core/task.h"
+
+#include "base/hash.h"
+#include "base/log/error.h"
+#include "base/log/plain.h"
+#include "base/log/trace.h"
 
 #include <sys/mman.h>
 
@@ -529,13 +532,15 @@ mc_table_term(void)
 	mm_shared_free(mc_table.parts);
 
 	// Compute the reserved address space size.
-	size_t space = mc_table_buckets_size(mc_table.nparts, mc_table.nbuckets_max);
-	size_t entry_space = mc_table_entries_size(mc_table.nparts, mc_table.nentries_max);
+	size_t buckets_size = mc_table_buckets_size(mc_table.nparts,
+						    mc_table.nbuckets_max);
+	size_t entries_size = mc_table_entries_size(mc_table.nparts,
+						    mc_table.nentries_max);
 
 	// Release the reserved address space.
-	if (munmap(mc_table.buckets_base, space) < 0)
+	if (munmap(mc_table.buckets_base, buckets_size) < 0)
 		mm_error(errno, "munmap");
-	if (munmap(mc_table.entries_base, entry_space) < 0)
+	if (munmap(mc_table.entries_base, entries_size) < 0)
 		mm_error(errno, "munmap");
 
 	LEAVE();

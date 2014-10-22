@@ -18,11 +18,10 @@
  */
 
 #include "memcache/parser.h"
-
 #include "memcache/state.h"
 
-#include "alloc.h"
-#include "netbuf.h"
+#include "base/mem/alloc.h"
+#include "net/netbuf.h"
 
 
 #define MC_KEY_LEN_MAX		250

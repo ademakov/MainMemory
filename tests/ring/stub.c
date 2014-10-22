@@ -1,6 +1,6 @@
 
-#include "ring.c"
-#include "backoff.c"
+#include "base/ring.c"
+#include "base/backoff.c"
 
 #include <sched.h>
 
@@ -23,4 +23,15 @@ void
 mm_thread_yield(void)
 {
 	sched_yield();
+}
+
+void
+mm_abort_with_message(const char *restrict location,
+		      const char *restrict function,
+		      const char *restrict msg, ...)
+{
+	(void) location;
+	(void) function;
+	(void) msg;
+	abort();
 }

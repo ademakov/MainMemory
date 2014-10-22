@@ -23,10 +23,10 @@
 #include "memcache/memcache.h"
 #include "memcache/entry.h"
 
-#include "bitops.h"
-#include "list.h"
-#include "lock.h"
-#include "wait.h"
+#include "base/bitops.h"
+#include "base/list.h"
+#include "base/lock.h"
+#include "core/wait.h"
 
 /* A partition of table of memcache entries. */
 struct mc_tpart
@@ -68,7 +68,7 @@ struct mc_tpart
 	/* The last used value for CAS command. */
 	uint64_t cas;
 
-} __align(MM_CACHELINE);
+} __align_cacheline;
 
 /* The table of memcache entries. */
 struct mc_table

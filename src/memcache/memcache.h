@@ -21,7 +21,7 @@
 #define MEMCACHE_H
 
 #include "common.h"
-#include "bitset.h"
+#include "base/bitset.h"
 
 #define ENABLE_MEMCACHE_LOCKS	1
 

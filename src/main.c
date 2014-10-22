@@ -1,5 +1,5 @@
 /*
- * daemon.c - MainMemory main routine.
+ * main.c - MainMemory main routine.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -18,13 +18,18 @@
  */
 
 #include "common.h"
-#include "alloc.h"
-#include "bitset.h"
-#include "core.h"
-#include "event.h"
-#include "log.h"
-#include "net.h"
-#include "trace.h"
+
+#include "core/core.h"
+
+#include "base/bitset.h"
+#include "base/log/error.h"
+#include "base/log/plain.h"
+#include "base/log/trace.h"
+#include "base/mem/alloc.h"
+#include "base/util/exit.h"
+
+#include "event/event.h"
+#include "net/net.h"
 
 #include "memcache/memcache.h"
 

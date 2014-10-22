@@ -18,22 +18,21 @@
  */
 
 #include "memcache/memcache.h"
-
 #include "memcache/command.h"
 #include "memcache/entry.h"
 #include "memcache/parser.h"
 #include "memcache/state.h"
 #include "memcache/table.h"
 
-#include "alloc.h"
-#include "bitops.h"
-#include "chunk.h"
-#include "core.h"
-#include "future.h"
-#include "list.h"
-#include "log.h"
-#include "pool.h"
-#include "trace.h"
+#include "core/core.h"
+#include "core/future.h"
+#include "core/pool.h"
+
+#include "base/bitops.h"
+#include "base/list.h"
+#include "base/log/trace.h"
+#include "base/mem/alloc.h"
+#include "base/mem/chunk.h"
 
 #include <stdio.h>
 #include <stdlib.h>

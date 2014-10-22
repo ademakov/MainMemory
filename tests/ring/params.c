@@ -1,5 +1,6 @@
 #include "params.h"
-#include "bitops.h"
+
+#include "base/bitops.h"
 
 #include <stdio.h>
 #include <stdlib.h>

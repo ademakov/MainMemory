@@ -20,7 +20,7 @@
 #include "memcache/entry.h"
 #include "memcache/table.h"
 
-#include "core.h"
+#include "core/core.h"
 
 #include <ctype.h>
 

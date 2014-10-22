@@ -18,15 +18,16 @@
  */
 
 #include "memcache/command.h"
-
 #include "memcache/entry.h"
 #include "memcache/table.h"
 
-#include "buffer.h"
-#include "hash.h"
-#include "net.h"
-#include "task.h"
-#include "trace.h"
+#include "core/task.h"
+
+#include "base/hash.h"
+#include "base/log/trace.h"
+#include "base/mem/buffer.h"
+
+#include "net/net.h"
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;

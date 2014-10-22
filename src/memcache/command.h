@@ -21,7 +21,7 @@
 #define MEMCACHE_COMMAND_H
 
 #include "memcache/memcache.h"
-#include "future.h"
+#include "core/future.h"
 
 /**********************************************************************
  * Command type declarations.

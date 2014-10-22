@@ -23,11 +23,8 @@
 #include "memcache/memcache.h"
 
 #include "arch/atomic.h"
-#include "chunk.h"
-#include "list.h"
-
-/* Forward declarations. */
-//struct mc_tpart;
+#include "base/list.h"
+#include "base/mem/chunk.h"
 
 #define MC_ENTRY_FREE		0
 #define MC_ENTRY_USED_MIN	1

@@ -1,10 +1,11 @@
-#include "ring.h"
+#include "base/ring.h"
+
 #include "params.h"
 #include "runner.h"
 
 #include <stdlib.h>
 
-#define LOCKS (MM_RING_GLOBAL_PUT | MM_RING_GLOBAL_GET)
+#define LOCKS (MM_RING_LOCKED_PUT | MM_RING_LOCKED_GET)
 
 #if TEST_STATIC_RING
 
@@ -37,7 +38,7 @@ producer(void *arg)
 
 	for (i = 0; i < g_producer_data_size; i++) {
 		delay_producer();
-		while (!mm_ring_global_put(ring, (void *) 1))
+		while (!mm_ring_spsc_locked_put(ring, (void *) 1))
 			;
 	}
 }
@@ -64,7 +65,7 @@ consumer(void *arg)
 
 	for (i = 0; i < g_consumer_data_size; i++) {
 		void *data;
-		while (!mm_ring_global_get(ring, &data))
+		while (!mm_ring_spsc_locked_get(ring, &data))
 			;
 		result += (uintptr_t) data;
 		delay_consumer();
