@@ -19,6 +19,7 @@
 
 #include "core/core.h"
 
+#include "core/alloc.h"
 #include "core/future.h"
 #include "core/port.h"
 #include "core/synch.h"
@@ -1010,9 +1011,11 @@ mm_core_init(void)
 
 	mm_alloc_init();
 	mm_cdata_init();
-
 	mm_clock_init();
 	mm_thread_init();
+
+	mm_shared_alloc_init();
+
 	mm_event_init();
 	mm_net_init();
 
@@ -1049,10 +1052,11 @@ mm_core_term(void)
 
 	mm_net_term();
 	mm_event_term();
-	mm_thread_term();
 
+	mm_shared_alloc_term();
+
+	mm_thread_term();
 	mm_cdata_term();
-	mm_alloc_term();
 
 	LEAVE();
 }

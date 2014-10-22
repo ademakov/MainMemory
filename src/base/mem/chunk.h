@@ -73,7 +73,7 @@ static inline size_t
 mm_chunk_base_size_global(const struct mm_chunk_base *chunk)
 {
 	ASSERT(chunk->core == MM_CORE_NONE);
-	return mm_global_alloc_size(chunk) - sizeof(struct mm_chunk);
+	return mm_global_getallocsize(chunk) - sizeof(struct mm_chunk);
 }
 
 static inline size_t

@@ -19,7 +19,7 @@
 
 #include "memcache/state.h"
 
-#include "base/mem/alloc.h"
+#include "core/alloc.h"
 
 struct mm_net_socket *
 mc_state_alloc(void)

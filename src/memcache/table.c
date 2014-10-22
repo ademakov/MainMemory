@@ -20,6 +20,7 @@
 #include "memcache/table.h"
 #include "memcache/entry.h"
 
+#include "core/alloc.h"
 #include "core/task.h"
 
 #include "base/hash.h"

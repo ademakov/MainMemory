@@ -18,6 +18,7 @@
  */
 
 #include "core/pool.h"
+#include "core/alloc.h"
 #include "core/core.h"
 
 #include "base/log/error.h"

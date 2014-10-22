@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef UTIL_LIBCALL_H
-#define UTIL_LIBCALL_H
+#ifndef BASE_UTIL_LIBCALL_H
+#define BASE_UTIL_LIBCALL_H
 
 void mm_libcall(const char *name);
 
-#endif /* UTIL_LIBCALL_H */
+#endif /* BASE_UTIL_LIBCALL_H */

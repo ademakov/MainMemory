@@ -38,68 +38,10 @@
 #endif
 
 /**********************************************************************
- * Memory subsystem initialization and termination.
+ * Memory subsystem initialization.
  **********************************************************************/
 
 void mm_alloc_init(void);
-void mm_alloc_term(void);
-
-/**********************************************************************
- * Cross-core memory allocation routines.
- **********************************************************************/
-
-void * mm_shared_alloc(size_t size)
-	__attribute__((malloc));
-
-void * mm_shared_aligned_alloc(size_t align, size_t size)
-	__attribute__((malloc));
-
-void * mm_shared_calloc(size_t count, size_t size)
-	__attribute__((malloc));
-
-void * mm_shared_realloc(void *ptr, size_t size);
-
-void * mm_shared_memdup(const void *ptr, size_t size)
-	__attribute__((malloc));
-
-char * mm_shared_strdup(const char *ptr)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
-
-void mm_shared_free(void *ptr);
-
-size_t mm_shared_alloc_size(const void *ptr);
-
-/**********************************************************************
- * Global Memory Allocation Routines.
- **********************************************************************/
-
-/*
- * The global memory allocation functions should only be used to create
- * few key global data structures.
- */
-
-void * mm_global_alloc(size_t size)
-	__attribute__((malloc));
-
-void * mm_global_aligned_alloc(size_t align, size_t size)
-	__attribute__((malloc));
-
-void * mm_global_calloc(size_t count, size_t size)
-	__attribute__((malloc));
-
-void * mm_global_realloc(void *ptr, size_t size);
-
-void * mm_global_memdup(const void *ptr, size_t size)
-	__attribute__((malloc));
-
-char * mm_global_strdup(const char *ptr)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
-
-void mm_global_free(void *ptr);
-
-size_t mm_global_alloc_size(const void *ptr);
 
 /**********************************************************************
  * Memory Space Allocation Routines.
@@ -143,10 +85,45 @@ size_t mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
 size_t mm_mspace_getallocsize(const void *ptr);
 
 /**********************************************************************
- * Simple Memory Arenas.
+ * Global Memory Allocation Routines.
  **********************************************************************/
 
-extern const struct mm_arena mm_shared_arena;
+/*
+ * The global memory allocation functions should only be used to create
+ * few key global data structures.
+ */
+
+void * mm_global_alloc(size_t size)
+	__attribute__((malloc));
+
+void * mm_global_aligned_alloc(size_t align, size_t size)
+	__attribute__((malloc));
+
+void * mm_global_calloc(size_t count, size_t size)
+	__attribute__((malloc));
+
+void * mm_global_realloc(void *ptr, size_t size);
+
+void mm_global_free(void *ptr);
+
+size_t mm_global_getallocsize(const void *ptr);
+
+static inline void *
+mm_global_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_global_alloc(size), ptr, size);
+}
+
+static inline char *
+mm_global_strdup(const char *ptr)
+{
+	return mm_global_memdup(ptr, strlen(ptr) + 1);
+}
+
+/**********************************************************************
+ * Global Memory Arena.
+ **********************************************************************/
+
 extern const struct mm_arena mm_global_arena;
 
 #endif /* BASE_MEM_ALLOC_H */

@@ -160,68 +160,6 @@ mm_thread_is_locked(mm_thread_lock_t *lock)
 }
 
 /**********************************************************************
- * Task-Only Extended TAS(TATAS) Spin Locks (with optional statistics).
- **********************************************************************/
-
-#if ENABLE_SMP
-# define MM_TASK_LOCK_INIT	{ .lock = MM_THREAD_LOCK_INIT }
-#else
-# define MM_TASK_LOCK_INIT	{ .lock = 0 }
-#endif
-
-typedef struct
-{
-#if ENABLE_SMP
-	mm_thread_lock_t lock;
-#else
-	uint8_t lock;
-#endif
-
-} mm_task_lock_t;
-
-static inline bool
-mm_task_trylock(mm_task_lock_t *lock)
-{
-#if ENABLE_SMP
-	return mm_thread_trylock(&lock->lock);
-#else
-	(void) lock;
-	return true;
-#endif
-}
-
-static inline void
-mm_task_lock(mm_task_lock_t *lock)
-{
-#if ENABLE_SMP
-	mm_thread_lock(&lock->lock);
-#else
-	(void) lock;
-#endif
-}
-
-static inline void
-mm_task_unlock(mm_task_lock_t *lock)
-{
-#if ENABLE_SMP
-	mm_thread_unlock(&lock->lock);
-#else
-	(void) lock;
-#endif
-}
-
-static inline bool
-mm_task_is_locked(mm_task_lock_t *lock)
-{
-#if ENABLE_SMP
-	return mm_thread_is_locked(&lock->lock);
-#else
-	(void) lock;
-	return false;
-#endif
-}
-
-/**********************************************************************
  * Lock statistics.
  **********************************************************************/
 

@@ -39,8 +39,10 @@ base_sources = \
 	base/util/libcall.c base/util/libcall.h
 
 core_sources = \
+	core/alloc.c core/alloc.h \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
+	core/lock.h \
 	core/pool.c core/pool.h \
 	core/port.c core/port.h \
 	core/runq.c core/runq.h \

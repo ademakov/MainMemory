@@ -20,7 +20,6 @@
 #include "base/mem/alloc.h"
 #include "base/lock.h"
 #include "base/log/error.h"
-#include "base/log/trace.h"
 #include "base/mem/arena.h"
 #include "base/util/libcall.h"
 
@@ -60,185 +59,13 @@ free(void *ptr)
 }
 
 /**********************************************************************
- * Cross-core memory allocation routines.
+ * Memory subsystem initialization.
  **********************************************************************/
 
-static mspace mm_shared_space;
-
-static mm_task_lock_t mm_shared_alloc_lock = MM_TASK_LOCK_INIT;
-
 void
-mm_shared_init(void)
+mm_alloc_init(void)
 {
-	ENTER();
-
-	mm_shared_space = create_mspace(0, 0);
-
-	LEAVE();
-}
-
-void
-mm_shared_term(void)
-{
-	ENTER();
-
-	destroy_mspace(mm_shared_space);
-
-	LEAVE();
-}
-
-void *
-mm_shared_alloc(size_t size)
-{
-	mm_task_lock(&mm_shared_alloc_lock);
-	void *ptr = mspace_malloc(mm_shared_space, size);
-	mm_task_unlock(&mm_shared_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_shared_aligned_alloc(size_t align, size_t size)
-{
-	mm_task_lock(&mm_shared_alloc_lock);
-	void *ptr = mspace_memalign(mm_shared_space, align, size);
-	mm_task_unlock(&mm_shared_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_shared_calloc(size_t count, size_t size)
-{
-	mm_task_lock(&mm_shared_alloc_lock);
-	void *ptr = mspace_calloc(mm_shared_space, count, size);
-	mm_task_unlock(&mm_shared_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	return ptr;
-}
-
-void *
-mm_shared_realloc(void *ptr, size_t size)
-{
-	mm_task_lock(&mm_shared_alloc_lock);
-	ptr = mspace_realloc(mm_shared_space, ptr, size);
-	mm_task_unlock(&mm_shared_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_shared_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_shared_alloc(size), ptr, size);
-}
-
-char *
-mm_shared_strdup(const char *ptr)
-{
-	return mm_shared_memdup(ptr, strlen(ptr) + 1);
-}
-
-void
-mm_shared_free(void *ptr)
-{
-	mm_task_lock(&mm_shared_alloc_lock);
-	mspace_free(mm_shared_space, ptr);
-	mm_task_unlock(&mm_shared_alloc_lock);
-}
-
-size_t
-mm_shared_alloc_size(const void *ptr)
-{
-	return mspace_usable_size(ptr);
-}
-
-/**********************************************************************
- * Global memory allocation routines.
- **********************************************************************/
-
-static mm_lock_t mm_global_alloc_lock = MM_LOCK_INIT;
-
-void *
-mm_global_alloc(size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlmalloc(size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_global_aligned_alloc(size_t align, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlmemalign(align, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_global_calloc(size_t count, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlcalloc(count, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	return ptr;
-}
-
-void *
-mm_global_realloc(void *ptr, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	ptr = dlrealloc(ptr, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_global_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_global_alloc(size), ptr, size);
-}
-
-char *
-mm_global_strdup(const char *ptr)
-{
-	return mm_global_memdup(ptr, strlen(ptr) + 1);
-}
-
-void
-mm_global_free(void *ptr)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	dlfree(ptr);
-	mm_global_unlock(&mm_global_alloc_lock);
-}
-
-size_t
-mm_global_alloc_size(const void *ptr)
-{
-	return dlmalloc_usable_size(ptr);
+	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
 }
 
 /**********************************************************************
@@ -351,33 +178,76 @@ mm_mspace_getallocsize(const void *ptr)
 }
 
 /**********************************************************************
- * Simple Memory Arenas.
+ * Global memory allocation routines.
  **********************************************************************/
 
-static void *
-mm_shared_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
-		      size_t size)
+static mm_lock_t mm_global_alloc_lock = MM_LOCK_INIT;
+
+void *
+mm_global_alloc(size_t size)
 {
-	return mm_shared_alloc(size);
+	mm_global_lock(&mm_global_alloc_lock);
+	void *ptr = dlmalloc(size);
+	mm_global_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
 }
-static void *
-mm_shared_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
-		       size_t count, size_t size)
+
+void *
+mm_global_aligned_alloc(size_t align, size_t size)
 {
-	return mm_shared_calloc(count, size);
+	mm_global_lock(&mm_global_alloc_lock);
+	void *ptr = dlmemalign(align, size);
+	mm_global_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
 }
-static void *
-mm_shared_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
-			void *ptr, size_t size)
+
+void *
+mm_global_calloc(size_t count, size_t size)
 {
-	return mm_shared_realloc(ptr, size);
+	mm_global_lock(&mm_global_alloc_lock);
+	void *ptr = dlcalloc(count, size);
+	mm_global_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
+	return ptr;
 }
-static void
-mm_shared_arena_free(const struct mm_arena *arena __attribute__((unused)),
-		     void *ptr)
+
+void *
+mm_global_realloc(void *ptr, size_t size)
 {
-	mm_shared_free(ptr);
+	mm_global_lock(&mm_global_alloc_lock);
+	ptr = dlrealloc(ptr, size);
+	mm_global_unlock(&mm_global_alloc_lock);
+
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
 }
+
+void
+mm_global_free(void *ptr)
+{
+	mm_global_lock(&mm_global_alloc_lock);
+	dlfree(ptr);
+	mm_global_unlock(&mm_global_alloc_lock);
+}
+
+size_t
+mm_global_getallocsize(const void *ptr)
+{
+	return dlmalloc_usable_size(ptr);
+}
+
+/**********************************************************************
+ * Global Memory Arena.
+ **********************************************************************/
 
 static void *
 mm_global_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
@@ -404,13 +274,6 @@ mm_global_arena_free(const struct mm_arena *arena __attribute__((unused)),
 	mm_global_free(ptr);
 }
 
-static const struct mm_arena_vtable mm_shared_arena_vtable = {
-	mm_shared_arena_alloc,
-	mm_shared_arena_calloc,
-	mm_shared_arena_realloc,
-	mm_shared_arena_free
-};
-
 static const struct mm_arena_vtable mm_global_arena_vtable = {
 	mm_global_arena_alloc,
 	mm_global_arena_calloc,
@@ -418,30 +281,4 @@ static const struct mm_arena_vtable mm_global_arena_vtable = {
 	mm_global_arena_free
 };
 
-const struct mm_arena mm_shared_arena = { .vtable = &mm_shared_arena_vtable };
 const struct mm_arena mm_global_arena = { .vtable = &mm_global_arena_vtable };
-
-/**********************************************************************
- * Memory subsystem initialization and termination.
- **********************************************************************/
-
-void
-mm_alloc_init(void)
-{
-	ENTER();
-
-	dlmallopt(M_GRANULARITY, 16 * MM_PAGE_SIZE);
-	mm_shared_init();
-
-	LEAVE();
-}
-
-void
-mm_alloc_term(void)
-{
-	ENTER();
-
-	mm_shared_term();
-
-	LEAVE();
-}
