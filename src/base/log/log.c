@@ -61,7 +61,7 @@ mm_log_create_chunk(size_t size)
 			tag = MM_CHUNK_COMMON;
 		else
 			tag = MM_CHUNK_GLOBAL;
-	} else if (unlikely(!mm_chunk_is_special_alloc_ready())) {
+	} else if (unlikely(!mm_chunk_is_private_alloc_ready())) {
 		tag = MM_CHUNK_COMMON;
 	}
 

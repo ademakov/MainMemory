@@ -40,20 +40,20 @@ static mm_chunk_free_t mm_chunk_free = NULL;
 static mm_lock_t mm_chunk_lock = MM_LOCK_INIT;
 
 bool
-mm_chunk_is_special_alloc_ready(void)
+mm_chunk_is_private_alloc_ready(void)
 {
 	return (mm_chunk_alloc != NULL);
 }
 
 void
-mm_chunk_set_special_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
+mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
 {
 	mm_global_lock(&mm_chunk_lock);
 
 	// If chunk allocation routines are replaced when there are already
 	// some allocated chunks then it might explode on freeing them.
 	if (mm_chunk_alloc != NULL || mm_chunk_free != NULL)
-		mm_fatal(0, "special chunk allocation might only be initialized once");
+		mm_fatal(0, "private chunk allocation might only be initialized once");
 
 	mm_chunk_alloc = alloc;
 	mm_chunk_free = free;
@@ -97,7 +97,7 @@ mm_chunk_create(mm_chunk_tag_t tag, size_t size)
 		chunk = mm_arena_alloc(arena, size);
 	} else {
 		if (unlikely(mm_chunk_alloc == NULL))
-			mm_fatal(0, "special chunk allocation is not initialized");
+			mm_fatal(0, "private chunk allocation is not initialized");
 		chunk = mm_chunk_alloc(tag, size);
 	}
 
@@ -120,7 +120,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		mm_arena_free(arena, chunk);
 	} else {
 		if (unlikely(mm_chunk_free == NULL))
-			mm_fatal(0, "special chunk allocation is not initialized");
+			mm_fatal(0, "private chunk allocation is not initialized");
 		mm_chunk_free(tag, chunk);
 	}
 }
