@@ -26,8 +26,10 @@
 void
 mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_prepare(&sock->rbuf);
-	mm_buffer_prepare(&sock->tbuf);
+	mm_core_t core = sock->sock.core;
+	mm_arena_t arena = mm_core_getarena(core);
+	mm_buffer_prepare(&sock->rbuf, arena, core);
+	mm_buffer_prepare(&sock->tbuf, arena, core);
 }
 
 void

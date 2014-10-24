@@ -20,9 +20,6 @@
 #include "base/mem/buffer.h"
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/mem/chunk.h"
-
-#include "core/core.h"
 
 #include <stdarg.h>
 #include <stdio.h>
@@ -32,13 +29,13 @@
  **********************************************************************/
 
 static struct mm_buffer_segment *
-mm_buffer_segment_create(char *data, size_t size,
+mm_buffer_segment_create(mm_arena_t arena, char *data, size_t size,
 			 mm_buffer_release_t release,
 			 uintptr_t release_data)
 {
 	ENTER();
 
-	struct mm_buffer_segment *seg = mm_local_alloc(sizeof *seg);
+	struct mm_buffer_segment *seg = mm_arena_alloc(arena, sizeof *seg);
 	seg->data = data;
 	seg->size = size;
 	seg->next = NULL;
@@ -50,13 +47,13 @@ mm_buffer_segment_create(char *data, size_t size,
 }
 
 static void
-mm_buffer_segment_destroy(struct mm_buffer_segment *seg)
+mm_buffer_segment_destroy(mm_arena_t arena, struct mm_buffer_segment *seg)
 {
 	ENTER();
 
 	if (seg->release != NULL)
 		(*seg->release)(seg->release_data);
-	mm_local_free(seg);
+	mm_arena_free(arena, seg);
 
 	LEAVE();
 }
@@ -81,7 +78,7 @@ mm_buffer_chunk_release(uintptr_t release_data)
 // Create a new buffer segment that resides in an internal buffer chunk.
 // The created segment size may be smaller or bigger than requested.
 static struct mm_buffer_segment *
-mm_buffer_chunk_reserve(size_t desired_size)
+mm_buffer_chunk_reserve(struct mm_buffer *buf, size_t desired_size)
 {
 	ENTER();
 
@@ -95,14 +92,13 @@ mm_buffer_chunk_reserve(size_t desired_size)
 	DEBUG("reserve %d/%d bytes for a buffer chunk",
 	      (int) size, (int) desired_size);
 
-
 	// Create an internal chunk.
-	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	struct mm_chunk *chunk = mm_chunk_create(buf->chunk_tag, size);
 	size = mm_chunk_getsize(chunk);
 
 	// Create a buffer segment based on the chunk.
 	struct mm_buffer_segment *seg
-		= mm_buffer_segment_create(chunk->data, size,
+		= mm_buffer_segment_create(buf->arena, chunk->data, size,
 					   mm_buffer_chunk_release,
 					   (uintptr_t) chunk);
 
@@ -125,7 +121,7 @@ mm_buffer_ensure_first_in(struct mm_buffer *buf, size_t desired_size)
 {
 	struct mm_buffer_segment *seg = buf->in_seg;
 	if (seg == NULL) {
-		seg = mm_buffer_chunk_reserve(desired_size);
+		seg = mm_buffer_chunk_reserve(buf, desired_size);
 		buf->in_seg = seg;
 		buf->out_seg = seg;
 		buf->chunk_size += seg->size;
@@ -139,7 +135,7 @@ mm_buffer_ensure_next_in(struct mm_buffer *buf,
 			 size_t desired_size)
 {
 	if (seg->next == NULL) {
-		seg->next = mm_buffer_chunk_reserve(desired_size);
+		seg->next = mm_buffer_chunk_reserve(buf, desired_size);
 		buf->chunk_size += seg->size;
 	}
 	return seg->next;
@@ -152,11 +148,14 @@ mm_buffer_ensure_next_in(struct mm_buffer *buf,
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
 void
-mm_buffer_prepare(struct mm_buffer *buf)
+mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_tag_t chunk_tag)
 {
 	ENTER();
 
 	memset(buf, 0, sizeof *buf);
+
+	buf->arena = arena;
+	buf->chunk_tag = chunk_tag;
 
 	LEAVE();
 }
@@ -169,7 +168,7 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 	struct mm_buffer_segment *seg = buf->out_seg;
 	while (seg != NULL) {
 		struct mm_buffer_segment *next = seg->next;
-		mm_buffer_segment_destroy(seg);
+		mm_buffer_segment_destroy(buf->arena, seg);
 		seg = next;
 	}
 
@@ -197,7 +196,7 @@ mm_buffer_rectify(struct mm_buffer *buf)
 		buf->in_seg = seg->next;
 		buf->out_seg = seg->next;
 		buf->extra_size -= seg->size;
-		mm_buffer_segment_destroy(seg);
+		mm_buffer_segment_destroy(buf->arena, seg);
 	}
 	buf->in_off = 0;
 	buf->out_off = 0;
@@ -259,12 +258,12 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 	} else if ((unsigned) len < n) {
 		buf->in_off += len;
 	} else {
-		char *ptr = mm_local_alloc(len + 1);
+		char *ptr = mm_arena_alloc(buf->arena, len + 1);
 		len = vsnprintf(ptr, len + 1, fmt, va);
 
 		mm_buffer_append(buf, ptr, len);
 
-		mm_local_free(ptr);
+		mm_arena_free(buf->arena, ptr);
 	}
 
 	LEAVE();
@@ -348,7 +347,7 @@ mm_buffer_reduce(struct mm_buffer *buf, size_t size)
 			}
 
 			struct mm_buffer_segment *next = seg->next;
-			mm_buffer_segment_destroy(seg);
+			mm_buffer_segment_destroy(buf->arena, seg);
 			seg = next;
 
 			size -= n;
@@ -391,7 +390,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 
 	// Create a new segment and insert it where appropriate.
 	struct mm_buffer_segment *seg
-		= mm_buffer_segment_create(data, size,
+		= mm_buffer_segment_create(buf->arena, data, size,
 					   release, release_data);
 	if (buf->in_seg == NULL) {
 		seg->next = NULL;
@@ -413,7 +412,8 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		// Split the in_seg segment into two parts.
 		struct mm_buffer_segment *ls, *rs;
 		ls = buf->in_seg;
-		rs = mm_buffer_segment_create(ls->data + buf->in_off,
+		rs = mm_buffer_segment_create(buf->arena,
+					      ls->data + buf->in_off,
 					      ls->size - buf->in_off,
 					      ls->release, ls->release_data);
 		rs->next = ls->next;
