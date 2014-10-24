@@ -29,4 +29,7 @@
 /* Virtual memory page size. */
 #define MM_PAGE_SIZE		(4096)
 
+/* Virtual address width. */
+#define MM_ADDRESS_BITS		(32)
+
 #endif /* ARCH_X86_BASIC_H */

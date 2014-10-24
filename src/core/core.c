@@ -19,7 +19,6 @@
 
 #include "core/core.h"
 
-#include "core/alloc.h"
 #include "core/future.h"
 #include "core/port.h"
 #include "core/synch.h"
@@ -33,6 +32,7 @@
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
 #include "base/mem/chunk.h"
+#include "base/mem/mem.h"
 #include "base/thr/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
@@ -286,20 +286,27 @@ mm_core_receive_tasks(struct mm_core *core)
 #endif
 
 /**********************************************************************
- * Chunk reclamation.
+ * Chunk allocation and reclamation.
  **********************************************************************/
 
-void
-mm_core_reclaim_chunk(struct mm_chunk *chunk)
+void *
+mm_core_chunk_alloc(mm_chunk_tag_t tag __attribute__((unused)), size_t size)
 {
-	ENTER();
+	ASSERT(tag == mm_core_selfid());
+	return mm_local_alloc(size);
+}
 
-	if (chunk->base.core == mm_core_selfid()) {
-		// Destroy the chunk directly.
-		mm_chunk_destroy(chunk);
+void
+mm_core_chunk_free(mm_chunk_tag_t tag, void *chunk)
+{
+	mm_core_t core = mm_core_selfid();
+	if (core == tag) {
+		mm_local_free(chunk);
 	} else {
+		ASSERT(!MM_CHUNK_IS_ARENA_TAG(tag));
+
 		// Put the chunk to the target core chunks ring.
-		struct mm_core *core = mm_core_getptr(chunk->base.core);
+		struct mm_core *core = mm_core_getptr(tag);
 		for (;;) {
 			bool ok = mm_ring_spsc_locked_put(&core->chunks, chunk);
 
@@ -308,8 +315,7 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 			if (ok) {
 				break;
 			} else if (unlikely(mm_memory_load(core->stop))) {
-				mm_warning(0, "lost a chunk as core %d is stopped",
-					   chunk->base.core);
+				mm_warning(0, "lost a chunk as core %d is stopped", tag);
 				break;
 			}
 
@@ -317,26 +323,6 @@ mm_core_reclaim_chunk(struct mm_chunk *chunk)
 			mm_synch_signal(core->synch);
 		}
 	}
-
-	LEAVE();
-}
-
-void
-mm_core_reclaim_chain(struct mm_chunk *chunk)
-{
-	ENTER();
-
-	if (chunk != NULL) {
-		for (;;) {
-			struct mm_link *link = chunk->base.link.next;
-			mm_core_reclaim_chunk(chunk);
-			if (link == NULL)
-				break;
-			chunk = containerof(link, struct mm_chunk, base.link);
-		}
-	}
-
-	LEAVE();
 }
 
 static void
@@ -344,9 +330,11 @@ mm_core_destroy_chunks(struct mm_core *core)
 {
 	ENTER();
 
-	struct mm_chunk *chunk;
-	while (mm_ring_spsc_get(&core->chunks, (void **) &chunk))
-		mm_chunk_destroy(chunk);
+	void *chunk;
+	while (mm_ring_spsc_get(&core->chunks, &chunk)) {
+		ASSERT(mm_chunk_gettag((struct mm_chunk *) chunk) == mm_core_selfid());
+		mm_local_free(chunk);
+	}
 
 	LEAVE();
 }
@@ -677,69 +665,33 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
 }
 
 /**********************************************************************
- * Core Memory Arena.
+ * Shared Core Space Initialization and Termination.
  **********************************************************************/
 
-typedef const struct mm_core_arena *mm_core_arena_t;
-
-static void *
-mm_core_arena_alloc(mm_arena_t arena, size_t size)
-{
-	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
-	ASSERT(core_arena->core == mm_core_selfid());
-	return mm_mspace_xalloc(core_arena->space, size);
-}
-
-static void *
-mm_core_arena_calloc(mm_arena_t arena, size_t count, size_t size)
-{
-	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
-	ASSERT(core_arena->core == mm_core_selfid());
-	return mm_mspace_xcalloc(core_arena->space, count, size);
-}
-
-static void *
-mm_core_arena_realloc(mm_arena_t arena, void *ptr, size_t size)
-{
-	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
-	ASSERT(core_arena->core == mm_core_selfid());
-	return mm_mspace_xrealloc(core_arena->space, ptr, size);
-}
+#if ENABLE_SMP
+struct mm_common_space mm_shared_space;
+mm_chunk_tag_t mm_shared_chunk_tag;
+#endif
 
 static void
-mm_core_arena_free(mm_arena_t arena, void *ptr)
+mm_shared_space_init(void)
 {
-	mm_core_arena_t core_arena = (mm_core_arena_t) arena;
-	ASSERT(core_arena->core == mm_core_selfid());
-	mm_mspace_free(core_arena->space, ptr);
-}
-
-static const struct mm_arena_vtable mm_core_arena_vtable = {
-	.alloc = mm_core_arena_alloc,
-	.calloc = mm_core_arena_calloc,
-	.realloc = mm_core_arena_realloc,
-	.free = mm_core_arena_free
-};
-
-static void
-mm_core_init_arena(struct mm_core *core)
-{
-	core->arena.space = mm_mspace_create();
-	core->arena.arena.vtable = &mm_core_arena_vtable;
-
-#if ENABLE_DEBUG
-	core->arena.core = mm_core_getid(core);
+#if ENABLE_SMP
+	mm_common_space_prepare(&mm_shared_space, true);
+	mm_shared_chunk_tag = mm_chunk_add_arena(&mm_shared_space.arena);
 #endif
 }
 
 static void
-mm_core_term_arena(struct mm_core *core)
+mm_shared_space_term(void)
 {
-	mm_mspace_destroy(core->arena.space);
+#if ENABLE_SMP
+	mm_common_space_cleanup(&mm_shared_space);
+#endif
 }
 
 /**********************************************************************
- * Core initialization and termination.
+ * Core Initialization and Termination.
  **********************************************************************/
 
 static void
@@ -775,7 +727,7 @@ mm_core_boot_init(struct mm_core *core)
 	if (!MM_CORE_IS_PRIMARY(core))
 		mm_synch_wait(core->synch);
 
-	mm_timer_init(&core->time_manager, &core->arena.arena);
+	mm_timer_init(&core->time_manager, &core->space.arena);
 
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
@@ -862,7 +814,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	mm_core_init_arena(core);
+	mm_private_space_prepare(&core->space, true);
 
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
@@ -938,7 +890,7 @@ mm_core_term_single(struct mm_core *core)
 	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
-	mm_core_term_arena(core);
+	mm_private_space_cleanup(&core->space);
 
 	LEAVE();
 }
@@ -1009,13 +961,11 @@ mm_core_init(void)
 		mm_brief("Running on %d cores.", mm_core_num);
 	mm_bitset_prepare(&mm_core_event_affinity, &mm_global_arena, mm_core_num);
 
-	mm_alloc_init();
-	mm_cdata_init();
-	mm_clock_init();
+	mm_memory_init(mm_core_chunk_alloc, mm_core_chunk_free);
 	mm_thread_init();
+	mm_clock_init();
 
-	mm_shared_alloc_init();
-
+	mm_shared_space_init();
 	mm_event_init();
 	mm_net_init();
 
@@ -1052,11 +1002,10 @@ mm_core_term(void)
 
 	mm_net_term();
 	mm_event_term();
-
-	mm_shared_alloc_term();
+	mm_shared_space_term();
 
 	mm_thread_term();
-	mm_cdata_term();
+	mm_memory_term();
 
 	LEAVE();
 }

@@ -20,7 +20,6 @@
 #include "memcache/table.h"
 #include "memcache/entry.h"
 
-#include "core/alloc.h"
 #include "core/task.h"
 
 #include "base/hash.h"
@@ -585,9 +584,7 @@ again:
 void
 mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
 {
-	struct mm_link *link = mm_link_head(&entry->chunks);
-	struct mm_chunk *chunks = containerof(link, struct mm_chunk, base.link);
-	mm_core_reclaim_chain(chunks);
+	mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
 
 	ASSERT(entry->state == MC_ENTRY_NOT_USED);
 	entry->state = MC_ENTRY_FREE;

@@ -20,7 +20,6 @@
 #include "base/mem/alloc.h"
 #include "base/lock.h"
 #include "base/log/error.h"
-#include "base/mem/arena.h"
 #include "base/util/libcall.h"
 
 #include "base/mem/malloc.h"
@@ -75,8 +74,9 @@ mm_alloc_init(void)
 mm_mspace_t
 mm_mspace_create(void)
 {
-	mm_mspace_t space = create_mspace(0, 0);
-	if (space == NULL)
+	mm_mspace_t space;
+	space.opaque = create_mspace(0, 0);
+	if (space.opaque == NULL)
 		mm_fatal(errno, "failed to create mspace");
 	return space;
 }
@@ -84,91 +84,55 @@ mm_mspace_create(void)
 void
 mm_mspace_destroy(mm_mspace_t space)
 {
-	destroy_mspace(space);
+	destroy_mspace(space.opaque);
 }
 
 void *
 mm_mspace_alloc(mm_mspace_t space, size_t size)
 {
-	return mspace_malloc(space, size);
-}
-
-void *
-mm_mspace_xalloc(mm_mspace_t space, size_t size)
-{
-	void *ptr = mm_mspace_alloc(space, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+	return mspace_malloc(space.opaque, size);
 }
 
 void *
 mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size)
 {
-	return mspace_memalign(space, align, size);
-}
-
-void *
-mm_mspace_aligned_xalloc(mm_mspace_t space, size_t align, size_t size)
-{
-	void *ptr = mm_mspace_aligned_alloc(space, align, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+	return mspace_memalign(space.opaque, align, size);
 }
 
 void *
 mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size)
 {
-	return mspace_calloc(space, count, size);
-}
-
-void *
-mm_mspace_xcalloc(mm_mspace_t space, size_t count, size_t size)
-{
-	void *ptr = mm_mspace_calloc(space, count, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	return ptr;
+	return mspace_calloc(space.opaque, count, size);
 }
 
 void *
 mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size)
 {
-	return mspace_realloc(space, ptr, size);
-}
-
-void *
-mm_mspace_xrealloc(mm_mspace_t space, void *ptr, size_t size)
-{
-	ptr = mm_mspace_realloc(space, ptr, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
+	return mspace_realloc(space.opaque, ptr, size);
 }
 
 void
 mm_mspace_free(mm_mspace_t space, void *ptr)
 {
-	mspace_free(space, ptr);
+	mspace_free(space.opaque, ptr);
 }
 
 size_t
 mm_mspace_getfootprint(mm_mspace_t space)
 {
-	return mspace_footprint(space);
+	return mspace_footprint(space.opaque);
 }
 
 size_t
 mm_mspace_getfootprint_limit(mm_mspace_t space)
 {
-	return mspace_footprint_limit(space);
+	return mspace_footprint_limit(space.opaque);
 }
 
 size_t
 mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size)
 {
-	return mspace_set_footprint_limit(space, size);
+	return mspace_set_footprint_limit(space.opaque, size);
 }
 
 size_t
@@ -244,41 +208,3 @@ mm_global_getallocsize(const void *ptr)
 {
 	return dlmalloc_usable_size(ptr);
 }
-
-/**********************************************************************
- * Global Memory Arena.
- **********************************************************************/
-
-static void *
-mm_global_arena_alloc(const struct mm_arena *arena __attribute__((unused)),
-		      size_t size)
-{
-	return mm_global_alloc(size);
-}
-static void *
-mm_global_arena_calloc(const struct mm_arena *arena __attribute__((unused)),
-		       size_t count, size_t size)
-{
-	return mm_global_calloc(count, size);
-}
-static void *
-mm_global_arena_realloc(const struct mm_arena *arena __attribute__((unused)),
-			void *ptr, size_t size)
-{
-	return mm_global_realloc(ptr, size);
-}
-static void
-mm_global_arena_free(const struct mm_arena *arena __attribute__((unused)),
-		     void *ptr)
-{
-	mm_global_free(ptr);
-}
-
-static const struct mm_arena_vtable mm_global_arena_vtable = {
-	mm_global_arena_alloc,
-	mm_global_arena_calloc,
-	mm_global_arena_realloc,
-	mm_global_arena_free
-};
-
-const struct mm_arena mm_global_arena = { .vtable = &mm_global_arena_vtable };

@@ -22,18 +22,22 @@
 
 #include "common.h"
 
+/* DLMalloc alignment. */
+#define MM_ALLOC_ALIGNMENT	(8)
+#define MM_ALLOC_ALIGNMENT_BITS	(3)
+
 /* DLMalloc overhead. */
 #if MM_WORD_32BIT
 # ifndef FOOTERS
-#  define MM_ALLOC_OVERHEAD (4)
+#  define MM_ALLOC_OVERHEAD	(4)
 # else
-#  define MM_ALLOC_OVERHEAD (8)
+#  define MM_ALLOC_OVERHEAD	(8)
 # endif
 #else
 # ifndef FOOTERS
-#  define MM_ALLOC_OVERHEAD (8)
+#  define MM_ALLOC_OVERHEAD	(8)
 # else
-#  define MM_ALLOC_OVERHEAD (16)
+#  define MM_ALLOC_OVERHEAD	(16)
 # endif
 #endif
 
@@ -47,7 +51,9 @@ void mm_alloc_init(void);
  * Memory Space Allocation Routines.
  **********************************************************************/
 
-typedef void * mm_mspace_t;
+typedef struct {
+	void *opaque;
+} mm_mspace_t;
 
 mm_mspace_t mm_mspace_create(void);
 
@@ -56,24 +62,13 @@ void mm_mspace_destroy(mm_mspace_t space);
 void * mm_mspace_alloc(mm_mspace_t space, size_t size)
 	__attribute__((malloc));
 
-void * mm_mspace_xalloc(mm_mspace_t space, size_t size)
-	__attribute__((malloc));
-
 void * mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size)
-	__attribute__((malloc));
-
-void * mm_mspace_aligned_xalloc(mm_mspace_t space, size_t align, size_t size)
 	__attribute__((malloc));
 
 void * mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size)
 	__attribute__((malloc));
 
-void * mm_mspace_xcalloc(mm_mspace_t space, size_t count, size_t size)
-	__attribute__((malloc));
-
 void * mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
-
-void * mm_mspace_xrealloc(mm_mspace_t space, void *ptr, size_t size);
 
 void mm_mspace_free(mm_mspace_t space, void *ptr);
 
@@ -89,8 +84,9 @@ size_t mm_mspace_getallocsize(const void *ptr);
  **********************************************************************/
 
 /*
- * The global memory allocation functions should only be used to create
- * few key global data structures.
+ * The global memory allocation routines should only be used to create
+ * key global data structures during system bootstrap. After bootstrap
+ * memory allocation should be done with dedicated spaces.
  */
 
 void * mm_global_alloc(size_t size)
@@ -108,6 +104,10 @@ void mm_global_free(void *ptr);
 
 size_t mm_global_getallocsize(const void *ptr);
 
+/**********************************************************************
+ * Global Memory Allocation Utilities.
+ **********************************************************************/
+
 static inline void *
 mm_global_memdup(const void *ptr, size_t size)
 {
@@ -119,11 +119,5 @@ mm_global_strdup(const char *ptr)
 {
 	return mm_global_memdup(ptr, strlen(ptr) + 1);
 }
-
-/**********************************************************************
- * Global Memory Arena.
- **********************************************************************/
-
-extern const struct mm_arena mm_global_arena;
 
 #endif /* BASE_MEM_ALLOC_H */

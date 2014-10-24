@@ -23,11 +23,13 @@ base_sources = \
 	base/log/trace.c base/log/trace.h \
 	base/lock.c base/lock.h \
 	base/mem/alloc.c base/mem/alloc.h \
-	base/mem/arena.h \
+	base/mem/arena.h base/mem/arena.c \
 	base/mem/buffer.c base/mem/buffer.h \
 	base/mem/cdata.c base/mem/cdata.h \
 	base/mem/chunk.c base/mem/chunk.h \
 	base/mem/malloc.c base/mem/malloc.h \
+	base/mem/mem.c base/mem/mem.h \
+	base/mem/space.c base/mem/space.h \
 	base/mem/stack.c base/mem/stack.h \
 	base/ring.c base/ring.h \
 	base/sys/clock.c base/sys/clock.h \
@@ -39,7 +41,6 @@ base_sources = \
 	base/util/libcall.c base/util/libcall.h
 
 core_sources = \
-	core/alloc.c core/alloc.h \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
 	core/lock.h \

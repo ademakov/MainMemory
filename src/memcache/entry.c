@@ -39,7 +39,7 @@ mc_entry_set(struct mc_entry *entry, uint32_t hash,
 
 	mm_link_init(&entry->chunks);
 	size_t size = mc_entry_sum_length(key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create(size);
+	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
 	mm_link_insert(&entry->chunks, &chunk->base.link);
 
 	char *entry_key = mc_entry_getkey(entry);

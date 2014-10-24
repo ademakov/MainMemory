@@ -18,7 +18,6 @@
  */
 
 #include "core/pool.h"
-#include "core/alloc.h"
 #include "core/core.h"
 
 #include "base/log/error.h"
@@ -461,7 +460,11 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_shared_arena, item_size);
+#if ENABLE_SMP
+	mm_pool_prepare_low(pool, name, &mm_shared_space.arena, item_size);
+#else
+	mm_pool_prepare_low(pool, name, &mm_core_set[0].space.arena, item_size);
+#endif
 
 	pool->shared = true;
 	pool->global = false;

@@ -1,7 +1,7 @@
 /*
- * arch/x86-64/basic.h - MainMemory basic architecture properties.
+ * base/mem/mem.h - MainMemory memory subsystem.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,19 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARCH_X86_64_BASIC_H
-#define ARCH_X86_64_BASIC_H
+#ifndef BASE_MEM_MEM_H
+#define BASE_MEM_MEM_H
 
-/* General purpose register width. */
-#define MM_WORD_64BIT		1
+#include "base/mem/chunk.h"
 
-/* Cache line size. */
-#define MM_CACHELINE		(64)
+void mm_memory_init(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
+	__attribute__((nonnull(1, 2)));
 
-/* Virtual memory page size. */
-#define MM_PAGE_SIZE		(4096)
+void mm_memory_term(void);
 
-/* Virtual address width. */
-#define MM_ADDRESS_BITS		(48)
-
-#endif /* ARCH_X86_64_BASIC_H */
+#endif /* BASE_MEM_MEM_H */

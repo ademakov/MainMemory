@@ -1,5 +1,5 @@
 /*
- * mem/arena.h - MainMemory abstract memory arena.
+ * base/mem/arena.h - MainMemory memory arenas.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,24 +17,41 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef MEM_ARENA_H
-#define MEM_ARENA_H
+#ifndef BASE_MEM_ARENA_H
+#define BASE_MEM_ARENA_H
 
 #include "common.h"
+
+/**********************************************************************
+ * Abstract Memory Arena.
+ **********************************************************************/
+
+#define MM_ARENA_VTABLE(name, a, ca, rea, f)			\
+	static const struct mm_arena_vtable name = {		\
+		.alloc = (mm_arena_alloc_t) a,			\
+		.calloc = (mm_arena_calloc_t) ca,		\
+		.realloc = (mm_arena_realloc_t) rea,		\
+		.free = (mm_arena_free_t) f,			\
+	}
+
+typedef const struct mm_arena *mm_arena_t;
+
+typedef void * (*const mm_arena_alloc_t)(mm_arena_t arena, size_t size);
+typedef void * (*const mm_arena_calloc_t)(mm_arena_t arena, size_t count, size_t size);
+typedef void * (*const mm_arena_realloc_t)(mm_arena_t arena, void *ptr, size_t size);
+typedef void (*const mm_arena_free_t)(mm_arena_t arena, void *ptr);
+
+struct mm_arena_vtable
+{
+	mm_arena_alloc_t alloc;
+	mm_arena_calloc_t calloc;
+	mm_arena_realloc_t realloc;
+	mm_arena_free_t free;
+};
 
 struct mm_arena
 {
 	const struct mm_arena_vtable *vtable;
-};
-
-typedef const struct mm_arena *mm_arena_t;
-
-struct mm_arena_vtable
-{
-	void * (*const alloc)(mm_arena_t arena, size_t size);
-	void * (*const calloc)(mm_arena_t arena, size_t count, size_t size);
-	void * (*const realloc)(mm_arena_t arena, void *ptr, size_t size);
-	void (*const free)(mm_arena_t arena, void *ptr);
 };
 
 static inline void *
@@ -73,4 +90,16 @@ mm_arena_strdup(mm_arena_t arena, const char *ptr)
 	return mm_arena_memdup(arena, ptr, strlen(ptr) + 1);
 }
 
-#endif /* MEM_ARENA_H */
+/**********************************************************************
+ * Global Memory Arena.
+ **********************************************************************/
+
+/*
+ * The global memory allocation routines should only be used to create
+ * key global data structures during system bootstrap. After bootstrap
+ * memory allocation should be done with dedicated spaces.
+ */
+
+extern const struct mm_arena mm_global_arena;
+
+#endif /* BASE_MEM_ARENA_H */

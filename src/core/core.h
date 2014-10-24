@@ -28,8 +28,8 @@
 #include "core/wait.h"
 
 #include "base/list.h"
-#include "base/mem/alloc.h"
-#include "base/mem/arena.h"
+#include "base/mem/chunk.h"
+#include "base/mem/space.h"
 #include "base/log/debug.h"
 #include "base/ring.h"
 
@@ -44,16 +44,6 @@ struct mm_work;
 #define MM_CORE_SCHED_RING_SIZE		(1024)
 #define MM_CORE_INBOX_RING_SIZE		(1024)
 #define MM_CORE_CHUNK_RING_SIZE		(1024)
-
-struct mm_core_arena
-{
-	struct mm_arena arena;
-	mm_mspace_t space;
-
-#if ENABLE_DEBUG
-	mm_core_t core;
-#endif
-};
 
 /* Virtual core state. */
 struct mm_core
@@ -87,8 +77,8 @@ struct mm_core
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
 
-	/* Private memory arena. */
-	struct mm_core_arena arena;
+	/* Private memory space. */
+	struct mm_private_space space;
 
 	/* Master task. */
 	struct mm_task *master;
@@ -153,9 +143,6 @@ void mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 void mm_core_run_task(struct mm_task *task)
 	__attribute__((nonnull(1)));
 
-void mm_core_reclaim_chunk(struct mm_chunk *chunk);
-void mm_core_reclaim_chain(struct mm_chunk *chunk);
-
 /**********************************************************************
  * Core Information.
  **********************************************************************/
@@ -190,6 +177,16 @@ mm_core_getptr(mm_core_t core)
 	return &mm_core_set[core];
 }
 
+static inline mm_arena_t
+mm_core_getarena(mm_core_t core)
+{
+	if (core == MM_CORE_NONE)
+		return NULL;
+	if (core == MM_CORE_SELF)
+		return &mm_core->space.arena;
+	return &mm_core_set[core].space.arena;
+}
+
 static inline struct mm_core *
 mm_core_self(void)
 {
@@ -203,54 +200,136 @@ mm_core_selfid(void)
 }
 
 /**********************************************************************
- * Core Memory Allocation Routines.
+ * Local Core Memory Allocation Routines.
  **********************************************************************/
 
 static inline void *
-mm_core_alloc(size_t size)
+mm_local_alloc(size_t size)
 {
 	struct mm_core *core = mm_core_self();
-	return mm_mspace_xalloc(core->arena.space, size);
+	return mm_private_space_xalloc(&core->space, size);
 }
 
 static inline void *
-mm_core_aligned_alloc(size_t align, size_t size)
+mm_local_aligned_alloc(size_t align, size_t size)
 {
 	struct mm_core *core = mm_core_self();
-	return mm_mspace_aligned_xalloc(core->arena.space, align, size);
+	return mm_private_space_aligned_xalloc(&core->space, align, size);
 }
 
 static inline void *
-mm_core_calloc(size_t count, size_t size)
+mm_local_calloc(size_t count, size_t size)
 {
 	struct mm_core *core = mm_core_self();
-	return mm_mspace_xcalloc(core->arena.space, count, size);
+	return mm_private_space_xcalloc(&core->space, count, size);
 }
 
 static inline void *
-mm_core_realloc(void *ptr, size_t size)
+mm_local_realloc(void *ptr, size_t size)
 {
 	struct mm_core *core = mm_core_self();
-	return mm_mspace_xrealloc(core->arena.space, ptr, size);
+	return mm_private_space_xrealloc(&core->space, ptr, size);
 }
 
 static inline void
-mm_core_free(void *ptr)
+mm_local_free(void *ptr)
 {
 	struct mm_core *core = mm_core_self();
-	mm_mspace_free(core->arena.space, ptr);
+	mm_private_space_free(&core->space, ptr);
 }
 
+/**********************************************************************
+ * Local Core Memory Allocation Utilities.
+ **********************************************************************/
+
 static inline void *
-mm_core_memdup(const void *ptr, size_t size)
+mm_local_memdup(const void *ptr, size_t size)
 {
-	return memcpy(mm_core_alloc(size), ptr, size);
+	return memcpy(mm_local_alloc(size), ptr, size);
 }
 
 static inline char *
-mm_core_strdup(const char *ptr)
+mm_local_strdup(const char *ptr)
 {
-	return mm_core_memdup(ptr, strlen(ptr) + 1);
+	return mm_local_memdup(ptr, strlen(ptr) + 1);
+}
+
+/**********************************************************************
+ * Cross-Core Memory Allocation Routines.
+ **********************************************************************/
+
+#if ENABLE_SMP
+# define MM_CHUNK_SHARED	(mm_shared_chunk_type)
+extern struct mm_common_space mm_shared_space;
+extern mm_chunk_tag_t mm_shared_chunk_tag;
+#else
+# define MM_CHUNK_SHARED	(0)
+#endif
+
+static inline void *
+mm_shared_alloc(size_t size)
+{
+#if ENABLE_SMP
+	return mm_common_space_xalloc(&mm_shared_space, size);
+#else
+	return mm_local_alloc(size);
+#endif
+}
+
+static inline void *
+mm_shared_aligned_alloc(size_t align, size_t size)
+{
+#if ENABLE_SMP
+	return mm_common_space_aligned_xalloc(&mm_shared_space, align, size);
+#else
+	return mm_local_aligned_alloc(align, size);
+#endif
+}
+
+static inline void *
+mm_shared_calloc(size_t count, size_t size)
+{
+#if ENABLE_SMP
+	return mm_common_space_xcalloc(&mm_shared_space, count, size);
+#else
+	return mm_local_calloc(count, size);
+#endif
+}
+
+static inline void *
+mm_shared_realloc(void *ptr, size_t size)
+{
+#if ENABLE_SMP
+	return mm_common_space_xrealloc(&mm_shared_space, ptr, size);
+#else
+	return mm_local_realloc(ptr, size);
+#endif
+}
+
+static inline void
+mm_shared_free(void *ptr)
+{
+#if ENABLE_SMP
+	mm_common_space_free(&mm_shared_space, ptr);
+#else
+	mm_local_free(ptr);
+#endif
+}
+
+/**********************************************************************
+ * Cross Core Memory Allocation Utilities.
+ **********************************************************************/
+
+static inline void *
+mm_shared_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_shared_alloc(size), ptr, size);
+}
+
+static inline char *
+mm_shared_strdup(const char *ptr)
+{
+	return mm_shared_memdup(ptr, strlen(ptr) + 1);
 }
 
 #endif /* CORE_CORE_H */

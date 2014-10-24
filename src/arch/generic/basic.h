@@ -35,4 +35,11 @@
 /* Virtual memory page size. */
 #define MM_PAGE_SIZE		(4096)
 
+/* Virtual address width. */
+#if MM_WORD_64BIT
+# define MM_ADDRESS_BITS	(64)
+#else
+# define MM_ADDRESS_BITS	(32)
+#endif
+
 #endif /* ARCH_GENERIC_BASIC_H */

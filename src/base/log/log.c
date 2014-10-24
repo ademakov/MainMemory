@@ -20,7 +20,7 @@
 #include "base/log/log.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/mem/alloc.h"
+#include "base/mem/space.h"
 #include "base/mem/chunk.h"
 #include "base/thr/thread.h"
 
@@ -53,12 +53,19 @@ mm_log_create_chunk(size_t size)
 	if (size < MM_LOG_CHUNK_SIZE)
 		size = MM_LOG_CHUNK_SIZE;
 
-	struct mm_chunk *chunk;
-	if (mm_core != NULL)
-		chunk = mm_chunk_create(size);
-	else
-		chunk = mm_chunk_create_global(size);
+	mm_chunk_tag_t tag = mm_core_selfid();
+	if (tag == MM_CORE_NONE) {
+		// Common arena could only be used after it gets
+		// initialized during bootstrap.
+		if (likely(mm_common_space_is_ready()))
+			tag = MM_CHUNK_COMMON;
+		else
+			tag = MM_CHUNK_GLOBAL;
+	} else if (unlikely(!mm_chunk_is_special_alloc_ready())) {
+		tag = MM_CHUNK_COMMON;
+	}
 
+	struct mm_chunk *chunk = mm_chunk_create(tag, size);
 	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
 	log_chunk->used = 0;
 
@@ -71,11 +78,7 @@ mm_log_create_chunk(size_t size)
 static size_t
 mm_log_chunk_size(const struct mm_log_chunk *chunk)
 {
-	size_t size;
-	if (chunk->base.core != MM_CORE_NONE)
-		size = mm_chunk_base_size(&chunk->base);
-	else
-		size = mm_chunk_base_size_global(&chunk->base);
+	size_t size = mm_chunk_base_getsize(&chunk->base);
 	return size - (sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk));
 }
 
@@ -195,10 +198,7 @@ mm_log_flush(void)
 
 		written += chunk->used;
 
-		if (chunk->base.core != MM_CORE_NONE)
-			mm_core_reclaim_chunk((struct mm_chunk *) chunk);
-		else
-			mm_chunk_destroy_global((struct mm_chunk *) chunk);
+		mm_chunk_destroy((struct mm_chunk *) chunk);
 
 	} while (link != NULL);
 

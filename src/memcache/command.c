@@ -128,7 +128,7 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 	ENTER();
 
 	if (command->own_key)
-		mm_core_free((char *) command->key.str);
+		mm_local_free((char *) command->key.str);
 
 	switch (mc_command_result(command)) {
 	case MC_RESULT_ENTRY:
