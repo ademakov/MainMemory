@@ -11,6 +11,7 @@ arch_sources = \
 
 base_sources = \
 	base/backoff.c base/backoff.h \
+	base/barrier.c base/barrier.h \
 	base/bitops.h \
 	base/bitset.c base/bitset.h \
 	base/combiner.c base/combiner.h \
