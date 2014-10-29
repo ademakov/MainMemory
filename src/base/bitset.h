@@ -26,6 +26,8 @@
 
 #define MM_BITSET_UNIT		(sizeof(uintptr_t) * 8)
 
+#define MM_BITSET_NONE		((size_t) -1)
+
 struct mm_bitset
 {
 	size_t size;
@@ -36,8 +38,7 @@ struct mm_bitset
 	};
 };
 
-void mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena,
-		       size_t size)
+void mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size)
 	__attribute__((nonnull(1)));
 
 void mm_bitset_cleanup(struct mm_bitset *set, mm_arena_t arena)
@@ -111,6 +112,15 @@ mm_bitset_clear(struct mm_bitset *set, size_t bit)
 	}
 }
 
+bool mm_bitset_any(const struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+bool mm_bitset_all(const struct mm_bitset *set)
+	__attribute__((nonnull(1)));
+
+size_t mm_bitset_find(const struct mm_bitset *set, size_t bit)
+	__attribute__((nonnull(1)));
+
 size_t mm_bitset_count(const struct mm_bitset *set)
 	__attribute__((nonnull(1)));
 
@@ -121,12 +131,6 @@ void mm_bitset_flip_all(struct mm_bitset *set)
 	__attribute__((nonnull(1)));
 
 void mm_bitset_clear_all(struct mm_bitset *set)
-	__attribute__((nonnull(1)));
-
-bool mm_bitset_any(const struct mm_bitset *set)
-	__attribute__((nonnull(1)));
-
-bool mm_bitset_all(const struct mm_bitset *set)
 	__attribute__((nonnull(1)));
 
 void mm_bitset_or(struct mm_bitset *set, const struct mm_bitset *set2)
