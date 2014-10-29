@@ -1,6 +1,7 @@
 
 #include "base/ring.c"
 #include "base/backoff.c"
+#include "base/barrier.c"
 
 #include <sched.h>
 

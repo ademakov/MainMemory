@@ -5,6 +5,7 @@
 #include "arch/atomic.h"
 #include "arch/memory.h"
 #include "arch/spin.h"
+#include "base/barrier.h"
 #include "base/lock.h"
 
 #include <pthread.h>
@@ -15,11 +16,13 @@
 #define _1M_	1000000
 
 static uint32_t g_threads;
-static mm_atomic_uint32_t g_arrived;
+static struct mm_barrier g_barrier;
 
 struct thread
 {
 	pthread_t thread;
+
+	struct mm_barrier_local barrier;
 
 	void (*start)(void *);
 	void *start_arg;
@@ -56,9 +59,8 @@ thread_runner(void *arg)
 	thr->lock_stat.fail_count = 0;
 #endif
 
-	mm_atomic_uint32_inc(&g_arrived);
-	while (mm_memory_load(g_arrived) < g_threads)
-		mm_spin_pause();
+	mm_barrier_local_init(&thr->barrier);
+	mm_barrier_wait(&g_barrier, &thr->barrier);
 
 	gettimeofday(&start_time, NULL);
 	thr->start(thr->start_arg);
@@ -114,6 +116,7 @@ test(void *arg, void (*producer)(void *arg), void (*consumer)(void *arg))
 	}
 
 	/* Run threads. */
+	mm_barrier_init(&g_barrier, g_threads);
 	for (i = 0; i < g_threads; i++) {
 		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
 		if (ret) {
