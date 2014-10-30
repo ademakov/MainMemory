@@ -89,9 +89,6 @@ struct mm_core
 	/* The bootstrap task. */
 	struct mm_task *boot;
 
-	/* The underlying thread. */
-	struct mm_thread *thread;
-
 	/* Event poll data. */
 	struct mm_event_table *events;
 	mm_timeval_t poll_time;

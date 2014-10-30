@@ -33,6 +33,7 @@
 #include "base/mem/cdata.h"
 #include "base/mem/chunk.h"
 #include "base/mem/mem.h"
+#include "base/thr/domain.h"
 #include "base/thr/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
@@ -58,6 +59,7 @@
 // The core set.
 mm_core_t mm_core_num;
 struct mm_core *mm_core_set;
+struct mm_domain mm_core_domain;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
@@ -705,21 +707,6 @@ mm_core_boot_signal(void)
 }
 
 static void
-mm_core_boot_join(void)
-{
-#if ENABLE_SMP
-	for (mm_core_t i = 1; i < mm_core_num; i++) {
-		struct mm_thread *thread = NULL;
-		do
-			thread = mm_memory_load(mm_core_set[i].thread);
-		while (thread == NULL);
-
-		mm_thread_join(thread);
-	}
-#endif
-}
-
-static void
 mm_core_boot_init(struct mm_core *core)
 {
 	// Secondary cores have to wait until the primary core runs
@@ -741,10 +728,8 @@ static void
 mm_core_boot_term(struct mm_core *core)
 {
 	// Call the stop hooks on the primary core.
-	if (MM_CORE_IS_PRIMARY(core)) {
-		mm_core_boot_join();
+	if (MM_CORE_IS_PRIMARY(core))
 		mm_hook_call(&mm_core_stop_hook, false);
-	}
 
 	mm_timer_term(&core->time_manager);
 
@@ -776,11 +761,10 @@ mm_core_boot(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_core *core = (struct mm_core *) arg;
+	struct mm_core *core = &mm_core_set[arg];
 
 	// Set the thread-local pointer to the core object.
 	mm_core = core;
-	mm_core->thread = mm_thread_self();
 
 	// Set the thread-local pointer to the running task.
 	mm_core->task = mm_core->boot;
@@ -829,7 +813,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->nworkers_max = nworkers_max;
 
 	core->master = NULL;
-	core->thread = NULL;
 
 	core->events = NULL;
 	core->poll_time = 0;
@@ -887,36 +870,9 @@ mm_core_term_single(struct mm_core *core)
 	if (core->events != NULL)
 		mm_event_destroy_table(core->events);
 
-	mm_thread_destroy(core->thread);
 	mm_task_destroy(core->boot);
 
 	mm_private_space_cleanup(&core->space);
-
-	LEAVE();
-}
-
-static void
-mm_core_start_single(struct mm_core *core, int core_tag)
-{
-	ENTER();
-
-	// Concoct a thread name.
-	char name[MM_THREAD_NAME_SIZE];
-	sprintf(name, "core %d", core_tag);
-
-	// Set thread attributes.
-	struct mm_thread_attr attr;
-	mm_thread_attr_init(&attr);
-	mm_thread_attr_setname(&attr, name);
-	mm_thread_attr_setstack(&attr,
-				core->boot->stack_base,
-				core->boot->stack_size);
-	mm_thread_attr_setcputag(&attr, core_tag);
-
-	// Create a core thread.
-	core->thread = mm_thread_create(&attr,
-					core->boot->start,
-					core->boot->start_arg);
 
 	LEAVE();
 }
@@ -959,7 +915,6 @@ mm_core_init(void)
 		mm_brief("Running on 1 core.");
 	else
 		mm_brief("Running on %d cores.", mm_core_num);
-	mm_bitset_prepare(&mm_core_event_affinity, &mm_global_arena, mm_core_num);
 
 	mm_memory_init(mm_core_chunk_alloc, mm_core_chunk_free);
 	mm_thread_init();
@@ -975,9 +930,13 @@ mm_core_init(void)
 	mm_future_init();
 	mm_work_init();
 
+	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
+
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
+
+	mm_bitset_prepare(&mm_core_event_affinity, &mm_common_space.arena, mm_core_num);
 
 	LEAVE();
 }
@@ -988,11 +947,13 @@ mm_core_term(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	mm_bitset_cleanup(&mm_core_event_affinity, &mm_global_arena);
+	mm_bitset_cleanup(&mm_core_event_affinity, &mm_common_space.arena);
 
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
+
+	mm_domain_cleanup(&mm_core_domain);
 
 	mm_core_free_hooks();
 
@@ -1061,9 +1022,16 @@ mm_core_start(void)
 		}
 	}
 
-	// Start core threads.
-	for (mm_core_t i = 0; i < mm_core_num; i++)
-		mm_core_start_single(&mm_core_set[i], i);
+	// Set core thread attributes.
+	for (mm_core_t i = 0; i < mm_core_num; i++) {
+		struct mm_core *core = &mm_core_set[i];
+		mm_domain_setstack(&mm_core_domain, i,
+				   core->boot->stack_base,
+				   core->boot->stack_size);
+		mm_domain_setcputag(&mm_core_domain, i, i);
+	}
+
+	mm_domain_start(&mm_core_domain, mm_core_boot);
 
 	// Loop until stopped.
 	while (!mm_exit_test()) {
@@ -1078,8 +1046,7 @@ mm_core_start(void)
 	}
 
 	// Wait for core threads completion.
-	for (int i = 0; i < mm_core_num; i++)
-		mm_thread_join(mm_core_set[i].thread);
+	mm_domain_join(&mm_core_domain);
 
  	LEAVE();
 }
