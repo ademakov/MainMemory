@@ -67,7 +67,7 @@ void mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag
 void mm_domain_setstack(struct mm_domain *domain, mm_core_t n, void *stack_base, uint32_t stack_size)
 	__attribute__((nonnull(1)));
 
-void mm_domain_start(struct mm_domain *domain, mm_routine_t start, mm_value_t start_arg)
+void mm_domain_start(struct mm_domain *domain, mm_routine_t start)
 	__attribute__((nonnull(1)));
 
 void mm_domain_join(struct mm_domain *domain)
