@@ -18,12 +18,14 @@
  */
 
 #include "base/thr/thread.h"
+#include "base/barrier.h"
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/thr/domain.h"
 
 #include <pthread.h>
 #include <sched.h>
@@ -41,10 +43,14 @@ struct mm_thread
 	/* The log message storage. */
 	struct mm_queue log_queue;
 
+	/* Thread domain. */
+	struct mm_domain *domain;
+	struct mm_barrier_local domain_barrier;
+
 	/* Underlying system thread. */
 	pthread_t system_thread;
 
-	/* The task start routine and its argument. */
+	/* The thread start routine and its argument. */
 	mm_routine_t start;
 	mm_value_t start_arg;
 
@@ -63,7 +69,7 @@ static struct mm_thread mm_thread_main = {
 	.name = "main"
 };
 
-static __thread struct mm_thread *mm_thread = &mm_thread_main;
+__thread struct mm_thread *__mm_thread_self = &mm_thread_main;
 
 /**********************************************************************
  * Global thread data initialization and termination.
@@ -93,6 +99,12 @@ mm_thread_attr_init(struct mm_thread_attr *attr)
 }
 
 void
+mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain)
+{
+	attr->domain = domain;
+}
+
+void
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 {
 	attr->cpu_tag = cpu_tag;
@@ -114,7 +126,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 		len = strlen(name);
 		if (len >= sizeof attr->name)
 			len = sizeof attr->name - 1;
-
 		memcpy(attr->name, name, len);
 	}
 	attr->name[len] = 0;
@@ -177,27 +188,39 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 static void *
 mm_thread_entry(void *arg)
 {
-	// Set the thread-local pointer to the thread object.
-	mm_thread = arg;
+	struct mm_thread *thread = arg;
+
+	// Set thread-specific data.
+	__mm_thread_self = thread;
+	__mm_domain_self = thread->domain;
 
 	ENTER();
 
 	// Set CPU affinity.
-	mm_thread_setaffinity(mm_thread->cpu_tag);
+	mm_thread_setaffinity(thread->cpu_tag);
 
 #if HAVE_PTHREAD_SETNAME_NP
 	// Let the system know the thread name.
 # ifdef __APPLE__
-	pthread_setname_np(mm_thread->name);
+	pthread_setname_np(thread->name);
 # else
-	pthread_setname_np(pthread_self(), mm_thread->name);
+	pthread_setname_np(pthread_self(), thread->name);
 # endif
 #endif
 
+	// Wait until all threads from the same domain start.
+	// This ensures that domain thread data is complete and
+	// threads might communicate.
+	if (thread->domain != NULL) {
+		mm_barrier_local_init(&thread->domain_barrier);
+		mm_barrier_wait(&thread->domain->barrier,
+				&thread->domain_barrier);
+	}
+
 	// Run the required routine.
-	mm_brief("start thread '%s'", mm_thread_getname(mm_thread));
-	mm_thread->start(mm_thread->start_arg);
-	mm_brief("end thread '%s'", mm_thread_getname(mm_thread));
+	mm_brief("start thread '%s'", mm_thread_getname(thread));
+	thread->start(thread->start_arg);
+	mm_brief("end thread '%s'", mm_thread_getname(thread));
 	mm_log_relay();
 
 	LEAVE();
@@ -218,13 +241,14 @@ mm_thread_create(struct mm_thread_attr *attr,
 
 	// Set thread attributes.
 	if (attr == NULL) {
+		thread->domain = NULL;
 		thread->cpu_tag = 0;
 		memset(thread->name, 0, MM_THREAD_NAME_SIZE);
 	} else {
+		thread->domain = attr->domain;
 		thread->cpu_tag = attr->cpu_tag;
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
-
 	mm_queue_init(&thread->log_queue);
 
 	// Set thread system attributes.
@@ -259,12 +283,6 @@ mm_thread_destroy(struct mm_thread *thread)
 /**********************************************************************
  * Thread information.
  **********************************************************************/
-
-struct mm_thread *
-mm_thread_self(void)
-{
-	return mm_thread;
-}
 
 const char *
 mm_thread_getname(const struct mm_thread *thread)

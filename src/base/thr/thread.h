@@ -1,5 +1,5 @@
 /*
- * thread.h - MainMemory threads.
+ * base/thr/thread.h - MainMemory threads.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -17,20 +17,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef THREAD_H
-#define THREAD_H
+#ifndef BASE_THR_THREAD_H
+#define BASE_THR_THREAD_H
 
 #include "common.h"
 
-/* Maximal thread name length (including terminating zero). */
+/* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
 
 /* Declare opaque thread type. */
 struct mm_thread;
+struct mm_domain;
 
 /* Thread creation attributes. */
 struct mm_thread_attr
 {
+	/* Thread domain. */
+	struct mm_domain *domain;
+
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
@@ -56,6 +60,9 @@ void mm_thread_term();
 void mm_thread_attr_init(struct mm_thread_attr *attr)
 	__attribute__((nonnull(1)));
 
+void mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain)
+	__attribute__((nonnull(1)));
+
 void mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 	__attribute__((nonnull(1)));
 
@@ -77,7 +84,13 @@ void mm_thread_destroy(struct mm_thread *thread)
  * Thread information.
  **********************************************************************/
 
-struct mm_thread *mm_thread_self(void);
+extern __thread struct mm_thread *__mm_thread_self;
+
+static inline struct mm_thread *
+mm_thread_self(void)
+{
+	return __mm_thread_self;
+}
 
 const char * mm_thread_getname(const struct mm_thread *thread)
 	__attribute__((nonnull(1)));
@@ -97,4 +110,4 @@ void mm_thread_join(struct mm_thread *thread)
 
 void mm_thread_yield(void);
 
-#endif /* THREAD_H */
+#endif /* BASE_THR_THREAD_H */

@@ -35,6 +35,7 @@ base_sources = \
 	base/ring.c base/ring.h \
 	base/sys/clock.c base/sys/clock.h \
 	base/timeq.c base/timeq.h \
+	base/thr/domain.c base/thr/domain.h \
 	base/thr/thread.c base/thr/thread.h \
 	base/util/exit.c base/util/exit.h \
 	base/util/format.c base/util/format.h \
