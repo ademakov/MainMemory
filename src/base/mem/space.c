@@ -142,6 +142,7 @@ mm_common_space_prepare(struct mm_common_space *space, bool xarena)
 	else
 		space->arena.vtable = &mm_common_arena_vtable;
 	space->space = mm_mspace_create();
+	space->lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 }
 
 void
