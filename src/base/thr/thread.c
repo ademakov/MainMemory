@@ -45,6 +45,7 @@ struct mm_thread
 
 	/* Thread domain. */
 	struct mm_domain *domain;
+	mm_core_t domain_index;
 	struct mm_barrier_local domain_barrier;
 
 	/* Underlying system thread. */
@@ -99,9 +100,12 @@ mm_thread_attr_init(struct mm_thread_attr *attr)
 }
 
 void
-mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain)
+mm_thread_attr_setdomain(struct mm_thread_attr *attr,
+			 struct mm_domain *domain,
+			 mm_core_t domain_index)
 {
 	attr->domain = domain;
+	attr->domain_index = domain_index;
 }
 
 void
@@ -242,10 +246,12 @@ mm_thread_create(struct mm_thread_attr *attr,
 	// Set thread attributes.
 	if (attr == NULL) {
 		thread->domain = NULL;
+		thread->domain_index = 0;
 		thread->cpu_tag = 0;
 		memset(thread->name, 0, MM_THREAD_NAME_SIZE);
 	} else {
 		thread->domain = attr->domain;
+		thread->domain_index = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	}
@@ -290,6 +296,18 @@ mm_thread_getname(const struct mm_thread *thread)
 	if (thread->name[0] == 0)
 		return "unnamed";
 	return thread->name;
+}
+
+struct mm_domain *
+mm_thread_getdomain(const struct mm_thread *thread)
+{
+	return thread->domain;
+}
+
+mm_core_t 
+mm_thread_getdomainindex(const struct mm_thread *thread)
+{
+	return thread->domain_index;
 }
 
 struct mm_queue *

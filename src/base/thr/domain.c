@@ -109,7 +109,7 @@ mm_domain_start(struct mm_domain *domain, mm_routine_t start)
 	// Create and start thread.
 	for (mm_core_t i = 0; i < domain->nthreads; i++) {
 		struct mm_domain_thread *thread = &domain->threads[i];
-		mm_thread_attr_setdomain(&thread->thread_attr, domain);
+		mm_thread_attr_setdomain(&thread->thread_attr, domain, i);
 		thread->thread = mm_thread_create(&thread->thread_attr, start, i);
 	}
 
