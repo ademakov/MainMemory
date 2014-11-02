@@ -32,22 +32,34 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/cdata.h"
+#include "base/thr/domain.h"
 #include "base/thr/thread.h"
 
 #include "base/util/format.h"
 
-#include "core/core.h"
-
 #define MM_LOCK_STAT_TABLE_SIZE		509
 
-// Lock statistics entry for non-core threads.
-struct mm_lock_stat_for_thread
+// Lock statistics entry for domain threads.
+struct mm_lock_domain_stat
+{
+	// The owner domain.
+	struct mm_domain *domain;
+	// Statistics for next domain.
+	struct mm_link link;
+	// Per-thread lock statistics.
+	MM_CDATA(struct mm_lock_stat, stat);
+	// Ready for use flag.
+	mm_atomic_uint8_t ready;
+};
+
+// Lock statistics entry for non-domain threads.
+struct mm_lock_thread_stat
 {
 	// The owner thread.
 	struct mm_thread *thread;
-	// Statistics collection thread list.
-	struct mm_link thread_link;
-	// Lock statistics entry itself.
+	// Statistics for next thread.
+	struct mm_link link;
+	// Lock statistics itself.
 	struct mm_lock_stat stat;
 };
 
@@ -63,14 +75,12 @@ struct mm_lock_stat_set
 	// Link in the common list of locks.
 	struct mm_link common_link;
 
-	// Per-core information.
-	MM_CDATA(struct mm_lock_stat, percore_stat);
+	// Domain statistics.
+	struct mm_link domain_list;
+	mm_lock_t domain_lock;
 
-	// Per-thread information.
+	// Thread statistics.
 	struct mm_link thread_list;
-
-	// Ready for use flag.
-	mm_atomic_uint8_t ready;
 };
 
 static mm_lock_t mm_lock_stat_lock = MM_LOCK_INIT;
@@ -78,8 +88,9 @@ static struct mm_link mm_lock_stat_table[MM_LOCK_STAT_TABLE_SIZE];
 static struct mm_link mm_lock_stat_list;
 
 static bool
-mm_lock_stat_match(struct mm_lock_stat_set *stat,
-		   const char *location, const char *moreinfo)
+mm_lock_match_stat_set(struct mm_lock_stat_set *stat,
+		       const char *location,
+		       const char *moreinfo)
 {
 	ASSERT(stat->location != NULL && location != NULL);
 
@@ -89,7 +100,7 @@ mm_lock_stat_match(struct mm_lock_stat_set *stat,
 	}
 
 	if (stat->moreinfo != moreinfo) {
-		if (stat->moreinfo == NULL || location == NULL)
+		if (stat->moreinfo == NULL || moreinfo == NULL)
 			return false;
 		if (strcmp(stat->moreinfo, moreinfo) != 0)
 			return false;
@@ -99,148 +110,191 @@ mm_lock_stat_match(struct mm_lock_stat_set *stat,
 }
 
 static struct mm_lock_stat_set *
-mm_lock_stat_find(uint32_t bucket, const char *location, const char *moreinfo)
+mm_lock_find_stat_set(uint32_t bucket,
+		      const char *location,
+		      const char *moreinfo)
 {
 	// Go through bucket entries trying to find a match.
 	struct mm_link *link = mm_link_shared_head(&mm_lock_stat_table[bucket]);
 	while (link != NULL) {
-		struct mm_lock_stat_set *stat
+		struct mm_lock_stat_set *stat_set
 			= containerof(link, struct mm_lock_stat_set, bucket_link);
 		mm_memory_load_fence();
-
-		// Match the entry.
-		if (mm_lock_stat_match(stat, location, moreinfo)) {
-			// If the entry is not yet ready then wait a bit until
-			// it becomes ready.  It shouldn't take long.  Really.
-			uint32_t count = 0;
-			while (mm_memory_load(stat->ready) == 0)
-				count = mm_backoff(count);
-			mm_memory_load_fence();
-			return stat;
-		}
-
+		// Match the current entry.
+		if (mm_lock_match_stat_set(stat_set, location, moreinfo))
+			return stat_set;
 		link = mm_memory_load(link->next);
 	}
 	return NULL;
 }
 
 static struct mm_lock_stat_set *
-mm_lock_stat_get_slowpath(struct mm_lock_stat_info *info)
+mm_lock_get_stat_set(struct mm_lock_stat_info *info)
 {
 	ASSERT(info->location != NULL);
 
+	// Find the pertinent hash table bucket.
 	uint32_t hash = mm_hash_fnv(info->location, strlen(info->location));
 	if (info->moreinfo != NULL)
 		hash = mm_hash_fnv_with_seed(info->moreinfo, strlen(info->moreinfo), hash);
 	uint32_t bucket = hash % MM_LOCK_STAT_TABLE_SIZE;
 
 	// Try to find statistics optimistically (w/o acquiring a lock).
-	struct mm_lock_stat_set *stat
-		= mm_lock_stat_find(bucket, info->location, info->moreinfo);
-	if (stat != NULL)
-		return stat;
+	struct mm_lock_stat_set *stat_set
+		= mm_lock_find_stat_set(bucket, info->location, info->moreinfo);
+	if (likely(stat_set != NULL))
+		return stat_set;
 
 	// Copy identification information.
 	char *location = mm_global_strdup(info->location);
 	char *moreinfo = info->moreinfo == NULL ? NULL : mm_global_strdup(info->moreinfo);
 
-	// Allocate a new statistics entry.
-	stat = mm_global_alloc(sizeof(struct mm_lock_stat_set));
-	stat->location = location;
-	stat->moreinfo = moreinfo; 
+	// Allocate a new statistics collection entry.
+	stat_set = mm_global_alloc(sizeof(struct mm_lock_stat_set));
+	stat_set->location = location;
+	stat_set->moreinfo = moreinfo; 
 
-	// Mark it as not ready.
-	stat->ready = 0;
+	// Initialize thread statistics.
+	mm_link_init(&stat_set->domain_list);
+	mm_link_init(&stat_set->thread_list);
+	stat_set->domain_lock = (mm_lock_t) MM_LOCK_INIT;
 
 	// Start critical section.
 	mm_global_lock(&mm_lock_stat_lock);
 
-	// Try to find again in case it was added concurrently.
+	// Try to find it again in case it was added concurrently.
 	struct mm_lock_stat_set *recheck_stat
-		= mm_lock_stat_find(bucket, location, moreinfo);
+		= mm_lock_find_stat_set(bucket, location, moreinfo);
 	if (unlikely(recheck_stat != NULL)) {
 		// Bail out if so.
 		mm_global_unlock(&mm_lock_stat_lock);
-
 		mm_global_free(location);
 		mm_global_free(moreinfo);
-		mm_global_free(stat);
-
+		mm_global_free(stat_set);
 		return recheck_stat;
 	}
 
 	// Make the entry globally visible.
-	stat->bucket_link.next = mm_lock_stat_table[bucket].next;
-	stat->common_link.next = mm_lock_stat_list.next;
+	stat_set->common_link.next = mm_lock_stat_list.next;
+	stat_set->bucket_link.next = mm_lock_stat_table[bucket].next;
 	mm_memory_store_fence();
-	mm_lock_stat_table[bucket].next = &stat->bucket_link;
-	mm_lock_stat_list.next = &stat->common_link;
+	mm_lock_stat_list.next = &stat_set->common_link;
+	mm_lock_stat_table[bucket].next = &stat_set->bucket_link;
 
 	// End critical section.
 	mm_global_unlock(&mm_lock_stat_lock);
 
-	// Initialize per-core statistics.
-	char *name;
-	if (moreinfo != NULL)
-		name = mm_format(&mm_global_arena, "lock %s (%s)",
-				   location, moreinfo);
-	else
-		name = mm_format(&mm_global_arena, "lock %s",
-				   location);
-	MM_CDATA_ALLOC(name, stat->percore_stat);
-	for (mm_core_t c = 0; c < mm_core_getnum(); c++) {
-		struct mm_lock_stat *core_stat =
-			MM_CDATA_DEREF(c, stat->percore_stat);
-		core_stat->lock_count = 0;
-		core_stat->fail_count = 0;
+	return stat_set;
+}
+
+struct mm_lock_domain_stat *
+mm_lock_find_domain_stat(struct mm_lock_stat_set *stat_set,
+			 struct mm_domain *domain)
+{
+	// Go through domain entries trying to find a match.
+	struct mm_link *link = mm_link_shared_head(&stat_set->domain_list);
+	while (link != NULL) {
+		struct mm_lock_domain_stat *dom_stat
+			= containerof(link, struct mm_lock_domain_stat, link);
+		if (dom_stat->domain == domain) {
+			// If the entry is not yet ready then wait a bit until
+			// it becomes ready.  It shouldn't take long.  Really.
+			while (mm_memory_load(dom_stat->ready) == 0)
+				mm_spin_pause();
+			mm_memory_load_fence();
+			return dom_stat;
+		}
+		link = mm_memory_load(link->next);
 	}
-	mm_global_free(name);
-
-	// Initialize non-core thread statistics.
-	mm_link_init(&stat->thread_list);
-
-	// Mark it as ready.
-	mm_memory_store_fence();
-	stat->ready = 1;
-
-	return stat;
+	return NULL;
 }
 
 struct mm_lock_stat *
-mm_lock_getstat(struct mm_lock_stat_info *info)
+mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
+			struct mm_thread *thread,
+			struct mm_domain *domain)
 {
-	// Find pertinent statistics collection.
-	struct mm_lock_stat_set *stat = mm_memory_load(info->stat);
-	if (stat == NULL)
-		stat = mm_lock_stat_get_slowpath(info);
+	mm_core_t dom_index = mm_thread_getdomainindex(thread);
 
-	// If running on a core thread then use per-core entry.
-	mm_core_t core = mm_core_selfid();
-	if (core != MM_CORE_NONE)
-		return MM_CDATA_DEREF(core, stat->percore_stat);
+	// Try to find domain entry optimistically (w/o acquiring a lock).
+	struct mm_lock_domain_stat *dom_stat
+		= mm_lock_find_domain_stat(stat_set, domain);
+	if (likely(dom_stat != NULL))
+		return MM_CDATA_DEREF(dom_index, dom_stat->stat);
 
-	// If running on a non-core thread try to find pertinent entry.
-	struct mm_lock_stat_for_thread *thr_stat;
-	struct mm_thread *thread = mm_thread_self();
-	struct mm_link *link = mm_link_shared_head(&stat->thread_list);
+	// Allocate a new statistics entry.
+	dom_stat = mm_global_alloc(sizeof(struct mm_lock_domain_stat));
+	dom_stat->domain = domain;
+
+	// Mark it as not ready.
+	dom_stat->ready = 0;
+
+	// Start critical section.
+	mm_global_lock(&stat_set->domain_lock);
+
+	// Try to find it again in case it was added concurrently.
+	struct mm_lock_domain_stat *recheck_stat
+		= mm_lock_find_domain_stat(stat_set, domain);
+	if (unlikely(recheck_stat != NULL)) {
+		// Bail out if so.
+		mm_global_unlock(&stat_set->domain_lock);
+		mm_global_free(dom_stat);
+		return MM_CDATA_DEREF(dom_index, recheck_stat->stat);
+	}
+
+	// End critical section.
+	mm_global_unlock(&stat_set->domain_lock);
+
+	// Initialize per-thread data.
+	char *name;
+	if (stat_set->moreinfo != NULL)
+		name = mm_format(&mm_global_arena, "lock %s (%s)",
+				 stat_set->location, stat_set->moreinfo);
+	else
+		name = mm_format(&mm_global_arena, "lock %s",
+				 stat_set->location);
+
+	MM_CDATA_ALLOC(domain, name, dom_stat->stat);
+	for (mm_core_t c = 0; c < domain->nthreads; c++) {
+		struct mm_lock_stat *stat = MM_CDATA_DEREF(c, dom_stat->stat);
+		stat->lock_count = 0;
+		stat->fail_count = 0;
+	}
+	mm_global_free(name);
+
+	// Mark it as ready.
+	mm_memory_store_fence();
+	dom_stat->ready = 1;
+
+	return MM_CDATA_DEREF(dom_index, dom_stat->stat);
+}
+
+struct mm_lock_stat *
+mm_lock_get_thread_stat(struct mm_lock_stat_set *stat_set,
+			struct mm_thread *thread)
+{
+	struct mm_lock_thread_stat *thr_stat;
+
+	// Look for a matching thread entry.
+	struct mm_link *link = mm_link_shared_head(&stat_set->thread_list);
 	while (link != NULL) {
-		thr_stat = containerof(link, struct mm_lock_stat_for_thread, thread_link);
+		thr_stat = containerof(link, struct mm_lock_thread_stat, link);
 		if (thr_stat->thread == thread)
 			return &thr_stat->stat;
 		link = mm_memory_load(link->next);
 	}
 
 	// If not found create a new entry.
-	thr_stat = mm_global_alloc(sizeof(struct mm_lock_stat_for_thread));
+	thr_stat = mm_global_alloc(sizeof(struct mm_lock_thread_stat));
 	thr_stat->thread = thread;
 	thr_stat->stat.lock_count = 0;
 	thr_stat->stat.fail_count = 0;
 
 	// Link the entry into list.
-	struct mm_link *head = mm_link_shared_head(&stat->thread_list);
+	struct mm_link *head = mm_link_shared_head(&stat_set->thread_list);
 	for (uint32_t b = 0; ; b = mm_backoff(b)) {
-		thr_stat->thread_link.next = head;
-		link = mm_link_cas_head(&stat->thread_list, head, &thr_stat->thread_link);
+		thr_stat->link.next = head;
+		link = mm_link_cas_head(&stat_set->thread_list, head, &thr_stat->link);
 		if (link == head)
 			break;
 		head = link;
@@ -249,19 +303,37 @@ mm_lock_getstat(struct mm_lock_stat_info *info)
 	return &thr_stat->stat;
 }
 
+struct mm_lock_stat *
+mm_lock_getstat(struct mm_lock_stat_info *info)
+{
+	// Get statistics collection pertinent to the lock in question.
+	struct mm_lock_stat_set *stat_set = mm_memory_load(info->stat);
+	if (stat_set == NULL)
+		stat_set = mm_lock_get_stat_set(info);
+
+	// Get a statistic entry specific to the calling thread.
+	struct mm_thread *thread = mm_thread_self();
+	struct mm_domain *domain = mm_thread_getdomain(thread);
+	if (domain != NULL)
+		return mm_lock_get_domain_stat(stat_set, thread, domain);
+	else
+		return mm_lock_get_thread_stat(stat_set, thread);
+}
+
 
 static void
-mm_lock_stat_print(const char *owner,
-		   struct mm_lock_stat_set *stat_set,
-		   struct mm_lock_stat *stat)
+mm_lock_print_stat(const struct mm_thread *thread,
+		   const struct mm_lock_stat_set *stat_set,
+		   const struct mm_lock_stat *stat)
 {
+	const char *name = mm_thread_getname(thread);
 	if (stat_set->moreinfo != NULL)
 		mm_verbose("lock %s (%s), %s, locked %llu, failed %llu",
-			stat_set->location, stat_set->moreinfo, owner,
+			stat_set->location, stat_set->moreinfo, name,
 			stat->lock_count, stat->fail_count);
 	else
 		mm_verbose("lock %s, %s, locked %llu, failed %llu",
-			stat_set->location, owner,
+			stat_set->location, name,
 			stat->lock_count, stat->fail_count);
 }
 
@@ -271,30 +343,36 @@ void
 mm_lock_stats(void)
 {
 #if ENABLE_LOCK_STATS
-	struct mm_link *link = mm_link_shared_head(&mm_lock_stat_list);
-	while (link != NULL) {
+	struct mm_link *set_link = mm_link_shared_head(&mm_lock_stat_list);
+	while (set_link != NULL) {
 		struct mm_lock_stat_set *stat_set
-			= containerof(link, struct mm_lock_stat_set, common_link);
+			= containerof(set_link, struct mm_lock_stat_set, common_link);
 		mm_memory_load_fence();
 
-		for (mm_core_t c = 0; c < mm_core_getnum(); c++) {
-			struct mm_lock_stat *stat
-				= MM_CDATA_DEREF(c, stat_set->percore_stat);
-			struct mm_core *core = mm_core_getptr(c);
-			const char *owner = mm_thread_getname(core->thread);
-			mm_lock_stat_print(owner, stat_set, stat);
+		struct mm_link *dom_link = mm_link_shared_head(&stat_set->domain_list);
+		while (dom_link != NULL) {
+			struct mm_lock_domain_stat *dom_stat
+				= containerof(dom_link, struct mm_lock_domain_stat, link);
+			struct mm_domain *domain = dom_stat->domain;
+			for (mm_core_t c = 0; c < domain->nthreads; c++) {
+				struct mm_lock_stat *stat
+					= MM_CDATA_DEREF(c, dom_stat->stat);
+				struct mm_thread *thread = domain->threads[c].thread;
+				mm_lock_print_stat(thread, stat_set, stat);
+			}
+			dom_link = mm_memory_load(dom_link->next);
 		}
 
 		struct mm_link *thr_link = mm_link_shared_head(&stat_set->thread_list);
 		while (thr_link != NULL) {
-			struct mm_lock_stat_for_thread *thr_stat
-				= containerof(thr_link, struct mm_lock_stat_for_thread, thread_link);
-			const char *owner = mm_thread_getname(thr_stat->thread);
-			mm_lock_stat_print(owner, stat_set, &thr_stat->stat);
+			struct mm_lock_thread_stat *thr_stat
+				= containerof(thr_link, struct mm_lock_thread_stat, link);
+			struct mm_thread *thread = thr_stat->thread;
+			mm_lock_print_stat(thread, stat_set, &thr_stat->stat);
 			thr_link = mm_memory_load(thr_link->next);
 		}
 
-		link = mm_memory_load(link->next);
+		set_link = mm_memory_load(set_link->next);
 	}
 #endif
 }
