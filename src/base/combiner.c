@@ -21,6 +21,7 @@
 #include "base/bitops.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/thr/domain.h"
 
 #include "core/core.h"
 #include "core/task.h"
@@ -80,7 +81,7 @@ mm_combiner_prepare(struct mm_combiner *combiner,
 	combiner->routine = routine;
 	combiner->handoff = handoff;
 
-	MM_CDATA_ALLOC(name, combiner->wait_list);
+	MM_CDATA_ALLOC(mm_domain_self(), name, combiner->wait_list);
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		struct mm_queue *wait_list = MM_CDATA_DEREF(core, combiner->wait_list);
 		mm_queue_init(wait_list);

@@ -24,6 +24,7 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/thr/domain.h"
 #include "base/util/format.h"
 
 #define MM_POOL_BLOCK_SIZE	(0x2000)
@@ -473,7 +474,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->shared_data.grow_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 
 	char *cdata_name = mm_format(&mm_global_arena, "'%s' memory pool", name);
-	MM_CDATA_ALLOC(cdata_name, pool->shared_data.cdata);
+	MM_CDATA_ALLOC(mm_domain_self(), cdata_name, pool->shared_data.cdata);
 	mm_core_t n = mm_core_getnum();
 	for (mm_core_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =

@@ -719,7 +719,7 @@ mm_core_boot_init(struct mm_core *core)
 	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_start_hook, false);
-		mm_cdata_summary();
+		mm_cdata_summary(&mm_core_domain);
 		mm_core_boot_signal();
 	}
 }

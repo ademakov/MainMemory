@@ -21,6 +21,8 @@
 #define	BASE_THR_DOMAIN_H
 
 #include "common.h"
+#include "base/list.h"
+#include "base/lock.h"
 #include "base/barrier.h"
 #include "base/bitset.h"
 #include "base/thr/thread.h"
@@ -36,9 +38,14 @@ struct mm_domain_thread
 
 struct mm_domain
 {
-	/* Domain thread data. */
+	/* Domain threads. */
 	mm_core_t nthreads;
 	struct mm_domain_thread *threads;
+
+	/* Per-thread data. */
+	struct mm_queue per_thread_chunk_list;
+	struct mm_queue per_thread_entry_list;
+	mm_lock_t per_thread_lock;
 
 	/* Thread start barrier. */
 	struct mm_barrier barrier;

@@ -19,6 +19,7 @@
 
 #include "base/thr/domain.h"
 #include "base/log/trace.h"
+#include "base/mem/cdata.h"
 #include "base/mem/space.h"
 
 #include <stdio.h>
@@ -56,6 +57,9 @@ mm_domain_prepare(struct mm_domain *domain, const char *name, mm_core_t nthreads
 		}
 	}
 
+	// Initialize per-thread data.
+	mm_cdata_init(domain);
+
 	LEAVE();
 }
 
@@ -64,11 +68,14 @@ mm_domain_cleanup(struct mm_domain *domain)
 {
 	ENTER();
 
+	// Release per-thread data.
+	mm_cdata_term(domain);
+
+	// Release thread data.
 	for (mm_core_t i = 0; i < domain->nthreads; i++) {
 		struct mm_domain_thread *thread = &domain->threads[i];
 		mm_thread_destroy(thread->thread);
 	}
-
 	mm_common_free(domain->threads);
 
 	LEAVE();

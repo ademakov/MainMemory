@@ -22,12 +22,15 @@
 
 #include "common.h"
 
+struct mm_domain;
+
 #define MM_CDATA_CHUNK_SIZE	MM_PAGE_SIZE
 
 #define MM_CDATA(type, name) union { type *ptr; mm_cdata_t ref; } name
 
-#define MM_CDATA_ALLOC(name, data) ({					\
-		data.ref = mm_cdata_alloc(name, sizeof(*data.ptr));	\
+#define MM_CDATA_ALLOC(domain, name, data) ({				\
+		data.ref = mm_cdata_alloc(domain, name,			\
+					  sizeof(*data.ptr));		\
 	})
 
 #define MM_CDATA_DEREF(core, data) ({					\
@@ -37,11 +40,11 @@
 
 typedef uintptr_t mm_cdata_t;
 
-void mm_cdata_init(void);
-void mm_cdata_term(void);
+void mm_cdata_init(struct mm_domain *domain);
+void mm_cdata_term(struct mm_domain *domain);
 
-mm_cdata_t mm_cdata_alloc(const char *name, size_t size);
+mm_cdata_t mm_cdata_alloc(struct mm_domain *domain, const char *name, size_t size);
 
-void mm_cdata_summary(void);
+void mm_cdata_summary(struct mm_domain *domain);
 
 #endif /* BASE_MEM_CDATA_H */

@@ -26,7 +26,6 @@ void
 mm_memory_init(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
 {
 	mm_alloc_init();
-	mm_cdata_init();
 	mm_common_space_init();
 	mm_chunk_set_private_alloc(alloc, free);
 }
@@ -35,5 +34,4 @@ void
 mm_memory_term(void)
 {
 	mm_common_space_term();
-	mm_cdata_term();
 }

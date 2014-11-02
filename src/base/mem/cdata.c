@@ -24,9 +24,8 @@
 #include "base/log/debug.h"
 #include "base/log/plain.h"
 #include "base/mem/alloc.h"
+#include "base/thr/domain.h"
 #include "base/util/libcall.h"
-
-#include "core/core.h"
 
 #define MM_CDATA_ALIGN		(8)
 #define MM_CDATA_CHUNK_HEAD	mm_round_up(sizeof(struct mm_cdata_chunk), MM_CDATA_ALIGN)
@@ -48,14 +47,10 @@ struct mm_cdata_entry
 	mm_cdata_t base;
 };
 
-static mm_lock_t mm_cdata_lock = MM_LOCK_INIT;
-static struct mm_queue mm_cdata_chunk_list;
-static struct mm_queue mm_cdata_entry_list;
-
 static struct mm_cdata_chunk *
-mm_cdata_create_chunk(void)
+mm_cdata_create_chunk(struct mm_domain *domain)
 {
-	size_t size = MM_CDATA_CHUNK_HEAD + mm_core_getnum() * MM_CDATA_CHUNK_SIZE;
+	size_t size = MM_CDATA_CHUNK_HEAD + domain->nthreads * MM_CDATA_CHUNK_SIZE;
 
 	struct mm_cdata_chunk *chunk = mm_global_alloc(size);
 	chunk->used = 0;
@@ -64,37 +59,39 @@ mm_cdata_create_chunk(void)
 }
 
 void
-mm_cdata_init(void)
+mm_cdata_init(struct mm_domain *domain)
 {
 	// Initialize lists.
-	mm_queue_init(&mm_cdata_chunk_list);
-	mm_queue_init(&mm_cdata_entry_list);
+	mm_queue_init(&domain->per_thread_chunk_list);
+	mm_queue_init(&domain->per_thread_entry_list);
+
+	domain->per_thread_lock = (mm_lock_t) MM_LOCK_INIT;
 
 	// Provision the first chunk w/o locking.
-	struct mm_cdata_chunk *chunk = mm_cdata_create_chunk();
-	mm_queue_append(&mm_cdata_chunk_list, &chunk->link);
+	struct mm_cdata_chunk *chunk = mm_cdata_create_chunk(domain);
+	mm_queue_append(&domain->per_thread_chunk_list, &chunk->link);
 }
 
 void
-mm_cdata_term(void)
+mm_cdata_term(struct mm_domain *domain)
 {
 	// Release all data info entries.
-	while (!mm_queue_empty(&mm_cdata_entry_list)) {
-		struct mm_link *link = mm_queue_delete_head(&mm_cdata_entry_list);
+	while (!mm_queue_empty(&domain->per_thread_entry_list)) {
+		struct mm_link *link = mm_queue_delete_head(&domain->per_thread_entry_list);
 		struct mm_cdata_entry *entry = containerof(link, struct mm_cdata_entry, link);
 		mm_global_free(entry);
 	}
 
 	// Release all data chunks.
-	while (!mm_queue_empty(&mm_cdata_chunk_list)) {
-		struct mm_link *link = mm_queue_delete_head(&mm_cdata_chunk_list);
+	while (!mm_queue_empty(&domain->per_thread_chunk_list)) {
+		struct mm_link *link = mm_queue_delete_head(&domain->per_thread_chunk_list);
 		struct mm_cdata_chunk *chunk = containerof(link, struct mm_cdata_chunk, link);
 		mm_global_free(chunk);
 	}
 }
 
 mm_cdata_t
-mm_cdata_alloc(const char *name, size_t size)
+mm_cdata_alloc(struct mm_domain *domain, const char *name, size_t size)
 {
 	ASSERT(size > 0);
 	ASSERT(size <= MM_CDATA_CHUNK_SIZE);
@@ -107,10 +104,10 @@ mm_cdata_alloc(const char *name, size_t size)
 	// Round the size to maintain the required alignment.
 	size = mm_round_up(size, MM_CDATA_ALIGN);
 
-	mm_global_lock(&mm_cdata_lock);
+	mm_global_lock(&domain->per_thread_lock);
 
 	// Find out a chunk with sufficient free space.
-	struct mm_link *link = mm_queue_head(&mm_cdata_chunk_list);
+	struct mm_link *link = mm_queue_head(&domain->per_thread_chunk_list);
 	struct mm_cdata_chunk *chunk = containerof(link, struct mm_cdata_chunk, link);
 	while ((chunk->used + size) > MM_CDATA_CHUNK_SIZE) {
 		link = link->next;
@@ -123,18 +120,18 @@ mm_cdata_alloc(const char *name, size_t size)
 	struct mm_cdata_chunk *discard_chunk = NULL;
 	if (link == NULL) {
 		// Allocate a new chunk.
-		mm_global_unlock(&mm_cdata_lock);
-		struct mm_cdata_chunk *chunk = mm_cdata_create_chunk();
-		mm_global_lock(&mm_cdata_lock);
+		mm_global_unlock(&domain->per_thread_lock);
+		struct mm_cdata_chunk *chunk = mm_cdata_create_chunk(domain);
+		mm_global_lock(&domain->per_thread_lock);
 
 		// Check to see if there is a concurrently added chunk
 		// (a chance that more than one chunk has been added is
 		// absolutely negligible).
-		link = mm_queue_tail(&mm_cdata_chunk_list);
+		link = mm_queue_tail(&domain->per_thread_chunk_list);
 		struct mm_cdata_chunk *recheck_chunk = containerof(link, struct mm_cdata_chunk, link);
 		if ((recheck_chunk->used + size) > MM_CDATA_CHUNK_SIZE) {
 			// Seems no, so use the allocated chunk.
-			mm_queue_append(&mm_cdata_chunk_list, &chunk->link);
+			mm_queue_append(&domain->per_thread_chunk_list, &chunk->link);
 		} else {
 			// Yes, so discard the allocated chunk.
 			discard_chunk = chunk;
@@ -147,9 +144,9 @@ mm_cdata_alloc(const char *name, size_t size)
 	chunk->used += size;
 
 	// Make the data info globally visible.
-	mm_queue_append(&mm_cdata_entry_list, &entry->link); 
+	mm_queue_append(&domain->per_thread_entry_list, &entry->link); 
 
-	mm_global_unlock(&mm_cdata_lock);
+	mm_global_unlock(&domain->per_thread_lock);
 
 	// Release the discarded chunk at last.
 	if (discard_chunk != NULL)
@@ -160,20 +157,20 @@ mm_cdata_alloc(const char *name, size_t size)
 
 /* This function is not thread-safe, and that should be okay so far. */
 void
-mm_cdata_summary(void)
+mm_cdata_summary(struct mm_domain *domain)
 {
 	int nchunks = 0;
 	int nentries = 0;
 	size_t used = 0;
 
-	struct mm_link *chunk_link = mm_queue_head(&mm_cdata_chunk_list);
+	struct mm_link *chunk_link = mm_queue_head(&domain->per_thread_chunk_list);
 	for (; chunk_link != NULL; chunk_link = chunk_link->next) {
 		struct mm_cdata_chunk *chunk = containerof(chunk_link, struct mm_cdata_chunk, link);
 		used += chunk->used;
 		nchunks++;
 	}
 
-	struct mm_link *entry_link = mm_queue_head(&mm_cdata_entry_list);
+	struct mm_link *entry_link = mm_queue_head(&domain->per_thread_entry_list);
 	for (; entry_link != NULL; entry_link = entry_link->next) {
 		struct mm_cdata_entry *entry = containerof(entry_link, struct mm_cdata_entry, link);
 		mm_verbose("core local data entry (%s): %lu bytes",
