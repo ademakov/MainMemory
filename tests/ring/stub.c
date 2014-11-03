@@ -16,11 +16,6 @@ mm_global_aligned_alloc(size_t align, size_t size)
 }
 
 void
-mm_task_yield(void)
-{
-}
-
-void
 mm_thread_yield(void)
 {
 	sched_yield();
