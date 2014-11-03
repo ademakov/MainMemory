@@ -902,6 +902,16 @@ mm_core_get_ncpu(void)
 	return MM_DEFAULT_CORES;
 }
 
+static bool
+mm_core_yield(void)
+{
+	if (mm_core == NULL)
+		return false;
+
+	mm_task_yield();
+	return true;
+}
+
 void
 mm_core_init(void)
 {
@@ -930,6 +940,7 @@ mm_core_init(void)
 	mm_future_init();
 	mm_work_init();
 
+	mm_backoff_prepare(mm_core_yield);
 	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));

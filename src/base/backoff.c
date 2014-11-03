@@ -18,10 +18,15 @@
  */
 
 #include "base/backoff.h"
-
-#include "core/core.h"
-#include "core/task.h"
 #include "base/thr/thread.h"
+
+static mm_backoff_yield_t mm_backoff_yield;
+
+void
+mm_backoff_prepare(mm_backoff_yield_t yield)
+{
+	mm_backoff_yield = yield;
+}
 
 uint32_t
 mm_backoff_slow(uint32_t count)
@@ -29,12 +34,9 @@ mm_backoff_slow(uint32_t count)
 	if (count > 0xffff) {
 		mm_thread_yield();
 		return 0;
-	} else if (mm_core != NULL) {
-		mm_task_yield();
-		return count * 2 + 1;
 	} else {
-		for (uint32_t n = count & 0xff; n; n--)
-			mm_spin_pause();
-		return count * 2 + 1;
+		if (mm_backoff_yield == NULL || !mm_backoff_yield())
+			mm_backoff_fixed(count & 0xfff);
+		return count + count + 1;
 	}
 }

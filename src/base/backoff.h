@@ -23,15 +23,25 @@
 #include "common.h"
 #include "arch/spin.h"
 
+typedef bool (*mm_backoff_yield_t)(void);
+
+void mm_backoff_prepare(mm_backoff_yield_t yield);
+
 uint32_t mm_backoff_slow(uint32_t count);
+
+static inline void
+mm_backoff_fixed(uint32_t count)
+{
+	while (count--)
+		mm_spin_pause();
+}
 
 static inline uint32_t
 mm_backoff(uint32_t count)
 {
 	if (count < 0xff) {
-		for (uint32_t n = count; n; n--)
-			mm_spin_pause();
-		return count * 2 + 1;
+		mm_backoff_fixed(count);
+		return count + count + 1;
 	} else {
 		return mm_backoff_slow(count);
 	}
