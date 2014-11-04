@@ -80,6 +80,31 @@ mm_chunk_add_arena(mm_arena_t arena)
 }
 
 /**********************************************************************
+ * Chunk Tag Selector.
+ **********************************************************************/
+
+mm_chunk_select_t __mm_chunk_select = mm_chunk_select_default;
+
+void
+mm_chunk_set_select(mm_chunk_select_t select)
+{
+	if (select == NULL)
+		select = mm_chunk_select_default;
+	__mm_chunk_select = select;
+}
+
+mm_chunk_tag_t
+mm_chunk_select_default(void)
+{
+	// Common arena could only be used after it gets initialized
+	// during bootstrap.
+	if (likely(mm_common_space_is_ready()))
+		return MM_CHUNK_COMMON;
+	else
+		return MM_CHUNK_GLOBAL;
+}
+
+/**********************************************************************
  * Chunk Creation and Destruction.
  **********************************************************************/
 

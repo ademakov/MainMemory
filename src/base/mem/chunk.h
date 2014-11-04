@@ -53,6 +53,23 @@ mm_chunk_tag_t mm_chunk_add_arena(mm_arena_t arena)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************
+ * Chunk Tag Selector.
+ **********************************************************************/
+
+typedef mm_chunk_tag_t (*mm_chunk_select_t)(void);
+
+void mm_chunk_set_select(mm_chunk_select_t select);
+
+mm_chunk_tag_t mm_chunk_select_default(void);
+
+static inline mm_chunk_tag_t
+mm_chunk_select(void)
+{
+	extern mm_chunk_select_t __mm_chunk_select;
+	return (*__mm_chunk_select)();
+}
+
+/**********************************************************************
  * Chunk Access.
  **********************************************************************/
 

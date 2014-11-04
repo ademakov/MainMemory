@@ -22,8 +22,10 @@
 
 #include "base/mem/chunk.h"
 
-void mm_memory_init(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
-	__attribute__((nonnull(1, 2)));
+void mm_memory_init(mm_chunk_select_t select,
+		    mm_chunk_alloc_t alloc,
+		    mm_chunk_free_t free)
+	__attribute__((nonnull(1, 2, 3)));
 
 void mm_memory_term(void);
 
