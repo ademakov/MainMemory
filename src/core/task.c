@@ -27,13 +27,14 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/stack.h"
+#include "base/thr/thread.h"
 
 /* Regular task stack size. */
 #define MM_TASK_STACK_SIZE		(32 * 1024)
 
 /* Minimal task stack size. */
 #if defined(PTHREAD_STACK_MIN)
-# define MM_TASK_STACK_SIZE_MIN		PTHREAD_STACK_MIN
+# define MM_TASK_STACK_SIZE_MIN		(PTHREAD_STACK_MIN + MM_PAGE_SIZE)
 #else
 # define MM_TASK_STACK_SIZE_MIN		(12 * 1024)
 #endif
@@ -130,6 +131,14 @@ static void
 mm_task_entry(void)
 {
 	struct mm_task *task = mm_task_self();
+
+#if ENABLE_TRACE
+	mm_trace_context_prepare(&task->trace, "[%s][%d %s]",
+				 mm_thread_getname(mm_thread_self()),
+				 mm_task_getid(task),
+				 mm_task_getname(task));
+#endif
+
 	TRACE("enter task %s", mm_task_getname(task));
 
 	// Execute the task routine on an empty stack.
@@ -207,19 +216,18 @@ mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 		task->flags = 0;
 		task->original_priority = MM_PRIO_WORK;
 		task->stack_size = MM_TASK_STACK_SIZE;
-		task->name[0] = 0;
+		strcpy(task->name, "unnamed");
 	} else {
 		task->flags = attr->flags;
 		task->original_priority = attr->priority;
 		task->stack_size = attr->stack_size;
-		strcpy(task->name, attr->name);
+		if (attr->name[0])
+			memcpy(task->name, attr->name, MM_TASK_NAME_SIZE);
+		else
+			strcpy(task->name, "unnamed");
 	}
 
 	task->priority = task->original_priority;
-
-#if ENABLE_TRACE
-	task->trace_level = 0;
-#endif
 }
 
 /* Create a new task. */
@@ -261,9 +269,8 @@ mm_task_create(const struct mm_task_attr *attr,
 		}
 	}
 	// Allocate a new task if needed.
-	if (task == NULL) {
+	if (task == NULL)
 		task = mm_task_new();
-	}
 
 	// Initialize the task info.
 	mm_task_set_attr(task, attr);
@@ -271,9 +278,8 @@ mm_task_create(const struct mm_task_attr *attr,
 	task->start_arg = start_arg;
 
 	// Allocate a new stack if needed.
-	if (task->stack_base == NULL) {
+	if (task->stack_base == NULL)
 		task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
-	}
 
 	// Setup the task entry point on its own stack and queue it for
 	// execution unless bootstrapping in which case it will be done

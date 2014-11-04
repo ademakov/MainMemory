@@ -763,12 +763,19 @@ mm_core_boot(mm_value_t arg)
 
 	struct mm_core *core = &mm_core_set[arg];
 
-	// Set the thread-local pointer to the core object.
+	// Set the thread-specific data.
 	mm_core = core;
 
-	// Set the thread-local pointer to the running task.
+	// Set pointer to the running task.
 	mm_core->task = mm_core->boot;
 	mm_core->task->state = MM_TASK_RUNNING;
+
+#if ENABLE_TRACE
+	mm_trace_context_prepare(&core->task->trace, "[%s][%d %s]",
+				 mm_thread_getname(mm_thread_self()),
+				 mm_task_getid(core->task),
+				 mm_task_getname(core->task));
+#endif
 
 	// Initialize per-core resources.
 	mm_core_boot_init(core);
@@ -872,6 +879,10 @@ mm_core_term_single(struct mm_core *core)
 
 	mm_task_destroy(core->boot);
 
+	// Flush logs before memory space with possible log chunks is unmapped.
+	mm_log_relay();
+	mm_log_flush();
+
 	mm_private_space_cleanup(&core->space);
 
 	LEAVE();
@@ -905,12 +916,28 @@ mm_core_get_ncpu(void)
 static bool
 mm_core_yield(void)
 {
-	if (mm_core == NULL)
+	if (mm_core_self() == NULL)
 		return false;
 
 	mm_task_yield();
 	return true;
 }
+
+#if ENABLE_TRACE
+
+static struct mm_trace_context *
+mm_core_gettracecontext(void)
+{
+	struct mm_core *core = mm_core_self();
+	if (core != NULL)
+		return &core->task->trace;
+	struct mm_thread *thread = mm_thread_self();
+	if (unlikely(thread == NULL))
+		ABORT();
+	return mm_thread_gettracecontext(thread);
+}
+
+#endif
 
 void
 mm_core_init(void)
@@ -941,6 +968,9 @@ mm_core_init(void)
 	mm_work_init();
 
 	mm_backoff_prepare(mm_core_yield);
+#if ENABLE_TRACE
+	mm_trace_setgetcontext(mm_core_gettracecontext);
+#endif
 	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
@@ -974,9 +1004,12 @@ mm_core_term(void)
 
 	mm_net_term();
 	mm_event_term();
-	mm_shared_space_term();
 
-	mm_thread_term();
+	// Flush logs before memory space with possible log chunks is unmapped.
+	mm_log_relay();
+	mm_log_flush();
+
+	mm_shared_space_term();
 	mm_memory_term();
 
 	LEAVE();
@@ -1037,8 +1070,8 @@ mm_core_start(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_domain_setstack(&mm_core_domain, i,
-				   core->boot->stack_base,
-				   core->boot->stack_size);
+				   (char *) core->boot->stack_base + MM_PAGE_SIZE,
+				   core->boot->stack_size - MM_PAGE_SIZE);
 		mm_domain_setcputag(&mm_core_domain, i, i);
 	}
 

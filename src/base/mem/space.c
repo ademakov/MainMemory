@@ -149,6 +149,7 @@ void
 mm_common_space_cleanup(struct mm_common_space *space)
 {
 	mm_mspace_destroy(space->space);
+	space->arena.vtable = NULL;
 }
 
 void *

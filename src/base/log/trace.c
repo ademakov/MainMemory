@@ -18,13 +18,57 @@
  */
 
 #include "base/log/trace.h"
+#include "base/log/debug.h"
 #include "base/log/log.h"
 #include "base/thr/thread.h"
+#include "base/util/format.h"
 
-#include "core/core.h"
-#include "core/task.h"
+/**********************************************************************
+ * Trace Context.
+ **********************************************************************/
 
-#include <stdarg.h>
+#if ENABLE_TRACE
+
+static struct mm_trace_context *
+mm_trace_getcontext_default(void)
+{
+	struct mm_thread *thread = mm_thread_self();
+	if (unlikely(thread == NULL))
+		ABORT();
+	return mm_thread_gettracecontext(thread);
+}
+
+static mm_trace_getcontext_t mm_trace_getcontext = mm_trace_getcontext_default;
+
+void
+mm_trace_setgetcontext(mm_trace_getcontext_t getcontext)
+{
+	if (getcontext == NULL)
+		mm_trace_getcontext = mm_trace_getcontext_default;
+	else
+		mm_trace_getcontext = getcontext;
+}
+
+void
+mm_trace_context_prepare(struct mm_trace_context *context,
+			 const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	context->owner = mm_vformat(&mm_global_arena, fmt, va);
+	va_end(va);
+
+	context->level = 0;
+	context->recur = 0;
+}
+
+void
+mm_trace_context_cleanup(struct mm_trace_context *context)
+{
+	mm_arena_free(&mm_global_arena, context->owner);
+}
+
+#endif
 
 /**********************************************************************
  * Trace Level.
@@ -32,68 +76,34 @@
 
 #if ENABLE_TRACE
 
-/* Trace nesting level. */
-static __thread int mm_trace_level;
-
-/* Trace recursion detection. */
-static __thread int mm_trace_recur;
-
 static bool
 mm_trace_enter(int level)
 {
-	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
-	if (task != NULL) {
-		if (unlikely(task->trace_recur))
-			return false;
-		if (level < 0)
-			task->trace_level += level;
-		task->trace_recur++;
-	} else {
-		if (unlikely(mm_trace_recur)) 
-			return false;
-		if (level < 0)
-			mm_trace_level += level;
-		mm_trace_recur++;
-	}
+	struct mm_trace_context *context = mm_trace_getcontext();
+	if (unlikely(context->recur))
+		return false;
+
+	if (level < 0)
+		context->level += level;
+	context->recur++;
+
 	return true;
 }
 
 static void
 mm_trace_leave(int level)
 {
-	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
-	if (task != NULL) {
-		if (level > 0)
-			task->trace_level += level;
-		task->trace_recur--;
-	} else {
-		if (level > 0)
-			mm_trace_level += level;
-		mm_trace_recur--;
-	}
-}
+	struct mm_trace_context *context = mm_trace_getcontext();
 
-void
-mm_trace_prefix(void)
-{
-	struct mm_task *task = mm_core != NULL ? mm_core->task : NULL;
-	if (task != NULL) {
-		mm_log_fmt("[%s][%d %s] %*s",
-			   mm_thread_getname(mm_thread_self()),
-			   mm_task_getid(task),
-			   mm_task_getname(task),
-			   task->trace_level * 2, "");
-	} else {
-		mm_log_fmt("[%s]%*s",
-			   mm_thread_getname(mm_thread_self()),
-			   mm_trace_level * 2, "");
-	}
+	if (level > 0)
+		context->level += level;
+	context->recur--;
 }
 
 #endif
 
 /**********************************************************************
- * Debug & Trace Utilities.
+ * Trace Utilities.
  **********************************************************************/
 
 void
@@ -104,6 +114,13 @@ mm_where(const char *restrict location, const char *function)
 }
 
 #if ENABLE_TRACE
+
+void
+mm_trace_prefix(void)
+{
+	struct mm_trace_context *context = mm_trace_getcontext();
+	mm_log_fmt("%s %*s", context->owner, context->level * 2, "");
+}
 
 void
 mm_trace(int level,

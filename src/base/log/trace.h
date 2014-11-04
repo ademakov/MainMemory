@@ -22,6 +22,10 @@
 
 #include "common.h"
 
+/**********************************************************************
+ * Trace Utilities.
+ **********************************************************************/
+
 #if ENABLE_TRACE
 # define TRACE(...)	mm_trace(0, __LOCATION__, __FUNCTION__, __VA_ARGS__)
 # define ENTER()	mm_trace(+1, __LOCATION__, __FUNCTION__, "enter")
@@ -46,6 +50,38 @@ void mm_trace(int level,
 #else
 #define mm_trace_prefix()	((void) 0)
 #define mm_trace(...)		((void) 0)
+#endif
+
+/**********************************************************************
+ * Trace Context.
+ **********************************************************************/
+
+#if ENABLE_TRACE
+
+struct mm_trace_context
+{
+	/* Human-readable description of the owner thread or task. */
+	char *owner;
+
+	/* Trace nesting level. */
+	int level;
+
+	/* Trace recursion detection (to avoid infinite recursion). */
+	int recur;
+};
+
+typedef struct mm_trace_context * (*mm_trace_getcontext_t)(void);
+
+void mm_trace_setgetcontext(mm_trace_getcontext_t getcontext);
+
+void mm_trace_context_prepare(struct mm_trace_context *context,
+			      const char *restrict fmt, ...)
+	__attribute__((format(printf, 2, 3)))
+	__attribute__((nonnull(1, 2)));
+
+void mm_trace_context_cleanup(struct mm_trace_context *context)
+	__attribute__((nonnull(1)));
+
 #endif
 
 #endif /* BASE_LOG_TRACE_H */

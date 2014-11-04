@@ -18,7 +18,6 @@
  */
 
 #include "base/thr/thread.h"
-#include "base/barrier.h"
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -60,6 +59,11 @@ struct mm_thread
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
+
+#if ENABLE_TRACE
+	/* Thread trace context. */
+	struct mm_trace_context trace;
+#endif
 };
 
 static struct mm_thread mm_thread_main = {
@@ -67,7 +71,16 @@ static struct mm_thread mm_thread_main = {
 		.head = { NULL },
 		.tail = &mm_thread_main.log_queue.head
 	},
-	.name = "main"
+
+	.name = "main",
+
+#if ENABLE_TRACE
+	.trace = {
+		.owner = "[main]",
+		.level = 0,
+		.recur = 0
+	}
+#endif
 };
 
 __thread struct mm_thread *__mm_thread_self = &mm_thread_main;
@@ -82,11 +95,6 @@ void
 mm_thread_init()
 {
 	mm_thread_main.system_thread = pthread_self();
-}
-
-void
-mm_thread_term()
-{
 }
 
 /**********************************************************************
@@ -198,6 +206,9 @@ mm_thread_entry(void *arg)
 	__mm_thread_self = thread;
 	__mm_domain_self = thread->domain;
 
+#if ENABLE_TRACE
+	mm_trace_context_prepare(&thread->trace, "[%s]", thread->name);
+#endif
 	ENTER();
 
 	// Set CPU affinity.
@@ -222,12 +233,11 @@ mm_thread_entry(void *arg)
 	}
 
 	// Run the required routine.
-	mm_brief("start thread '%s'", mm_thread_getname(thread));
 	thread->start(thread->start_arg);
-	mm_brief("end thread '%s'", mm_thread_getname(thread));
-	mm_log_relay();
 
 	LEAVE();
+	mm_log_relay();
+
 	return NULL;
 }
 
@@ -248,13 +258,17 @@ mm_thread_create(struct mm_thread_attr *attr,
 		thread->domain = NULL;
 		thread->domain_index = 0;
 		thread->cpu_tag = 0;
-		memset(thread->name, 0, MM_THREAD_NAME_SIZE);
+		strcpy(thread->name, "unnamed");
 	} else {
 		thread->domain = attr->domain;
 		thread->domain_index = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
-		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
+		if (attr->name[0])
+			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
+		else
+			strcpy(thread->name, "unnamed");
 	}
+
 	mm_queue_init(&thread->log_queue);
 
 	// Set thread system attributes.
@@ -281,6 +295,10 @@ mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
 
+#if ENABLE_TRACE
+	mm_trace_context_cleanup(&thread->trace);
+#endif
+
 	mm_global_free(thread);
 
 	LEAVE();
@@ -293,8 +311,6 @@ mm_thread_destroy(struct mm_thread *thread)
 const char *
 mm_thread_getname(const struct mm_thread *thread)
 {
-	if (thread->name[0] == 0)
-		return "unnamed";
 	return thread->name;
 }
 
@@ -315,6 +331,14 @@ mm_thread_getlog(struct mm_thread *thread)
 {
 	return &thread->log_queue;
 }
+
+#if ENABLE_TRACE
+struct mm_trace_context *
+mm_thread_gettracecontext(struct mm_thread *thread)
+{
+	return &thread->trace;
+}
+#endif
 
 /**********************************************************************
  * Thread control routines.

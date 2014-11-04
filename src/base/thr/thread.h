@@ -22,12 +22,15 @@
 
 #include "common.h"
 
+/* Forward declarations. */
+struct mm_domain;
+struct mm_thread;
+#if ENABLE_TRACE
+struct mm_trace_context;
+#endif
+
 /* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
-
-/* Declare opaque thread type. */
-struct mm_thread;
-struct mm_domain;
 
 /* Thread creation attributes. */
 struct mm_thread_attr
@@ -52,7 +55,6 @@ struct mm_thread_attr
  **********************************************************************/
 
 void mm_thread_init();
-void mm_thread_term();
 
 /**********************************************************************
  * Thread creation routines.
@@ -106,6 +108,11 @@ mm_core_t mm_thread_getdomainindex(const struct mm_thread *thread)
 
 struct mm_queue * mm_thread_getlog(struct mm_thread *thread)
 	__attribute__((nonnull(1)));
+
+#if ENABLE_TRACE
+struct mm_trace_context * mm_thread_gettracecontext(struct mm_thread *thread)
+	__attribute__((nonnull(1)));
+#endif
 
 /**********************************************************************
  * Thread control routines.

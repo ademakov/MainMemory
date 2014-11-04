@@ -21,27 +21,31 @@
 #include "base/log/error.h"
 
 #include <stdio.h>
-#include <stdarg.h>
 
 char *
-mm_format(const struct mm_arena *arena, const char *restrict fmt, ...)
+mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va)
 {
-	int len;
-	va_list va;
-	char dummy[1];
-
-	va_start(va, fmt);
-	len = vsnprintf(dummy, sizeof dummy, fmt, va);
-	va_end(va);
+	char dummy;
+	va_list va2;
+	va_copy(va2, va);
+	int len = vsnprintf(&dummy, sizeof dummy, fmt, va2);
+	va_end(va2);
 
 	if (unlikely(len < 0))
 		mm_fatal(errno, "invalid format string");
 
 	char *ptr = mm_arena_alloc(arena, ++len);
-
-	va_start(va, fmt);
 	vsnprintf(ptr, len, fmt, va);
-	va_end(va);
 
+	return ptr;
+}
+
+char *
+mm_format(const struct mm_arena *arena, const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	char *ptr = mm_vformat(arena, fmt, va);
+	va_end(va);
 	return ptr;
 }
