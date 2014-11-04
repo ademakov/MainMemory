@@ -20,11 +20,7 @@
 #ifndef ARCH_X86_ATOMIC_H
 #define ARCH_X86_ATOMIC_H
 
-#if ENABLE_SMP
-# define MM_LOCK_PREFIX "lock;"
-#else
-# define MM_LOCK_PREFIX
-#endif
+#define MM_LOCK_PREFIX "lock;"
 
 /**********************************************************************
  * Atomic types.
