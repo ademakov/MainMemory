@@ -29,12 +29,6 @@
 #define MM_COMBINER_MINIMUM_HANDOFF	4
 #define MM_COMBINER_DEFAULT_HANDOFF	16
 
-struct mm_combiner_wait_node
-{
-	struct mm_link link;
-	struct mm_task *task;
-};
-
 struct mm_combiner *
 mm_combiner_create(const char *name,
 		   mm_combiner_routine_t routine,
@@ -81,10 +75,10 @@ mm_combiner_prepare(struct mm_combiner *combiner,
 	combiner->routine = routine;
 	combiner->handoff = handoff;
 
-	MM_CDATA_ALLOC(mm_domain_self(), name, combiner->wait_list);
+	MM_CDATA_ALLOC(mm_domain_self(), name, combiner->wait_queue);
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
-		struct mm_queue *wait_list = MM_CDATA_DEREF(core, combiner->wait_list);
-		mm_queue_init(wait_list);
+		struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
+		mm_list_init(wait_queue);
 	}
 
 	mm_ring_mpmc_prepare(&combiner->ring, size);
@@ -175,17 +169,16 @@ mm_combiner_enqueue(struct mm_combiner *combiner, uintptr_t data, bool wait)
 
 	// Get per-core queue of pending requests.
 	mm_core_t core = mm_core_selfid();
-	struct mm_queue *wait_list = MM_CDATA_DEREF(core, combiner->wait_list);
+	struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
 
 	// Add the current request to the per-core queue.
-	struct mm_combiner_wait_node wait_node;
-	wait_node.task = mm_task_self();
-	wait_node.task->flags |= MM_TASK_COMBINING;
-	mm_queue_append(wait_list, &wait_node.link);
+	struct mm_task *task = mm_task_self();
+	task->flags |= MM_TASK_COMBINING;
+	mm_list_append(wait_queue, &task->wait_queue);
 
 	// White until the current request becomes the head of the
 	// per-core queue.
-	while (mm_queue_head(wait_list) != &wait_node.link)
+	while (mm_list_head(wait_queue) != &task->wait_queue)
 		mm_task_block();
 
 	// Get a request slot in the bounded MPMC queue shared between cores.
@@ -206,19 +199,18 @@ mm_combiner_enqueue(struct mm_combiner *combiner, uintptr_t data, bool wait)
 		mm_combiner_busywait(combiner, node, tail + 1 + ring->base.mask, true);
 
 	// Remove the request from the per-core queue.
-	mm_queue_delete_head(wait_list);
-	wait_node.task->flags &= ~MM_TASK_COMBINING;
+	mm_list_delete(&task->wait_queue);
+	task->flags &= ~MM_TASK_COMBINING;
 
 	// Restore cancellation.
 	mm_task_setcancelstate(cancelstate, NULL);
 
 	// If the per-core queue is not empty then let its new head take
 	// the next turn.  Otherwise 
-	if (!mm_queue_empty(wait_list)) {
-		struct mm_link *link = mm_queue_head(wait_list);
-		struct mm_combiner_wait_node *next =
-			containerof(link, struct mm_combiner_wait_node, link);
-		mm_task_run(next->task);
+	if (!mm_list_empty(wait_queue)) {
+		struct mm_list *link = mm_list_head(wait_queue);
+		task = containerof(link, struct mm_task, wait_queue);
+		mm_task_run(task);
 	} else if (!wait) {
 		mm_core_post(MM_CORE_NONE, mm_combiner_deplete, (mm_value_t) combiner);
 	}

@@ -34,7 +34,7 @@ struct mm_combiner
 	size_t handoff;
 
 	/* Per-core wait list of pending requests. */
-	MM_CDATA(struct mm_queue, wait_list);
+	MM_CDATA(struct mm_list, wait_queue);
 
 	struct mm_ring_mpmc ring;
 };
