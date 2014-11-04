@@ -61,7 +61,7 @@ mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
 	mm_global_unlock(&mm_chunk_lock);
 }
 
-mm_chunk_tag_t
+mm_chunk_t
 mm_chunk_add_arena(mm_arena_t arena)
 {
 	mm_global_lock(&mm_chunk_lock);
@@ -93,7 +93,7 @@ mm_chunk_set_select(mm_chunk_select_t select)
 	__mm_chunk_select = select;
 }
 
-mm_chunk_tag_t
+mm_chunk_t
 mm_chunk_select_default(void)
 {
 	// Common arena could only be used after it gets initialized
@@ -109,7 +109,7 @@ mm_chunk_select_default(void)
  **********************************************************************/
 
 struct mm_chunk *
-mm_chunk_create(mm_chunk_tag_t tag, size_t size)
+mm_chunk_create(mm_chunk_t tag, size_t size)
 {
 	size += sizeof(struct mm_chunk);
 
@@ -135,7 +135,7 @@ mm_chunk_create(mm_chunk_tag_t tag, size_t size)
 void
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
-	mm_chunk_tag_t tag = mm_chunk_gettag(chunk);
+	mm_chunk_t tag = mm_chunk_gettag(chunk);
 
 	if (MM_CHUNK_IS_ARENA_TAG(tag)) {
 		int idx = MM_CHUNK_TAG_TO_IDX(tag);

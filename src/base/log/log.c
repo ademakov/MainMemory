@@ -51,7 +51,7 @@ mm_log_create_chunk(size_t size)
 	if (size < MM_LOG_CHUNK_SIZE)
 		size = MM_LOG_CHUNK_SIZE;
 
-	mm_chunk_tag_t tag = mm_chunk_select();
+	mm_chunk_t tag = mm_chunk_select();
 	struct mm_chunk *chunk = mm_chunk_create(tag, size);
 	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
 	log_chunk->used = 0;

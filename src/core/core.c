@@ -291,10 +291,10 @@ mm_core_receive_tasks(struct mm_core *core)
  * Chunk allocation and reclamation.
  **********************************************************************/
 
-mm_chunk_tag_t
+mm_chunk_t
 mm_core_chunk_select(void)
 {
-	mm_chunk_tag_t tag = mm_core_selfid();
+	mm_chunk_t tag = mm_core_selfid();
 	if (tag == MM_CORE_NONE) {
 		// Common arena could only be used after it gets
 		// initialized during bootstrap.
@@ -307,14 +307,14 @@ mm_core_chunk_select(void)
 }
 
 void *
-mm_core_chunk_alloc(mm_chunk_tag_t tag __attribute__((unused)), size_t size)
+mm_core_chunk_alloc(mm_chunk_t tag __attribute__((unused)), size_t size)
 {
 	ASSERT(tag == mm_core_selfid());
 	return mm_local_alloc(size);
 }
 
 void
-mm_core_chunk_free(mm_chunk_tag_t tag, void *chunk)
+mm_core_chunk_free(mm_chunk_t tag, void *chunk)
 {
 	mm_core_t core = mm_core_selfid();
 	if (core == tag) {
@@ -687,7 +687,7 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
 
 #if ENABLE_SMP
 struct mm_common_space mm_shared_space;
-mm_chunk_tag_t mm_shared_chunk_tag;
+mm_chunk_t mm_shared_chunk_tag;
 #endif
 
 static void
@@ -984,9 +984,9 @@ mm_core_init(void)
 	mm_future_init();
 	mm_work_init();
 
-	mm_backoff_prepare(mm_core_yield);
+	mm_backoff_set_yield(mm_core_yield);
 #if ENABLE_TRACE
-	mm_trace_setgetcontext(mm_core_gettracecontext);
+	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
 	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
 

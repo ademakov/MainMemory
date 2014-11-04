@@ -258,7 +258,7 @@ mm_local_strdup(const char *ptr)
 #if ENABLE_SMP
 # define MM_CHUNK_SHARED	(mm_shared_chunk_type)
 extern struct mm_common_space mm_shared_space;
-extern mm_chunk_tag_t mm_shared_chunk_tag;
+extern mm_chunk_t mm_shared_chunk_tag;
 #else
 # define MM_CHUNK_SHARED	(0)
 #endif

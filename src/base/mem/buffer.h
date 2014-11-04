@@ -60,7 +60,7 @@ struct mm_buffer
 
 	/* Memory allocation info. */
 	mm_arena_t arena;
-	mm_chunk_tag_t chunk_tag;
+	mm_chunk_t chunk_tag;
 };
 
 struct mm_buffer_segment
@@ -83,7 +83,7 @@ mm_buffer_empty(struct mm_buffer *buf)
 	return (buf->in_seg == buf->out_seg && buf->in_off == buf->out_off);
 }
 
-void mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_tag_t chunk_tag)
+void mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_t chunk_tag)
 	__attribute__((nonnull(1, 2)));
 
 void mm_buffer_cleanup(struct mm_buffer *buf)

@@ -25,7 +25,7 @@
 
 typedef bool (*mm_backoff_yield_t)(void);
 
-void mm_backoff_prepare(mm_backoff_yield_t yield);
+void mm_backoff_set_yield(mm_backoff_yield_t yield);
 
 uint32_t mm_backoff_slow(uint32_t count);
 

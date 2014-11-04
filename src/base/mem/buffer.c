@@ -148,7 +148,7 @@ mm_buffer_ensure_next_in(struct mm_buffer *buf,
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
 void
-mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_tag_t chunk_tag)
+mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_t chunk_tag)
 {
 	ENTER();
 

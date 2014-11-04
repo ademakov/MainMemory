@@ -41,7 +41,7 @@ mm_trace_getcontext_default(void)
 static mm_trace_getcontext_t mm_trace_getcontext = mm_trace_getcontext_default;
 
 void
-mm_trace_setgetcontext(mm_trace_getcontext_t getcontext)
+mm_trace_set_getcontext(mm_trace_getcontext_t getcontext)
 {
 	if (getcontext == NULL)
 		mm_trace_getcontext = mm_trace_getcontext_default;

@@ -31,7 +31,7 @@
 
 #define MM_CHUNK_ARENA_MAX	((int) 32)
 
-#define MM_CHUNK_IDX_TO_TAG(i)	((mm_chunk_tag_t) ~(i))
+#define MM_CHUNK_IDX_TO_TAG(i)	((mm_chunk_t) ~(i))
 #define MM_CHUNK_TAG_TO_IDX(t)	(~((int)(int16_t) (t)))
 
 #define MM_CHUNK_GLOBAL		MM_CHUNK_IDX_TO_TAG(0)
@@ -39,30 +39,30 @@
 
 #define MM_CHUNK_IS_ARENA_TAG(t) ((t) > MM_CHUNK_IDX_TO_TAG(MM_CHUNK_ARENA_MAX))
 
-typedef uint16_t mm_chunk_tag_t;
+typedef uint16_t mm_chunk_t;
 
-typedef void * (*mm_chunk_alloc_t)(mm_chunk_tag_t tag, size_t size);
-typedef void (*mm_chunk_free_t)(mm_chunk_tag_t tag, void *chunk);
+typedef void * (*mm_chunk_alloc_t)(mm_chunk_t tag, size_t size);
+typedef void (*mm_chunk_free_t)(mm_chunk_t tag, void *chunk);
 
 bool mm_chunk_is_private_alloc_ready(void);
 
 void mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
 	__attribute__((nonnull(1, 2)));
 
-mm_chunk_tag_t mm_chunk_add_arena(mm_arena_t arena)
+mm_chunk_t mm_chunk_add_arena(mm_arena_t arena)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************
  * Chunk Tag Selector.
  **********************************************************************/
 
-typedef mm_chunk_tag_t (*mm_chunk_select_t)(void);
+typedef mm_chunk_t (*mm_chunk_select_t)(void);
 
 void mm_chunk_set_select(mm_chunk_select_t select);
 
-mm_chunk_tag_t mm_chunk_select_default(void);
+mm_chunk_t mm_chunk_select_default(void);
 
-static inline mm_chunk_tag_t
+static inline mm_chunk_t
 mm_chunk_select(void)
 {
 	extern mm_chunk_select_t __mm_chunk_select;
@@ -78,7 +78,7 @@ mm_chunk_select(void)
 struct mm_chunk_base
 {
 	struct mm_link link;
-	mm_chunk_tag_t tag;
+	mm_chunk_t tag;
 };
 
 /* A chunk of memory that could be chained together with other chunks and
@@ -89,13 +89,13 @@ struct mm_chunk
 	char data[];
 };
 
-static inline mm_chunk_tag_t
+static inline mm_chunk_t
 mm_chunk_base_gettag(const struct mm_chunk_base *chunk)
 {
 	return chunk->tag;
 }
 
-static inline mm_chunk_tag_t
+static inline mm_chunk_t
 mm_chunk_gettag(const struct mm_chunk *chunk)
 {
 	return mm_chunk_base_gettag(&chunk->base);
@@ -126,7 +126,7 @@ mm_chunk_getsize(const struct mm_chunk *chunk)
  * Chunk Creation and Destruction.
  **********************************************************************/
 
-struct mm_chunk * mm_chunk_create(mm_chunk_tag_t type, size_t size);
+struct mm_chunk * mm_chunk_create(mm_chunk_t type, size_t size);
 
 void mm_chunk_destroy(struct mm_chunk *chunk)
 	__attribute__((nonnull(1)));

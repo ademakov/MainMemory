@@ -23,7 +23,7 @@
 static mm_backoff_yield_t mm_backoff_yield;
 
 void
-mm_backoff_prepare(mm_backoff_yield_t yield)
+mm_backoff_set_yield(mm_backoff_yield_t yield)
 {
 	mm_backoff_yield = yield;
 }

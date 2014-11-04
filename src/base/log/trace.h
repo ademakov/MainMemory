@@ -72,7 +72,7 @@ struct mm_trace_context
 
 typedef struct mm_trace_context * (*mm_trace_getcontext_t)(void);
 
-void mm_trace_setgetcontext(mm_trace_getcontext_t getcontext);
+void mm_trace_set_getcontext(mm_trace_getcontext_t getcontext);
 
 void mm_trace_context_prepare(struct mm_trace_context *context,
 			      const char *restrict fmt, ...)
