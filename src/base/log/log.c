@@ -20,15 +20,13 @@
 #include "base/log/log.h"
 #include "base/list.h"
 #include "base/lock.h"
+#include "base/log/debug.h"
 #include "base/mem/space.h"
 #include "base/mem/chunk.h"
 #include "base/thr/thread.h"
 
-#include "core/core.h"
-
 #include <stdio.h>
 #include <stdlib.h>
-#include <sys/uio.h>
 #include <unistd.h>
 
 #define MM_LOG_CHUNK_SIZE	(MM_PAGE_SIZE - MM_ALLOC_OVERHEAD)
@@ -53,18 +51,7 @@ mm_log_create_chunk(size_t size)
 	if (size < MM_LOG_CHUNK_SIZE)
 		size = MM_LOG_CHUNK_SIZE;
 
-	mm_chunk_tag_t tag = mm_core_selfid();
-	if (tag == MM_CORE_NONE) {
-		// Common arena could only be used after it gets
-		// initialized during bootstrap.
-		if (likely(mm_common_space_is_ready()))
-			tag = MM_CHUNK_COMMON;
-		else
-			tag = MM_CHUNK_GLOBAL;
-	} else if (unlikely(!mm_chunk_is_private_alloc_ready())) {
-		tag = MM_CHUNK_COMMON;
-	}
-
+	mm_chunk_tag_t tag = mm_chunk_select();
 	struct mm_chunk *chunk = mm_chunk_create(tag, size);
 	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
 	log_chunk->used = 0;
@@ -114,17 +101,18 @@ void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_log_chunk *chunk = NULL;
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	struct mm_thread *thread = mm_thread_self();
+	struct mm_queue *queue = mm_thread_getlog(thread);
 	if (!mm_queue_empty(queue)) {
 		struct mm_link *link = mm_queue_tail(queue);
 		chunk = containerof(link, struct mm_log_chunk, base.link);
 	}
 
-	char dummy[1];
+	char dummy;
 	char *space;
 	size_t avail = 0;
 	if (chunk == NULL) {
-		space = dummy;
+		space = &dummy;
 		avail = sizeof dummy;
 	} else {
 		space = chunk->data + chunk->used;
