@@ -11,6 +11,8 @@ autom4te.cache
 config.log
 config.status
 configure
+config/ar-lib
+config/compile
 config/config.guess
 config/config.sub
 config/depcomp
@@ -20,6 +22,4 @@ src/config.h
 src/config.h.in
 src/stamp-h1
 
-src/mmem
-
-nbproject/
+nbproject

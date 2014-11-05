@@ -1,2 +1,2 @@
 
-SUBDIRS = combiner ring
+SUBDIRS = base

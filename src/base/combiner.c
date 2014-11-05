@@ -1,5 +1,5 @@
 /*
- * base/combiner.c - MainMemory synchronization via combining/delegation.
+ * base/combiner.c - MainMemory combining synchronization.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -19,19 +19,15 @@
 
 #include "base/combiner.h"
 #include "base/bitops.h"
+#include "base/log/debug.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/thr/domain.h"
-
-#include "core/core.h"
-#include "core/task.h"
+#include "base/mem/space.h"
 
 #define MM_COMBINER_MINIMUM_HANDOFF	4
 #define MM_COMBINER_DEFAULT_HANDOFF	16
 
 struct mm_combiner *
-mm_combiner_create(const char *name,
-		   mm_combiner_routine_t routine,
+mm_combiner_create(mm_combiner_routine_t routine,
 		   size_t size, size_t handoff)
 {
 	ENTER();
@@ -45,8 +41,8 @@ mm_combiner_create(const char *name,
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the combiner.
-	struct mm_combiner *combiner = mm_global_aligned_alloc(MM_CACHELINE, nbytes);
-	mm_combiner_prepare(combiner, name, routine, size, handoff);
+	struct mm_combiner *combiner = mm_common_aligned_alloc(MM_CACHELINE, nbytes);
+	mm_combiner_prepare(combiner, routine, size, handoff);
 
 	LEAVE();
 	return combiner;
@@ -55,12 +51,15 @@ mm_combiner_create(const char *name,
 void
 mm_combiner_destroy(struct mm_combiner *combiner)
 {
-	mm_global_free(combiner);
+	ENTER();
+
+	mm_common_free(combiner);
+
+	LEAVE();
 }
 
 void
 mm_combiner_prepare(struct mm_combiner *combiner,
-		    const char *name,
 		    mm_combiner_routine_t routine,
 		    size_t size, size_t handoff)
 {
@@ -75,165 +74,63 @@ mm_combiner_prepare(struct mm_combiner *combiner,
 	combiner->routine = routine;
 	combiner->handoff = handoff;
 
-	MM_CDATA_ALLOC(mm_domain_self(), name, combiner->wait_queue);
-	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
-		struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
-		mm_list_init(wait_queue);
-	}
-
 	mm_ring_mpmc_prepare(&combiner->ring, size);
 	mm_ring_base_prepare_locks(&combiner->ring.base, MM_RING_LOCKED_GET);
 
 	LEAVE();
 }
 
-bool
-mm_combiner_combine(struct mm_combiner *combiner)
-{
-	ENTER();
-	bool done = false;
-
-	for (size_t i = 0; i < combiner->handoff; i++) {
-		uintptr_t argument;
-		if (mm_ring_relaxed_get(&combiner->ring, &argument)) {
-			combiner->routine(argument);
-		} else {
-			done = true;
-			break;
-		}
-	}
-
-	LEAVE();
-	return done;
-}
-
-static void
-mm_combiner_busywait(struct mm_combiner *combiner,
-		     struct mm_ring_node * node,
-		     uintptr_t lock, bool more)
-{
-	ENTER();
-
-	// Spin until the slot reaches the required state.
-	uint32_t backoff = 0;
-	while (mm_memory_load(node->lock) != lock) {
-		if (unlikely(node->lock > lock)) {
-			if (more)
-				break;
-			else
-				ABORT();
-		}
-
-		// Pause for a small time.
-		backoff = mm_backoff(backoff);
-
-		// Try again to acquire the lock and execute pending requests.
-		if (mm_combiner_trylock(combiner)) {
-			mm_combiner_combine(combiner);
-			mm_combiner_unlock(combiner);
-			backoff = 0;
-		}
-	}
-
-	LEAVE();
-}
-
-mm_value_t
-mm_combiner_deplete(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_combiner *combiner = (struct mm_combiner *) arg;
-
-	while (mm_combiner_trylock(combiner)) {
-		bool depleted = mm_combiner_combine(combiner);
-		mm_combiner_unlock(combiner);
-		if (depleted)
-			break;
-		mm_task_yield();
-	}
-
-	LEAVE();
-	return 0;
-}
-
 void
-mm_combiner_enqueue(struct mm_combiner *combiner, uintptr_t data, bool wait)
+mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 {
 	ENTER();
-
-	// Disable cancellation as the enqueue algorithm cannot be
-	// safely undone if interrupted in the middle.
-	int cancelstate;
-	mm_task_setcancelstate(MM_TASK_CANCEL_DISABLE, &cancelstate);
-
-	// Get per-core queue of pending requests.
-	mm_core_t core = mm_core_selfid();
-	struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
-
-	// Add the current request to the per-core queue.
-	struct mm_task *task = mm_task_self();
-	task->flags |= MM_TASK_COMBINING;
-	mm_list_append(wait_queue, &task->wait_queue);
-
-	// White until the current request becomes the head of the
-	// per-core queue.
-	while (mm_list_head(wait_queue) != &task->wait_queue)
-		mm_task_block();
 
 	// Get a request slot in the bounded MPMC queue shared between cores.
 	struct mm_ring_mpmc *ring = &combiner->ring;
 	uintptr_t tail = mm_atomic_uintptr_fetch_and_add(&ring->base.tail, 1);
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
 
-	// Wait until the slot becomes ready to accept the request.
-	mm_combiner_busywait(combiner, node, tail, false);
+	// Wait until the slot becomes ready to accept a request.
+	uint32_t backoff = 0;
+	while (mm_memory_load(node->lock) != tail)
+		backoff = mm_backoff(backoff);
+	mm_memory_fence(); /* TODO: load_store fence */
 
 	// Put the request to the slot.
 	mm_memory_store(node->data, data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
 
-	// Optionally wait until the request is seen.
-	if (wait)
-		mm_combiner_busywait(combiner, node, tail + 1 + ring->base.mask, true);
+	// Wait until the request is executed.
+	backoff = 0;
+	do {
+		// Check if it is actually our turn to execute the requests.
+		uintptr_t head = mm_memory_load(ring->base.head);
+		if (head == tail) {
+			uintptr_t last = head + combiner->handoff;
+			while (head != last) {
+				struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
+				if (mm_memory_load(node->lock) != (head + 1))
+					break;
 
-	// Remove the request from the per-core queue.
-	mm_list_delete(&task->wait_queue);
-	task->flags &= ~MM_TASK_COMBINING;
+				mm_memory_load_fence();
+				const uintptr_t data = mm_memory_load(node->data);
+				mm_memory_fence(); /* TODO: load_store fence */
+				mm_memory_store(node->lock, head + 1 + ring->base.mask);
 
-	// Restore cancellation.
-	mm_task_setcancelstate(cancelstate, NULL);
+				(*combiner->routine)(data);
 
-	// If the per-core queue is not empty then let its new head take
-	// the next turn.  Otherwise 
-	if (!mm_list_empty(wait_queue)) {
-		struct mm_list *link = mm_list_head(wait_queue);
-		task = containerof(link, struct mm_task, wait_queue);
-		mm_task_run(task);
-	} else if (!wait) {
-		mm_core_post(MM_CORE_NONE, mm_combiner_deplete, (mm_value_t) combiner);
-	}
+				head = head + 1;
+			}
 
-	LEAVE();
-}
+			mm_memory_fence();
+			mm_memory_store(ring->base.head, head);
+			break;
+		}
 
-void
-mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data, bool wait)
-{
-	ENTER();
+		backoff = mm_backoff(backoff);
 
-	// Try to acquire the lock.  If successful execute the current request
-	// along with a handful of queued requests.  Otherwise enqueue it to
-	// be executed later.
-	if (mm_combiner_trylock(combiner)) {
-		combiner->routine(data);
-		mm_combiner_combine(combiner);
-		mm_combiner_unlock(combiner);
-	} else {
-		mm_combiner_enqueue(combiner, data, wait);
-	}
+	} while (mm_memory_load(node->lock) == (tail + 1));
 
 	LEAVE();
 }
-

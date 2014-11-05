@@ -63,8 +63,8 @@ consumer(void *arg)
 	volatile uintptr_t result = 0;
 	size_t i;
 
+	void *data = NULL;
 	for (i = 0; i < g_consumer_data_size; i++) {
-		void *data;
 		while (!mm_ring_spsc_locked_get(ring, &data))
 			;
 		result += (uintptr_t) data;
@@ -91,10 +91,10 @@ single_consumer(void *arg)
 int
 main(int ac, char **av)
 {
-	set_params(ac, av);
+	set_params(ac, av, TEST_RING);
 	init();
-	test(g_ring,
-	     g_producers == 1 && g_optimize ? single_producer : producer,
-	     g_consumers == 1 && g_optimize ? single_consumer : consumer);
+	test2(g_ring,
+	      g_producers == 1 && g_optimize ? single_producer : producer,
+	      g_consumers == 1 && g_optimize ? single_consumer : consumer);
 	return EXIT_SUCCESS;
 }

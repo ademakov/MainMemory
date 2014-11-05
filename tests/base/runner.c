@@ -15,7 +15,7 @@
 
 #define _1M_	1000000
 
-static uint32_t g_threads;
+static int g_threads;
 static struct mm_barrier g_barrier;
 
 struct thread
@@ -88,7 +88,54 @@ print_thread_time(struct thread *thread)
 }
 
 void
-test(void *arg, void (*producer)(void *arg), void (*consumer)(void *arg))
+test1(void *arg, void (*routine)(void*))
+{
+	int i, ret;
+
+	g_threads = g_consumers;
+
+	// Allocate thread table.
+	struct thread *tt = calloc(g_threads, sizeof(struct thread));
+	if (tt == NULL) {
+		fprintf(stderr, "out of memory\n");
+		exit(EXIT_FAILURE);
+	}
+
+	// Initialize thread table.
+	for (i = 0; i < g_consumers; i++) {
+		struct thread *t = &tt[i];
+		t->start = routine;
+		t->start_arg = arg;
+		snprintf(t->name, sizeof t->name, "thread #%02d", i);
+	}
+
+	/* Run threads. */
+	mm_barrier_init(&g_barrier, g_threads);
+	for (i = 0; i < g_threads; i++) {
+		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
+		if (ret) {
+			fprintf(stderr, "failed to create a thread\n");
+			exit(EXIT_FAILURE);
+		}
+	}
+	for (i = 0; i < g_threads; i++) {
+		pthread_join(tt[i].thread, NULL);
+	}
+
+	// Collect and print stats.
+	uint64_t time_sum = 0;
+	for (i = 0; i < g_threads; i++) {
+		print_thread_time(&tt[i]);
+		time_sum += tt[i].time;
+	}
+	print_time("total", time_sum);
+	print_time("average", time_sum / g_threads);
+
+	free(tt);
+}
+
+void
+test2(void *arg, void (*producer)(void *arg), void (*consumer)(void *arg))
 {
 	int i, ret;
 

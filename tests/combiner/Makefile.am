@@ -1,4 +1,0 @@
-
-#noinst_PROGRAMS = test
-
-

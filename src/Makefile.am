@@ -1,48 +1,16 @@
 
-SUBDIRS = memcache
+SUBDIRS = base memcache
 
 bin_PROGRAMS = mmem
 
-mmem_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
+AM_CFLAGS = -Wall -Wextra
 
 arch_sources = \
 	arch/atomic.h arch/basic.h arch/lock.h \
 	arch/memory.h arch/spin.h arch/stack.h 
 
-base_sources = \
-	base/backoff.c base/backoff.h \
-	base/barrier.c base/barrier.h \
-	base/bitops.h \
-	base/bitset.c base/bitset.h \
-	base/combiner.c base/combiner.h \
-	base/hash.c base/hash.h \
-	base/list.h \
-	base/log/debug.c base/log/debug.h \
-	base/log/error.c base/log/error.h \
-	base/log/log.c base/log/log.h \
-	base/log/plain.c base/log/plain.h \
-	base/log/trace.c base/log/trace.h \
-	base/lock.c base/lock.h \
-	base/mem/alloc.c base/mem/alloc.h \
-	base/mem/arena.h base/mem/arena.c \
-	base/mem/buffer.c base/mem/buffer.h \
-	base/mem/cdata.c base/mem/cdata.h \
-	base/mem/chunk.c base/mem/chunk.h \
-	base/mem/malloc.c base/mem/malloc.h \
-	base/mem/mem.c base/mem/mem.h \
-	base/mem/space.c base/mem/space.h \
-	base/mem/stack.c base/mem/stack.h \
-	base/ring.c base/ring.h \
-	base/sys/clock.c base/sys/clock.h \
-	base/timeq.c base/timeq.h \
-	base/thr/domain.c base/thr/domain.h \
-	base/thr/thread.c base/thr/thread.h \
-	base/util/exit.c base/util/exit.h \
-	base/util/format.c base/util/format.h \
-	base/util/hook.c base/util/hook.h \
-	base/util/libcall.c base/util/libcall.h
-
 core_sources = \
+	core/combiner.c core/combiner.h \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
 	core/lock.h \
@@ -63,11 +31,12 @@ net_sources = \
 	net/netbuf.c net/netbuf.h
 
 mmem_SOURCES = \
-	$(arch_sources) $(base_sources) \
-	$(core_sources) $(net_sources) \
+	$(arch_sources) \
+	$(core_sources) \
+	$(net_sources) \
 	common.h main.c
 
-mmem_LDADD = memcache/libmemcache.a
+mmem_LDADD = base/libmmbase.a memcache/libmemcache.a
 
 if ARCH_X86
 mmem_SOURCES += \

@@ -1,5 +1,5 @@
 /*
- * base/combiner.h - MainMemory combining synchronization.
+ * core/combiner.h - MainMemory task combining synchronization.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,35 +17,36 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_COMBINER_H
-#define BASE_COMBINER_H
+#ifndef CORE_COMBINER_H
+#define CORE_COMBINER_H
 
 #include "common.h"
-#include "base/ring.h"
+#include "base/combiner.h"
+#include "base/list.h"
+#include "base/mem/cdata.h"
 
-typedef void (*mm_combiner_routine_t)(uintptr_t data);
-
-struct mm_combiner
+struct mm_task_combiner
 {
-	mm_combiner_routine_t routine;
+	/* Per-core wait list of pending requests. */
+	MM_CDATA(struct mm_list, wait_queue);
 
-	size_t handoff;
-
-	struct mm_ring_mpmc ring;
+	struct mm_combiner combiner;
 };
 
-struct mm_combiner * mm_combiner_create(mm_combiner_routine_t routine,
-					size_t size, size_t handoff);
+struct mm_task_combiner * mm_task_combiner_create(const char *name,
+						  mm_combiner_routine_t routine,
+						  size_t size, size_t handoff);
 
-void mm_combiner_destroy(struct mm_combiner *combiner)
+void mm_task_combiner_destroy(struct mm_task_combiner *combiner)
 	__attribute__((nonnull(1)));
 
-void mm_combiner_prepare(struct mm_combiner *combiner,
-			 mm_combiner_routine_t routine,
-			 size_t size, size_t handoff)
+void mm_task_combiner_prepare(struct mm_task_combiner *combiner,
+			      const char *name,
+			      mm_combiner_routine_t routine,
+			      size_t size, size_t handoff)
 	__attribute__((nonnull(1)));
 
-void mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
+void mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 	__attribute__((nonnull(1)));
 
-#endif /* BASE_COMBINER_H */
+#endif /* CORE_COMBINER_H */
