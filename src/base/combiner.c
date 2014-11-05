@@ -94,9 +94,9 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 	uint32_t backoff = 0;
 	while (mm_memory_load(node->lock) != tail)
 		backoff = mm_backoff(backoff);
-	mm_memory_fence(); /* TODO: load_store fence */
 
 	// Put the request to the slot.
+	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->data, data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
@@ -107,14 +107,14 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 		// Check if it is actually our turn to execute the requests.
 		uintptr_t head = mm_memory_load(ring->base.head);
 		if (head == tail) {
-			uintptr_t last = head + combiner->handoff;
+			uintptr_t last = tail + combiner->handoff;
 			while (head != last) {
 				struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
 				if (mm_memory_load(node->lock) != (head + 1))
 					break;
 
 				mm_memory_load_fence();
-				const uintptr_t data = mm_memory_load(node->data);
+				uintptr_t data = mm_memory_load(node->data);
 				mm_memory_fence(); /* TODO: load_store fence */
 				mm_memory_store(node->lock, head + 1 + ring->base.mask);
 

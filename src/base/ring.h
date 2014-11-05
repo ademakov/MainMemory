@@ -286,6 +286,7 @@ mm_ring_mpmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
 
 	mm_ring_mpmc_busywait(node, tail);
 
+	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->data, data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
@@ -300,6 +301,7 @@ mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *data_ptr)
 
 	mm_ring_mpmc_busywait(node, head + 1);
 
+	mm_memory_load_fence();
 	*data_ptr = mm_memory_load(node->data);
 	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
