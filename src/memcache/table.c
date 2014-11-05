@@ -589,8 +589,10 @@ mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
 	ASSERT(entry->state == MC_ENTRY_NOT_USED);
 	entry->state = MC_ENTRY_FREE;
 
+	mc_table_lock(part);
 	mm_link_insert(&part->free_list, &entry->link);
 	part->nentries_free++;
+	mc_table_unlock(part);
 }
 
 /**********************************************************************
