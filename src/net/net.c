@@ -264,7 +264,8 @@ mm_net_alloc_server(void)
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
 	srv->fd = -1;
 	srv->flags = 0;
-	srv->client_core = 0;
+	srv->client_index = 0;
+	srv->client_count = 0;
 
 	srv->core = MM_CORE_NONE;
 	srv->core_num = 0;
@@ -431,9 +432,15 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Select a core for the client using round-robin discipline.
-	mm_core_t index = srv->client_core++;
-	if (srv->client_core == srv->core_num)
-		srv->client_core = 0;
+	mm_core_t index = srv->client_index;
+	if (srv->client_count < 4) {
+		srv->client_count++;
+	} else {
+		srv->client_index++;
+		if (srv->client_index == srv->core_num)
+			srv->client_index = 0;
+		srv->client_count = 0;
+	}
 
 	// Register with the server.
 	sock->core_server_index = index;

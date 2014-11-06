@@ -109,7 +109,8 @@ struct mm_net_server
 	mm_event_hid_t control_handler;
 
 	/* A core the next client to be bound to. */
-	mm_core_t client_core;
+	mm_core_t client_index;
+	mm_core_t client_count;
 
 	/* Per-core server data. */
 	mm_core_t core;
