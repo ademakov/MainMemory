@@ -21,6 +21,7 @@
 #define MEMCACHE_COMMAND_H
 
 #include "memcache/memcache.h"
+#include "memcache/action.h"
 #include "core/future.h"
 
 /**********************************************************************
@@ -117,12 +118,6 @@ typedef enum
 
 } mc_command_result_t;
 
-struct mc_command_key
-{
-	size_t len;
-	const char *str;
-};
-
 struct mc_command_params_set
 {
 	struct mm_buffer_segment *seg;
@@ -158,11 +153,9 @@ union mc_command_params
 struct mc_command
 {
 	struct mc_command_type *type;
-	struct mc_command_key key;
+	struct mc_action action;
 	union mc_command_params params;
 	mc_command_result_t result;
-	struct mc_entry *entry;
-	uint32_t key_hash;
 	bool noreply;
 	bool own_key;
 

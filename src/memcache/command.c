@@ -128,13 +128,13 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 	ENTER();
 
 	if (command->own_key)
-		mm_local_free((char *) command->key.str);
+		mm_local_free((char *) command->action.key);
 
 	switch (mc_command_result(command)) {
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS:
 	case MC_RESULT_VALUE:
-		mc_table_unref_entry(mc_table_part(command->key_hash), command->entry);
+		mc_table_unref_entry(command->action.part, command->action.entry);
 		break;
 
 	default:
@@ -162,14 +162,15 @@ mc_command_execute(struct mc_command *command)
 		return;
 
 	if ((command->type->flags & MC_ASYNC) != 0) {
-		command->key_hash = mc_hash(command->key.str, command->key.len);
+		command->action.hash = mc_hash(command->action.key,
+					       command->action.key_len);
+		command->action.part = mc_table_part(command->action.hash);
 
 #if ENABLE_SMP && !ENABLE_MEMCACHE_LOCKS
-		struct mc_tpart *part = mc_table_part(command->key_hash);
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->exec,
 						   (mm_value_t) command);
-		mm_future_start(command->future, part->core);
+		mm_future_start(command->future, command->action.part->core);
 		return;
 #endif
 	}
@@ -178,12 +179,9 @@ mc_command_execute(struct mc_command *command)
 }
 
 static mc_command_result_t
-mc_command_result_entry(struct mc_command *command,
-			struct mc_entry *entry,
-			mc_command_result_t result)
+mc_command_result_entry(struct mc_command *command, mc_command_result_t result)
 {
-	mc_table_ref_entry(entry);
-	command->entry = entry;
+	mc_table_ref_entry(command->action.entry);
 	return result;
 }
 
@@ -223,22 +221,18 @@ mc_command_process_get2(mm_value_t arg, mc_command_result_t rc)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *entry = mc_table_lookup(part, hash, key, key_len);
-	if (entry != NULL)
-		rc = mc_command_result_entry(command, entry, rc);
+	mc_table_lookup(&command->action);
+	if (command->action.entry != NULL)
+		rc = mc_command_result_entry(command, rc);
 	else if (command->params.last)
 		rc = MC_RESULT_END;
 	else
 		rc = MC_RESULT_BLANK;
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	LEAVE();
 	return rc;
@@ -262,25 +256,24 @@ mc_command_exec_set(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-	struct mc_entry *new_entry = mc_table_create_entry(part);
-	mc_entry_set(new_entry, hash, key_len, key,
+	mc_table_remove(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
+	struct mc_entry *new_entry = mc_table_create_entry(command->action.part);
+	mc_entry_set(new_entry, &command->action,
 		     params->flags, params->exptime, params->bytes);
 	mc_command_process_value(new_entry, params, 0);
-	mc_table_insert(part, hash, new_entry, MC_ENTRY_USED_MIN);
 
-	mc_table_unlock(part);
+	mc_table_insert(&command->action, new_entry, MC_ENTRY_USED_MIN);
+
+	mc_table_unlock(command->action.part);
 
 	if (old_entry != NULL)
-		mc_table_unref_entry(part, old_entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -298,25 +291,24 @@ mc_command_exec_add(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
+	mc_table_lookup(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	if (old_entry == NULL) {
-		new_entry = mc_table_create_entry(part);
-		mc_entry_set(new_entry, hash, key_len, key,
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_set(new_entry, &command->action,
 			     params->flags, params->exptime, params->bytes);
 		mc_command_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry, MC_ENTRY_USED_MIN);
+
+		mc_table_insert(&command->action, new_entry, MC_ENTRY_USED_MIN);
 	}
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -336,29 +328,28 @@ mc_command_exec_replace(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
 	// TODO: preserve state
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
+	mc_table_remove(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
-		new_entry = mc_table_create_entry(part);
-		mc_entry_set(new_entry, hash, key_len, key,
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_set(new_entry, &command->action,
 			     params->flags, params->exptime, params->bytes);
 		mc_command_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry, MC_ENTRY_USED_MIN);
+
+		mc_table_insert(&command->action, new_entry, MC_ENTRY_USED_MIN);
 	}
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	if (old_entry != NULL)
-		mc_table_unref_entry(part, old_entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -378,30 +369,30 @@ mc_command_exec_cas(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
+	mc_table_lookup(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL && old_entry->cas == params->cas) {
 		uint8_t state = old_entry->state;
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_table_unref_entry(part, old_entry2);
+		mc_table_remove(&command->action);
 
-		new_entry = mc_table_create_entry(part);
-		mc_entry_set(new_entry, hash, key_len, key,
+		ASSERT(old_entry == command->action.entry);
+		mc_table_unref_entry(command->action.part, old_entry);
+
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_set(new_entry, &command->action,
 			     params->flags, params->exptime, params->bytes);
 		mc_command_process_value(new_entry, params, 0);
-		mc_table_insert(part, hash, new_entry, state);
+
+		mc_table_insert(&command->action, new_entry, state);
 	}
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -423,34 +414,33 @@ mc_command_exec_append(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
 	// TODO: preserve state
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
+	mc_table_remove(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		new_entry = mc_table_create_entry(part);
-		mc_entry_set(new_entry, hash, key_len, key,
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_set(new_entry, &command->action,
 			     old_entry->flags, old_entry->exp_time, value_len);
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
 		mc_command_process_value(new_entry, params, old_entry->value_len);
-		mc_table_insert(part, hash, new_entry, MC_ENTRY_USED_MIN);
+
+		mc_table_insert(&command->action, new_entry, MC_ENTRY_USED_MIN);
 	}
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	if (old_entry != NULL)
-		mc_table_unref_entry(part, old_entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -470,34 +460,33 @@ mc_command_exec_prepend(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 	struct mc_command_params_set *params = &command->params.set;
 
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
 	// TODO: preserve state
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
+	mc_table_remove(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	if (old_entry != NULL) {
 		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		new_entry = mc_table_create_entry(part);
-		mc_entry_set(new_entry, hash, key_len, key,
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_set(new_entry, &command->action,
 			     old_entry->flags, old_entry->exp_time, value_len);
 		char *new_value = mc_entry_getvalue(new_entry);
 		mc_command_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
-		mc_table_insert(part, hash, new_entry, MC_ENTRY_USED_MIN);
+
+		mc_table_insert(&command->action, new_entry, MC_ENTRY_USED_MIN);
 	}
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	if (old_entry != NULL)
-		mc_table_unref_entry(part, old_entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
 	mc_command_result_t rc;
 	if (command->noreply)
@@ -517,43 +506,42 @@ mc_command_exec_incr(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
+	mc_table_lookup(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	uint64_t value;
 	if (old_entry != NULL && mc_entry_getnum(old_entry, &value)) {
 		value += command->params.val64;
 
-		new_entry = mc_table_create_entry(part);
-		mc_entry_setnum(new_entry, hash, key_len, key,
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_setnum(new_entry, &command->action,
 				old_entry->flags, old_entry->exp_time,
 				value);
 
 		uint8_t state = old_entry->state;
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_table_unref_entry(part, old_entry2);
+		mc_table_remove(&command->action);
+		ASSERT(old_entry == command->action.entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
-		mc_table_insert(part, hash, new_entry, state);
+		mc_table_insert(&command->action, new_entry, state);
+		command->action.entry = new_entry;
 	}
 
 	mc_command_result_t rc;
 	if (command->noreply)
 		rc = MC_RESULT_BLANK;
 	else if (new_entry != NULL)
-		rc = mc_command_result_entry(command, new_entry, MC_RESULT_VALUE);
+		rc = mc_command_result_entry(command, MC_RESULT_VALUE);
 	else if (old_entry != NULL)
 		rc = MC_RESULT_INC_DEC_NON_NUM;
 	else
 		rc = MC_RESULT_NOT_FOUND;
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	LEAVE();
 	return rc;
@@ -565,14 +553,12 @@ mc_command_exec_decr(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_lookup(part, hash, key, key_len);
+	mc_table_lookup(&command->action);
+	struct mc_entry *old_entry = command->action.entry;
+
 	struct mc_entry *new_entry = NULL;
 	uint64_t value;
 	if (old_entry != NULL && mc_entry_getnum(old_entry, &value)) {
@@ -581,30 +567,30 @@ mc_command_exec_decr(mm_value_t arg)
 		else
 			value = 0;
 
-		new_entry = mc_table_create_entry(part);
-		mc_entry_setnum(new_entry, hash, key_len, key,
-				old_entry->flags, old_entry->exp_time,
-				value);
+		new_entry = mc_table_create_entry(command->action.part);
+		mc_entry_setnum(new_entry, &command->action,
+				old_entry->flags, old_entry->exp_time, value);
 
 		uint8_t state = old_entry->state;
-		struct mc_entry *old_entry2 = mc_table_remove(part, hash, key, key_len);
-		ASSERT(old_entry == old_entry2);
-		mc_table_unref_entry(part, old_entry2);
+		mc_table_remove(&command->action);
+		ASSERT(old_entry == command->action.entry);
+		mc_table_unref_entry(command->action.part, old_entry);
 
-		mc_table_insert(part, hash, new_entry, state);
+		mc_table_insert(&command->action, new_entry, state);
+		command->action.entry = new_entry;
 	}
 
 	mc_command_result_t rc;
 	if (command->noreply)
 		rc = MC_RESULT_BLANK;
 	else if (new_entry != NULL)
-		rc = mc_command_result_entry(command, new_entry, MC_RESULT_VALUE);
+		rc = mc_command_result_entry(command, MC_RESULT_VALUE);
 	else if (old_entry != NULL)
 		rc = MC_RESULT_INC_DEC_NON_NUM;
 	else
 		rc = MC_RESULT_NOT_FOUND;
 
-	mc_table_unlock(part);
+	mc_table_unlock(command->action.part);
 
 	LEAVE();
 	return rc;
@@ -616,24 +602,18 @@ mc_command_exec_delete(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 
-	struct mc_tpart *part = mc_table_part(command->key_hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
+	mc_table_remove(&command->action);
+	mc_table_unlock(command->action.part);
 
-	struct mc_entry *old_entry = mc_table_remove(part, hash, key, key_len);
-
-	mc_table_unlock(part);
-
-	if (old_entry != NULL)
-		mc_table_unref_entry(part, old_entry);
+	if (command->action.entry != NULL)
+		mc_table_unref_entry(command->action.part, command->action.entry);
 
 	mc_command_result_t rc;
 	if (command->noreply)
 		rc = MC_RESULT_BLANK;
-	else if (old_entry != NULL)
+	else if (command->action.entry != NULL)
 		rc = MC_RESULT_DELETED;
 	else
 		rc = MC_RESULT_NOT_FOUND;
@@ -648,26 +628,22 @@ mc_command_exec_touch(mm_value_t arg __attribute__((unused)))
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	const char *key = command->key.str;
-	size_t key_len = command->key.len;
-	uint32_t hash = command->key_hash;
 
-	struct mc_tpart *part = mc_table_part(hash);
-	mc_table_lock(part);
+	mc_table_lock(command->action.part);
 
-	struct mc_entry *entry = mc_table_lookup(part, hash, key, key_len);
-	if (entry != NULL)
-		entry->exp_time = command->params.val32;
+	mc_table_lookup(&command->action);
+	if (command->action.entry != NULL)
+		command->action.entry->exp_time = command->params.val32;
+
+	mc_table_unlock(command->action.part);
 
 	mc_command_result_t rc;
 	if (command->noreply)
 		rc = MC_RESULT_BLANK;
-	else if (entry != NULL)
+	else if (command->action.entry != NULL)
 		rc = MC_RESULT_TOUCHED;
 	else
 		rc = MC_RESULT_NOT_FOUND;
-
-	mc_table_unlock(part);
 
 	LEAVE();
 	return rc;

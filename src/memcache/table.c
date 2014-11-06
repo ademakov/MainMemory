@@ -308,7 +308,12 @@ mc_table_evict(struct mc_tpart *part, uint32_t nrequired)
 		if (state >= MC_ENTRY_USED_MIN && state <= MC_ENTRY_USED_MAX) {
 			if (mc_table_is_eviction_victim(hand)) {
 				char *key = mc_entry_getkey(hand);
-				mc_table_remove(part, hand->hash, key, hand->key_len);
+				struct mc_action action;
+				action.key = key;
+				action.key_len = hand->key_len;
+				action.hash = hand->hash;
+				action.part = part;
+				mc_table_remove(&action);
 				mm_link_insert(&victims, &hand->link);
 				++nvictims;
 			} else {
@@ -608,56 +613,58 @@ mc_table_access(struct mc_tpart *part __attribute__((unused)),
 		mm_memory_store(entry->state, state + 1);
 }
 
-struct mc_entry *
-mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
+void
+mc_table_lookup(struct mc_action *action)
 {
 	ENTER();
-	struct mc_entry *found_entry = NULL;
 
-	uint32_t index = mc_table_index(part, hash);
-	struct mm_link *bucket = &part->buckets[index];
+	action->entry = NULL;
+
+	uint32_t index = mc_table_index(action->part, action->hash);
+	struct mm_link *bucket = &action->part->buckets[index];
 
 	struct mm_link *link = mm_link_head(bucket);
 	while (link != NULL) {
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		char *entry_key = mc_entry_getkey(entry);
-		if (hash == entry->hash
-		    && key_len == entry->key_len
-		    && !memcmp(key, entry_key, key_len)) {
-			mc_table_access(part, entry);
-			found_entry = entry;
+		if (action->hash == entry->hash
+		    && action->key_len == entry->key_len
+		    && !memcmp(action->key, entry_key, action->key_len)) {
+			mc_table_access(action->part, entry);
+
+			action->entry = entry;
 			break;
 		}
 		link = link->next;
 	}
 
 	LEAVE();
-	return found_entry;
 }
 
-struct mc_entry *
-mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
+void
+mc_table_remove(struct mc_action *action)
 {
 	ENTER();
-	struct mc_entry *found_entry = NULL;
 
-	uint32_t index = mc_table_index(part, hash);
-	struct mm_link *pred = &part->buckets[index];
+	action->entry = NULL;
+
+	uint32_t index = mc_table_index(action->part, action->hash);
+	struct mm_link *pred = &action->part->buckets[index];
 
 	while (!mm_link_is_last(pred)) {
 		struct mm_link *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 
 		char *entry_key = mc_entry_getkey(entry);
-		if (hash == entry->hash
-		    && key_len == entry->key_len
-		    && !memcmp(key, entry_key, key_len)) {
+		if (action->hash == entry->hash
+		    && action->key_len == entry->key_len
+		    && !memcmp(action->key, entry_key, action->key_len)) {
 			mm_link_cleave(pred, link->next);
 			entry->state = MC_ENTRY_NOT_USED;
 
-			part->volume -= mc_entry_size(entry);
+			action->part->volume -= mc_entry_size(entry);
 
-			found_entry = entry;
+			action->entry = entry;
 			break; 
 		}
 
@@ -665,32 +672,30 @@ mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t k
 	}
 
 	LEAVE();
-	return found_entry;
 }
 
 void
-mc_table_insert(struct mc_tpart *part, uint32_t hash,
-		struct mc_entry *entry, uint8_t state)
+mc_table_insert(struct mc_action *action, struct mc_entry *entry, uint8_t state)
 {
 	ENTER();
 
-	uint32_t index = mc_table_index(part, hash);
-	struct mm_link *bucket = &part->buckets[index];
+	uint32_t index = mc_table_index(action->part, action->hash);
+	struct mm_link *bucket = &action->part->buckets[index];
 
 	mm_link_insert(bucket, &entry->link);
 	entry->state = state;
 
-	entry->cas = part->cas;
-	part->cas += mc_table.nparts;
+	entry->cas = action->part->cas;
+	action->part->cas += mc_table.nparts;
 
-	part->volume += mc_entry_size(entry);
-	if (!part->evicting && mc_table_check_volume(part, 0)) {
-		part->evicting = true;
-		mc_table_start_evicting(part);
+	action->part->volume += mc_entry_size(entry);
+	if (!action->part->evicting && mc_table_check_volume(action->part, 0)) {
+		action->part->evicting = true;
+		mc_table_start_evicting(action->part);
 	}
-	if (!part->striding && mc_table_check_size(part)) {
-		part->striding = true;
-		mc_table_start_striding(part);
+	if (!action->part->striding && mc_table_check_size(action->part)) {
+		action->part->striding = true;
+		mc_table_start_striding(action->part);
 	}
 
 	LEAVE();

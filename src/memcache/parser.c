@@ -442,29 +442,29 @@ again:
 					goto again;
 				} else {
 					state = S_KEY_N;
-					command->key.str = s;
+					command->action.key = s;
 					break;
 				}
 
 			case S_KEY_N:
 				if (c == ' ') {
-					size_t len = s - command->key.str;
+					size_t len = s - command->action.key;
 					if (unlikely(len > MC_KEY_LEN_MAX)) {
 						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
 						state = S_SPACE;
-						command->key.len = len;
+						command->action.key_len = len;
 					}
 					break;
 				} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
-					size_t len = s - command->key.str;
+					size_t len = s - command->action.key;
 					if (len > MC_KEY_LEN_MAX) {
 						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
 						state = shift;
-						command->key.len = len;
+						command->action.key_len = len;
 					}
 					goto again;
 				} else {
@@ -475,11 +475,11 @@ again:
 			case S_KEY_EDGE:
 				if (c == ' ') {
 					state = S_SPACE;
-					command->key.len = MC_KEY_LEN_MAX;
+					command->action.key_len = MC_KEY_LEN_MAX;
 					break;
 				} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
 					state = shift;
-					command->key.len = MC_KEY_LEN_MAX;
+					command->action.key_len = MC_KEY_LEN_MAX;
 					goto again;
 				} else {
 					DEBUG("Too long key.");
@@ -495,13 +495,13 @@ again:
 					state = shift;
 					goto again;
 				} else {
-					struct mc_command_key *key = &command->key;
-					if (key->len == MC_KEY_LEN_MAX) {
+					struct mc_action *action = &command->action;
+					if (action->key_len == MC_KEY_LEN_MAX) {
 						DEBUG("Too long key.");
 						state = S_ERROR;
 					} else {
-						char *str = (char *) key->str;
-						str[key->len++] = c;
+						char *str = (char *) action->key;
+						str[action->key_len++] = c;
 					}
 					break;
 				}
@@ -867,7 +867,7 @@ again:
 		if (state == S_KEY_N) {
 			DEBUG("Split key.");
 
-			size_t len = e - command->key.str;
+			size_t len = e - command->action.key;
 			if (len > MC_KEY_LEN_MAX) {
 				DEBUG("Too long key.");
 				state = S_ERROR;
@@ -877,9 +877,9 @@ again:
 				state = S_KEY_COPY;
 
 				char *str = mm_local_alloc(MC_KEY_LEN_MAX);
-				memcpy(str, command->key.str, len);
-				command->key.len = len;
-				command->key.str = str;
+				memcpy(str, command->action.key, len);
+				command->action.key_len = len;
+				command->action.key = str;
 				command->own_key = true;
 			}
 		}

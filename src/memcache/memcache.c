@@ -124,7 +124,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS: {
-		struct mc_entry *entry = command->entry;
+		struct mc_entry *entry = command->action.entry;
 		const char *key = mc_entry_getkey(entry);
 		char *value = mc_entry_getvalue(entry);
 		uint8_t key_len = entry->key_len;
@@ -159,7 +159,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	}
 
 	case MC_RESULT_VALUE: {
-		struct mc_entry *entry = command->entry;
+		struct mc_entry *entry = command->action.entry;
 		char *value = mc_entry_getvalue(entry);
 		uint32_t value_len = entry->value_len;
 

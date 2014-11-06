@@ -5,5 +5,10 @@ AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra
 
 libmemcache_a_SOURCES = \
-	command.c command.h entry.c entry.h memcache.c memcache.h \
-	parser.c parser.h state.c state.h table.c table.h
+	action.h \
+	command.c command.h \
+	entry.c entry.h \
+	memcache.c memcache.h \
+	parser.c parser.h \
+	state.c state.h \
+	table.c table.h

@@ -18,6 +18,7 @@
  */
 
 #include "memcache/entry.h"
+#include "memcache/action.h"
 #include "memcache/table.h"
 
 #include "core/core.h"
@@ -25,32 +26,28 @@
 #include <ctype.h>
 
 void
-mc_entry_set(struct mc_entry *entry, uint32_t hash,
-	     uint8_t key_len, const char *key,
-	     uint32_t flags, uint32_t exp_time,
-	     uint32_t value_len)
+mc_entry_set(struct mc_entry *entry, struct mc_action *action,
+	     uint32_t flags, uint32_t exp_time, uint32_t value_len)
 {
-	entry->hash = hash;
-	entry->key_len = key_len;
+	entry->hash = action->hash;
+	entry->key_len = action->key_len;
 	entry->value_len = value_len;
 	entry->flags = flags;
 	entry->exp_time = exp_time;
 	entry->ref_count = 1;
 
 	mm_link_init(&entry->chunks);
-	size_t size = mc_entry_sum_length(key_len, value_len);
+	size_t size = mc_entry_sum_length(action->key_len, value_len);
 	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
 	mm_link_insert(&entry->chunks, &chunk->base.link);
 
 	char *entry_key = mc_entry_getkey(entry);
-	memcpy(entry_key, key, entry->key_len);
+	memcpy(entry_key, action->key, entry->key_len);
 }
 
 void
-mc_entry_setnum(struct mc_entry *entry, uint32_t hash,
-		uint8_t key_len, const char *key,
-		uint32_t flags, uint32_t exp_time,
-		uint64_t value)
+mc_entry_setnum(struct mc_entry *entry, struct mc_action *action,
+		uint32_t flags, uint32_t exp_time, uint64_t value)
 {
 	char buffer[32];
 	size_t value_len = 0;
@@ -60,7 +57,7 @@ mc_entry_setnum(struct mc_entry *entry, uint32_t hash,
 		value /= 10;
 	} while (value);
 
-	mc_entry_set(entry, hash, key_len, key, flags, exp_time, value_len);
+	mc_entry_set(entry, action, flags, exp_time, value_len);
 
 	char *v = mc_entry_getvalue(entry);
 	do {

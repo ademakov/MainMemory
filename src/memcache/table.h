@@ -21,6 +21,7 @@
 #define MEMCACHE_TABLE_H
 
 #include "memcache/memcache.h"
+#include "memcache/action.h"
 #include "memcache/entry.h"
 
 #include "base/bitops.h"
@@ -180,13 +181,13 @@ mc_table_unref_entry(struct mc_tpart *part, struct mc_entry *entry)
  * Table entry access routines.
  **********************************************************************/
 
-struct mc_entry * mc_table_lookup(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
+void mc_table_lookup(struct mc_action *action)
 	__attribute__((nonnull(1)));
 
-struct mc_entry * mc_table_remove(struct mc_tpart *part, uint32_t hash, const char *key, uint8_t key_len)
+void mc_table_remove(struct mc_action *action)
 	__attribute__((nonnull(1)));
 
-void mc_table_insert(struct mc_tpart *part, uint32_t hash, struct mc_entry *entry, uint8_t state)
+void mc_table_insert(struct mc_action *action, struct mc_entry *entry, uint8_t state)
 	__attribute__((nonnull(1)));
 
 #endif /* MEMCACHE_TABLE_H */
