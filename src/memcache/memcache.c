@@ -50,8 +50,9 @@ mc_transmit_unref(uintptr_t data)
 {
 	ENTER();
 
-	struct mc_entry *entry = (struct mc_entry *) data;
-	mc_table_unref_entry(mc_table_part(entry->hash), entry);
+	struct mc_action action;
+	action.old_entry = (struct mc_entry *) data;
+	mc_action_finish(&action);
 
 	LEAVE();
 }
@@ -124,7 +125,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 
 	case MC_RESULT_ENTRY:
 	case MC_RESULT_ENTRY_CAS: {
-		struct mc_entry *entry = command->action.entry;
+		struct mc_entry *entry = command->action.old_entry;
 		const char *key = mc_entry_getkey(entry);
 		char *value = mc_entry_getvalue(entry);
 		uint8_t key_len = entry->key_len;
@@ -142,7 +143,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 				"VALUE %.*s %u %u %llu\r\n",
 				key_len, key,
 				entry->flags, value_len,
-				(unsigned long long) entry->cas);
+				(unsigned long long) entry->stamp);
 		}
 
 		mm_netbuf_splice(&state->sock, value, value_len,
@@ -159,7 +160,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	}
 
 	case MC_RESULT_VALUE: {
-		struct mc_entry *entry = command->action.entry;
+		struct mc_entry *entry = command->action.new_entry;
 		char *value = mc_entry_getvalue(entry);
 		uint32_t value_len = entry->value_len;
 
@@ -432,17 +433,17 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		mc_config.volume = MC_TABLE_VOLUME_DEFAULT;
 
 	// Determine the required memcache table partitions.
-#if ENABLE_MEMCACHE_LOCKS
-	if (config != NULL && config->nparts)
-		mc_config.nparts = config->nparts;
-	else
-		mc_config.nparts = 1;
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	mm_bitset_prepare(&mc_config.affinity, &mm_alloc_global, mm_core_getnum());
 	if (config != NULL)
 		mm_bitset_or(&mc_config.affinity, &config->affinity);
 	if (!mm_bitset_any(&mc_config.affinity))
 		mm_bitset_set(&mc_config.affinity, 0);
+#else
+	if (config != NULL && config->nparts)
+		mc_config.nparts = config->nparts;
+	else
+		mc_config.nparts = 1;
 #endif
 
 	LEAVE();

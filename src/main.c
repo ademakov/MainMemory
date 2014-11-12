@@ -129,12 +129,12 @@ mm_server_init(void)
 
 	struct mm_memcache_config memcache_config;
 	memcache_config.volume = 64 * 1024 * 1024;
-#if ENABLE_MEMCACHE_LOCKS
-	memcache_config.nparts = 1;
-#else
+#if ENABLE_MEMCACHE_DELAGATE
 	mm_bitset_prepare(&memcache_config.affinity, &mm_alloc_global, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
 	mm_bitset_set(&memcache_config.affinity, 7);
+#else
+	memcache_config.nparts = 1;
 #endif
 	mm_memcache_init(&memcache_config);
 

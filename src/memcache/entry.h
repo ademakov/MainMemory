@@ -22,10 +22,14 @@
 
 #include "memcache/memcache.h"
 
-#include "arch/atomic.h"
 #include "base/list.h"
 #include "base/mem/chunk.h"
 
+#if !ENABLE_MEMCACHE_COMBINER
+# include "arch/atomic.h"
+#endif
+
+/* Forward declaration. */
 struct mc_action;
 
 #define MC_ENTRY_FREE		0
@@ -42,13 +46,17 @@ struct mc_entry
 	uint32_t exp_time;
 	uint32_t flags;
 
+#if ENABLE_MEMCACHE_COMBINER
+	uint16_t ref_count;
+#else
 	mm_atomic_uint16_t ref_count;
+#endif
 
 	uint8_t state;
 
 	uint8_t key_len;
 	uint32_t value_len;
-	uint64_t cas;
+	uint64_t stamp;
 };
 
 static inline size_t

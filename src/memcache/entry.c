@@ -34,7 +34,6 @@ mc_entry_set(struct mc_entry *entry, struct mc_action *action,
 	entry->value_len = value_len;
 	entry->flags = flags;
 	entry->exp_time = exp_time;
-	entry->ref_count = 1;
 
 	mm_link_init(&entry->chunks);
 	size_t size = mc_entry_sum_length(action->key_len, value_len);

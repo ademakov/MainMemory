@@ -624,7 +624,7 @@ again:
 				goto again;
 
 			case S_CAS:
-				command->params.set.cas = num64;
+				command->action.stamp = num64;
 				ASSERT(c != ' ');
 				if (c == 'n') {
 					state = S_MATCH;
@@ -852,8 +852,7 @@ again:
 		if (unlikely(count > 1024)) {
 			bool too_much = true;
 			if (command->type != NULL
-			    && (command->type->tag == mc_command_get
-			        || command->type->tag == mc_command_gets)
+			    && command->type->kind == MC_COMMAND_LOOKUP
 			    && count < (16 * 1024))
 				too_much = false;
 

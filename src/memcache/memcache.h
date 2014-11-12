@@ -23,23 +23,43 @@
 #include "common.h"
 #include "base/bitset.h"
 
-#define ENABLE_MEMCACHE_LOCKS	1
+/* Enable table access combiner. */
+#define ENABLE_MEMCACHE_COMBINER	1
+/* Enable table access via delegate thread. */
+#define ENABLE_MEMCACHE_DELEGATE	0
+/* Enable table access with locking. */
+#define ENABLE_MEMCACHE_LOCKING		0
 
 #ifndef mc_hash
-# define mc_hash		mm_hash_murmur3_32
+# define mc_hash			mm_hash_murmur3_32
 #endif
 
-#define MC_TABLE_VOLUME_DEFAULT	(64 * 1024 * 1024)
+/* Maximum total data size by default. */
+#define MC_TABLE_VOLUME_DEFAULT		(64 * 1024 * 1024)
 
+#define MC_COMBINER_SIZE		(1024)
+#define MC_COMBINER_HANDOFF		(16)
+
+/* Sanity checks for requested table access method. */
+#if (ENABLE_MEMCACHE_COMBINER && ENABLE_MEMCACHE_DELEGATE)	\
+ || (ENABLE_MEMCACHE_COMBINER && ENABLE_MEMCACHE_LOCKING)	\
+ || (ENABLE_MEMCACHE_DELEGATE && ENABLE_MEMCACHE_LOCKING)
+# error "Ambiguous memcache table access method."
+#endif
+/* Use locking by default. */
+#if !ENABLE_MEMCACHE_COMBINER && !ENABLE_MEMCACHE_DELEGATE
+# undef ENABLE_MEMCACHE_LOCKING
+# define ENABLE_MEMCACHE_LOCKING	1
+#endif
 
 struct mm_memcache_config
 {
 	size_t volume;
 
-#if ENABLE_MEMCACHE_LOCKS
-	mm_core_t nparts;
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	struct mm_bitset affinity;
+#else
+	mm_core_t nparts;
 #endif
 };
 

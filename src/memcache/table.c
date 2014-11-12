@@ -18,18 +18,18 @@
  */
 
 #include "memcache/table.h"
+#include "memcache/action.h"
 #include "memcache/entry.h"
 
 #include "core/task.h"
 
+#include "base/combiner.h"
 #include "base/hash.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 
 #include <sys/mman.h>
-
-#define MC_TABLE_STRIDE		64
 
 #if MM_WORD_32BIT
 # define MC_TABLE_SIZE_MAX	((size_t) 64 * 1024 * 1024)
@@ -57,22 +57,6 @@ mc_table_entries_size(uint16_t nparts, uint32_t nentries)
 {
 	size_t space = nentries * sizeof(struct mc_entry);
 	return nparts * mm_round_up(space, MM_PAGE_SIZE);
-}
-
-static inline uint32_t
-mc_table_index(struct mc_tpart *part, uint32_t hash)
-{
-	ASSERT(part == &mc_table.parts[hash & mc_table.part_mask]);
-
- 	uint32_t used = mm_memory_load(part->nbuckets);
-	uint32_t size = 1 << (32 - mm_clz(used - 1));
-	uint32_t mask = size - 1;
-
-	uint32_t index = (hash >> mc_table.part_bits) & mask;
-	if (index >= used)
-		index -= size / 2;
-
-	return index;
 }
 
 static inline bool
@@ -123,7 +107,7 @@ mc_table_resize(void *start, size_t old_size, size_t new_size)
 		mm_fatal(0, "mmap returned wrong address");
 }
 
-static void
+void
 mc_table_buckets_resize(struct mc_tpart *part,
 			uint32_t old_nbuckets,
 			uint32_t new_nbuckets)
@@ -144,7 +128,7 @@ mc_table_buckets_resize(struct mc_tpart *part,
 	LEAVE();
 }
 
-static void
+void
 mc_table_entries_resize(struct mc_tpart *part,
 			uint32_t old_nentries,
 			uint32_t new_nentries)
@@ -163,10 +147,12 @@ mc_table_entries_resize(struct mc_tpart *part,
 	LEAVE();
 }
 
-static void
+bool
 mc_table_expand(struct mc_tpart *part, uint32_t n)
 {
 	ENTER();
+
+	bool rc = false;
 
 	uint32_t old_nentries = part->nentries;
 	uint32_t new_nentries = old_nentries + n;
@@ -176,66 +162,15 @@ mc_table_expand(struct mc_tpart *part, uint32_t n)
 		new_nentries = mc_table.nentries_max;
 	n = new_nentries - old_nentries;
 
-	mc_table_entries_resize(part, old_nentries, new_nentries);
-
-	part->nentries_void += n;
-	part->nentries += n;
-
-	LEAVE();
-}
-
-static void
-mc_table_stride(struct mc_tpart *part)
-{
-	ENTER();
-
-	mc_table_lock(part);
-
-	uint32_t used = mm_memory_load(part->nbuckets);
-
-	uint32_t half_size;
-	if (unlikely(mm_is_pow2z(used))) {
-		half_size = used;
-		mc_table_buckets_resize(part, used, used * 2);
-	} else {
-		half_size = 1 << (31 - mm_clz(used));
+	if (n) {
+		mc_table_entries_resize(part, old_nentries, new_nentries);
+		part->nentries_void += n;
+		part->nentries += n;
+		rc = true;
 	}
 
-	uint32_t target = used;
-	uint32_t source = used - half_size;
-	uint32_t mask = half_size + half_size - 1;
-
-	for (uint32_t count = 0; count < MC_TABLE_STRIDE; count++) {
-		struct mm_link s_entries, t_entries;
-		mm_link_init(&s_entries);
-		mm_link_init(&t_entries);
-
-		struct mm_link *link = mm_link_head(&part->buckets[source]);
-		while (link != NULL) {
-			struct mm_link *next = link->next;
-
-			struct mc_entry *entry = containerof(link, struct mc_entry, link);
-			uint32_t index = (entry->hash >> mc_table.part_bits) & mask;
-			if (index == source) {
-				mm_link_insert(&s_entries, link);
-			} else {
-				ASSERT(index == target);
-				mm_link_insert(&t_entries, link);
-			}
-
-			link = next;
-		}
-
-		part->buckets[source++] = s_entries;
-		part->buckets[target++] = t_entries;
-	}
-
-	used += MC_TABLE_STRIDE;
-	mm_memory_store(part->nbuckets, used);
-
-	mc_table_unlock(part);
-
 	LEAVE();
+	return rc;
 }
 
 static mm_value_t
@@ -246,7 +181,10 @@ mc_table_stride_routine(mm_value_t arg)
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	ASSERT(part->striding);
 
-	mc_table_stride(part);
+	struct mc_action action;
+	action.part = part;
+
+	mc_action_stride(&action);
 
 	part->striding = false;
 
@@ -259,10 +197,10 @@ mc_table_start_striding(struct mc_tpart *part)
 {
 	ENTER();
 
-#if ENABLE_MEMCACHE_LOCKS
-	mm_core_post(MM_CORE_NONE, mc_table_stride_routine, (mm_value_t) part);
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	mm_core_post(MM_CORE_SELF, mc_table_stride_routine, (mm_value_t) part);
+#else
+	mm_core_post(MM_CORE_NONE, mc_table_stride_routine, (mm_value_t) part);
 #endif
 
 	LEAVE();
@@ -272,70 +210,6 @@ mc_table_start_striding(struct mc_tpart *part)
  * Entry eviction.
  **********************************************************************/
 
-static bool
-mc_table_is_eviction_victim(struct mc_entry *entry)
-{
-	if (entry->state == MC_ENTRY_USED_MIN)
-		return true;
-	if (entry->exp_time && entry->exp_time <= mm_core->time_manager.time)
-		return true;
-	return false;
-}
-
-bool
-mc_table_evict(struct mc_tpart *part, uint32_t nrequired)
-{
-	ENTER();
-
-	uint32_t nvictims = 0;
-	struct mm_link victims;
-	mm_link_init(&victims);
-
-	mc_table_lock(part);
-
-	uint32_t navailable = part->nentries;
-	navailable -= part->nentries_free;
-	navailable -= part->nentries_void;
-	if (nrequired > navailable)
-		nrequired = navailable;
-
-	while (nvictims < nrequired) {
-		struct mc_entry *hand = part->clock_hand;
-		if (unlikely(hand == part->entries_end))
-			hand = part->entries;
-
-		uint8_t state = hand->state;
-		if (state >= MC_ENTRY_USED_MIN && state <= MC_ENTRY_USED_MAX) {
-			if (mc_table_is_eviction_victim(hand)) {
-				char *key = mc_entry_getkey(hand);
-				struct mc_action action;
-				action.key = key;
-				action.key_len = hand->key_len;
-				action.hash = hand->hash;
-				action.part = part;
-				mc_table_remove(&action);
-				mm_link_insert(&victims, &hand->link);
-				++nvictims;
-			} else {
-				hand->state--;
-			}
-		}
-
-		part->clock_hand = hand + 1;
-	}
-
-	mc_table_unlock(part);
-
-	while (!mm_link_empty(&victims)) {
-		struct mm_link *link = mm_link_delete_head(&victims);
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		mc_table_unref_entry(part, entry);
-	}
-
-	LEAVE();
-	return (nvictims && nvictims == nrequired);
-}
-
 static mm_value_t
 mc_table_evict_routine(mm_value_t arg)
 {
@@ -344,9 +218,14 @@ mc_table_evict_routine(mm_value_t arg)
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	ASSERT(part->evicting);
 
+	struct mc_action action;
+	action.part = part;
+
 	size_t reserve = MC_TABLE_VOLUME_RESERVE / mc_table.nparts;
-	while (mc_table_check_volume(part, reserve) && mc_table_evict(part, 32))
+	while (mc_table_check_volume(part, reserve)) {
+		mc_action_evict(&action);
 		mm_task_yield();
+	}
 
 	part->evicting = false;
 
@@ -359,13 +238,31 @@ mc_table_start_evicting(struct mc_tpart *part)
 {
 	ENTER();
 
-#if ENABLE_MEMCACHE_LOCKS
-	mm_core_post(MM_CORE_NONE, mc_table_evict_routine, (mm_value_t) part);
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	mm_core_post(MM_CORE_SELF, mc_table_evict_routine, (mm_value_t) part);
+#else
+	mm_core_post(MM_CORE_NONE, mc_table_evict_routine, (mm_value_t) part);
 #endif
 
 	LEAVE();
+}
+
+void
+mc_table_reserve_volume(struct mc_tpart *part)
+{
+	if (!part->evicting && mc_table_check_volume(part, 0)) {
+		part->evicting = true;
+		mc_table_start_evicting(part);
+	}
+}
+
+void
+mc_table_reserve_entries(struct mc_tpart *part)
+{
+	if (!part->striding && mc_table_check_size(part)) {
+		part->striding = true;
+		mc_table_start_striding(part);
+	}
 }
 
 /**********************************************************************
@@ -400,17 +297,22 @@ mc_table_init_part(mm_core_t index, mm_core_t core)
 	mm_waitset_prepare(&part->waitset);
 	mm_waitset_pin(&part->waitset, core);
 
-#if ENABLE_MEMCACHE_LOCKS
-	part->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-#else
+#if ENABLE_MEMCACHE_COMBINER
+	part->combiner = mm_combiner_create(mc_action_perform,
+					    MC_COMBINER_SIZE,
+					    MC_COMBINER_HANDOFF);
+#elif ENABLE_MEMCACHE_DELEGATE
 	mm_verbose("bind partition %d to core %d", index, core);
 	part->core = core;
+#elif ENABLE_MEMCACHE_LOCKING
+	part->lookup_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	part->freelist_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 #endif
 
 	part->evicting = false;
 	part->striding = false;
 
-	part->cas = index;
+	part->stamp = index;
 
 	// Allocate initial space for the table.
 	mc_table_expand(part, mc_table.nentries_increment);
@@ -426,10 +328,10 @@ mc_table_init(const struct mm_memcache_config *config)
 
 	// Round the number of table partitions to a power of 2.
 	mm_core_t nparts;
-#if ENABLE_MEMCACHE_LOCKS
-	nparts = config->nparts;
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	nparts = mm_bitset_count(&config->affinity);
+#else
+	nparts = config->nparts;
 #endif
 	ASSERT(nparts > 0);
 	uint16_t nbits = sizeof(int) * 8 - 1 - mm_clz(nparts);
@@ -496,17 +398,17 @@ mc_table_init(const struct mm_memcache_config *config)
 	mc_table.entries_base = entries_base;
 
 	// Initialize the table partitions.
-#if ENABLE_MEMCACHE_LOCKS
-	for (mm_core_t index = 0; index < nparts; index++) {
-		mc_table_init_part(index, MM_CORE_NONE);
-	}
-#else
+#if ENABLE_MEMCACHE_DELEGATE
 	mm_core_t index = 0;
 	ASSERT(nparts <= mm_core_getnum());
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		if (mm_bitset_test(&mc_config.affinity, core)) {
 			mc_table_init_part(index++, core);
 		}
+	}
+#else
+	for (mm_core_t index = 0; index < nparts; index++) {
+		mc_table_init_part(index, MM_CORE_NONE);
 	}
 #endif
 
@@ -528,7 +430,7 @@ mc_table_term(void)
 					containerof(link, struct mc_entry, link);
 				link = link->next;
 
-				mc_table_destroy_entry(part, entry);
+				mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
 			}
 		}
 	}
@@ -547,156 +449,6 @@ mc_table_term(void)
 		mm_error(errno, "munmap");
 	if (munmap(mc_table.entries_base, entries_size) < 0)
 		mm_error(errno, "munmap");
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Table entry creation and destruction routines.
- **********************************************************************/
-
-struct mc_entry *
-mc_table_create_entry(struct mc_tpart *part)
-{
-	struct mc_entry *entry = NULL;
-
-again:
-	if (!mm_link_empty(&part->free_list)) {
-		struct mm_link *link = mm_link_delete_head(&part->free_list);
-		ASSERT(part->nentries_free);
-		part->nentries_free--;
-		entry = containerof(link, struct mc_entry, link);
-	} else if (part->nentries_void) {
-		part->nentries_void--;
-		entry = part->entries_end++;
-	} else {
-		// TODO: optimize this case, unlock before table expansion
-		// allowing concurrent lookup & remove calls.
-		mc_table_expand(part, mc_table.nentries_increment);
-		if (!part->nentries_void) {
-			mc_table_unlock(part);
-			mc_table_evict(part, 1);
-			mc_table_lock(part);
-		}
-		goto again;
-	}
-
-	entry->state = MC_ENTRY_NOT_USED;
-
-	return entry;
-}
-
-void
-mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
-{
-	mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
-
-	ASSERT(entry->state == MC_ENTRY_NOT_USED);
-	entry->state = MC_ENTRY_FREE;
-
-	mc_table_lock(part);
-	mm_link_insert(&part->free_list, &entry->link);
-	part->nentries_free++;
-	mc_table_unlock(part);
-}
-
-/**********************************************************************
- * Table entry access routines.
- **********************************************************************/
-
-static inline void
-mc_table_access(struct mc_tpart *part __attribute__((unused)),
-		     struct mc_entry *entry)
-{
-	uint8_t state = mm_memory_load(entry->state);
-	if (state >= MC_ENTRY_USED_MIN && state < MC_ENTRY_USED_MAX)
-		mm_memory_store(entry->state, state + 1);
-}
-
-void
-mc_table_lookup(struct mc_action *action)
-{
-	ENTER();
-
-	action->entry = NULL;
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
-
-	struct mm_link *link = mm_link_head(bucket);
-	while (link != NULL) {
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		char *entry_key = mc_entry_getkey(entry);
-		if (action->hash == entry->hash
-		    && action->key_len == entry->key_len
-		    && !memcmp(action->key, entry_key, action->key_len)) {
-			mc_table_access(action->part, entry);
-
-			action->entry = entry;
-			break;
-		}
-		link = link->next;
-	}
-
-	LEAVE();
-}
-
-void
-mc_table_remove(struct mc_action *action)
-{
-	ENTER();
-
-	action->entry = NULL;
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *pred = &action->part->buckets[index];
-
-	while (!mm_link_is_last(pred)) {
-		struct mm_link *link = pred->next;
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-
-		char *entry_key = mc_entry_getkey(entry);
-		if (action->hash == entry->hash
-		    && action->key_len == entry->key_len
-		    && !memcmp(action->key, entry_key, action->key_len)) {
-			mm_link_cleave(pred, link->next);
-			entry->state = MC_ENTRY_NOT_USED;
-
-			action->part->volume -= mc_entry_size(entry);
-
-			action->entry = entry;
-			break; 
-		}
-
-		pred = link;
-	}
-
-	LEAVE();
-}
-
-void
-mc_table_insert(struct mc_action *action, struct mc_entry *entry, uint8_t state)
-{
-	ENTER();
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
-
-	mm_link_insert(bucket, &entry->link);
-	entry->state = state;
-
-	entry->cas = action->part->cas;
-	action->part->cas += mc_table.nparts;
-
-	action->part->volume += mc_entry_size(entry);
-	if (!action->part->evicting && mc_table_check_volume(action->part, 0)) {
-		action->part->evicting = true;
-		mc_table_start_evicting(action->part);
-	}
-	if (!action->part->striding && mc_table_check_size(action->part)) {
-		action->part->striding = true;
-		mc_table_start_striding(action->part);
-	}
 
 	LEAVE();
 }

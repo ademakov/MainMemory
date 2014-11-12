@@ -21,13 +21,16 @@
 #define MEMCACHE_TABLE_H
 
 #include "memcache/memcache.h"
-#include "memcache/action.h"
 #include "memcache/entry.h"
+
+#include "core/wait.h"
 
 #include "base/bitops.h"
 #include "base/list.h"
-#include "base/lock.h"
-#include "core/wait.h"
+
+#if ENABLE_MEMCACHE_LOCKING
+# include "base/lock.h"
+#endif
 
 /* A partition of table of memcache entries. */
 struct mc_tpart
@@ -57,17 +60,21 @@ struct mc_tpart
 
 	struct mm_waitset waitset;
 
-#if ENABLE_MEMCACHE_LOCKS
-	mm_task_lock_t lock;
-#else
+#if ENABLE_MEMCACHE_COMBINER
+	struct mm_combiner *combiner;
+#elif ENABLE_MEMCACHE_DELEGATE
 	mm_core_t core;
+#elif ENABLE_MEMCACHE_LOCKING
+	mm_task_lock_t lookup_lock;
+	mm_task_lock_t freelist_lock;
 #endif
 
 	bool evicting;
 	bool striding;
 
 	/* The last used value for CAS command. */
-	uint64_t cas;
+	uint64_t stamp;
+	uint64_t flush_stamp;
 
 } __align_cacheline;
 
@@ -118,76 +125,79 @@ mc_table_part(uint32_t hash)
 	return &mc_table.parts[hash & mc_table.part_mask];
 }
 
-static inline void
-mc_table_lock(struct mc_tpart *part)
+static inline uint32_t
+mc_table_index(struct mc_tpart *part, uint32_t hash)
 {
-#if ENABLE_MEMCACHE_LOCKS
-	mm_task_lock(&part->lock);
+	ASSERT(part == mc_table_part(hash));
+
+ 	uint32_t used = mm_memory_load(part->nbuckets);
+	uint32_t size = 1 << (32 - mm_clz(used - 1));
+	uint32_t mask = size - 1;
+
+	uint32_t index = (hash >> mc_table.part_bits) & mask;
+	if (index >= used)
+		index -= size / 2;
+
+	return index;
+}
+
+static inline void
+mc_table_lookup_lock(struct mc_tpart *part)
+{
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
+	mm_task_lock(&part->lookup_lock);
 #else
 	(void) part;
 #endif
 }
 
 static inline void
-mc_table_unlock(struct mc_tpart *part)
+mc_table_lookup_unlock(struct mc_tpart *part)
 {
-#if ENABLE_MEMCACHE_LOCKS
-	mm_task_unlock(&part->lock);
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
+	mm_task_unlock(&part->lookup_lock);
 #else
 	(void) part;
 #endif
 }
 
-/**********************************************************************
- * Table entry creation and destruction routines.
- **********************************************************************/
-
-bool mc_table_evict(struct mc_tpart *part, uint32_t nrequired)
-	__attribute__((nonnull(1)));
-
-struct mc_entry * mc_table_create_entry(struct mc_tpart *part)
-	__attribute__((nonnull(1)));
-
-void mc_table_destroy_entry(struct mc_tpart *part, struct mc_entry *entry)
-	__attribute__((nonnull(1, 2)));
-
 static inline void
-mc_table_ref_entry(struct mc_entry *entry)
+mc_table_freelist_lock(struct mc_tpart *part)
 {
-	uint32_t test;
-#if ENABLE_SMP
-	test = mm_atomic_uint16_inc_and_test(&entry->ref_count);
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
+	mm_task_lock(&part->freelist_lock);
 #else
-	test = ++(entry->ref_count);
+	(void) part;
 #endif
-	if (unlikely(!test))
-		ABORT();
 }
 
 static inline void
-mc_table_unref_entry(struct mc_tpart *part, struct mc_entry *entry)
+mc_table_freelist_unlock(struct mc_tpart *part)
 {
-	uint32_t test;
-#if ENABLE_SMP
-	test = mm_atomic_uint16_dec_and_test(&entry->ref_count);
+#if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
+	mm_task_unlock(&part->freelist_lock);
 #else
-	test = --(entry->ref_count);
+	(void) part;
 #endif
-	if (!test)
-		mc_table_destroy_entry(part, entry);
 }
 
-/**********************************************************************
- * Table entry access routines.
- **********************************************************************/
-
-void mc_table_lookup(struct mc_action *action)
+void mc_table_buckets_resize(struct mc_tpart *part,
+			     uint32_t old_nbuckets,
+			     uint32_t new_nbuckets)
 	__attribute__((nonnull(1)));
 
-void mc_table_remove(struct mc_action *action)
+void mc_table_entries_resize(struct mc_tpart *part,
+			     uint32_t old_nentries,
+			     uint32_t new_nentries)
 	__attribute__((nonnull(1)));
 
-void mc_table_insert(struct mc_action *action, struct mc_entry *entry, uint8_t state)
+bool mc_table_expand(struct mc_tpart *part, uint32_t n)
+	__attribute__((nonnull(1)));
+
+void mc_table_reserve_volume(struct mc_tpart *part)
+	__attribute__((nonnull(1)));
+
+void mc_table_reserve_entries(struct mc_tpart *part)
 	__attribute__((nonnull(1)));
 
 #endif /* MEMCACHE_TABLE_H */

@@ -22,37 +22,47 @@
 
 #include "memcache/memcache.h"
 #include "memcache/action.h"
+#include "memcache/result.h"
 #include "core/future.h"
 
 /**********************************************************************
  * Command type declarations.
  **********************************************************************/
 
-#define MC_ASYNC 1
+/* A non-table command. */
+#define MC_COMMAND_CUSTOM	0
+/* A table lookup command. */
+#define MC_COMMAND_LOOKUP	1
+/* A table storage command. */
+#define MC_COMMAND_STORAGE	2
+/* A table update command. */
+#define MC_COMMAND_UPDATE	3
+/* A table update command. */
+#define MC_COMMAND_DELETE	4
 
 /*
  * Some preprocessor magic to emit command definitions.
  */
 
-#define MC_COMMAND_LIST(_)		\
-	_(get,		MC_ASYNC)	\
-	_(gets,		MC_ASYNC)	\
-	_(set,		MC_ASYNC)	\
-	_(add,		MC_ASYNC)	\
-	_(replace,	MC_ASYNC)	\
-	_(append,	MC_ASYNC)	\
-	_(prepend,	MC_ASYNC)	\
-	_(cas,		MC_ASYNC)	\
-	_(incr,		MC_ASYNC)	\
-	_(decr,		MC_ASYNC)	\
-	_(delete,	MC_ASYNC)	\
-	_(touch,	MC_ASYNC)	\
-	_(slabs,	0)		\
-	_(stats,	0)		\
-	_(flush_all,	0)		\
-	_(version,	0)		\
-	_(verbosity,	0)		\
-	_(quit,		0)
+#define MC_COMMAND_LIST(_)			\
+	_(get,		MC_COMMAND_LOOKUP)	\
+	_(gets,		MC_COMMAND_LOOKUP)	\
+	_(set,		MC_COMMAND_STORAGE)	\
+	_(add,		MC_COMMAND_STORAGE)	\
+	_(replace,	MC_COMMAND_STORAGE)	\
+	_(append,	MC_COMMAND_STORAGE)	\
+	_(prepend,	MC_COMMAND_STORAGE)	\
+	_(cas,		MC_COMMAND_STORAGE)	\
+	_(incr,		MC_COMMAND_UPDATE)	\
+	_(decr,		MC_COMMAND_UPDATE)	\
+	_(delete,	MC_COMMAND_DELETE)	\
+	_(touch,	MC_COMMAND_UPDATE)	\
+	_(slabs,	MC_COMMAND_CUSTOM)	\
+	_(stats,	MC_COMMAND_CUSTOM)	\
+	_(flush_all,	MC_COMMAND_CUSTOM)	\
+	_(version,	MC_COMMAND_CUSTOM)	\
+	_(verbosity,	MC_COMMAND_CUSTOM)	\
+	_(quit,		MC_COMMAND_CUSTOM)
 
 /*
  * Define enumerated type to tag commands.
@@ -74,7 +84,7 @@ struct mc_command_type
 {
 	mc_command_t tag;
 	mm_routine_t exec;
-	uint32_t flags;
+	uint32_t kind;
 };
 
 #define MC_COMMAND_TYPE(cmd, value)	\
@@ -88,36 +98,6 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  * Command data.
  **********************************************************************/
 
-typedef enum
-{
-	MC_RESULT_NONE = 0,
-#if ENABLE_SMP && !ENABLE_MEMCACHE_LOCKS
-	MC_RESULT_FUTURE,
-#endif
-
-	MC_RESULT_BLANK,
-	MC_RESULT_OK,
-	MC_RESULT_END,
-	MC_RESULT_ERROR,
-	MC_RESULT_EXISTS,
-	MC_RESULT_STORED,
-	MC_RESULT_DELETED,
-	MC_RESULT_TOUCHED,
-	MC_RESULT_NOT_FOUND,
-	MC_RESULT_NOT_STORED,
-	MC_RESULT_INC_DEC_NON_NUM,
-	MC_RESULT_NOT_IMPLEMENTED,
-	MC_RESULT_CANCELED,
-	MC_RESULT_VERSION,
-
-	MC_RESULT_ENTRY,
-	MC_RESULT_ENTRY_CAS,
-	MC_RESULT_VALUE,
-
-	MC_RESULT_QUIT,
-
-} mc_command_result_t;
-
 struct mc_command_params_set
 {
 	struct mm_buffer_segment *seg;
@@ -126,7 +106,6 @@ struct mc_command_params_set
 
 	uint32_t flags;
 	uint32_t exptime;
-	uint64_t cas;
 };
 
 struct mc_command_params_slabs
@@ -155,11 +134,11 @@ struct mc_command
 	struct mc_command_type *type;
 	struct mc_action action;
 	union mc_command_params params;
-	mc_command_result_t result;
+	mc_result_t result;
 	bool noreply;
 	bool own_key;
 
-#if ENABLE_SMP && !ENABLE_MEMCACHE_LOCKS
+#if ENABLE_MEMCACHE_DELEGATE
 	struct mm_future *future;
 #endif
 
@@ -182,11 +161,11 @@ void mc_command_destroy(mm_core_t core, struct mc_command *command);
 
 void mc_command_execute(struct mc_command *command);
 
-static inline mc_command_result_t
+static inline mc_result_t
 mc_command_result(struct mc_command *command)
 {
-	mc_command_result_t result = command->result;
-#if ENABLE_SMP && !ENABLE_MEMCACHE_LOCKS
+	mc_result_t result = command->result;
+#if ENABLE_MEMCACHE_DELEGATE
 	if (result == MC_RESULT_FUTURE) {
 		result = mm_future_wait(command->future);
 		if (mm_future_is_canceled(command->future))
