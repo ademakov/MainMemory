@@ -114,8 +114,6 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 		struct mm_list *link = mm_list_head(wait_queue);
 		task = containerof(link, struct mm_task, wait_queue);
 		mm_task_run(task);
-	} else if (!wait) {
-//		mm_core_post(MM_CORE_NONE, mm_combiner_deplete, (mm_value_t) combiner);
 	}
 
 	// Restore cancellation.
