@@ -61,7 +61,7 @@ mm_arena_alloc(mm_arena_t arena, size_t size)
 }
 
 static inline void *
-mm_arena_calloc(mm_arena_t arena, size_t count, ssize_t size)
+mm_arena_calloc(mm_arena_t arena, size_t count, size_t size)
 {
 	return (arena->vtable->calloc)(arena, count, size);
 }
