@@ -36,7 +36,7 @@ mmem_SOURCES = \
 	$(net_sources) \
 	common.h main.c
 
-mmem_LDADD = base/libmmbase.a memcache/libmemcache.a
+mmem_LDADD = memcache/libmemcache.a base/libmmbase.a
 
 if ARCH_X86
 mmem_SOURCES += \
