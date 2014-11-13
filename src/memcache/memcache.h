@@ -24,7 +24,7 @@
 #include "base/bitset.h"
 
 /* Enable table access combiner. */
-#define ENABLE_MEMCACHE_COMBINER	1
+#define ENABLE_MEMCACHE_COMBINER	0
 /* Enable table access via delegate thread. */
 #define ENABLE_MEMCACHE_DELEGATE	0
 /* Enable table access with locking. */
