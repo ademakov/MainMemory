@@ -54,7 +54,6 @@ typedef enum {
 struct mm_event_entry
 {
 	mm_event_entry_tag_t tag;
-	int fd;
 	struct mm_event_fd *ev_fd;
 };
 
@@ -258,7 +257,7 @@ mm_event_process_entry(struct mm_event_table *events,
 		if (ev_fd->output_handler)
 			event.events |= EPOLLOUT | EPOLLET;
 
-		rc = epoll_ctl(events->event_fd, EPOLL_CTL_ADD, entry->fd, &event);
+		rc = epoll_ctl(events->event_fd, EPOLL_CTL_ADD, ev_fd->fd, &event);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
@@ -269,7 +268,7 @@ mm_event_process_entry(struct mm_event_table *events,
 		break;
 
 	case MM_EVENT_FD_UNREGISTER:
-		rc = epoll_ctl(events->event_fd, EPOLL_CTL_DEL, entry->fd, &event);
+		rc = epoll_ctl(events->event_fd, EPOLL_CTL_DEL, ev_fd->fd, &event);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
@@ -429,7 +428,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_READ, flags, 0, 0, ev_fd);
+			EV_SET(kp, ev_fd->fd, EVFILT_READ, flags, 0, 0, ev_fd);
 		}
 		if (ev_fd->output_handler) {
 			int flags;
@@ -442,7 +441,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_WRITE, flags, 0, 0, ev_fd);
+			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, flags, 0, 0, ev_fd);
 		}
 		if (ev_fd->control_handler)
 			ev_fd->changed = 1;
@@ -455,7 +454,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
 		if (ev_fd->output_handler
 		    && (!ev_fd->oneshot_output
@@ -463,7 +462,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 		if (ev_fd->control_handler)
 			ev_fd->changed = 1;
@@ -476,7 +475,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
+			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
 			       0, 0, ev_fd);
 
 			if (ev_fd->control_handler)
@@ -491,7 +490,7 @@ mm_event_process_entry(struct mm_event_table *events,
 
 			ASSERT(events->nevents < MM_EVENT_NEVENTS);
 			struct kevent *kp = &events->events[events->nevents++];
-			EV_SET(kp, entry->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
+			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
 			       0, 0, ev_fd);
 		}
 		break;
@@ -670,11 +669,10 @@ mm_event_open_selfpipe(struct mm_event_table *events)
 	events->selfpipe_ready = false;
 
 	// Start serving the self-pipe.
-	mm_event_prepare_fd(&events->selfevent,
+	mm_event_prepare_fd(&events->selfevent, events->selfpipe_read_fd,
 			    mm_event_selfpipe_handler, false,
 			    0, false, 0);
 
-	events->entries[0].fd = events->selfpipe_read_fd;
 	events->entries[0].tag = MM_EVENT_FD_REGISTER;
 	events->entries[0].ev_fd = &events->selfevent;
 
@@ -767,8 +765,9 @@ mm_event_dampen(struct mm_event_table *events)
  **********************************************************************/
 
 static void
-mm_event_send(struct mm_event_table *events, int fd,
-	      mm_event_entry_tag_t tag, struct mm_event_fd *ev_fd)
+mm_event_send(struct mm_event_table *events,
+	      mm_event_entry_tag_t tag,
+	      struct mm_event_fd *ev_fd)
 {
 again:
 	mm_task_lock(&events->lock);
@@ -783,7 +782,6 @@ again:
 
 	head %= MM_EVENT_NENTRIES;
 
-	events->entries[head].fd = fd;
 	events->entries[head].tag = tag;
 	events->entries[head].ev_fd = ev_fd;
 	events->head_entry++;
@@ -792,15 +790,18 @@ again:
 }
 
 bool
-mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
 		    mm_event_hid_t input_handler, bool input_oneshot,
 		    mm_event_hid_t output_handler, bool output_oneshot,
 		    mm_event_hid_t control_handler)
 {
+	ASSERT(fd >= 0);
 	ASSERT(input_handler || output_handler || control_handler);
 	ASSERT(input_handler < mm_event_hd_table_size);
 	ASSERT(output_handler < mm_event_hd_table_size);
 	ASSERT(control_handler < mm_event_hd_table_size);
+
+	ev_fd->fd = fd;
 
 	ev_fd->input_handler = input_handler;
 	ev_fd->output_handler = output_handler;
@@ -816,49 +817,49 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd,
 }
 
 void
-mm_event_register_fd(struct mm_event_table *events, int fd,
+mm_event_register_fd(struct mm_event_table *events,
 		     struct mm_event_fd *ev_fd)
 {
 	ENTER();
-	ASSERT(fd >= 0);
+	ASSERT(ev_fd->fd >= 0);
 
-	mm_event_send(events, fd, MM_EVENT_FD_REGISTER, ev_fd);
+	mm_event_send(events, MM_EVENT_FD_REGISTER, ev_fd);
 
 	LEAVE();
 }
 
 void
-mm_event_unregister_fd(struct mm_event_table *events, int fd,
+mm_event_unregister_fd(struct mm_event_table *events,
 		       struct mm_event_fd *ev_fd)
 {
 	ENTER();
-	ASSERT(fd >= 0);
+	ASSERT(ev_fd->fd >= 0);
 
-	mm_event_send(events, fd, MM_EVENT_FD_UNREGISTER, ev_fd);
+	mm_event_send(events, MM_EVENT_FD_UNREGISTER, ev_fd);
 
 	LEAVE();
 }
 
 void
-mm_event_trigger_input(struct mm_event_table *events, int fd,
+mm_event_trigger_input(struct mm_event_table *events,
 		       struct mm_event_fd *ev_fd)
 {
 	ENTER();
-	ASSERT(fd >= 0);
+	ASSERT(ev_fd->fd >= 0);
 
-	mm_event_send(events, fd, MM_EVENT_FD_TRIGGER_INPUT, ev_fd);
+	mm_event_send(events, MM_EVENT_FD_TRIGGER_INPUT, ev_fd);
 
 	LEAVE();
 }
 
 void
-mm_event_trigger_output(struct mm_event_table *events, int fd,
+mm_event_trigger_output(struct mm_event_table *events,
 			struct mm_event_fd *ev_fd)
 {
 	ENTER();
-	ASSERT(fd >= 0);
+	ASSERT(ev_fd->fd >= 0);
 
-	mm_event_send(events, fd, MM_EVENT_FD_TRIGGER_OUTPUT, ev_fd);
+	mm_event_send(events, MM_EVENT_FD_TRIGGER_OUTPUT, ev_fd);
 
 	LEAVE();
 }

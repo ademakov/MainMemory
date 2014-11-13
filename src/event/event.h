@@ -109,26 +109,26 @@ void mm_event_dampen(struct mm_event_table *events)
  * I/O events support.
  **********************************************************************/
 
-bool mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+bool mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
 			 mm_event_hid_t input_handler, bool input_oneshot,
 			 mm_event_hid_t output_handler, bool output_oneshot,
 			 mm_event_hid_t control_handler)
 	__attribute__((nonnull(1)));
 
-void mm_event_register_fd(struct mm_event_table *events, int fd,
+void mm_event_register_fd(struct mm_event_table *events,
 			  struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 3)));
+	__attribute__((nonnull(1, 2)));
 
-void mm_event_unregister_fd(struct mm_event_table *events, int fd,
+void mm_event_unregister_fd(struct mm_event_table *events,
 			    struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 3)));
+	__attribute__((nonnull(1, 2)));
 
-void mm_event_trigger_input(struct mm_event_table *events, int fd,
+void mm_event_trigger_input(struct mm_event_table *events,
 			    struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 3)));
+	__attribute__((nonnull(1, 2)));
 
-void mm_event_trigger_output(struct mm_event_table *events, int fd,
+void mm_event_trigger_output(struct mm_event_table *events,
 			     struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 3)));
+	__attribute__((nonnull(1, 2)));
 
 #endif /* EVENT_EVENT_H */

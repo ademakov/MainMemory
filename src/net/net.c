@@ -262,9 +262,8 @@ mm_net_alloc_server(void)
 	}
 
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
-	srv->fd = -1;
+	srv->event.fd = -1;
 	srv->flags = 0;
-	srv->client_index = 0;
 	srv->client_count = 0;
 
 	srv->core = MM_CORE_NONE;
@@ -284,7 +283,14 @@ mm_net_alloc_server(void)
 static void
 mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
 {
-	sock->fd = fd;
+	// Prepare the event data.
+	bool input_oneshot = !(srv->proto->flags & MM_NET_INBOUND);
+	bool output_oneshot = !(srv->proto->flags & MM_NET_OUTBOUND);
+	mm_event_prepare_fd(&sock->event, fd,
+			     srv->input_handler, input_oneshot,
+			     srv->output_handler, output_oneshot,
+			     srv->control_handler);
+
 	sock->flags = 0;
 	sock->close_flags = 0;
 #if !MM_NET_LOCAL_EVENTS
@@ -394,7 +400,7 @@ mm_net_accept(struct mm_net_server *srv)
 retry:
 	// Try to accept a connection.
 	salen = sizeof sa;
-	fd = accept(srv->fd, (struct sockaddr *) &sa, &salen);
+	fd = accept(srv->event.fd, (struct sockaddr *) &sa, &salen);
 	if (unlikely(fd < 0)) {
 		if (errno == EINTR)
 			goto retry;
@@ -432,15 +438,7 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Select a core for the client using round-robin discipline.
-	mm_core_t index = srv->client_index;
-	if (srv->client_count < 4) {
-		srv->client_count++;
-	} else {
-		srv->client_index++;
-		if (srv->client_index == srv->core_num)
-			srv->client_index = 0;
-		srv->client_count = 0;
-	}
+	mm_core_t index = (srv->client_count++ / 4) % srv->core_num;
 
 	// Register with the server.
 	sock->core_server_index = index;
@@ -455,14 +453,6 @@ retry:
 		sock->flags |= MM_NET_READER_PENDING;
 	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
 		sock->flags |= MM_NET_WRITER_PENDING;
-
-	// Prepare the event data.
-	bool input_oneshot = !(srv->proto->flags & MM_NET_INBOUND);
-	bool output_oneshot = !(srv->proto->flags & MM_NET_OUTBOUND);
-	mm_event_prepare_fd(&sock->event,
-			     srv->input_handler, input_oneshot,
-			     srv->output_handler, output_oneshot,
-			     srv->control_handler);
 
 	// Request protocol handler routine.
 	mm_core_post(sock->core, mm_net_prepare, (mm_value_t) sock);
@@ -650,8 +640,7 @@ mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
 		bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 		if (oneshot) {
 			struct mm_core *core = mm_core_getptr(sock->core);
-			mm_event_trigger_input(core->events, sock->fd,
-					       &sock->event);
+			mm_event_trigger_input(core->events, &sock->event);
 		}
 #endif
 	}
@@ -674,8 +663,7 @@ mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
 		bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 		if (oneshot) {
 			struct mm_core *core = mm_core_getptr(sock->core);
-			mm_event_trigger_output(core->events, sock->fd,
-						&sock->event);
+			mm_event_trigger_output(core->events, &sock->event);
 		}
 #endif
 	}
@@ -945,7 +933,7 @@ mm_net_prepare(mm_value_t arg)
 		(sock->server->proto->prepare)(sock);
 
 	// Register the socket with the event loop.
-	mm_event_register_fd(mm_core->events, sock->fd, &sock->event);
+	mm_event_register_fd(mm_core->events, &sock->event);
 
 	LEAVE();
 	return 0;
@@ -965,8 +953,8 @@ mm_net_destroy(mm_value_t arg)
 
 	// Close the socket.
 	// TODO: set linger off and/or close concurrently to avoid stalls.
-	close(sock->fd);
-	sock->fd = -1;
+	close(sock->event.fd);
+	sock->event.fd = -1;
 
 	// Remove the socket from the server lists.
 	mm_net_destroy_socket(sock);
@@ -1094,7 +1082,7 @@ mm_net_exit_cleanup(void)
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
-		if (srv->fd >= 0) {
+		if (srv->event.fd >= 0) {
 			mm_net_remove_unix_socket(&srv->addr);
 		}
 	}
@@ -1130,8 +1118,8 @@ mm_net_term(void)
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
-		if (srv->fd >= 0) {
-			mm_net_close_server_socket(&srv->addr, srv->fd);
+		if (srv->event.fd >= 0) {
+			mm_net_close_server_socket(&srv->addr, srv->event.fd);
 		}
 
 		// TODO: close client sockets
@@ -1218,7 +1206,7 @@ void
 mm_net_start_server(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT(srv->fd == -1);
+	ASSERT(srv->event.fd == -1);
 
 	mm_brief("start server '%s'", srv->name);
 
@@ -1250,8 +1238,8 @@ mm_net_start_server(struct mm_net_server *srv)
 	ASSERT(c == srv->core_num);
 
 	// Create the server socket.
-	srv->fd = mm_net_open_server_socket(&srv->addr, 0);
-	mm_verbose("bind server '%s' to socket %d", srv->name, srv->fd);
+	int fd = mm_net_open_server_socket(&srv->addr, 0);
+	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Allocate an event handler IDs.
 	srv->input_handler = mm_event_register_handler(mm_net_input_handler);
@@ -1259,9 +1247,9 @@ mm_net_start_server(struct mm_net_server *srv)
 	srv->control_handler = mm_event_register_handler(mm_net_control_handler);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, mm_net_accept_hid, false, 0, false, 0);
+	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid, false, 0, false, 0);
 	struct mm_core *core = mm_core_getptr(srv->core);
-	mm_event_register_fd(core->events, srv->fd, &srv->event);
+	mm_event_register_fd(core->events, &srv->event);
 
 	LEAVE();
 }
@@ -1270,17 +1258,17 @@ void
 mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT(srv->fd != -1);
+	ASSERT(srv->event.fd != -1);
 
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
 	struct mm_core *core = mm_core_getptr(srv->core);
-	mm_event_unregister_fd(core->events, srv->fd, &srv->event);
+	mm_event_unregister_fd(core->events, &srv->event);
 
 	// Close the socket.
-	mm_net_close_server_socket(&srv->addr, srv->fd);
-	srv->fd = -1;
+	mm_net_close_server_socket(&srv->addr, srv->event.fd);
+	srv->event.fd = -1;
 
 	LEAVE();
 }
@@ -1426,7 +1414,7 @@ retry:
 	uint32_t stamp = mm_memory_load(sock->read_stamp);
 
 	// Try to read (nonblocking).
-	n = read(sock->fd, buffer, nbytes);
+	n = read(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_read_ready(sock, stamp);
@@ -1479,7 +1467,7 @@ retry:
 	uint32_t stamp = mm_memory_load(sock->write_stamp);
 
 	// Try to write (nonblocking).
-	n = write(sock->fd, buffer, nbytes);
+	n = write(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_write_ready(sock, stamp);
@@ -1534,7 +1522,7 @@ retry:
 	uint32_t stamp = mm_memory_load(sock->read_stamp);
 
 	// Try to read (nonblocking).
-	n = readv(sock->fd, iov, iovcnt);
+	n = readv(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_read_ready(sock, stamp);
@@ -1589,7 +1577,7 @@ retry:
 	uint32_t stamp = mm_memory_load(sock->write_stamp);
 
 	// Try to write (nonblocking).
-	n = writev(sock->fd, iov, iovcnt);
+	n = writev(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_write_ready(sock, stamp);
@@ -1629,7 +1617,7 @@ mm_net_close(struct mm_net_socket *sock)
 
 	// Remove the socket from the event loop.
 	struct mm_core *core = mm_core_getptr(sock->core);
-	mm_event_unregister_fd(core->events, sock->fd, &sock->event);
+	mm_event_unregister_fd(core->events, &sock->event);
 
 leave:
 	LEAVE();
@@ -1648,7 +1636,7 @@ mm_net_shutdown_reader(struct mm_net_socket *sock)
 	sock->close_flags |= MM_NET_READER_SHUTDOWN;
 
 	// TODO: async this
-	if (shutdown(sock->fd, SHUT_RD) < 0)
+	if (shutdown(sock->event.fd, SHUT_RD) < 0)
 		mm_warning(errno, "shutdown");
 
 leave:
@@ -1668,7 +1656,7 @@ mm_net_shutdown_writer(struct mm_net_socket *sock)
 	sock->close_flags |= MM_NET_WRITER_SHUTDOWN;
 
 	// TODO: async this
-	if (shutdown(sock->fd, SHUT_WR) < 0)
+	if (shutdown(sock->event.fd, SHUT_WR) < 0)
 		mm_warning(errno, "shutdown");
 
 leave:

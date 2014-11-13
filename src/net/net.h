@@ -95,22 +95,19 @@ struct mm_net_server
 	/* Event handling data. */
 	struct mm_event_fd event;
 
-	/* Server socket. */
-	int fd;
 	/* Server flags. */
 	int flags;
+
+	/* Number of connections from the start. */
+	uint64_t client_count;
 
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* I/O event handler IDs. */
+	/* Client I/O event handler IDs. */
 	mm_event_hid_t input_handler;
 	mm_event_hid_t output_handler;
 	mm_event_hid_t control_handler;
-
-	/* A core the next client to be bound to. */
-	mm_core_t client_index;
-	mm_core_t client_count;
 
 	/* Per-core server data. */
 	mm_core_t core;
@@ -131,9 +128,6 @@ struct mm_net_socket
 {
 	/* Event handling data. */
 	struct mm_event_fd event;
-
-	/* Socket file descriptor. */
-	int fd;
 
 	/* Tasks bound to perform socket I/O. */
 	struct mm_task *reader;
