@@ -564,7 +564,7 @@ mm_core_halt(struct mm_core *core)
 	if (core->time_manager.time < hold_time) {
 		bool quit = false;
 		while (!quit) {
-			mm_core_update_time(core);
+			mm_timer_update_time(&core->time_manager);
 			if (core->time_manager.time >= hold_time)
 				break;
 			for (int i = 0; i < 10; i++) {

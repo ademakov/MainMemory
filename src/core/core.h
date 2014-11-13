@@ -152,7 +152,11 @@ extern __thread struct mm_core *mm_core;
 static inline mm_core_t
 mm_core_getnum(void)
 {
+#if ENABLE_SMP
 	return mm_core_num;
+#else
+	return 1;
+#endif
 }
 
 static inline mm_core_t
