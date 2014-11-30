@@ -31,6 +31,7 @@ libmmbase_a_SOURCES = \
 	mem/stack.c mem/stack.h \
 	sys/clock.c sys/clock.h \
 	thr/domain.c thr/domain.h \
+	thr/monitor.c thr/monitor.h \
 	thr/thread.c thr/thread.h \
 	util/exit.c util/exit.h \
 	util/format.c util/format.h \
