@@ -144,10 +144,6 @@ struct mm_net_socket
 	mm_task_lock_t lock;
 #endif
 
-	/* Tasks pending on socket I/O. */
-	struct mm_waitset read_waitset;
-	struct mm_waitset write_waitset;
-
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
 	struct mm_work write_work;

@@ -318,8 +318,6 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 #endif
 	sock->read_stamp = 0;
 	sock->write_stamp = 0;
-	mm_waitset_prepare(&sock->read_waitset);
-	mm_waitset_prepare(&sock->write_waitset);
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->core = MM_CORE_NONE;
@@ -332,8 +330,6 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 static void
 mm_net_cleanup_socket(struct mm_net_socket *sock)
 {
-	mm_waitset_cleanup(&sock->read_waitset);
-	mm_waitset_cleanup(&sock->write_waitset);
 	mm_list_delete(&sock->clients);
 }
 
@@ -463,10 +459,6 @@ retry:
 	// Register with the server.
 	sock->core_server_index = index;
 	sock->core = srv->per_core[index].core;
-#if MM_NET_LOCAL_EVENTS
-	mm_waitset_pin(&sock->read_waitset, sock->core);
-	mm_waitset_pin(&sock->write_waitset, sock->core);
-#endif
 	mm_list_append(&srv->per_core[index].clients, &sock->clients);
 	mm_verbose("bind socket %d to core %d", fd, sock->core);
 
@@ -548,41 +540,6 @@ mm_net_socket_unlock(struct mm_net_socket *sock)
 #endif
 }
 
-static inline void
-mm_net_socket_notify(struct mm_net_socket *sock, struct mm_waitset *waitset)
-{
-#if !MM_NET_LOCAL_EVENTS
-	mm_waitset_broadcast(waitset, &sock->lock);
-#else
-	(void) sock;
-	mm_waitset_local_broadcast(waitset);
-#endif
-}
-
-static inline void
-mm_net_socket_wait(struct mm_net_socket *sock, struct mm_waitset *waitset)
-{
-#if !MM_NET_LOCAL_EVENTS
-	mm_waitset_wait(waitset, &sock->lock);
-#else
-	(void) sock;
-	mm_waitset_local_wait(waitset);
-#endif
-}
-
-static inline void
-mm_net_socket_timedwait(struct mm_net_socket *sock,
-			struct mm_waitset *waitset,
-			mm_timeout_t timeout)
-{
-#if !MM_NET_LOCAL_EVENTS
-	mm_waitset_timedwait(waitset, &sock->lock, timeout);
-#else
-	(void) sock;
-	mm_waitset_local_timedwait(waitset, timeout);
-#endif
-}
-
 static void
 mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 {
@@ -602,11 +559,13 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 	if (flags == MM_NET_READER_PENDING) {
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
-
 		sock->flags |= MM_NET_READER_SPAWNED;
+	} else if (sock->reader != NULL) {
+		// FIXME: do this after unlock.
+		mm_core_run_task(sock->reader);
 	}
 
-	mm_net_socket_notify(sock, &sock->read_waitset);
+	mm_net_socket_unlock(sock);
 
 	// Submit a reader work if needed.
 	if (flags == MM_NET_READER_PENDING)
@@ -634,11 +593,13 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 	if (flags == MM_NET_WRITER_PENDING) {
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
-
 		sock->flags |= MM_NET_WRITER_SPAWNED;
+	} else if (sock->writer != NULL) {
+		// FIXME: do this after unlock.
+		mm_core_run_task(sock->writer);
 	}
 
-	mm_net_socket_notify(sock, &sock->write_waitset);
+	mm_net_socket_unlock(sock);
 
 	// Submit a writer work if needed.
 	if (flags == MM_NET_WRITER_PENDING)
@@ -853,13 +814,14 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	if (unlikely((task->flags & MM_TASK_READING) == 0))
 		goto leave;
 
+	mm_net_socket_lock(sock);
+
 	// Unbind the current task from the socket.
 	ASSERT(sock->reader == mm_task_self());
 	task->flags &= ~MM_TASK_READING;
 	sock->reader = NULL;
 
-	mm_net_socket_lock(sock);
-
+	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
 	if (mm_net_is_reader_shutdown(sock)) {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
@@ -903,13 +865,14 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	if (unlikely((task->flags & MM_TASK_WRITING) == 0))
 		goto leave;
 
+	mm_net_socket_lock(sock);
+
 	// Unbind the current task from the socket.
 	ASSERT(sock->writer == mm_task_self());
 	task->flags &= ~MM_TASK_WRITING;
 	sock->writer = NULL;
 
-	mm_net_socket_lock(sock);
-
+	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
 	if (mm_net_is_writer_shutdown(sock)) {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
@@ -1307,25 +1270,15 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	mm_net_socket_lock(sock);
-
-	// Check to see if the socket is read ready again.
-	flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
-	if (flags != 0) {
-		mm_net_socket_unlock(sock);
-		goto leave;
-	}
-
 	// Block the task waiting for the socket to become read ready.
-	if (sock->read_timeout == MM_TIMEOUT_INFINITE) {
-		mm_net_socket_wait(sock, &sock->read_waitset);
+	if (deadline == MM_TIMEVAL_MAX) {
+		mm_task_block();
 		rc = 0;
 	} else if (mm_core->time_manager.time < deadline) {
 		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
-		mm_net_socket_timedwait(sock, &sock->read_waitset, timeout);
+		mm_timer_block(timeout);
 		rc = 0;
 	} else {
-		mm_net_socket_unlock(sock);
 		if (sock->read_timeout != 0)
 			errno = ETIMEDOUT;
 		else
@@ -1362,25 +1315,15 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	mm_net_socket_lock(sock);
-
-	// Check to see if the socket is write ready again.
-	flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
-	if (flags != 0) {
-		mm_net_socket_unlock(sock);
-		goto leave;
-	}
-
 	// Block the task waiting for the socket to become write ready.
-	if (sock->write_timeout == MM_TIMEOUT_INFINITE) {
-		mm_net_socket_wait(sock, &sock->write_waitset);
+	if (deadline == MM_TIMEVAL_MAX) {
+		mm_task_block();
 		rc = 0;
 	} else  if (mm_core->time_manager.time < deadline) {
 		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
-		mm_net_socket_timedwait(sock, &sock->write_waitset, timeout);
+		mm_timer_block(timeout);
 		rc = 0;
 	} else {
-		mm_net_socket_unlock(sock);
 		if (sock->write_timeout != 0)
 			errno = ETIMEDOUT;
 		else
