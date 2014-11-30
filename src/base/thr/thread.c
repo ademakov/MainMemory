@@ -379,3 +379,19 @@ mm_thread_yield(void)
 
 	LEAVE();
 }
+
+void
+mm_thread_domain_barrier(void)
+{
+	ENTER();
+
+	struct mm_thread *thread = mm_thread_self();
+	if (thread->domain != NULL) {
+		mm_log_relay();
+
+		mm_barrier_wait(&thread->domain->barrier,
+				&thread->domain_barrier);
+	}
+
+	LEAVE();
+}

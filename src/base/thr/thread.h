@@ -126,4 +126,6 @@ void mm_thread_join(struct mm_thread *thread)
 
 void mm_thread_yield(void);
 
+void mm_thread_domain_barrier(void);
+
 #endif /* BASE_THR_THREAD_H */
