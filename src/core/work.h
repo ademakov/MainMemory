@@ -74,9 +74,12 @@ mm_work_destroy(struct mm_work *work)
  * Work item initialization.
  **********************************************************************/
 
+void mm_work_complete_noop(struct mm_work *work, mm_value_t result);
+
 static inline void
 mm_work_prepare(struct mm_work *work,
-		mm_routine_t routine, mm_value_t argument,
+		mm_routine_t routine,
+		mm_value_t argument,
 		mm_work_complete_t complete)
 {
 	work->routine = routine;

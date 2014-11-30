@@ -72,3 +72,9 @@ mm_work_destroy_low(mm_core_t core, struct mm_work *work)
 {
 	mm_pool_shared_free_low(core, &mm_work_pool, work);
 }
+
+void
+mm_work_complete_noop(struct mm_work *work __attribute__((unused)),
+		      mm_value_t result __attribute__((unused)))
+{
+}
