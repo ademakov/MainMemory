@@ -25,10 +25,9 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/sys/clock.h"
+#include "base/thr/monitor.h"
 
 #include "event/event.h"
-
-#include <pthread.h>
 
 #if HAVE_LINUX_FUTEX_H
 # include <unistd.h>
@@ -59,13 +58,11 @@
  * Synchronization based on pthread condition variables.
  **********************************************************************/
 
-/* A synchronization object based on pthread. */
 struct mm_synch_cond
 {
 	struct mm_synch base;
 
-	pthread_mutex_t lock;
-	pthread_cond_t cond;
+	struct mm_monitor monitor;
 };
 
 struct mm_synch *
@@ -77,13 +74,7 @@ mm_synch_create_cond(void)
 
 	cond->base.value = 0;
 	cond->base.magic = MM_SYNCH_COND;
-
-	int rc = pthread_mutex_init(&cond->lock, NULL);
-	if (rc)
-		mm_fatal(rc, "pthread_mutex_init");
-	rc = pthread_cond_init(&cond->cond, NULL);
-	if (rc)
-		mm_fatal(rc, "pthread_cond_init");
+	mm_monitor_prepare(&cond->monitor);
 
 	LEAVE();
 	return &cond->base;
@@ -94,8 +85,7 @@ mm_synch_destroy_cond(struct mm_synch *synch)
 {
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
-	pthread_mutex_destroy(&cond->lock);
-	pthread_cond_destroy(&cond->cond);
+	mm_monitor_cleanup(&cond->monitor);
 
 	mm_global_free(cond);
 }
@@ -103,33 +93,22 @@ mm_synch_destroy_cond(struct mm_synch *synch)
 static bool
 mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 {
-	bool rc = true;
-
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
-	struct timespec ts;
 	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
-	ts.tv_sec = (time / 1000000);
-	ts.tv_nsec = (time % 1000000) * 1000;
 
 	// Publish the log before a possible sleep.
 	mm_log_relay();
 
-	pthread_mutex_lock(&cond->lock);
+	mm_monitor_lock(&cond->monitor);
 
-	while (cond->base.value == 0) {
-		int err = pthread_cond_timedwait(&cond->cond, &cond->lock, &ts);
-		if (err) {
-			if (err != ETIMEDOUT)
-				mm_fatal(err, "pthread_cond_timedwait");
-			rc = false;
-			break;
-		}
-	}
+	bool rc = true;
+	while (rc && cond->base.value == 0)
+		rc = mm_monitor_timedwait(&cond->monitor, time);
 
 	cond->base.value = 0;
 
-	pthread_mutex_unlock(&cond->lock);
+	mm_monitor_unlock(&cond->monitor);
 	return rc;
 }
 
@@ -138,12 +117,12 @@ mm_synch_signal_cond(struct mm_synch *synch)
 {
 	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
 
-	pthread_mutex_lock(&cond->lock);
+	mm_monitor_lock(&cond->monitor);
 
 	cond->base.value = 1;
-	pthread_cond_signal(&cond->cond);
+	mm_monitor_signal(&cond->monitor);
 
-	pthread_mutex_unlock(&cond->lock);
+	mm_monitor_unlock(&cond->monitor);
 }
 
 static void
