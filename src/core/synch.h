@@ -63,9 +63,6 @@ struct mm_synch *mm_synch_create_event_poll(struct mm_event_table *events);
 void mm_synch_destroy(struct mm_synch *synch)
 	__attribute__((nonnull(1)));
 
-void mm_synch_wait(struct mm_synch *synch)
-	__attribute__((nonnull(1)));
-
 bool mm_synch_timedwait(struct mm_synch *synch, mm_timeout_t timeout);
 
 void mm_synch_signal(struct mm_synch *synch)

@@ -100,27 +100,6 @@ mm_synch_destroy_cond(struct mm_synch *synch)
 	mm_global_free(cond);
 }
 
-static void
-mm_synch_wait_cond(struct mm_synch *synch)
-{
-	struct mm_synch_cond *cond = (struct mm_synch_cond *) synch;
-
-	// Publish the log before a possible sleep.
-	mm_log_relay();
-
-	pthread_mutex_lock(&cond->lock);
-
-	while (cond->base.value == 0) {
-		int err = pthread_cond_wait(&cond->cond, &cond->lock);
-		if (err)
-			mm_fatal(err, "pthread_cond_wait");
-	}
-
-	cond->base.value = 0;
-
-	pthread_mutex_unlock(&cond->lock);
-}
-
 static bool
 mm_synch_timedwait_cond(struct mm_synch *synch, mm_timeout_t timeout)
 {
@@ -207,37 +186,6 @@ static void
 mm_synch_destroy_poll(struct mm_synch *synch)
 {
 	mm_global_free(synch);
-}
-
-static void
-mm_synch_wait_poll(struct mm_synch *synch)
-{
-	struct mm_synch_poll *poll = (struct mm_synch_poll *) synch;
-
-#if POLL_GUARD
-	// Advertise that the thread is about to sleep.
-	mm_memory_store(poll->waiting, true);
-
-	// FIXME: have a store-atomic fence.
-	mm_memory_fence();
-
-	// Check to see if there are already some wake signals pending.
-	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
-	if (value == 0)
-		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
-	else
-		mm_event_poll(poll->events, 0);
-
-	// Advertise that the thread has woken up.
-	mm_memory_store(poll->waiting, false);
-#else
-	// Check to see if there are already some wake signals pending.
-	uint32_t value = mm_atomic_uint32_fetch_and_set(&poll->base.value, 0);
-	if (value == 0)
-		mm_event_poll(poll->events, MM_TIMEOUT_INFINITE);
-	else
-		mm_event_poll(poll->events, 0);
-#endif
 }
 
 static bool
@@ -334,26 +282,6 @@ mm_synch_destroy_fast(struct mm_synch *synch)
 	mm_global_free(synch);
 }
 
-static void
-mm_synch_wait_fast(struct mm_synch *synch)
-{
-	// Publish the log before a sleep.
-	mm_log_relay();
-
-	for (;;) {
-		uint32_t value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_SIGNALED, MM_SYNCH_CLEAR);
-		if (value == MM_SYNCH_SIGNALED)
-			break;
-		if (value == MM_SYNCH_CLEAR) {
-			value = mm_atomic_uint32_cas(&synch->value, MM_SYNCH_CLEAR, MM_SYNCH_SLEEPING);
-			if (value == MM_SYNCH_SIGNALED)
-				continue;
-		}
-
-		syscall(SYS_futex, &synch->value, FUTEX_WAIT_PRIVATE, MM_SYNCH_SLEEPING, NULL, NULL, 0);
-	}
-}
-
 static bool
 mm_synch_timedwait_fast(struct mm_synch *synch, mm_timeout_t timeout)
 {
@@ -444,31 +372,6 @@ mm_synch_destroy_mach(struct mm_synch *synch)
 	semaphore_destroy(mach_task_self(), mach->sem);
 
 	mm_global_free(mach);
-}
-
-static void
-mm_synch_wait_mach(struct mm_synch *synch)
-{
-	struct mm_synch_mach *mach = (struct mm_synch_mach *) synch;
-
-	// Advertise that the thread is about to sleep.
-	mm_memory_store(mach->waiting, true);
-
-	// FIXME: have an atomic-atomic fence.
-	mm_memory_fence();
-
-	// FIXME: protect against spurious wakeups.
-	// Check to see if there are already some wake signals pending.
-	uint32_t value = mm_atomic_uint32_fetch_and_set(&mach->base.value, 0);
-	if (value == 0) {
-		// Publish the log before a sleep.
-		mm_log_relay();
-
-		semaphore_wait(mach->sem);
-	}
-
-	// Advertise that the thread has woken up.
-	mm_memory_store(mach->waiting, false);
 }
 
 static bool
@@ -570,39 +473,6 @@ mm_synch_destroy(struct mm_synch *synch)
 #if MM_SYNCH_MACH
 	case MM_SYNCH_MACH:
 		mm_synch_destroy_mach(synch);
-		break;
-#endif
-
-	default:
-		ABORT();
-	}
-
-	LEAVE();
-}
-
-void
-mm_synch_wait(struct mm_synch *synch)
-{
-	ENTER();
-
-	switch (synch->magic) {
-	case MM_SYNCH_COND:
-		mm_synch_wait_cond(synch);
-		break;
-
-	case MM_SYNCH_POLL:
-		mm_synch_wait_poll(synch);
-		break;
-
-#if MM_SYNCH_FAST
-	case MM_SYNCH_FAST:
-		mm_synch_wait_fast(synch);
-		break;
-#endif
-
-#if MM_SYNCH_MACH
-	case MM_SYNCH_MACH:
-		mm_synch_wait_mach(synch);
 		break;
 #endif
 

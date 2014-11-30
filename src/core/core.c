@@ -367,7 +367,7 @@ mm_core_worker_cancel(uintptr_t arg)
 
 	// Notify that the work has been canceled.
 	struct mm_work *work = (struct mm_work *) arg;
-	(work->complete)(work, MM_RESULT_CANCELED);
+	work->complete(work, MM_RESULT_CANCELED);
 
 	LEAVE();
 }
@@ -712,30 +712,21 @@ mm_shared_space_term(void)
  **********************************************************************/
 
 static void
-mm_core_boot_signal(void)
-{
-#if ENABLE_SMP
-	for (mm_core_t i = 1; i < mm_core_num; i++) {
-		mm_synch_signal(mm_core_set[i].synch);
-	}
-#endif
-}
-
-static void
 mm_core_boot_init(struct mm_core *core)
 {
-	// Secondary cores have to wait until the primary core runs
-	// the start hooks that initialize shared resources.
-	if (!MM_CORE_IS_PRIMARY(core))
-		mm_synch_wait(core->synch);
-
-	mm_timer_init(&core->time_manager, &core->space.arena);
-
-	// Call the start hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
+		// Call the start hooks on the primary core.
+		mm_timer_init(&core->time_manager, &core->space.arena);
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(&mm_core_domain);
-		mm_core_boot_signal();
+
+		mm_thread_domain_barrier();
+	} else {
+		// Secondary cores have to wait until the primary core runs
+		// the start hooks that initialize shared resources.
+		mm_thread_domain_barrier();
+
+		mm_timer_init(&core->time_manager, &core->space.arena);
 	}
 }
 
