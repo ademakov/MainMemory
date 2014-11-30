@@ -24,6 +24,7 @@
 #include "base/bitset.h"
 #include "base/list.h"
 #include "core/wait.h"
+#include "core/work.h"
 #include "event/event.h"
 
 #include <netinet/in.h>
@@ -95,9 +96,6 @@ struct mm_net_server
 	/* Event handling data. */
 	struct mm_event_fd event;
 
-	/* Server flags. */
-	int flags;
-
 	/* Number of connections from the start. */
 	uint64_t client_count;
 
@@ -149,6 +147,11 @@ struct mm_net_socket
 	/* Tasks pending on socket I/O. */
 	struct mm_waitset read_waitset;
 	struct mm_waitset write_waitset;
+
+	/* Work items for I/O tasks. */
+	struct mm_work read_work;
+	struct mm_work write_work;
+	struct mm_work cleanup_work;
 
 	/* I/O readiness stamps. */
 	uint32_t read_stamp;

@@ -263,7 +263,6 @@ mm_net_alloc_server(void)
 
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
 	srv->event.fd = -1;
-	srv->flags = 0;
 	srv->client_count = 0;
 
 	srv->core = MM_CORE_NONE;
@@ -281,6 +280,20 @@ mm_net_alloc_server(void)
  **********************************************************************/
 
 static void
+mm_net_reader_complete(struct mm_work *work,
+		       mm_value_t value __attribute__((unused)))
+{
+	mm_net_yield_reader(containerof(work, struct mm_net_socket, read_work));
+}
+
+static void
+mm_net_writer_complete(struct mm_work *work,
+		       mm_value_t value __attribute__((unused)))
+{
+	mm_net_yield_writer(containerof(work, struct mm_net_socket, write_work));
+}
+
+static void
 mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
 {
 	// Prepare the event data.
@@ -290,6 +303,13 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 			     srv->input_handler, input_oneshot,
 			     srv->output_handler, output_oneshot,
 			     srv->control_handler);
+
+	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock,
+			mm_net_reader_complete);
+	mm_work_prepare(&sock->write_work, mm_net_writer, (mm_value_t) sock,
+			mm_net_writer_complete);
+	mm_work_prepare(&sock->cleanup_work, mm_net_cleanup, (mm_value_t) sock,
+			mm_work_complete_noop);
 
 	sock->flags = 0;
 	sock->close_flags = 0;
@@ -443,8 +463,10 @@ retry:
 	// Register with the server.
 	sock->core_server_index = index;
 	sock->core = srv->per_core[index].core;
+#if MM_NET_LOCAL_EVENTS
 	mm_waitset_pin(&sock->read_waitset, sock->core);
 	mm_waitset_pin(&sock->write_waitset, sock->core);
+#endif
 	mm_list_append(&srv->per_core[index].clients, &sock->clients);
 	mm_verbose("bind socket %d to core %d", fd, sock->core);
 
@@ -588,7 +610,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 
 	// Submit a reader work if needed.
 	if (flags == MM_NET_READER_PENDING)
-		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->read_work);
 
 	LEAVE();
 }
@@ -620,7 +642,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 
 	// Submit a writer work if needed.
 	if (flags == MM_NET_WRITER_PENDING)
-		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->write_work);
 
 	LEAVE();
 }
@@ -728,7 +750,7 @@ mm_net_control_handler(mm_event_t event, void *data)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		mm_core_post(sock->core, mm_net_cleanup, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->cleanup_work);
 		break;
 
 	case MM_EVENT_INPUT_ERROR:
@@ -773,7 +795,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		mm_net_socket_unlock(sock);
 
 		// Submit a reader work.
-		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->read_work);
 
 		// Let it start immediately.
 #if ENABLE_SMP
@@ -806,7 +828,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		mm_net_socket_unlock(sock);
 
 		// Submit a writer work.
-		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->write_work);
 
 		// Let it start immediately.
 #if ENABLE_SMP
@@ -855,7 +877,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		mm_net_socket_unlock(sock);
 
 		// Submit a reader work.
-		mm_core_post(sock->core, mm_net_reader, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_socket_unlock(sock);
@@ -905,7 +927,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		mm_net_socket_unlock(sock);
 
 		// Submit a writer work.
-		mm_core_post(sock->core, mm_net_writer, (mm_value_t) sock);
+		mm_core_post_work(sock->core, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_socket_unlock(sock);
@@ -987,7 +1009,7 @@ mm_net_cleanup(mm_value_t arg)
 	if (sock->server->proto->cleanup != NULL)
 		(sock->server->proto->cleanup)(sock);
 
-	mm_core_post(0, mm_net_destroy, (mm_value_t) sock);
+	mm_core_post(sock->server->core, mm_net_destroy, (mm_value_t) sock);
 
 	LEAVE();
 	return 0;
@@ -1008,14 +1030,8 @@ mm_net_reader(mm_value_t arg)
 	task->flags |= MM_TASK_READING;
 	sock->reader = task;
 
-	// Ensure the task yields socket on exit.
-	mm_task_cleanup_push(mm_net_yield_reader, sock);
-
 	// Run the protocol handler routine.
 	(sock->server->proto->reader)(sock);
-
-	// Yield the socket on return.
-	mm_task_cleanup_pop(true);
 
 leave:
 	LEAVE();
@@ -1037,14 +1053,8 @@ mm_net_writer(mm_value_t arg)
 	task->flags |= MM_TASK_WRITING;
 	sock->writer = task;
 
-	// Ensure the task yields socket on exit.
-	mm_task_cleanup_push(mm_net_yield_writer, sock);
-
 	// Run the protocol handler routine.
 	(sock->server->proto->writer)(sock);
-
-	// Yield the socket on return.
-	mm_task_cleanup_pop(true);
 
 leave:
 	LEAVE();
