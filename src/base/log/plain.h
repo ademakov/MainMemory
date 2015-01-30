@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LOG_PLAIN_H
-#define LOG_PLAIN_H
+#ifndef BASE_LOG_PLAIN_H
+#define BASE_LOG_PLAIN_H
 
 #include "common.h"
 
@@ -32,4 +32,4 @@ void mm_brief(const char *restrict msg, ...)
 	__attribute__((format(printf, 1, 2)))
 	__attribute__((nonnull(1)));
 
-#endif /* LOG_PLAIN_H */
+#endif /* BASE_LOG_PLAIN_H */

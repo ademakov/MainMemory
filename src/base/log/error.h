@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef LOG_ERROR_H
-#define LOG_ERROR_H
+#ifndef BASE_LOG_ERROR_H
+#define BASE_LOG_ERROR_H
 
 #include "common.h"
 
@@ -37,4 +37,4 @@ void mm_fatal(int error, const char *restrict msg, ...)
 	__attribute__((nonnull(2)))
 	__attribute__((noreturn));
 
-#endif /* LOG_ERROR_H */
+#endif /* BASE_LOG_ERROR_H */
