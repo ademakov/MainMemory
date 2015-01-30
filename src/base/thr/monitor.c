@@ -19,6 +19,7 @@
 
 #include "base/thr/monitor.h"
 #include "base/log/error.h"
+#include "base/log/log.h"
 #include "base/log/trace.h"
 
 void
@@ -52,6 +53,9 @@ mm_monitor_wait(struct mm_monitor *monitor)
 {
 	ENTER();
 
+	// Publish the log before a possible sleep.
+	mm_log_relay();
+
 	int err = pthread_cond_wait(&monitor->cond, &monitor->lock);
 	if (err)
 		mm_fatal(err, "pthread_cond_wait");
@@ -68,6 +72,9 @@ mm_monitor_timedwait(struct mm_monitor *monitor, mm_timeval_t realtime)
 	struct timespec ts;
 	ts.tv_sec = (realtime / 1000000);
 	ts.tv_nsec = (realtime % 1000000) * 1000;
+
+	// Publish the log before a possible sleep.
+	mm_log_relay();
 
 	int err = pthread_cond_timedwait(&monitor->cond, &monitor->lock, &ts);
 	if (err) {
