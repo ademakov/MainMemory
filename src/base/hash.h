@@ -23,7 +23,7 @@
 #include "common.h"
 
 /**********************************************************************
- *  D. J. Bernstein's hash function.
+ * D. J. Bernstein's hash function.
  **********************************************************************/
 
 static inline uint32_t
