@@ -29,12 +29,10 @@
 #include <pthread.h>
 #include <sched.h>
 
-#if HAVE_MACH_SEMAPHORE_H || HAVE_MACH_THREAD_POLICY_H
+#if HAVE_MACH_THREAD_POLICY_H
 # include <mach/mach_init.h>
-# if HAVE_MACH_THREAD_POLICY_H
-#  include <mach/thread_act.h>
-#  include <mach/thread_policy.h>
-# endif
+# include <mach/thread_act.h>
+# include <mach/thread_policy.h>
 #endif
 
 struct mm_thread
