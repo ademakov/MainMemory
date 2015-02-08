@@ -49,13 +49,13 @@ mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch
 static inline void __attribute__((nonnull(1)))
 mm_event_batch_addflags(struct mm_event_batch *batch, int flags)
 {
-	batch->nevents |= flags;
+	batch->flags |= flags;
 }
 
 static inline bool __attribute__((nonnull(1)))
 mm_event_batch_hasflags(struct mm_event_batch *batch, int flags)
 {
-	return (batch->nevents & flags) != 0;
+	return (batch->flags & flags) != 0;
 }
 
 static inline void __attribute__((nonnull(1)))
