@@ -23,7 +23,8 @@
 #include "base/log/trace.h"
 #include "base/mem/space.h"
 
-#define MM_EVENT_NEVENTS_MAX	(32 * MM_EVENT_NEVENTS)
+#define MM_EVENT_BATCH_NEVENTS_MIN	(512)
+#define MM_EVENT_BATCH_NEVENTS_MAX	(32 * MM_EVENT_BATCH_NEVENTS_MIN)
 
 void __attribute__((nonnull(1)))
 mm_event_batch_prepare(struct mm_event_batch *batch)
@@ -32,7 +33,7 @@ mm_event_batch_prepare(struct mm_event_batch *batch)
 
 	batch->flags = 0;
 	batch->nevents = 0;
-	batch->nevents_max = MM_EVENT_NEVENTS;
+	batch->nevents_max = MM_EVENT_BATCH_NEVENTS_MIN;
 	batch->events = mm_common_alloc(batch->nevents_max * sizeof(struct mm_event));
 
 	LEAVE();
@@ -53,7 +54,7 @@ mm_event_batch_expand(struct mm_event_batch *batch)
 {
 	ENTER();
 
-	if (unlikely(batch->nevents_max == MM_EVENT_NEVENTS_MAX))
+	if (unlikely(batch->nevents_max == MM_EVENT_BATCH_NEVENTS_MAX))
 		mm_fatal(0, "too many events");
 
 	batch->nevents_max *= 2;
