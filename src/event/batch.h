@@ -23,14 +23,14 @@
 #include "common.h"
 #include "event/event.h"
 
-#define MM_EVENT_BATCH_REGISTER		(1)
-#define MM_EVENT_BATCH_UNREGISTER	(2)
+#define MM_EVENT_BATCH_REGISTER		((unsigned int) 1)
+#define MM_EVENT_BATCH_UNREGISTER	((unsigned int) 2)
 
 struct mm_event_batch
 {
-	int flags;
-	int nevents;
-	int nevents_max;
+	unsigned int flags;
+	unsigned int nevents;
+	unsigned int nevents_max;
 	struct mm_event *events;
 };
 
@@ -47,13 +47,13 @@ void __attribute__((nonnull(1, 2)))
 mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch2);
 
 static inline void __attribute__((nonnull(1)))
-mm_event_batch_addflags(struct mm_event_batch *batch, int flags)
+mm_event_batch_addflags(struct mm_event_batch *batch, unsigned int flags)
 {
 	batch->flags |= flags;
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_event_batch_hasflags(struct mm_event_batch *batch, int flags)
+mm_event_batch_hasflags(struct mm_event_batch *batch, unsigned int flags)
 {
 	return (batch->flags & flags) != 0;
 }

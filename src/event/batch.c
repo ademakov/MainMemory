@@ -70,7 +70,7 @@ mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch
 
 	mm_event_batch_addflags(batch, batch2->flags);
 
-	for (int i = 0; i < batch2->nevents; i++) {
+	for (unsigned int i = 0; i < batch2->nevents; i++) {
 		struct mm_event *event = &batch2->events[i];
 		mm_event_batch_add(batch, event->event, event->ev_fd);
 	}
