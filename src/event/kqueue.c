@@ -24,7 +24,6 @@
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
-#include "base/log/plain.h"
 #include "base/log/trace.h"
 
 #include <unistd.h>
@@ -281,6 +280,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *ev_kq,
 {
 	ENTER();
 
+	// Make event changes.
 	ev_kq->nevents = 0;
 	unsigned int first = 0, next = 0;
 	while (next < changes->nevents) {
