@@ -72,8 +72,8 @@ mm_event_epoll_add_event(struct mm_event_epoll *ev_ep,
 static void
 mm_event_epoll_get_events(struct mm_event_epoll *ev_ep, struct mm_event_batch *events)
 {
-	for (int i = 0; i < events->nevents; i++) {
-		struct epoll_event *event = &events->events[i];
+	for (int i = 0; i < ev_ep->nevents; i++) {
+		struct epoll_event *event = &ev_ep->events[i];
 		struct mm_event_fd *ev_fd = event->data.ptr;
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0)
@@ -98,7 +98,7 @@ mm_event_epoll_poll(struct mm_event_epoll *ev_ep, mm_timeout_t timeout)
 
 	// Poll the system for events.
 	int n = epoll_wait(ev_ep->event_fd,
-			   ev_ep->events, MM_EVENT_NEVENTS,
+			   ev_ep->events, MM_EVENT_EPOLL_NEVENTS,
 			   timeout);
 
 	if (unlikely(n < 0)) {
@@ -149,7 +149,7 @@ mm_event_epoll_listen(struct mm_event_epoll *ev_ep,
 	// Make event changes.
 	for (unsigned int i = 0; i < changes->nevents; i++) {
 		struct mm_event *event = &changes->events[i];
-		mm_event_epoll_add_event(events, &events->entries[i], events);
+		mm_event_epoll_add_event(ev_ep, event, events);
 	}
 
 	// Poll for incoming events.
