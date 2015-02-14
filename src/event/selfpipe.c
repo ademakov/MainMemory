@@ -30,7 +30,56 @@
 
 #include <unistd.h>
 
+/**********************************************************************
+ * Self-pipe Handler.
+ **********************************************************************/
+
+/* Self-pipe event handler ID. */
+static mm_event_hid_t mm_selfpipe_handler;
+
+static void
+mm_selfpipe_ready(mm_event_t event __attribute__((unused)), void *data)
+{
+	ENTER();
+
+	struct mm_selfpipe *selfpipe = containerof(data, struct mm_selfpipe, event_fd);
+
+	selfpipe->read_ready = true;
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Self-pipe Initialization.
+ **********************************************************************/
+
+void
+mm_selfpipe_init(void)
+{
+	ENTER();
+
+	// Register the self-pipe event handler.
+	mm_selfpipe_handler = mm_event_register_handler(mm_selfpipe_ready);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Self-pipe Statistics.
+ **********************************************************************/
+
 static mm_atomic_uint32_t mm_selfpipe_write_count;
+
+void
+mm_selfpipe_stats(void)
+{
+	uint32_t write_count = mm_memory_load(mm_selfpipe_write_count);
+	mm_verbose("selfpipe stats: write = %u", write_count);
+}
+
+/**********************************************************************
+ * Self-pipe instance.
+ **********************************************************************/
 
 void __attribute__((nonnull(1)))
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
@@ -45,7 +94,8 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	selfpipe->read_fd = fds[0];
+	mm_event_prepare_fd(&selfpipe->event_fd, fds[0],
+			    mm_selfpipe_handler, false, 0, false, 0);
 	selfpipe->write_fd = fds[1];
 	selfpipe->read_ready = false;
 
@@ -57,7 +107,7 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	close(selfpipe->read_fd);
+	close(selfpipe->event_fd.fd);
 	close(selfpipe->write_fd);
 
 	LEAVE();
@@ -84,17 +134,10 @@ mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 		selfpipe->read_ready = false;
 
 		char dummy[64];
-		while (read(selfpipe->read_fd, dummy, sizeof dummy) == sizeof dummy) {
+		while (read(selfpipe->event_fd.fd, dummy, sizeof dummy) == sizeof dummy) {
 			/* do nothing */
 		}
 	}
 
 	LEAVE();
-}
-
-void
-mm_selfpipe_stats(void)
-{
-	uint32_t write_count = mm_memory_load(mm_selfpipe_write_count);
-	mm_verbose("selfpipe stats: write = %u", write_count);
 }

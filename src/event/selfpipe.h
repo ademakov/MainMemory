@@ -21,20 +21,32 @@
 #define EVENT_SELFPIPE_H
 
 #include "common.h"
+#include "event/event.h"
 
 struct mm_selfpipe
 {
-	int read_fd;
+	struct mm_event_fd event_fd;
+
 	int write_fd;
 
 	bool read_ready;
 };
 
-static inline void __attribute__((nonnull(1)))
-mm_selfpipe_set_ready(struct mm_selfpipe *selfpipe)
-{
-	selfpipe->read_ready = true;
-}
+/**********************************************************************
+ * Self-pipe Initialization.
+ **********************************************************************/
+
+void mm_selfpipe_init(void);
+
+/**********************************************************************
+ * Self-pipe Statistics.
+ **********************************************************************/
+
+void mm_selfpipe_stats(void);
+
+/**********************************************************************
+ * Self-pipe Instance.
+ **********************************************************************/
 
 void __attribute__((nonnull(1)))
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe);
@@ -47,7 +59,5 @@ mm_selfpipe_write(struct mm_selfpipe *selfpipe);
 
 void __attribute__((nonnull(1)))
 mm_selfpipe_drain(struct mm_selfpipe *selfpipe);
-
-void mm_selfpipe_stats(void);
 
 #endif /* EVENT_SELFPIPE_H */
