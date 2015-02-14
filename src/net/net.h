@@ -36,7 +36,11 @@
 /* Forward declaration. */
 struct mm_task;
 
-#define MM_NET_LOCAL_EVENTS	1
+#if ENABLE_SMP
+# define MM_NET_LOCAL_EVENTS	0
+#else
+# define MM_NET_LOCAL_EVENTS	1
+#endif
 
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x01
@@ -85,9 +89,6 @@ struct mm_net_server_per_core
 {
 	/* The core id. */
 	mm_core_t core;
-
-	/* A list of all client sockets. */
-	struct mm_list clients;
 };
 
 /* Network server data. */
@@ -111,6 +112,9 @@ struct mm_net_server
 	mm_core_t core;
 	mm_core_t core_num;
 	struct mm_net_server_per_core *per_core;
+
+	/* A list of all client sockets. */
+	struct mm_list clients;
 
 	/* Core affinity. */
 	struct mm_bitset affinity;

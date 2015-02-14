@@ -24,6 +24,7 @@
 #include "core/task.h"
 #include "core/timer.h"
 
+#include "event/dispatch.h"
 #include "event/event.h"
 #include "event/nonblock.h"
 
@@ -459,8 +460,9 @@ retry:
 	// Register with the server.
 	sock->core_server_index = index;
 	sock->core = srv->per_core[index].core;
-	mm_list_append(&srv->per_core[index].clients, &sock->clients);
 	mm_verbose("bind socket %d to core %d", fd, sock->core);
+
+	mm_list_append(&srv->clients, &sock->clients);
 
 	// Request required I/O tasks.
 	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
@@ -500,7 +502,7 @@ mm_net_accept_handler(mm_event_t event __attribute__((unused)), void *data)
 
 	struct mm_net_server *srv
 		= containerof(data, struct mm_net_server, event);
-	mm_core_post(MM_CORE_SELF, mm_net_acceptor, (mm_value_t) srv);
+	mm_core_post(srv->core, mm_net_acceptor, (mm_value_t) srv);
 
 	LEAVE();
 }
@@ -612,6 +614,7 @@ static void
 mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
 {
 	ENTER();
+	ASSERT(sock->core == mm_core_selfid());
 
 	mm_net_socket_lock(sock);
 	if (sock->read_stamp != stamp) {
@@ -622,8 +625,8 @@ mm_net_reset_read_ready(struct mm_net_socket *sock, uint32_t stamp)
 #if MM_ONESHOT_HANDLERS
 		bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 		if (oneshot) {
-			struct mm_core *core = mm_core_getptr(sock->core);
-			mm_event_trigger_input(core->events, &sock->event);
+			struct mm_core *core = &mm_core_set[sock->core];
+			mm_listener_trigger_input(&core->listener, &sock->event);
 		}
 #endif
 	}
@@ -635,6 +638,7 @@ static void
 mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
 {
 	ENTER();
+	ASSERT(sock->core == mm_core_selfid());
 
 	mm_net_socket_lock(sock);
 	if (sock->write_stamp != stamp) {
@@ -645,8 +649,8 @@ mm_net_reset_write_ready(struct mm_net_socket *sock, uint32_t stamp)
 #if MM_ONESHOT_HANDLERS
 		bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 		if (oneshot) {
-			struct mm_core *core = mm_core_getptr(sock->core);
-			mm_event_trigger_output(core->events, &sock->event);
+			struct mm_core *core = &mm_core_set[sock->core];
+			mm_listener_trigger_output(&core->listener, &sock->event);
 		}
 #endif
 	}
@@ -918,7 +922,8 @@ mm_net_prepare(mm_value_t arg)
 		(sock->server->proto->prepare)(sock);
 
 	// Register the socket with the event loop.
-	mm_event_register_fd(mm_core->events, &sock->event);
+	struct mm_core *core = &mm_core_set[sock->core];
+	mm_listener_register_fd(&core->listener, &sock->event);
 
 	LEAVE();
 	return 0;
@@ -1175,13 +1180,30 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
 	LEAVE();
 }
 
+static mm_value_t
+mm_net_register_server(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
+	ASSERT(srv->event.fd >= 0);
+	ASSERT(srv->core == mm_core_selfid()); 
+
+	struct mm_core *core = &mm_core_set[srv->core];
+	mm_listener_register_fd(&core->listener, &srv->event);
+
+	LEAVE();
+	return 0;
+}
+
 void
 mm_net_start_server(struct mm_net_server *srv)
 {
 	ENTER();
-	ASSERT(srv->event.fd == -1);
 
 	mm_brief("start server '%s'", srv->name);
+	ASSERT(srv->event.fd == -1);
+	ASSERT(srv->core == MM_CORE_NONE); 
 
 	// Find the cores to run the server on.
 	if (mm_bitset_any(&srv->affinity))
@@ -1192,6 +1214,9 @@ mm_net_start_server(struct mm_net_server *srv)
 	if (srv->core_num == 0)
 		mm_fatal(0, "the server cannot be bound to any core");
 
+	// Initialize the clients list.
+	mm_list_init(&srv->clients);
+
 	// Bind the server to the specified cores.
 	mm_core_t c = 0;
 	srv->per_core = mm_global_calloc(srv->core_num, sizeof(struct mm_net_server_per_core));
@@ -1199,9 +1224,6 @@ mm_net_start_server(struct mm_net_server *srv)
 		if (mm_bitset_test(&srv->affinity, i)) {
 			ASSERT(c < srv->core_num);
 			srv->per_core[c].core = i;
-
-			/* Initialize the client list. */
-			mm_list_init(&srv->per_core[c].clients);
 
 			if (c == 0)
 				srv->core = i;
@@ -1221,8 +1243,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid, false, 0, false, 0);
-	struct mm_core *core = mm_core_getptr(srv->core);
-	mm_event_register_fd(core->events, &srv->event);
+	mm_core_post(srv->core, mm_net_register_server, (mm_value_t) srv);
 
 	LEAVE();
 }
@@ -1232,12 +1253,13 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
+	ASSERT(srv->core == mm_core_selfid());
 
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	struct mm_core *core = mm_core_getptr(srv->core);
-	mm_event_unregister_fd(core->events, &srv->event);
+	struct mm_core *core = &mm_core_set[srv->core];
+	mm_listener_unregister_fd(&core->listener, &srv->event);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->event.fd);
@@ -1569,8 +1591,8 @@ mm_net_close(struct mm_net_socket *sock)
 	sock->close_flags = MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
-	struct mm_core *core = mm_core_getptr(sock->core);
-	mm_event_unregister_fd(core->events, &sock->event);
+	struct mm_core *core = &mm_core_set[sock->core];
+	mm_listener_unregister_fd(&core->listener, &sock->event);
 
 leave:
 	LEAVE();

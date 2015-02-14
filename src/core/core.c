@@ -18,12 +18,12 @@
  */
 
 #include "core/core.h"
-
 #include "core/future.h"
 #include "core/port.h"
-#include "core/synch.h"
 #include "core/task.h"
 #include "core/work.h"
+
+#include "event/dispatch.h"
 
 #include "base/bitset.h"
 #include "base/log/error.h"
@@ -66,6 +66,9 @@ __thread struct mm_core *mm_core;
 
 // The set of cores with event loops.
 static struct mm_bitset mm_core_event_affinity;
+
+// Common event dispatch.
+static struct mm_dispatch mm_core_dispatch;
 
 /**********************************************************************
  * Idle queue.
@@ -186,7 +189,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 			bool ok = mm_ring_spsc_locked_put(&core->inbox, work);
 
 			// Wakeup the target core if it is asleep.
-			mm_synch_signal(core->synch);
+			mm_listener_notify(&core->listener, &mm_core_dispatch);
 
 			if (ok) {
 				break;
@@ -254,7 +257,7 @@ mm_core_run_task(struct mm_task *task)
 			bool ok = mm_ring_spsc_locked_put(&task->core->sched, task);
 
 			// Wakeup the target core if it is asleep.
-			mm_synch_signal(task->core->synch);
+			mm_listener_notify(&task->core->listener, &mm_core_dispatch);
 
 			if (ok) {
 				break;
@@ -332,12 +335,14 @@ mm_core_chunk_free(mm_chunk_t tag, void *chunk)
 			if (ok) {
 				break;
 			} else if (unlikely(mm_memory_load(core->stop))) {
+#if 0
 				mm_warning(0, "lost a chunk as core %d is stopped", tag);
+#endif
 				break;
 			}
 
 			// Wakeup the target core if it is asleep.
-			mm_synch_signal(core->synch);
+			mm_listener_notify(&core->listener, &mm_core_dispatch);
 		}
 	}
 }
@@ -495,7 +500,7 @@ mm_core_master(mm_value_t arg)
  **********************************************************************/
 
 // Dealer loop sleep time - 1 second
-#define MM_DEALER_HALT_TIMEOUT	((mm_timeout_t) 1000000)
+#define MM_DEALER_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
 
 // Dealer loop hang on times
 #define MM_DEALER_POLL_TIMEOUT	((mm_timeout_t) 10)
@@ -510,10 +515,6 @@ mm_core_deal(struct mm_core *core)
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
-
-	// Indicate that the data that has so far been put to the rings
-	// is to be consumed now.
-	mm_synch_clear(core->synch);
 
 	// Consume the data from the communication rings.
 	mm_core_destroy_chunks(core);
@@ -536,63 +537,21 @@ mm_core_halt(struct mm_core *core)
 {
 	ENTER();
 
-	// Get the closest pending timer.
-	mm_timeval_t wait_time = mm_timer_next(&core->time_manager);
+	// Get the closest timer expiration time.
+	mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
 
-	// Consider the time until the next required event poll.
-	mm_timeval_t poll_time = MM_TIMEVAL_MAX;
-	if (core->events != NULL) {
-		// If any event system changes have been requested then it is
-		// required to notify on their completion immediately.
-		if (mm_event_collect(core->events))
-			poll_time = wait_time = core->time_manager.time;
-		else
-			poll_time = core->poll_time + MM_DEALER_POLL_TIMEOUT;
-	}
+	// Get the halt timeout.
+	mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
+	if (unlikely(next_timer < core->time_manager.time))
+		timeout = 0;
+	else if (next_timer < core->time_manager.time + MM_DEALER_HALT_TIMEOUT)
+		timeout = next_timer - core->time_manager.time;
+	else
+		timeout = MM_DEALER_HALT_TIMEOUT;
 
-	// Find the halt time.
-	mm_timeval_t halt_time = min(wait_time, core->time_manager.time + MM_DEALER_HALT_TIMEOUT);
+	mm_listener_listen(&core->listener, &mm_core_dispatch, timeout);
 
-#if 1
 	mm_timer_update_time(&core->time_manager);
-#else
-	// Before actually halting hang around a little bit waiting for
-	// possible wake requests.
-	mm_timeval_t hold_time = min(wait_time, core->time_manager.time + MM_DEALER_HOLD_TIMEOUT);
-	if (hold_time > poll_time)
-		hold_time = poll_time;
-	if (core->time_manager.time < hold_time) {
-		bool quit = false;
-		while (!quit) {
-			mm_timer_update_time(&core->time_manager);
-			if (core->time_manager.time >= hold_time)
-				break;
-			for (int i = 0; i < 10; i++) {
-				quit = mm_synch_test(core->synch);
-				if (quit) {
-					halt_time = core->time_manager.time;
-					break;
-				}
-				mm_spin_pause();
-			}
-		}
-	}
-#endif
-
-	mm_timeout_t timeout = 0;
-	if (core->time_manager.time < halt_time)
-		timeout = halt_time - core->time_manager.time;
-
-	if (timeout || core->time_manager.time >= poll_time) {
-		bool dispatch = mm_synch_timedwait(core->synch, timeout);
-		mm_timer_update_time(&core->time_manager);
-		if (core->events != NULL) {
-			core->poll_time = core->time_manager.time;
-			if (dispatch)
-				mm_event_dispatch(core->events);
-		}
-	}
-
 	mm_timer_update_real_time(&core->time_manager);
 
 	LEAVE();
@@ -827,11 +786,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->master = NULL;
 
-	core->events = NULL;
-	core->poll_time = 0;
-
 	core->stop = false;
-	core->synch = NULL;
+
+	mm_listener_prepare(&core->listener);
 
 	mm_ring_spsc_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_LOCKED_PUT);
 	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_LOCKED_PUT);
@@ -877,11 +834,9 @@ mm_core_term_single(struct mm_core *core)
 	mm_core_term_work(core);
 	mm_core_term_inbox(core);
 
-	mm_wait_cache_cleanup(&core->wait_cache);
+	mm_listener_cleanup(&core->listener);
 
-	mm_synch_destroy(core->synch);
-	if (core->events != NULL)
-		mm_event_destroy_table(core->events);
+	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_task_destroy(core->boot);
 
@@ -980,6 +935,7 @@ mm_core_init(void)
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
 	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
+	mm_dispatch_prepare(&mm_core_dispatch);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
@@ -1011,7 +967,6 @@ mm_core_term(void)
 	mm_wait_term();
 
 	mm_net_term();
-	mm_event_term();
 
 	// Flush logs before memory space with possible log chunks is unmapped.
 	mm_log_relay();
@@ -1060,20 +1015,6 @@ mm_core_start(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	// Set up event loops and synchronization.
-	if (!mm_bitset_any(&mm_core_event_affinity))
-		mm_bitset_set(&mm_core_event_affinity, 0);
-	for (mm_core_t i = 0; i < mm_core_num; i++) {
-		struct mm_core *core = &mm_core_set[i];
-		if (mm_bitset_test(&mm_core_event_affinity, i)) {
-			mm_brief("start event loop on core %d", i);
-			core->events = mm_event_create_table();
-			core->synch = mm_synch_create_event_poll(core->events);
-		} else {
-			core->synch = mm_synch_create();
-		}
-	}
-
 	// Set core thread attributes.
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
@@ -1113,7 +1054,7 @@ mm_core_stop(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
-		mm_synch_signal(core->synch);
+		mm_listener_notify(&core->listener, &mm_core_dispatch);
 	}
 
 	LEAVE();

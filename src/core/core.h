@@ -33,10 +33,11 @@
 #include "base/log/debug.h"
 #include "base/ring.h"
 
+#include "event/listener.h"
+
 /* Forward declarations. */
 struct mm_bitset;
 struct mm_chunk;
-struct mm_event_table;
 struct mm_net_server;
 struct mm_task;
 struct mm_work;
@@ -89,10 +90,6 @@ struct mm_core
 	/* The bootstrap task. */
 	struct mm_task *boot;
 
-	/* Event poll data. */
-	struct mm_event_table *events;
-	mm_timeval_t poll_time;
-
 	/*
 	 * The fields below engage in cross-core communication.
 	 */
@@ -100,7 +97,8 @@ struct mm_core
 	/* Stop flag. */
 	bool stop;
 
-	struct mm_synch *synch;
+	/* Event dispatch listener. */
+	struct mm_listener listener;
 
 	/* Tasks to be scheduled. */
 	MM_RING_SPSC(sched, MM_CORE_SCHED_RING_SIZE);

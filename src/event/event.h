@@ -25,7 +25,7 @@
 #if defined(HAVE_SYS_EPOLL_H)
 # undef MM_ONESHOT_HANDLERS
 #else
-# define MM_ONESHOT_HANDLERS 1
+# define MM_ONESHOT_HANDLERS	1
 #endif
 
 /* Event types. */
@@ -38,11 +38,52 @@ typedef enum {
 	MM_EVENT_OUTPUT_ERROR,
 } mm_event_t;
 
-/* Event handler routine. */
-typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
+/* Event details. */
+struct mm_event
+{
+	mm_event_t event;
+	struct mm_event_fd *ev_fd;
+};
+
+/**********************************************************************
+ * Event subsystem initialization.
+ **********************************************************************/
+
+void mm_event_init(void);
+
+/**********************************************************************
+ * Event subsystem statistics.
+ **********************************************************************/
+
+void mm_event_stats(void);
+
+/**********************************************************************
+ * Event handlers.
+ **********************************************************************/
 
 /* Event handler identifier. */
 typedef uint8_t mm_event_hid_t;
+
+/* Event handler routine. */
+typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
+
+/* Event handler descriptor. */
+struct mm_event_hdesc
+{
+	mm_event_handler_t handler;
+};
+
+/* Event handler table. */
+extern struct mm_event_hdesc mm_event_hdesc_table[];
+
+/* The number of registered event handlers. */
+extern int mm_event_hdesc_table_size;
+
+mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
+
+/**********************************************************************
+ * I/O events support.
+ **********************************************************************/
 
 /* File descriptor event entry. */
 struct mm_event_fd
@@ -63,72 +104,47 @@ struct mm_event_fd
 	unsigned oneshot_output_trigger : 1;
 };
 
-/* Event poll data container. */
-struct mm_event_table;
+bool __attribute__((nonnull(1)))
+mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
+		    mm_event_hid_t input_handler, bool input_oneshot,
+		    mm_event_hid_t output_handler, bool output_oneshot,
+		    mm_event_hid_t control_handler);
 
-/**********************************************************************
- * Event subsystem initialization and termination.
- **********************************************************************/
+static inline void __attribute__((nonnull(1)))
+mm_event_input(struct mm_event_fd *ev_fd)
+{
+	mm_event_hid_t id = ev_fd->input_handler;
 
-void mm_event_init(void);
-void mm_event_term(void);
+#if MM_ONESHOT_HANDLERS
+	if (ev_fd->oneshot_input)
+		ev_fd->oneshot_input_trigger = 0;
+#endif
 
-void mm_event_stats(void);
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+	(hd->handler)(MM_EVENT_INPUT, ev_fd);
+}
 
-/**********************************************************************
- * Event handler registration.
- **********************************************************************/
+static inline void __attribute__((nonnull(1)))
+mm_event_output(struct mm_event_fd *ev_fd)
+{
+	mm_event_hid_t id = ev_fd->output_handler;
 
-mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
+#if MM_ONESHOT_HANDLERS
+	if (ev_fd->oneshot_output)
+		ev_fd->oneshot_output_trigger = 0;
+#endif
 
-/**********************************************************************
- * Event poll routines.
- **********************************************************************/
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+	(hd->handler)(MM_EVENT_OUTPUT, ev_fd);
+}
 
-struct mm_event_table * mm_event_create_table(void);
+static inline void __attribute__((nonnull(1)))
+mm_event_control(struct mm_event_fd *ev_fd, mm_event_t event)
+{
+	mm_event_hid_t id = ev_fd->control_handler;
 
-void mm_event_destroy_table(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
-bool mm_event_collect(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
-bool mm_event_poll(struct mm_event_table *events, mm_timeout_t timeout)
-	__attribute__((nonnull(1)));
-
-void mm_event_dispatch(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
-void mm_event_notify(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
-void mm_event_dampen(struct mm_event_table *events)
-	__attribute__((nonnull(1)));
-
-/**********************************************************************
- * I/O events support.
- **********************************************************************/
-
-bool mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
-			 mm_event_hid_t input_handler, bool input_oneshot,
-			 mm_event_hid_t output_handler, bool output_oneshot,
-			 mm_event_hid_t control_handler)
-	__attribute__((nonnull(1)));
-
-void mm_event_register_fd(struct mm_event_table *events,
-			  struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 2)));
-
-void mm_event_unregister_fd(struct mm_event_table *events,
-			    struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 2)));
-
-void mm_event_trigger_input(struct mm_event_table *events,
-			    struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 2)));
-
-void mm_event_trigger_output(struct mm_event_table *events,
-			     struct mm_event_fd *ev_fd)
-	__attribute__((nonnull(1, 2)));
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+	(hd->handler)(event, ev_fd);
+}
 
 #endif /* EVENT_EVENT_H */
