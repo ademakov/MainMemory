@@ -25,15 +25,8 @@
 #include "core/lock.h"
 #include "event/batch.h"
 #include "event/epoll.h"
-#include "event/event.h"
 #include "event/kqueue.h"
 #include "event/selfpipe.h"
-
-#if HAVE_SYS_EPOLL_H
-# include <sys/epoll.h>
-#endif
-
-#define MM_EVENT_NEVENTS	(512)
 
 struct mm_dispatch
 {
