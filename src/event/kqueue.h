@@ -45,15 +45,15 @@ struct mm_event_kqueue
 };
 
 void __attribute__((nonnull(1)))
-mm_event_kqueue_prepare(struct mm_event_kqueue *ev_kq);
+mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend);
 
 void __attribute__((nonnull(1)))
-mm_event_kqueue_cleanup(struct mm_event_kqueue *ev_kq);
+mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend);
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_event_kqueue_listen(struct mm_event_kqueue *ev_kq,
-		       struct mm_event_batch *changes,
-		       struct mm_event_batch *events,
+mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
+		       struct mm_event_batch *change_events,
+		       struct mm_event_batch *return_events,
 		       mm_timeout_t timeout);
 
 #endif /* HAVE_SYS_EVENT_H */

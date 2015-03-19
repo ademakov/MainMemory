@@ -31,15 +31,15 @@
 #if HAVE_SYS_EVENT_H
 
 static bool
-mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
+mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
+			  struct mm_event *change_event)
 {
-	int nevents = ev_kq->nevents;
-	struct mm_event_fd *ev_fd = event->ev_fd;
+	int nevents = event_backend->nevents;
+	struct mm_event_fd *ev_fd = change_event->ev_fd;
 
-	switch (event->event) {
+	switch (change_event->event) {
 	case MM_EVENT_REGISTER:
 		if (ev_fd->input_handler) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -53,11 +53,10 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 				flags = EV_ADD | EV_CLEAR;
 			}
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_READ, flags, 0, 0, ev_fd);
 		}
 		if (ev_fd->output_handler) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -71,7 +70,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 				flags = EV_ADD | EV_CLEAR;
 			}
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, flags, 0, 0, ev_fd);
 		}
 		break;
@@ -80,25 +79,23 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 		if (ev_fd->input_handler
 		    && (!ev_fd->oneshot_input
 			|| ev_fd->oneshot_input_trigger)) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
 				return false;
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
 		if (ev_fd->output_handler
 		    && (!ev_fd->oneshot_output
 			|| ev_fd->oneshot_output_trigger)) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
 				return false;
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 		break;
@@ -107,13 +104,12 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 		if (ev_fd->input_handler
 		    && ev_fd->oneshot_input
 		    && !ev_fd->oneshot_input_trigger) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
 				return false;
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
 			       0, 0, ev_fd);
 		}
@@ -123,13 +119,12 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 		if (ev_fd->output_handler
 		    && ev_fd->oneshot_output
 		    && !ev_fd->oneshot_output_trigger) {
-
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
 				return false;
 
-			struct kevent *kp = &ev_kq->events[nevents++];
+			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
 			       0, 0, ev_fd);
 		}
@@ -139,8 +134,8 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 		ABORT();
 	}
 
-	if (ev_kq->nevents != nevents) {
-		ev_kq->nevents = nevents;
+	if (event_backend->nevents != nevents) {
+		event_backend->nevents = nevents;
 		if (likely(ev_fd->control_handler))
 			ev_fd->changed = 1;
 	}
@@ -149,11 +144,12 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *ev_kq, struct mm_event *event)
 }
 
 static void
-mm_event_kqueue_get_events(struct mm_event_kqueue *ev_kq, struct mm_event_batch *events)
+mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
+				    struct mm_event_batch *return_events)
 {
-	int nevents = ev_kq->nevents;
+	int nevents = event_backend->nevents;
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &ev_kq->events[i];
+		struct kevent *event = &event_backend->events[i];
 
 		if (event->filter == EVFILT_READ) {
 			struct mm_event_fd *ev_fd = event->udata;
@@ -161,9 +157,9 @@ mm_event_kqueue_get_events(struct mm_event_kqueue *ev_kq, struct mm_event_batch 
 			DEBUG("read event");
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_batch_add(events, MM_EVENT_INPUT_ERROR, ev_fd);
+				mm_event_batch_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
 			else
-				mm_event_batch_add(events, MM_EVENT_INPUT, ev_fd);
+				mm_event_batch_add(return_events, MM_EVENT_INPUT, ev_fd);
 
 		} else if (event->filter == EVFILT_WRITE) {
 			struct mm_event_fd *ev_fd = event->udata;
@@ -171,21 +167,20 @@ mm_event_kqueue_get_events(struct mm_event_kqueue *ev_kq, struct mm_event_batch 
 			DEBUG("write event");
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_batch_add(events, MM_EVENT_OUTPUT_ERROR, ev_fd);
+				mm_event_batch_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);
 			else
-				mm_event_batch_add(events, MM_EVENT_OUTPUT, ev_fd);
+				mm_event_batch_add(return_events, MM_EVENT_OUTPUT, ev_fd);
 		}
 	}
 }
 
 static void
-mm_event_kqueue_get_register_events(struct mm_event_batch *events,
-				    struct mm_event_batch *changes,
-				    unsigned int first,
-				    unsigned int last)
+mm_event_kqueue_get_register_events(struct mm_event_batch *return_events,
+				    struct mm_event_batch *change_events,
+				    unsigned int first, unsigned int last)
 {
 	for (unsigned int i = first; i < last; i++) {
-		struct mm_event *event = &changes->events[i];
+		struct mm_event *event = &change_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
 
 		// Reset the change flag.
@@ -193,31 +188,46 @@ mm_event_kqueue_get_register_events(struct mm_event_batch *events,
 
 		// Store the pertinent event.
 		if (event->event == MM_EVENT_REGISTER)
-			mm_event_batch_add(events, MM_EVENT_REGISTER, ev_fd);
+			mm_event_batch_add(return_events, MM_EVENT_REGISTER, ev_fd);
 	}
 }
 
 static void
-mm_event_kqueue_get_unregister_events(struct mm_event_batch *events,
-				      struct mm_event_batch *changes,
-				      unsigned int first,
-				      unsigned int last)
+mm_event_kqueue_get_unregister_events(struct mm_event_batch *return_events,
+				      struct mm_event_batch *change_events,
+				      unsigned int first, unsigned int last)
 {
 	for (unsigned int i = first; i < last; i++) {
-		struct mm_event *event = &changes->events[i];
+		struct mm_event *event = &change_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
 
 		// Store the pertinent event.
 		if (event->event == MM_EVENT_UNREGISTER)
-			mm_event_batch_add(events, MM_EVENT_UNREGISTER, ev_fd);
+			mm_event_batch_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
 	}
 }
 
 static void
-mm_event_kqueue_poll(struct mm_event_kqueue *ev_kq, mm_timeout_t timeout)
+mm_event_kqueue_get_events(struct mm_event_batch *return_events,
+			   struct mm_event_kqueue *event_backend,
+			   struct mm_event_batch *change_events,
+			   unsigned int first, unsigned int last)
+{
+	// Store register events.
+	mm_event_kqueue_get_register_events(return_events, change_events, first, last);
+
+	// Store incoming events.
+	mm_event_kqueue_get_incoming_events(event_backend, return_events);
+
+	// Store unregister events.
+	mm_event_kqueue_get_unregister_events(return_events, change_events, first, last);
+}
+
+static void
+mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout)
 {
 	ENTER();
-	DEBUG("poll: changes: %d, timeout: %lu", ev_kq->nevents, (unsigned long) timeout);
+	DEBUG("poll: changes: %d, timeout: %lu", event_backend->nevents, (unsigned long) timeout);
 
 	// Calculate the event wait timeout.
 	struct timespec ts;
@@ -228,97 +238,88 @@ mm_event_kqueue_poll(struct mm_event_kqueue *ev_kq, mm_timeout_t timeout)
 	mm_log_relay();
 
 	// Poll the system for events.
-	int n = kevent(ev_kq->event_fd,
-		       ev_kq->events, ev_kq->nevents,
-		       ev_kq->events, MM_EVENT_KQUEUE_NEVENTS,
+	int n = kevent(event_backend->event_fd,
+		       event_backend->events, event_backend->nevents,
+		       event_backend->events, MM_EVENT_KQUEUE_NEVENTS,
 		       &ts);
 
-	DEBUG("kevent changed: %d, received: %d", ev_kq->nevents, n);
+	DEBUG("kevent changed: %d, received: %d", event_backend->nevents, n);
 
 	if (n < 0) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
 		else
 			mm_error(errno, "kevent");
-		ev_kq->nevents = 0;
+		event_backend->nevents = 0;
 	} else {
-		ev_kq->nevents = n;
+		event_backend->nevents = n;
 	}
 
 	LEAVE();
 }
 
 void __attribute__((nonnull(1)))
-mm_event_kqueue_prepare(struct mm_event_kqueue *ev_kq)
+mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend)
 {
 	ENTER();
 
 	// Open a kqueue file descriptor.
-	ev_kq->event_fd = kqueue();
-	if (ev_kq->event_fd == -1)
+	event_backend->event_fd = kqueue();
+	if (event_backend->event_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
 
 	LEAVE();
 }
 
 void __attribute__((nonnull(1)))
-mm_event_kqueue_cleanup(struct mm_event_kqueue *ev_kq)
+mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend)
 {
 	ENTER();
 
 	// Close the kqueue file descriptor.
-	close(ev_kq->event_fd);
+	close(event_backend->event_fd);
 
 	LEAVE();
 }
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_event_kqueue_listen(struct mm_event_kqueue *ev_kq,
-		       struct mm_event_batch *changes,
-		       struct mm_event_batch *events,
+mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
+		       struct mm_event_batch *change_events,
+		       struct mm_event_batch *return_events,
 		       mm_timeout_t timeout)
 {
 	ENTER();
 
 	// Make event changes.
-	ev_kq->nevents = 0;
+	event_backend->nevents = 0;
 	unsigned int first = 0, next = 0;
-	while (next < changes->nevents) {
-		struct mm_event *event = &changes->events[next];
-		if (likely(mm_event_kqueue_add_event(ev_kq, event))) {
+	while (next < change_events->nevents) {
+		struct mm_event *event = &change_events->events[next];
+		if (likely(mm_event_kqueue_add_event(event_backend, event))) {
 			// Proceed with more change events if any.
 			next++;
 		} else {
 			// Flush event changes.
-			mm_event_kqueue_poll(ev_kq, 0);
+			mm_event_kqueue_poll(event_backend, 0);
 
-			// Store register events.
-			mm_event_kqueue_get_register_events(events, changes, first, next);
+			// Collect returned events.
+			mm_event_kqueue_get_events(return_events, event_backend,
+						   change_events, first, next);
 
 			// Store incoming events.
-			mm_event_kqueue_get_events(ev_kq, events);
-
-			// Store unregister events.
-			mm_event_kqueue_get_unregister_events(events, changes, first, next);
-
 			// Proceed with more change events if any.
-			ev_kq->nevents = 0;
+			event_backend->nevents = 0;
 			first = next;
 			continue;
 		}
 	}
 
 	// Poll for incoming events.
-	mm_event_kqueue_poll(ev_kq, timeout);
+	mm_event_kqueue_poll(event_backend, timeout);
 
-	// Store register events.
-	mm_event_kqueue_get_register_events(events, changes, first, changes->nevents);
-
-	// Store incoming events.
-	mm_event_kqueue_get_events(ev_kq, events);
-
-	// Store unregister events.
-	mm_event_kqueue_get_unregister_events(events, changes, first, changes->nevents);
+	// Collect returned events.
+	mm_event_kqueue_get_events(return_events, event_backend,
+				   change_events, first, change_events->nevents);
 
 	LEAVE();
 }
