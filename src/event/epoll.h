@@ -45,15 +45,15 @@ struct mm_event_epoll
 };
 
 void __attribute__((nonnull(1)))
-mm_event_epoll_prepare(struct mm_event_epoll *ev_ep);
+mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
 
 void __attribute__((nonnull(1)))
-mm_event_epoll_cleanup(struct mm_event_epoll *ev_ep);
+mm_event_epoll_cleanup(struct mm_event_epoll *event_backend);
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_event_epoll_listen(struct mm_event_epoll *ev_ep,
-		      struct mm_event_batch *changes,
-		      struct mm_event_batch *events,
+mm_event_epoll_listen(struct mm_event_epoll *event_backend,
+		      struct mm_event_batch *change_events,
+		      struct mm_event_batch *return_events,
 		      mm_timeout_t timeout);
 
 #endif /* HAVE_SYS_EPOLL_H */
