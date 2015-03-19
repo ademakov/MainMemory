@@ -1,5 +1,5 @@
 /*
- * log/plain.h - MainMemory plain message logging.
+ * base/log/plain.h - MainMemory plain message logging.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *

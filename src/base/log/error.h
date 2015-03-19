@@ -1,5 +1,5 @@
 /*
- * log/error.h - MainMemory error message logging.
+ * base/log/error.h - MainMemory error message logging.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
