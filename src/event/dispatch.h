@@ -21,25 +21,36 @@
 #define EVENT_DISPATCH_H
 
 #include "common.h"
-#include "base/list.h"
 #include "core/lock.h"
 #include "event/batch.h"
 #include "event/epoll.h"
 #include "event/kqueue.h"
 #include "event/selfpipe.h"
 
+struct mm_dispatch_per_listener
+{
+	/* The waiting listener. */
+	struct mm_listener *listener;
+
+	/* Auxiliary memory to store target listeners on dispatch. */
+	struct mm_listener **dispatch_targets;
+};
+
 struct mm_dispatch
 {
 	mm_task_lock_t lock;
 
-	/* The dispatch node chosen to do event poll. */
+	/* The listener elected to do event poll. */
 	struct mm_listener *polling_listener;
 
-	/* The dispatch nodes that have nothing to do. */
-	struct mm_list waiting_listeners;
+	/* The listeners that have nothing to do. */
+	struct mm_listener **waiting_listeners;
 
-	/* The event changes from waiting dispatch nodes. */
+	/* The event changes from waiting listeners. */
 	struct mm_event_batch pending_changes;
+
+	/* The events to be delivered to listeners. */
+	struct mm_event_batch *pending_events;
 
 	/* Event-loop self-pipe. */
 	struct mm_selfpipe selfpipe;
@@ -57,6 +68,12 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch);
 
 void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);
+
+void __attribute__((nonnull(1, 2)))
+mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener);
+
+void __attribute__((nonnull(1, 2)))
+mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener);
 
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_dispatch_listen(struct mm_dispatch *dispatch,

@@ -1,7 +1,7 @@
 /*
  * net/net.h - MainMemory networking.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,12 +35,6 @@
 
 /* Forward declaration. */
 struct mm_task;
-
-#if ENABLE_SMP
-# define MM_NET_LOCAL_EVENTS	0
-#else
-# define MM_NET_LOCAL_EVENTS	1
-#endif
 
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x01
@@ -109,7 +103,6 @@ struct mm_net_server
 	mm_event_hid_t control_handler;
 
 	/* Per-core server data. */
-	mm_core_t core;
 	mm_core_t core_num;
 	struct mm_net_server_per_core *per_core;
 
@@ -143,22 +136,12 @@ struct mm_net_socket
 	uint8_t flags;
 	uint8_t close_flags;
 
-#if !MM_NET_LOCAL_EVENTS
-	/* Socket I/O status lock. */
-	mm_task_lock_t lock;
-#endif
-
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
 	struct mm_work write_work;
 	struct mm_work cleanup_work;
 
-	/* I/O readiness stamps. */
-	uint32_t read_stamp;
-	uint32_t write_stamp;
-
 	/* Pinned core. */
-	mm_core_t core;
 	mm_core_t core_server_index;
 
 	/* Socket server. */

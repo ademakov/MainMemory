@@ -49,7 +49,7 @@ ssize_t mm_netbuf_write(struct mm_netbuf_socket *sock)
 static inline mm_core_t
 mm_netbuf_core(struct mm_netbuf_socket *sock)
 {
-	return sock->sock.core;
+	return sock->sock.event.core;
 }
 
 static inline void

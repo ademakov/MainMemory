@@ -1,7 +1,7 @@
 /*
  * event/event.c - MainMemory event loop.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -82,7 +82,7 @@ mm_event_register_handler(mm_event_handler_t handler)
  **********************************************************************/
 
 bool
-mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
+mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd, mm_core_t core,
 		    mm_event_hid_t input_handler, bool input_oneshot,
 		    mm_event_hid_t output_handler, bool output_oneshot,
 		    mm_event_hid_t control_handler)
@@ -94,6 +94,7 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
 	ASSERT(control_handler < mm_event_hdesc_table_size);
 
 	ev_fd->fd = fd;
+	ev_fd->core = core;
 
 	ev_fd->input_handler = input_handler;
 	ev_fd->output_handler = output_handler;

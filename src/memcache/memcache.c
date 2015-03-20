@@ -34,9 +34,6 @@
 #include "base/mem/alloc.h"
 #include "base/mem/chunk.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-
 #define MC_VERSION	"VERSION " PACKAGE_STRING "\r\n"
 
 struct mm_memcache_config mc_config;
@@ -281,7 +278,7 @@ retry:
 
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create(sock->core);
+			struct mc_command *command = mc_command_create(sock->event.core);
 			command->type = &mc_desc_quit;
 			command->params.sock = sock;
 			command->end_ptr = state->start_ptr;
@@ -298,7 +295,7 @@ parse:
 	// Try to parse the received input.
 	if (!mc_parser_parse(&parser)) {
 		if (parser.command != NULL) {
-			mc_command_destroy(sock->core, parser.command);
+			mc_command_destroy(sock->event.core, parser.command);
 			parser.command = NULL;
 		}
 		if (state->trash) {
@@ -363,7 +360,7 @@ mc_writer_routine(struct mm_net_socket *sock)
 		if (state->command_head == NULL)
 			state->command_tail = NULL;
 
-		mc_command_destroy(sock->core, head);
+		mc_command_destroy(sock->event.core, head);
 
 		if (head == command) {
 			break;

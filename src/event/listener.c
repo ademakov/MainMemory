@@ -20,10 +20,13 @@
 #include "event/listener.h"
 #include "event/dispatch.h"
 
+#include "core/core.h"
+
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
+#include "base/mem/space.h"
 
 #if ENABLE_LINUX_FUTEX
 # include <unistd.h>
@@ -41,11 +44,16 @@ mm_listener_prepare(struct mm_listener *listener)
 {
 	ENTER();
 
+	mm_core_t ncores = mm_core_getnum();
+	ASSERT(ncores > 0);
+
 	listener->listen_stamp = 1;
 	listener->notify_stamp = 0;
 	listener->state = MM_LISTENER_RUNNING;
 
-#if ENABLE_MACH_SEMAPHORE
+#if ENABLE_LINUX_FUTEX
+	// Nothing to do for futexes.
+#elif ENABLE_MACH_SEMAPHORE
 	kern_return_t r = semaphore_create(mach_task_self(), &listener->semaphore,
 					   SYNC_POLICY_FIFO, 0);
 	if (r != KERN_SUCCESS)
@@ -53,6 +61,8 @@ mm_listener_prepare(struct mm_listener *listener)
 #else
 	mm_monitor_prepare(&listener->monitor);
 #endif
+
+	listener->dispatch_targets = mm_common_calloc(ncores, sizeof (struct mm_listener *));
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
@@ -65,11 +75,15 @@ mm_listener_cleanup(struct mm_listener *listener)
 {
 	ENTER();
 
-#if ENABLE_MACH_SEMAPHORE
+#if ENABLE_LINUX_FUTEX
+	// Nothing to do for futexes.
+#elif ENABLE_MACH_SEMAPHORE
 	semaphore_destroy(mach_task_self(), listener->semaphore);
 #else
 	mm_monitor_cleanup(&listener->monitor);
 #endif
+
+	mm_common_free(listener->dispatch_targets);
 
 	mm_event_batch_cleanup(&listener->changes);
 	mm_event_batch_cleanup(&listener->events);
@@ -83,7 +97,7 @@ mm_listener_signal(struct mm_listener *listener)
 	ENTER();
 
 #if ENABLE_LINUX_FUTEX
-	syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAKE_PRIVATE, 1, NULL, NULL, 0);
+	syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAKE_PRIVATE, 1);
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_signal(listener->semaphore);
 #else
@@ -106,7 +120,7 @@ mm_listener_timedwait(struct mm_listener *listener, mm_timeout_t timeout)
 	// Publish the log before a sleep.
 	mm_log_relay();
 
-	int rc = syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAIT_PRIVATE, notify_stamp, &ts, NULL, 0);
+	int rc = syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAIT_PRIVATE, notify_stamp, &ts);
 	if (rc != 0 && unlikely(errno != ETIMEDOUT))
 		mm_fatal(errno, "futex");
 #elif ENABLE_MACH_SEMAPHORE
@@ -152,10 +166,10 @@ mm_listener_handle(struct mm_listener *listener)
 		case MM_EVENT_OUTPUT_ERROR:
 			mm_event_control(event->ev_fd, event->event);
 			break;
+		case MM_EVENT_DISPATCH_STUB:
+			break;
 		}
 	}
-
-	mm_event_batch_clear(&listener->events);
 
 	LEAVE();
 }
@@ -206,41 +220,33 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 {
 	ENTER();
 
-	bool has_pending_changes = false;
-	struct mm_listener *polling_listener = NULL;
-	struct mm_listener *waiting_listener = NULL;
+	// Register the listener for event dispatch.
+	mm_dispatch_checkin(dispatch, listener);
 
-	mm_task_lock(&dispatch->lock);
+	// Check to see if the listener has been elected to do event poll.
+	bool is_polling_listener = (listener == dispatch->polling_listener);
 
-	if (dispatch->polling_listener == NULL) {
-		dispatch->polling_listener = listener;
-
-		mm_event_batch_append(&listener->changes, &dispatch->pending_changes);
-		mm_event_batch_clear(&dispatch->pending_changes);
-	} else {
-		mm_list_insert(&dispatch->waiting_listeners, &listener->link);
-
-		has_pending_changes = mm_listener_has_changes(listener);
-		if (has_pending_changes) {
-			mm_event_batch_append(&dispatch->pending_changes, &listener->changes);
-			mm_event_batch_clear(&listener->changes);
-		}
+	// Check to see if there are already some pending events.
+	if (mm_listener_has_events(listener)) {
+		DEBUG("pending events");
+		timeout = 0;
 	}
 
-	polling_listener = dispatch->polling_listener;
+	if (is_polling_listener) {
 
-	mm_task_unlock(&dispatch->lock);
+		// Cleanup stale event notifications.
+		mm_dispatch_dampen(dispatch);
 
-	if (listener == polling_listener) {
-
+		// Check to see if there are any changes that need to be
+		// immediately acknowledged.
 		if (mm_listener_has_urgent_changes(listener)) {
-			DEBUG("urgent events");
+			DEBUG("urgent changes");
 			timeout = 0;
 		}
 
-		if (unlikely(timeout == 0)) {
+		if (timeout == 0) {
 			mm_dispatch_listen(dispatch, &listener->changes,
-						 &listener->events, 0);
+					   &listener->events, 0);
 		} else {
 			// TODO: spin holding CPU a little checking for notifications
 
@@ -256,23 +262,14 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 				timeout = 0;
 
 			mm_dispatch_listen(dispatch, &listener->changes,
-						 &listener->events, timeout);
+					   &listener->events, timeout);
 
 			// Advertise that the thread has woken up.
 			mm_memory_store(listener->state, MM_LISTENER_RUNNING);
 		}
 
-		// Dispatch received events.
-		mm_listener_handle(listener);
-
-		// Cleanup stale event notifications.
-		mm_dispatch_dampen(dispatch);
-
 	} else {
-		if (has_pending_changes)
-			mm_listener_notify(polling_listener, dispatch);
-
-		if (likely(timeout != 0)) {
+		if (timeout != 0) {
 			// TODO: spin holding CPU a little checking for notifications
 
 			// Advertise that the thread is about to sleep.
@@ -295,28 +292,20 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 	mm_memory_store(listener->notify_stamp, listener->listen_stamp);
 	mm_memory_store(listener->listen_stamp, listener->listen_stamp + 1);
 
-	mm_task_lock(&dispatch->lock);
+	// NB: There should be a memory fence here for the stores above to
+	// become visible. But the following mm_dispatch_checkout() call
+	// acquires a lock internally so it should serve as a fence too.
+	//mm_memory_strict_fence();
 
-	if (listener == polling_listener) {
-		dispatch->polling_listener = NULL;
-#if 0
-		has_changes = !mm_event_batch_empty(&dispatch->pending_changes);
-		if (has_changes && !mm_list_empty(&dispatch->waiting_listeners)) {
-			struct mm_list *link = mm_list_head(&dispatch->waiting_listeners);
-			waiting_listener = containerof(link, struct mm_listener, link);
-		}
-#endif
-	} else {
-		mm_list_delete(&listener->link);
-	}
+	// Unregister the listener from event dispatch.
+	mm_dispatch_checkout(dispatch, listener);
 
-	mm_task_unlock(&dispatch->lock);
+	// Handle received events.
+	mm_listener_handle(listener);
 
-	if (listener == polling_listener) {
-		if (waiting_listener != NULL)
-			mm_listener_notify(waiting_listener, dispatch);
-		mm_event_batch_clear(&listener->changes);
-	}
+	// Forget just handled events.
+	mm_event_batch_clear(&listener->changes);
+	mm_event_batch_clear(&listener->events);
 
 	LEAVE();
 }

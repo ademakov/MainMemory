@@ -72,7 +72,7 @@ mc_state_cleanup(struct mm_net_socket *sock)
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(sock->core, command);
+		mc_command_destroy(sock->event.core, command);
 	}
 
 	mm_netbuf_cleanup(&state->sock);

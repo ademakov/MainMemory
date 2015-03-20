@@ -21,11 +21,8 @@
 #define EVENT_LISTENER_H
 
 #include "common.h"
-
 #include "event/batch.h"
 #include "event/event.h"
-
-#include "base/list.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -33,7 +30,9 @@
 # define ENABLE_MACH_SEMAPHORE	1
 #endif
 
-#if ENABLE_MACH_SEMAPHORE
+#if ENABLE_LINUX_FUTEX
+/* Nothing for futexes. */
+#elif ENABLE_MACH_SEMAPHORE
 # include <mach/semaphore.h>
 #else
 # include "base/thr/monitor.h"
@@ -58,15 +57,16 @@ struct mm_listener
 
 	mm_listener_state_t state;
 
-	struct mm_list link;
-
 #if ENABLE_LINUX_FUTEX
-	// Nothing for futexes.
+	/* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_t semaphore;
 #else
 	struct mm_monitor monitor;
 #endif
+
+	/* Auxiliary memory to store target listeners on dispatch. */
+	struct mm_listener **dispatch_targets;
 
 	/* Listener's private event change list. */
 	struct mm_event_batch changes;
@@ -124,6 +124,12 @@ mm_listener_trigger_output(struct mm_listener *listener, struct mm_event_fd *ev_
 	(void) listener;
 	(void) ev_fd;
 #endif
+}
+
+static inline bool __attribute__((nonnull(1)))
+mm_listener_has_events(struct mm_listener *listener)
+{
+	return listener->events.nevents != 0;
 }
 
 static inline bool __attribute__((nonnull(1)))

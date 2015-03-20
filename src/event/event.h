@@ -1,7 +1,7 @@
 /*
  * event/event.h - MainMemory event loop.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,6 +36,8 @@ typedef enum {
 	MM_EVENT_UNREGISTER,
 	MM_EVENT_INPUT_ERROR,
 	MM_EVENT_OUTPUT_ERROR,
+	MM_EVENT_DISPATCH_STUB,
+
 } mm_event_t;
 
 /* Event details. */
@@ -91,6 +93,9 @@ struct mm_event_fd
 	/* The file descriptor to watch. */
 	int fd;
 
+	/* The core the handlers are pinned to. */
+	mm_core_t core;
+
 	/* Event handers. */
 	mm_event_hid_t input_handler;
 	mm_event_hid_t output_handler;
@@ -105,7 +110,7 @@ struct mm_event_fd
 };
 
 bool __attribute__((nonnull(1)))
-mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
+mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd, mm_core_t core,
 		    mm_event_hid_t input_handler, bool input_oneshot,
 		    mm_event_hid_t output_handler, bool output_oneshot,
 		    mm_event_hid_t control_handler);
