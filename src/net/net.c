@@ -44,7 +44,6 @@ static mm_value_t mm_net_prepare(mm_value_t arg);
 static mm_value_t mm_net_cleanup(mm_value_t arg);
 static mm_value_t mm_net_reader(mm_value_t arg);
 static mm_value_t mm_net_writer(mm_value_t arg);
-static mm_value_t mm_net_closer(mm_value_t arg);
 
 /**********************************************************************
  * Address manipulation routines.
@@ -762,16 +761,16 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 
 	// Check to see if a new reader should be spawned.
 	uint8_t fd_flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
-	uint8_t task_flags = sock->flags & MM_NET_READER_PENDING;
-	if (task_flags != 0 && fd_flags != 0) {
+	if ((sock->flags & MM_NET_READER_PENDING) != 0 && fd_flags != 0) {
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
 		mm_core_post_work(sock->event.core, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
-		if ((fd_flags & MM_NET_READ_ERROR) != 0) {
-			mm_core_post(sock->event.core, mm_net_closer, (mm_value_t) sock);
+		if ((fd_flags & MM_NET_READ_ERROR) != 0
+		    && (sock->flags & MM_NET_WRITER_SPAWNED) == 0) {
+			mm_net_close(sock);
 		}
 	}
 
@@ -805,16 +804,16 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 
 	// Check to see if a new writer should be spawned.
 	uint8_t fd_flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
-	uint8_t task_flags = sock->flags & MM_NET_WRITER_PENDING;
-	if (task_flags != 0 && fd_flags != 0) {
+	if ((sock->flags & MM_NET_WRITER_PENDING) != 0 && fd_flags != 0) {
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
 		mm_core_post_work(sock->event.core, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		if ((fd_flags & MM_NET_WRITE_ERROR) != 0) {
-			mm_core_post(sock->event.core, mm_net_closer, (mm_value_t) sock);
+		if ((fd_flags & MM_NET_WRITE_ERROR) != 0
+		    && (sock->flags & MM_NET_READER_SPAWNED) == 0) {
+			mm_net_close(sock);
 		}
 	}
 
@@ -940,21 +939,6 @@ mm_net_writer(mm_value_t arg)
 
 leave:
 	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_closer(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->core == mm_core_selfid());
-
-	// Close the socket.
-	mm_net_close(sock);
-
- 	LEAVE();
 	return 0;
 }
 
