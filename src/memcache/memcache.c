@@ -55,6 +55,18 @@ mc_transmit_unref(uintptr_t data)
 }
 
 static void
+mc_transmit_flush(struct mc_state *state)
+{
+	ENTER();
+
+	ssize_t n = mm_netbuf_write(&state->sock);
+	if (n > 0)
+		mm_netbuf_write_reset(&state->sock);
+
+	LEAVE();
+}
+
+static void
 mc_transmit(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
@@ -172,24 +184,13 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 	}
 
 	case MC_RESULT_QUIT:
+		mc_transmit_flush(state);
 		mm_netbuf_close(&state->sock);
 		break;
 
 	default:
 		ABORT();
 	}
-
-	LEAVE();
-}
-
-static void
-mc_transmit_flush(struct mc_state *state)
-{
-	ENTER();
-
-	ssize_t n = mm_netbuf_write(&state->sock);
-	if (n > 0)
-		mm_netbuf_write_reset(&state->sock);
 
 	LEAVE();
 }
