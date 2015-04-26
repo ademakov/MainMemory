@@ -42,6 +42,7 @@ struct mc_state
 	// Flags.
 	bool error;
 	bool trash;
+	bool dirty;
 };
 
 /* Net-proto routines. */
@@ -49,6 +50,9 @@ struct mm_net_socket *mc_state_alloc(void);
 void mc_state_free(struct mm_net_socket *sock);
 void mc_state_prepare(struct mm_net_socket *sock);
 void mc_state_cleanup(struct mm_net_socket *sock);
+bool mc_state_finish(struct mm_net_socket *sock);
+void mc_state_attach(struct mm_net_socket *sock);
+void mc_state_detach(struct mm_net_socket *sock);
 
 static inline void
 mc_queue_command(struct mc_state *state,

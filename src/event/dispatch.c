@@ -96,19 +96,64 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 	LEAVE();
 }
 
+static void
+mm_dispatch_get_pending_events(struct mm_dispatch *dispatch,
+			       struct mm_listener *listener,
+			       mm_core_t core)
+{
+	ENTER();
+
+	struct mm_event_batch *pending_events = &dispatch->pending_events[core];
+	if (mm_event_batch_empty(pending_events))
+		goto leave;
+
+	// Flag event sinks that have incoming events.
+	for (unsigned int i = 0; i < pending_events->nevents; i++) {
+		struct mm_event *event = &pending_events->events[i];
+		struct mm_event_fd *ev_fd = event->ev_fd;
+		if (ev_fd->has_pending_events) {
+			ev_fd->has_dispatched_events = true;
+			ev_fd->has_pending_events = false;
+		}
+	}
+
+	// Grab pending incoming events if any.
+	mm_event_batch_append(&listener->events, pending_events);
+	mm_event_batch_clear(pending_events);
+
+leave:
+	LEAVE();
+}
+
+static void
+mm_dispatch_finish_events(struct mm_listener *listener)
+{
+	ENTER();
+
+	struct mm_event_batch *finish_events = &listener->finish;
+	for (unsigned int i = 0; i < finish_events->nevents; i++) {
+		struct mm_event *event = &finish_events->events[i];
+		struct mm_event_fd *ev_fd = event->ev_fd;
+		if (!ev_fd->has_dispatched_events) {
+			mm_event_control(ev_fd, MM_EVENT_DETACH);
+			mm_memory_store_fence();
+			mm_event_dispatch_finish(ev_fd);
+		}
+	}
+
+	mm_event_batch_clear(finish_events);
+
+	LEAVE();
+}
+
 void __attribute__((nonnull(1, 2)))
 mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 {
 	ENTER();
 
 	mm_core_t core = mm_core_selfid();
-	struct mm_listener *polling_listener = NULL;
 
 	mm_task_lock(&dispatch->lock);
-
-	// Get pending incoming events if any.
-	mm_event_batch_append(&listener->events, &dispatch->pending_events[core]);
-	mm_event_batch_clear(&dispatch->pending_events[core]);
 
 	// The first arrived listener is elected to do event poll.
 	if (dispatch->polling_listener == NULL) {
@@ -118,23 +163,39 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		// Seize all pending changes and make them private.
 		mm_event_batch_append(&listener->changes, &dispatch->pending_changes);
 		mm_event_batch_clear(&dispatch->pending_changes);
+
+		mm_task_unlock(&dispatch->lock);
+
+		// Get pending incoming events.
+		mm_dispatch_get_pending_events(dispatch, listener, core);
+
+		// Handle finished events.
+		mm_dispatch_finish_events(listener);
+
 	} else {
 		// Register as a waiting listener.
 		dispatch->waiting_listeners[core] = listener;
 
 		// Make private changes public adding them to pending changes.
+		struct mm_listener *notify_listener = NULL;
 		if (mm_listener_has_changes(listener)) {
 			mm_event_batch_append(&dispatch->pending_changes, &listener->changes);
-			polling_listener = dispatch->polling_listener;
+			notify_listener = dispatch->polling_listener;
 		}
+
+		// Get pending incoming events.
+		mm_dispatch_get_pending_events(dispatch, listener, core);
+
+		mm_task_unlock(&dispatch->lock);
+
+		// Handle finished events.
+		mm_dispatch_finish_events(listener);
+
+		// Wake up a listener that is possibly sleeping in a poll system call.
+		if (notify_listener != NULL)
+			mm_listener_notify(notify_listener, dispatch);
 	}
 
-	mm_task_unlock(&dispatch->lock);
-
-	// Wake up a listener that is possibly sleeping in a poll system call.
-	if (polling_listener != NULL)
-		mm_listener_notify(polling_listener, dispatch);
- 
 	LEAVE();
 }
 
@@ -146,7 +207,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 	mm_core_t core = mm_core_selfid();
 
 	if (dispatch->polling_listener == listener) {
-		unsigned int nevents = 0, nlisteners = 0;
+		unsigned int nlisteners = 0;
 
 		mm_task_lock(&dispatch->lock);
 
@@ -156,27 +217,36 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		// Dispatch received events.
 		for (unsigned int i = 0; i < listener->events.nevents; i++) {
 			struct mm_event *event = &listener->events.events[i];
+			struct mm_event_fd *ev_fd = event->ev_fd;
 
-			mm_core_t ev_core = event->ev_fd->core;
-			if (ev_core == core)
-				continue;
-			if (ev_core == MM_CORE_SELF)
-				continue;
-			if (ev_core == MM_CORE_NONE)
-				continue;
-			ASSERT(ev_core < mm_core_getnum());
+			// If the event handler is clean of any previous events
+			// we are free to pin it to the current core.
+			if (ev_fd->core != core
+			    && !ev_fd->has_dispatched_events
+			    && !ev_fd->has_pending_events) {
+				// TODO: load_store fence
+				mm_memory_fence();
+				ev_fd->core = core;
+				mm_event_control(ev_fd, MM_EVENT_ATTACH);
+			}
 
-			mm_event_batch_add(&dispatch->pending_events[ev_core],
-					   event->event, event->ev_fd);
+			mm_core_t target_core = ev_fd->core;
+			ASSERT(target_core < mm_core_getnum());
+			if (target_core == core) {
+				ev_fd->has_dispatched_events = true;
+				continue;
+			}
+
+			ev_fd->has_pending_events = true;
+			mm_event_batch_add(&dispatch->pending_events[target_core],
+					   event->event, ev_fd);
 			event->event = MM_EVENT_DISPATCH_STUB;
-			nevents++;
 
-			struct mm_listener *target = dispatch->waiting_listeners[ev_core];
-			if (target != NULL) {
-				dispatch->waiting_listeners[ev_core] = NULL;
-
+			struct mm_listener *target_listener = dispatch->waiting_listeners[target_core];
+			if (target_listener != NULL) {
 				ASSERT(nlisteners < mm_core_getnum());
-				listener->dispatch_targets[nlisteners++] = target;
+				listener->dispatch_targets[nlisteners++] = target_listener;
+				dispatch->waiting_listeners[target_core] = NULL;
 			}
 		}
 
@@ -196,10 +266,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 		// Unregister as waiting listener.
 		dispatch->waiting_listeners[core] = NULL;
-
-		// Get pending incoming events if any.
-		mm_event_batch_append(&listener->events, &dispatch->pending_events[core]);
-		mm_event_batch_clear(&dispatch->pending_events[core]);
+		mm_dispatch_get_pending_events(dispatch, listener, core);
 
 		mm_task_unlock(&dispatch->lock);
 	}

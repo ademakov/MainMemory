@@ -21,6 +21,7 @@
 #define EVENT_EVENT_H
 
 #include "common.h"
+#include "arch/memory.h"
 
 #if defined(HAVE_SYS_EPOLL_H)
 # undef MM_ONESHOT_HANDLERS
@@ -32,6 +33,8 @@
 typedef enum {
 	MM_EVENT_INPUT,
 	MM_EVENT_OUTPUT,
+	MM_EVENT_ATTACH,
+	MM_EVENT_DETACH,
 	MM_EVENT_REGISTER,
 	MM_EVENT_UNREGISTER,
 	MM_EVENT_INPUT_ERROR,
@@ -95,6 +98,8 @@ struct mm_event_fd
 
 	/* The core the handlers are pinned to. */
 	mm_core_t core;
+	bool has_pending_events;
+	bool has_dispatched_events;
 
 	/* Event handers. */
 	mm_event_hid_t input_handler;
@@ -110,10 +115,16 @@ struct mm_event_fd
 };
 
 bool __attribute__((nonnull(1)))
-mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd, mm_core_t core,
+mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
 		    mm_event_hid_t input_handler, bool input_oneshot,
 		    mm_event_hid_t output_handler, bool output_oneshot,
 		    mm_event_hid_t control_handler);
+
+static inline void __attribute__((nonnull(1)))
+mm_event_dispatch_finish(struct mm_event_fd *ev_fd)
+{
+	mm_memory_store(ev_fd->has_dispatched_events, false);
+}
 
 static inline void __attribute__((nonnull(1)))
 mm_event_input(struct mm_event_fd *ev_fd)

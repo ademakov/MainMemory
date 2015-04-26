@@ -414,6 +414,9 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		.free = mc_state_free,
 		.prepare = mc_state_prepare,
 		.cleanup = mc_state_cleanup,
+		.finish = mc_state_finish,
+		.attach = mc_state_attach,
+		.detach = mc_state_detach,
 		.reader = mc_reader_routine,
 		.writer = mc_writer_routine,
 	};

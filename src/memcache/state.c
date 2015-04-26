@@ -54,10 +54,9 @@ mc_state_prepare(struct mm_net_socket *sock)
 	state->command_head = NULL;
 	state->command_tail = NULL;
 
-	mm_netbuf_prepare(&state->sock);
-
 	state->error = false;
 	state->trash = false;
+	state->dirty = false;
 
 	LEAVE();
 }
@@ -75,7 +74,46 @@ mc_state_cleanup(struct mm_net_socket *sock)
 		mc_command_destroy(sock->event.core, command);
 	}
 
-	mm_netbuf_cleanup(&state->sock);
+	if (state->dirty) {
+		mm_netbuf_cleanup(&state->sock);
+	}
+
+	LEAVE();
+}
+
+bool
+mc_state_finish(struct mm_net_socket *sock)
+{
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+	return state->command_head == NULL;
+}
+
+void
+mc_state_attach(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	ASSERT(!state->dirty);
+	mm_netbuf_prepare(&state->sock);
+	state->dirty = true;
+
+	LEAVE();
+}
+
+void
+mc_state_detach(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	if (state->dirty) {
+		mm_netbuf_cleanup(&state->sock);
+		state->start_ptr = NULL;
+		state->dirty = false;
+	}
 
 	LEAVE();
 }

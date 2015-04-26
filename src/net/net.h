@@ -78,13 +78,6 @@ struct mm_net_peer_addr
 	};
 };
 
-/* Per-core server data. */
-struct mm_net_server_per_core
-{
-	/* The core id. */
-	mm_core_t core;
-};
-
 /* Network server data. */
 struct mm_net_server
 {
@@ -101,10 +94,6 @@ struct mm_net_server
 	mm_event_hid_t input_handler;
 	mm_event_hid_t output_handler;
 	mm_event_hid_t control_handler;
-
-	/* Per-core server data. */
-	mm_core_t core_num;
-	struct mm_net_server_per_core *per_core;
 
 	/* A list of all client sockets. */
 	struct mm_list clients;
@@ -164,6 +153,10 @@ struct mm_net_proto
 
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
+
+	bool (*finish)(struct mm_net_socket *sock);
+	void (*attach)(struct mm_net_socket *sock);
+	void (*detach)(struct mm_net_socket *sock);
 
 	void (*reader)(struct mm_net_socket *sock);
 	void (*writer)(struct mm_net_socket *sock);

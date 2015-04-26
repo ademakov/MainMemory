@@ -72,6 +72,8 @@ struct mm_listener
 	struct mm_event_batch changes;
 	/* Listener's private event list. */
 	struct mm_event_batch events;
+	/* Listener's finished events. */
+	struct mm_event_batch finish;
 };
 
 void __attribute__((nonnull(1)))
@@ -126,16 +128,22 @@ mm_listener_trigger_output(struct mm_listener *listener, struct mm_event_fd *ev_
 #endif
 }
 
+static inline void __attribute__((nonnull(1, 2)))
+mm_listener_dispatch_finish(struct mm_listener *listener, struct mm_event_fd *ev_fd)
+{
+	mm_event_batch_add(&listener->finish, MM_EVENT_DETACH, ev_fd);
+}
+
 static inline bool __attribute__((nonnull(1)))
 mm_listener_has_events(struct mm_listener *listener)
 {
-	return listener->events.nevents != 0;
+	return !mm_event_batch_empty(&listener->events);
 }
 
 static inline bool __attribute__((nonnull(1)))
 mm_listener_has_changes(struct mm_listener *listener)
 {
-	return listener->changes.nevents != 0;
+	return !mm_event_batch_empty(&listener->changes);
 }
 
 static inline bool __attribute__((nonnull(1)))

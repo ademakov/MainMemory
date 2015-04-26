@@ -66,6 +66,7 @@ mm_listener_prepare(struct mm_listener *listener)
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
+	mm_event_batch_prepare(&listener->finish);
 
 	LEAVE();
 }
@@ -87,6 +88,7 @@ mm_listener_cleanup(struct mm_listener *listener)
 
 	mm_event_batch_cleanup(&listener->changes);
 	mm_event_batch_cleanup(&listener->events);
+	mm_event_batch_cleanup(&listener->finish);
 
 	LEAVE();
 }
@@ -167,6 +169,8 @@ mm_listener_handle(struct mm_listener *listener)
 		case MM_EVENT_OUTPUT:
 			mm_event_output(event->ev_fd);
 			break;
+		case MM_EVENT_ATTACH:
+		case MM_EVENT_DETACH:
 		case MM_EVENT_REGISTER:
 		case MM_EVENT_UNREGISTER:
 		case MM_EVENT_INPUT_ERROR:
