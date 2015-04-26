@@ -52,7 +52,7 @@ ssize_t
 mm_netbuf_read(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->sock.core == mm_core_selfid());
+	ASSERT(sock->sock.event.core == mm_core_selfid());
 
 	struct mm_buffer *buf = &sock->rbuf;
 
@@ -102,7 +102,7 @@ ssize_t
 mm_netbuf_write(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->sock.core == mm_core_selfid());
+	ASSERT(sock->sock.event.core == mm_core_selfid());
 
 	struct mm_buffer *buf = &sock->tbuf;
 
