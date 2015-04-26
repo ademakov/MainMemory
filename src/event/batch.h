@@ -76,4 +76,10 @@ mm_event_batch_clear(struct mm_event_batch *batch)
 	batch->nevents = 0;
 }
 
+static inline bool __attribute__((nonnull(1)))
+mm_event_batch_empty(struct mm_event_batch *batch)
+{
+	return (batch->nevents == 0);
+}
+
 #endif /* EVENT_BATCH_H */
