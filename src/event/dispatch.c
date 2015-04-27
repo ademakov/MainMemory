@@ -61,9 +61,10 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch)
 			   &dispatch->selfpipe.event_fd);
 	mm_dispatch_listen(dispatch,
 			   &dispatch->pending_changes,
-			   &dispatch->pending_changes,
+			   &dispatch->pending_events[0],
 			   0);
 	mm_event_batch_clear(&dispatch->pending_changes);
+	mm_event_batch_clear(&dispatch->pending_events[0]);
 
 	LEAVE();
 }
