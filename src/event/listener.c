@@ -128,7 +128,7 @@ mm_listener_timedwait(struct mm_listener *listener, uint32_t notify_stamp, mm_ti
 	mm_log_relay();
 
 	int rc = syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAIT_PRIVATE, notify_stamp, &ts);
-	if (rc != 0 && unlikely(errno != ETIMEDOUT))
+	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
 		mm_fatal(errno, "futex");
 #elif ENABLE_MACH_SEMAPHORE
 	(void) notify_stamp;
