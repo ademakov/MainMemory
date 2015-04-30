@@ -422,7 +422,7 @@ mm_memcache_init(const struct mm_memcache_config *config)
 	};
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
-						  "127.0.0.1", 11211);
+						  "0.0.0.0", 11211);
 
 	mm_core_hook_start(mc_memcache_start);
 	mm_core_hook_stop(mc_memcache_stop);
