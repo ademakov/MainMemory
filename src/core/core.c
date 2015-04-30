@@ -385,8 +385,9 @@ mm_core_worker_execute(struct mm_work *work)
 	// Save the work data before it might be destroyed.
 	mm_routine_t routine = work->routine;
 	mm_value_t value = work->argument;
+	mm_work_complete_t complete = work->complete;
 
-	if (work->complete == NULL) {
+	if (complete == NULL) {
 		// Destroy unneeded work data.
 		mm_work_destroy(work);
 		// Execute the work routine.
@@ -397,10 +398,12 @@ mm_core_worker_execute(struct mm_work *work)
 
 		// Execute the work routine.
 		value = routine(value);
-		// Perform completion notification on return.
-		work->complete(work, value);
 
+		// Task completed, no cleanup is required.
 		mm_task_cleanup_pop(false);
+
+		// Perform completion notification on return.
+		complete(work, value);
 	}
 
 	LEAVE();
