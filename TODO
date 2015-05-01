@@ -3,7 +3,6 @@ ASAP:
 * improve smp performance
 ** avoid long memcache locks or non-blocking memcache table
 ** some form of work stealing
-* implement memcache expiration
 * polish & optimize
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
