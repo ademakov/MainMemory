@@ -136,7 +136,7 @@ mm_dispatch_finish_events(struct mm_listener *listener)
 		struct mm_event *event = &finish_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
 		if (!ev_fd->has_dispatched_events) {
-			mm_event_control(ev_fd, MM_EVENT_DETACH);
+			mm_event_dispatch(ev_fd, MM_EVENT_DETACH);
 			mm_memory_store_fence();
 			mm_event_dispatch_finish(ev_fd);
 		}
@@ -228,7 +228,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 				// TODO: load_store fence
 				mm_memory_fence();
 				ev_fd->core = core;
-				mm_event_control(ev_fd, MM_EVENT_ATTACH);
+				mm_event_dispatch(ev_fd, MM_EVENT_ATTACH);
 			}
 
 			mm_core_t target_core = ev_fd->core;

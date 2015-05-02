@@ -44,9 +44,9 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 
 	switch (change_event->event) {
 	case MM_EVENT_REGISTER:
-		if (ev_fd->input_handler)
+		if (ev_fd->regular_input)
 			ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
-		if (ev_fd->output_handler)
+		if (ev_fd->regular_output)
 			ee.events |= EPOLLOUT | EPOLLET;
 
 		rc = epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD, ev_fd->fd, &ee);

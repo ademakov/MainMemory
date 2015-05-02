@@ -94,8 +94,8 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	mm_event_prepare_fd(&selfpipe->event_fd, fds[0],
-			    mm_selfpipe_handler, false, 0, false, 0);
+	mm_event_prepare_fd(&selfpipe->event_fd, fds[0], mm_selfpipe_handler,
+			    true, false, false, false);
 	selfpipe->write_fd = fds[1];
 	selfpipe->read_ready = false;
 

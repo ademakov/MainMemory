@@ -45,6 +45,12 @@ static mm_value_t mm_net_cleanup(mm_value_t arg);
 static mm_value_t mm_net_reader(mm_value_t arg);
 static mm_value_t mm_net_writer(mm_value_t arg);
 
+/* Accept event handler cookie. */
+static mm_event_hid_t mm_net_accept_hid;
+
+/* Client socket I/O event handler ID. */
+static mm_event_hid_t mm_net_socket_hid;
+
 /**********************************************************************
  * Address manipulation routines.
  **********************************************************************/
@@ -294,10 +300,9 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 	// Prepare the event data.
 	bool input_oneshot = !(srv->proto->flags & MM_NET_INBOUND);
 	bool output_oneshot = !(srv->proto->flags & MM_NET_OUTBOUND);
-	mm_event_prepare_fd(&sock->event, fd,
-			     srv->input_handler, input_oneshot,
-			     srv->output_handler, output_oneshot,
-			     srv->control_handler);
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
+			     !input_oneshot, input_oneshot,
+			     !output_oneshot, output_oneshot);
 
 	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock,
 			mm_net_reader_complete);
@@ -387,9 +392,6 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
  * Server connection acceptor.
  **********************************************************************/
 
-/* Accept event handler cookie. */
-static mm_event_hid_t mm_net_accept_hid;
-
 static bool
 mm_net_accept(struct mm_net_server *srv)
 {
@@ -444,6 +446,7 @@ retry:
 
 	// Register with the server.
 	mm_list_append(&srv->clients, &sock->clients);
+	srv->client_count++;
 
 	// Request required I/O tasks.
 	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
@@ -477,18 +480,20 @@ mm_net_acceptor(mm_value_t arg)
 }
 
 static void
-mm_net_accept_handler(mm_event_t event __attribute__((unused)), void *data)
+mm_net_accept_handler(mm_event_t event, void *data)
 {
 	ENTER();
 
-	struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
-	mm_core_post(srv->event.core, mm_net_acceptor, (mm_value_t) srv);
+	if (event == MM_EVENT_INPUT) {
+		struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
+		mm_core_post(srv->event.core, mm_net_acceptor, (mm_value_t) srv);
+	}
 
 	LEAVE();
 }
 
 static void
-mm_net_init_acceptor(void)
+mm_net_init_accept_handler(void)
 {
 	ENTER();
 
@@ -620,35 +625,7 @@ leave:
  **********************************************************************/
 
 static void
-mm_net_input_handler(mm_event_t event __attribute__((unused)), void *data)
-{
-	ENTER();
-
-	// Find the pertinent socket.
-	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
-
-	// Mark the socket as read ready.
-	mm_net_set_read_ready(sock, MM_NET_READ_READY);
-
-	LEAVE();
-}
-
-static void
-mm_net_output_handler(mm_event_t event __attribute__((unused)), void *data)
-{
-	ENTER();
-
-	// Find the pertinent socket.
-	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
-
-	// Mark the socket as write ready.
-	mm_net_set_write_ready(sock, MM_NET_WRITE_READY);
-
-	LEAVE();
-}
-
-static void
-mm_net_control_handler(mm_event_t event, void *data)
+mm_net_socket_handler(mm_event_t event, void *data)
 {
 	ENTER();
 
@@ -656,6 +633,16 @@ mm_net_control_handler(mm_event_t event, void *data)
 	struct mm_net_socket *sock = containerof(data, struct mm_net_socket, event);
 
 	switch (event) {
+	case MM_EVENT_INPUT:
+		// Mark the socket as read ready.
+		mm_net_set_read_ready(sock, MM_NET_READ_READY);
+		break;
+
+	case MM_EVENT_OUTPUT:
+		// Mark the socket as write ready.
+		mm_net_set_write_ready(sock, MM_NET_WRITE_READY);
+		break;
+
 	case MM_EVENT_ATTACH:
 		if (sock->server->proto->attach != NULL)
 			(sock->server->proto->attach)(sock);
@@ -690,9 +677,19 @@ mm_net_control_handler(mm_event_t event, void *data)
 		break;
 
 	default:
-		mm_brief("%x", event);
-		ABORT();
+		break;
 	}
+
+	LEAVE();
+}
+
+void
+mm_net_init_socket_handler()
+{
+	ENTER();
+
+	// Allocate an event handler IDs.
+	mm_net_socket_hid = mm_event_register_handler(mm_net_socket_handler);
 
 	LEAVE();
 }
@@ -993,7 +990,8 @@ mm_net_init(void)
 	mm_core_hook_stop(mm_net_free_socket_table);
 
 	mm_net_init_server_table();
-	mm_net_init_acceptor();
+	mm_net_init_accept_handler();
+	mm_net_init_socket_handler();
 
 	mm_net_initialized = 1;
 
@@ -1134,13 +1132,9 @@ mm_net_start_server(struct mm_net_server *srv)
 	int fd = mm_net_open_server_socket(&srv->addr, 0);
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
-	// Allocate an event handler IDs.
-	srv->input_handler = mm_event_register_handler(mm_net_input_handler);
-	srv->output_handler = mm_event_register_handler(mm_net_output_handler);
-	srv->control_handler = mm_event_register_handler(mm_net_control_handler);
-
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid, false, 0, false, 0);
+	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
+			    true, false, false, false);
 	srv->event.core = srv_core;
 	srv->event.has_dispatched_events = true;
 	mm_core_post(srv->event.core, mm_net_register_server, (mm_value_t) srv);

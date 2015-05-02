@@ -82,16 +82,16 @@ mm_event_register_handler(mm_event_handler_t handler)
  **********************************************************************/
 
 bool
-mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
-		    mm_event_hid_t input_handler, bool input_oneshot,
-		    mm_event_hid_t output_handler, bool output_oneshot,
-		    mm_event_hid_t control_handler)
+mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+		    int fd, mm_event_hid_t handler,
+		    bool regular_input, bool oneshot_input,
+		    bool regular_output, bool oneshot_output)
 {
 	ASSERT(fd >= 0);
-	ASSERT(input_handler || output_handler || control_handler);
-	ASSERT(input_handler < mm_event_hdesc_table_size);
-	ASSERT(output_handler < mm_event_hdesc_table_size);
-	ASSERT(control_handler < mm_event_hdesc_table_size);
+	ASSERT(handler > 0);
+	ASSERT(handler < mm_event_hdesc_table_size);
+	ASSERT(!(regular_input && oneshot_input));
+	ASSERT(!(regular_output && oneshot_output));
 
 	ev_fd->fd = fd;
 
@@ -99,14 +99,14 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
 	ev_fd->has_pending_events = false;
 	ev_fd->has_dispatched_events = false;
 
-	ev_fd->input_handler = input_handler;
-	ev_fd->output_handler = output_handler;
-	ev_fd->control_handler = control_handler;
+	ev_fd->handler = handler;
 
 	ev_fd->changed = false;
-	ev_fd->oneshot_input = input_oneshot;
+	ev_fd->regular_input = regular_input;
+	ev_fd->oneshot_input = oneshot_input;
 	ev_fd->oneshot_input_trigger = 0;
-	ev_fd->oneshot_output = output_oneshot;
+	ev_fd->regular_output = regular_output;
+	ev_fd->oneshot_output = oneshot_output;
 	ev_fd->oneshot_output_trigger = 0;
 
 	return true;

@@ -102,65 +102,35 @@ struct mm_event_fd
 	bool has_dispatched_events;
 
 	/* Event handers. */
-	mm_event_hid_t input_handler;
-	mm_event_hid_t output_handler;
-	mm_event_hid_t control_handler;
+	mm_event_hid_t handler;
 
 	/* Event flags */
 	unsigned changed : 1;
+	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;
 	unsigned oneshot_input_trigger : 1;
+	unsigned regular_output;
 	unsigned oneshot_output : 1;
 	unsigned oneshot_output_trigger : 1;
 };
 
 bool __attribute__((nonnull(1)))
-mm_event_prepare_fd(struct mm_event_fd *ev_fd, int fd,
-		    mm_event_hid_t input_handler, bool input_oneshot,
-		    mm_event_hid_t output_handler, bool output_oneshot,
-		    mm_event_hid_t control_handler);
+mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+		    int fd, mm_event_hid_t handler,
+		    bool regular_input, bool oneshot_input,
+		    bool regular_output, bool oneshot_output);
+
+static inline void __attribute__((nonnull(1)))
+mm_event_dispatch(struct mm_event_fd *ev_fd, mm_event_t event)
+{
+	mm_event_hid_t id = ev_fd->handler;
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+	(hd->handler)(event, ev_fd);
+}
 
 static inline void __attribute__((nonnull(1)))
 mm_event_dispatch_finish(struct mm_event_fd *ev_fd)
 {
 	mm_memory_store(ev_fd->has_dispatched_events, false);
 }
-
-static inline void __attribute__((nonnull(1)))
-mm_event_input(struct mm_event_fd *ev_fd)
-{
-	mm_event_hid_t id = ev_fd->input_handler;
-
-#if MM_ONESHOT_HANDLERS
-	if (ev_fd->oneshot_input)
-		ev_fd->oneshot_input_trigger = 0;
-#endif
-
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-	(hd->handler)(MM_EVENT_INPUT, ev_fd);
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_event_output(struct mm_event_fd *ev_fd)
-{
-	mm_event_hid_t id = ev_fd->output_handler;
-
-#if MM_ONESHOT_HANDLERS
-	if (ev_fd->oneshot_output)
-		ev_fd->oneshot_output_trigger = 0;
-#endif
-
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-	(hd->handler)(MM_EVENT_OUTPUT, ev_fd);
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_event_control(struct mm_event_fd *ev_fd, mm_event_t event)
-{
-	mm_event_hid_t id = ev_fd->control_handler;
-
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-	(hd->handler)(event, ev_fd);
-}
-
 #endif /* EVENT_EVENT_H */

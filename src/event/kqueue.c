@@ -39,7 +39,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 
 	switch (change_event->event) {
 	case MM_EVENT_REGISTER:
-		if (ev_fd->input_handler) {
+		if (ev_fd->regular_input || ev_fd->oneshot_input) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -56,7 +56,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_READ, flags, 0, 0, ev_fd);
 		}
-		if (ev_fd->output_handler) {
+		if (ev_fd->regular_output || ev_fd->oneshot_output) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -76,9 +76,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 		break;
 
 	case MM_EVENT_UNREGISTER:
-		if (ev_fd->input_handler
-		    && (!ev_fd->oneshot_input
-			|| ev_fd->oneshot_input_trigger)) {
+		if (ev_fd->regular_input || ev_fd->oneshot_input_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -87,9 +85,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 			struct kevent *kp = &event_backend->events[nevents++];
 			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
-		if (ev_fd->output_handler
-		    && (!ev_fd->oneshot_output
-			|| ev_fd->oneshot_output_trigger)) {
+		if (ev_fd->regular_output || ev_fd->oneshot_output_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -101,9 +97,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 		break;
 
 	case MM_EVENT_INPUT:
-		if (ev_fd->input_handler
-		    && ev_fd->oneshot_input
-		    && !ev_fd->oneshot_input_trigger) {
+		if (ev_fd->oneshot_input && !ev_fd->oneshot_input_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -116,9 +110,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 		break;
 
 	case MM_EVENT_OUTPUT:
-		if (ev_fd->output_handler
-		    && ev_fd->oneshot_output
-		    && !ev_fd->oneshot_output_trigger) {
+		if (ev_fd->oneshot_output && !ev_fd->oneshot_output_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
 			if (unlikely(ev_fd->changed))
@@ -136,8 +128,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 
 	if (event_backend->nevents != nevents) {
 		event_backend->nevents = nevents;
-		if (likely(ev_fd->control_handler))
-			ev_fd->changed = 1;
+		ev_fd->changed = 1;
 	}
 
 	return true;
@@ -152,9 +143,10 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 		struct kevent *event = &event_backend->events[i];
 
 		if (event->filter == EVFILT_READ) {
-			struct mm_event_fd *ev_fd = event->udata;
-
 			DEBUG("read event");
+
+			struct mm_event_fd *ev_fd = event->udata;
+			ev_fd->oneshot_input_trigger = 0;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
 				mm_event_batch_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
@@ -162,9 +154,11 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 				mm_event_batch_add(return_events, MM_EVENT_INPUT, ev_fd);
 
 		} else if (event->filter == EVFILT_WRITE) {
-			struct mm_event_fd *ev_fd = event->udata;
-
 			DEBUG("write event");
+
+mm_log_relay(); mm_log_flush();
+			struct mm_event_fd *ev_fd = event->udata;
+			ev_fd->oneshot_output_trigger = 0;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
 				mm_event_batch_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);

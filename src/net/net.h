@@ -84,19 +84,14 @@ struct mm_net_server
 	/* Event handling data. */
 	struct mm_event_fd event;
 
-	/* Number of connections from the start. */
-	uint64_t client_count;
-
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* Client I/O event handler IDs. */
-	mm_event_hid_t input_handler;
-	mm_event_hid_t output_handler;
-	mm_event_hid_t control_handler;
-
 	/* A list of all client sockets. */
 	struct mm_list clients;
+
+	/* Number of connections from the start. */
+	uint64_t client_count;
 
 	/* Core affinity. */
 	struct mm_bitset affinity;

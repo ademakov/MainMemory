@@ -162,24 +162,7 @@ mm_listener_handle(struct mm_listener *listener)
 
 	for (unsigned int i = 0; i < listener->events.nevents; i++) {
 		struct mm_event *event = &listener->events.events[i];
-		switch (event->event) {
-		case MM_EVENT_INPUT:
-			mm_event_input(event->ev_fd);
-			break;
-		case MM_EVENT_OUTPUT:
-			mm_event_output(event->ev_fd);
-			break;
-		case MM_EVENT_ATTACH:
-		case MM_EVENT_DETACH:
-		case MM_EVENT_REGISTER:
-		case MM_EVENT_UNREGISTER:
-		case MM_EVENT_INPUT_ERROR:
-		case MM_EVENT_OUTPUT_ERROR:
-			mm_event_control(event->ev_fd, event->event);
-			break;
-		case MM_EVENT_DISPATCH_STUB:
-			break;
-		}
+		mm_event_dispatch(event->ev_fd, event->event);
 	}
 
 	LEAVE();
