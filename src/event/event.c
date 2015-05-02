@@ -93,6 +93,13 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd,
 	ASSERT(!(regular_input && oneshot_input));
 	ASSERT(!(regular_output && oneshot_output));
 
+#if !MM_ONESHOT_HANDLERS
+	if (oneshot_input)
+		regular_input = true;
+	if (oneshot_output)
+		regular_output = true;
+#endif
+
 	ev_fd->fd = fd;
 
 	ev_fd->core = MM_CORE_NONE;
