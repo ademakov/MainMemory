@@ -40,11 +40,17 @@ void mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 void mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
         __attribute__((nonnull(1)));
 
-ssize_t mm_netbuf_read(struct mm_netbuf_socket *sock)
-        __attribute__((nonnull(1)));
+ssize_t __attribute__((nonnull(1)))
+mm_netbuf_fill(struct mm_netbuf_socket *sock);
 
-ssize_t mm_netbuf_write(struct mm_netbuf_socket *sock)
-        __attribute__((nonnull(1)));
+ssize_t __attribute__((nonnull(1)))
+mm_netbuf_flush(struct mm_netbuf_socket *sock);
+
+ssize_t __attribute__((nonnull(1, 2)))
+mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
+
+ssize_t __attribute__((nonnull(1, 2)))
+mm_netbuf_write(struct mm_netbuf_socket *sock, const char *data, size_t size);
 
 static inline mm_core_t
 mm_netbuf_core(struct mm_netbuf_socket *sock)
@@ -73,7 +79,7 @@ mm_netbuf_demand(struct mm_netbuf_socket *sock, size_t size)
 static inline void
 mm_netbuf_reduce(struct mm_netbuf_socket *sock, size_t size)
 {
-	mm_buffer_reduce(&sock->rbuf, size);
+	mm_buffer_flush(&sock->rbuf, size);
 }
 
 static inline bool
@@ -85,19 +91,19 @@ mm_netbuf_read_empty(struct mm_netbuf_socket *sock)
 static inline bool
 mm_netbuf_read_first(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
 {
-	return mm_buffer_first_out(&sock->rbuf, cur);
+	return mm_buffer_head(&sock->rbuf, cur);
 }
 
 static inline bool
 mm_netbuf_read_next(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
 {
-	return mm_buffer_next_out(&sock->rbuf, cur);
+	return mm_buffer_head_next(&sock->rbuf, cur);
 }
 
 static inline void
 mm_netbuf_read_more(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
 {
-	mm_buffer_size_out(&sock->rbuf, cur);
+	mm_buffer_head_size(&sock->rbuf, cur);
 }
 
 static inline bool
@@ -106,15 +112,8 @@ mm_netbuf_read_end(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
 	return mm_buffer_depleted(&sock->rbuf, cur);
 }
 
-static inline void
-mm_netbuf_append(struct mm_netbuf_socket *sock, const char *data, size_t size)
-{
-	mm_buffer_append(&sock->tbuf, data, size);
-}
-
-void mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1, 2))) __attribute__((format(printf, 2, 3)))
+mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...);
 
 static inline void
 mm_netbuf_splice(struct mm_netbuf_socket *sock, char *data, size_t size,

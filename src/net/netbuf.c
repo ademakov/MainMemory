@@ -39,29 +39,20 @@ mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
 	mm_buffer_cleanup(&sock->tbuf);
 }
 
-void
-mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...)
-{
-	va_list va;
-	va_start(va, fmt);
-	mm_buffer_vprintf(&sock->tbuf, fmt, va);
-	va_end(va);
-}
-
-ssize_t
-mm_netbuf_read(struct mm_netbuf_socket *sock)
+ssize_t __attribute__((nonnull(1)))
+mm_netbuf_fill(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->sock.event.core == mm_core_selfid());
+	ASSERT(mm_netbuf_core(sock) == mm_core_selfid());
 
-	struct mm_buffer *buf = &sock->rbuf;
+	struct mm_buffer *rbuf = &sock->rbuf;
 
 	ssize_t n = 0;
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
 	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_first_in(buf, &cur);
+	bool rc = mm_buffer_tail(rbuf, &cur);
 	while (rc) {
 		size_t len = cur.end - cur.ptr;
 		if (likely(len)) {
@@ -74,7 +65,7 @@ mm_netbuf_read(struct mm_netbuf_socket *sock)
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_buffer_next_in(buf, &cur);
+		rc = mm_buffer_tail_next(rbuf, &cur);
 	}
 
 	if (unlikely(n <= 0)) {
@@ -89,7 +80,7 @@ mm_netbuf_read(struct mm_netbuf_socket *sock)
 		n = mm_net_readv(&sock->sock, iov, iovcnt, n);
 	}
 	if (n > 0) {
-		mm_buffer_expand(buf, n);
+		mm_buffer_fill(rbuf, n);
 	}
 
 leave:
@@ -98,20 +89,20 @@ leave:
 	return n;
 }
 
-ssize_t
-mm_netbuf_write(struct mm_netbuf_socket *sock)
+ssize_t __attribute__((nonnull(1)))
+mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->sock.event.core == mm_core_selfid());
+	ASSERT(mm_netbuf_core(sock) == mm_core_selfid());
 
-	struct mm_buffer *buf = &sock->tbuf;
+	struct mm_buffer *tbuf = &sock->tbuf;
 
 	ssize_t n = 0;
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
 	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_first_out(buf, &cur);
+	bool rc = mm_buffer_head(tbuf, &cur);
 	while (rc) {
 		size_t len = cur.end - cur.ptr;
 		if (likely(len)) {
@@ -124,7 +115,7 @@ mm_netbuf_write(struct mm_netbuf_socket *sock)
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_buffer_next_out(buf, &cur);
+		rc = mm_buffer_head_next(tbuf, &cur);
 	}
 
 	if (unlikely(n <= 0)) {
@@ -139,7 +130,7 @@ mm_netbuf_write(struct mm_netbuf_socket *sock)
 		n = mm_net_writev(&sock->sock, iov, iovcnt, n);
 	}
 	if (n > 0) {
-		mm_buffer_reduce(buf, n);
+		mm_buffer_flush(tbuf, n);
 	}
 
 leave:
@@ -148,3 +139,23 @@ leave:
 	return n;
 }
 
+ssize_t __attribute__((nonnull(1, 2)))
+mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes)
+{
+	return mm_buffer_read(&sock->rbuf, buffer, nbytes);
+}
+
+ssize_t __attribute__((nonnull(1, 2)))
+mm_netbuf_write(struct mm_netbuf_socket *sock, const char *data, size_t size)
+{
+	return mm_buffer_write(&sock->tbuf, data, size);
+}
+
+void __attribute__((nonnull(1, 2))) __attribute__((format(printf, 2, 3)))
+mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	mm_buffer_vprintf(&sock->tbuf, fmt, va);
+	va_end(va);
+}

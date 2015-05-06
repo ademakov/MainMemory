@@ -26,9 +26,6 @@
 
 #define MC_KEY_LEN_MAX		250
 
-#define MC_BINARY_REQ		0x80
-#define MC_BINARY_RES		0x81
-
 
 static inline bool
 mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
@@ -79,9 +76,9 @@ mc_parser_scan_lf(struct mc_parser *parser, char *s)
 
 	struct mm_buffer *buf = &parser->state->sock.rbuf;
 	struct mm_buffer_segment *seg = parser->cursor.seg;
-	if (seg != buf->in_seg) {
+	if (seg != buf->tail_seg) {
 		seg = seg->next;
-		if (seg != buf->in_seg || buf->in_off)
+		if (seg != buf->tail_seg || buf->tail_off)
 			return seg->data[0] == '\n';
 	}
 
@@ -115,7 +112,7 @@ mc_parser_scan_value(struct mc_parser *parser)
 		if (!mm_netbuf_read_next(&parser->state->sock, &parser->cursor)) {
 			// Try to read the value and required LF and optional CR.
 			mm_netbuf_demand(&parser->state->sock, bytes + 2);
-			ssize_t n = mm_netbuf_read(&parser->state->sock);
+			ssize_t n = mm_netbuf_fill(&parser->state->sock);
 			if (n <= 0) {
 				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
 					parser->state->error = true;

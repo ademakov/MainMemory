@@ -59,7 +59,7 @@ mc_transmit_flush(struct mc_state *state)
 {
 	ENTER();
 
-	ssize_t n = mm_netbuf_write(&state->sock);
+	ssize_t n = mm_netbuf_flush(&state->sock);
 	if (n > 0)
 		mm_netbuf_write_reset(&state->sock);
 
@@ -79,55 +79,55 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		break;
 
 	case MC_RESULT_OK:
-		mm_netbuf_append(&state->sock, SL("OK\r\n"));
+		mm_netbuf_write(&state->sock, SL("OK\r\n"));
 		break;
 
 	case MC_RESULT_END:
-		mm_netbuf_append(&state->sock, SL("END\r\n"));
+		mm_netbuf_write(&state->sock, SL("END\r\n"));
 		break;
 
 	case MC_RESULT_ERROR:
-		mm_netbuf_append(&state->sock, SL("ERROR\r\n"));
+		mm_netbuf_write(&state->sock, SL("ERROR\r\n"));
 		break;
 
 	case MC_RESULT_EXISTS:
-		mm_netbuf_append(&state->sock, SL("EXISTS\r\n"));
+		mm_netbuf_write(&state->sock, SL("EXISTS\r\n"));
 		break;
 
 	case MC_RESULT_STORED:
-		mm_netbuf_append(&state->sock, SL("STORED\r\n"));
+		mm_netbuf_write(&state->sock, SL("STORED\r\n"));
 		break;
 
 	case MC_RESULT_DELETED:
-		mm_netbuf_append(&state->sock, SL("DELETED\r\n"));
+		mm_netbuf_write(&state->sock, SL("DELETED\r\n"));
 		break;
 
 	case MC_RESULT_TOUCHED:
-		mm_netbuf_append(&state->sock, SL("TOUCHED\r\n"));
+		mm_netbuf_write(&state->sock, SL("TOUCHED\r\n"));
 		break;
 
 	case MC_RESULT_NOT_FOUND:
-		mm_netbuf_append(&state->sock, SL("NOT_FOUND\r\n"));
+		mm_netbuf_write(&state->sock, SL("NOT_FOUND\r\n"));
 		break;
 
 	case MC_RESULT_NOT_STORED:
-		mm_netbuf_append(&state->sock, SL("NOT_STORED\r\n"));
+		mm_netbuf_write(&state->sock, SL("NOT_STORED\r\n"));
 		break;
 
 	case MC_RESULT_INC_DEC_NON_NUM:
-		mm_netbuf_append(&state->sock, SL("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n"));
+		mm_netbuf_write(&state->sock, SL("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n"));
 		break;
 
 	case MC_RESULT_NOT_IMPLEMENTED:
-		mm_netbuf_append(&state->sock, SL("SERVER_ERROR not implemented\r\n"));
+		mm_netbuf_write(&state->sock, SL("SERVER_ERROR not implemented\r\n"));
 		break;
 
 	case MC_RESULT_CANCELED:
-		mm_netbuf_append(&state->sock, SL("SERVER_ERROR command canceled\r\n"));
+		mm_netbuf_write(&state->sock, SL("SERVER_ERROR command canceled\r\n"));
 		break;
 
 	case MC_RESULT_VERSION:
-		mm_netbuf_append(&state->sock, SL(MC_VERSION));
+		mm_netbuf_write(&state->sock, SL(MC_VERSION));
 		break;
 
 #undef SL
@@ -162,9 +162,9 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		command->result = MC_RESULT_BLANK;
 
 		if (command->params.last)
-			mm_netbuf_append(&state->sock, "\r\nEND\r\n", 7);
+			mm_netbuf_write(&state->sock, "\r\nEND\r\n", 7);
 		else
-			mm_netbuf_append(&state->sock, "\r\n", 2);
+			mm_netbuf_write(&state->sock, "\r\n", 2);
 		break;
 	}
 
@@ -179,7 +179,7 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		// Prevent extra entry unref on command destruction.
 		command->result = MC_RESULT_BLANK;
 
-		mm_netbuf_append(&state->sock, "END\r\n", 5);
+		mm_netbuf_write(&state->sock, "END\r\n", 5);
 		break;
 	}
 
@@ -268,7 +268,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
 	mm_netbuf_demand(&state->sock, 1);
-	ssize_t n = mm_netbuf_read(&state->sock);
+	ssize_t n = mm_netbuf_fill(&state->sock);
 	mm_net_set_read_timeout(&state->sock.sock, MC_READ_TIMEOUT);
 
 retry:
@@ -306,7 +306,7 @@ parse:
 
 		// The input is incomplete, try to get some more.
 		mm_netbuf_demand(&state->sock, 1);
-		n = mm_netbuf_read(&state->sock);
+		n = mm_netbuf_fill(&state->sock);
 		goto retry;
 	}
 
