@@ -149,7 +149,7 @@ mc_action_find_victims(struct mc_tpart *part,
 		       struct mm_link *victims,
 		       uint32_t nrequired)
 {
-	mm_timeval_t time = mm_core->time_manager.time;
+	mm_timeval_t time = mm_core_self()->time_manager.time;
 	uint32_t nvictims = 0;
 	mm_link_init(victims);
 
