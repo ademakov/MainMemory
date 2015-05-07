@@ -564,6 +564,7 @@ again:
 
 			case S_GET_N:
 				ASSERT(c != ' ');
+				mc_action_hash(&command->action);
 				if (c == '\r' || c == '\n') {
 					state = S_EOL;
 					command->params.last = true;
@@ -583,6 +584,8 @@ again:
 				goto again;
 
 			case S_SET_2:
+				mc_action_hash(&command->action);
+				mc_action_create(&command->action);
 				state = S_NUM32;
 				shift = S_SET_3;
 				goto again;
@@ -639,6 +642,7 @@ again:
 				goto again;
 
 			case S_ARITH_2:
+				mc_action_hash(&command->action);
 				state = S_NUM64;
 				shift = S_VAL64;
 				goto again;
@@ -650,6 +654,7 @@ again:
 
 			case S_DELETE_2:
 				ASSERT(c != ' ');
+				mc_action_hash(&command->action);
 				if (c == 'n') {
 					state = S_MATCH;
 					match = "oreply";
@@ -666,6 +671,7 @@ again:
 				goto again;
 
 			case S_TOUCH_2:
+				mc_action_hash(&command->action);
 				state = S_NUM32;
 				shift = S_TOUCH_3;
 				goto again;

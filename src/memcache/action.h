@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "memcache/table.h"
+#include "base/hash.h"
 #include "core/core.h"
 
 #if ENABLE_MEMCACHE_COMBINER
@@ -82,8 +83,8 @@ struct mc_action
 	bool match_stamp;
 	/* Input flags indicating if update should retain old and new
 	   entry references after the action. */
-	bool ref_old_on_failure;
-	bool ref_new_on_success;
+	bool use_old_entry;
+	bool use_new_entry;
 	/* Output flag indicating if the entry match succeeded. */
 	bool entry_match;
 };
@@ -120,6 +121,13 @@ void mc_action_evict_low(struct mc_action *action)
 
 void mc_action_flush_low(struct mc_action *action)
 	__attribute__((nonnull(1)));
+
+static inline void
+mc_action_hash(struct mc_action *action)
+{
+	action->hash = mc_hash(action->key, action->key_len);
+	action->part = mc_table_part(action->hash);
+}
 
 static inline void
 mc_action_wait(struct mc_action *action __attribute__((unused)))
@@ -207,8 +215,8 @@ static inline void
 mc_action_update(struct mc_action *action)
 {
 	action->match_stamp = false;
-	action->ref_old_on_failure = false;
-	action->ref_new_on_success = false;
+	action->use_old_entry = false;
+	action->use_new_entry = false;
 #if ENABLE_MEMCACHE_COMBINER
 	action->action = MC_ACTION_UPDATE;
 	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
@@ -220,12 +228,12 @@ mc_action_update(struct mc_action *action)
 
 static inline void
 mc_action_compare_and_update(struct mc_action *action,
-			     bool ref_old_on_failure,
-			     bool ref_new_on_success)
+			     bool use_old_entry,
+			     bool use_new_entry)
 {
 	action->match_stamp = true;
-	action->ref_old_on_failure = ref_old_on_failure;
-	action->ref_new_on_success = ref_new_on_success;
+	action->use_old_entry = use_old_entry;
+	action->use_new_entry = use_new_entry;
 #if ENABLE_MEMCACHE_COMBINER
 	action->action = MC_ACTION_UPDATE;
 	mm_combiner_execute(action->part->combiner, (uintptr_t) action);

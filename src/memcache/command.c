@@ -23,7 +23,6 @@
 
 #include "core/task.h"
 
-#include "base/hash.h"
 #include "base/log/trace.h"
 #include "base/mem/buffer.h"
 
@@ -138,6 +137,11 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 		mc_action_finish(&command->action);
 		break;
 
+	case MC_RESULT_NONE:
+		if (command->action.new_entry != NULL)
+			mc_action_cancel(&command->action);
+		break;
+
 	default:
 		break;
 	}
@@ -162,19 +166,15 @@ mc_command_execute(struct mc_command *command)
 	if (unlikely(command->result != MC_RESULT_NONE))
 		return;
 
-	if (command->type->kind != MC_COMMAND_CUSTOM) {
-		command->action.hash = mc_hash(command->action.key,
-					       command->action.key_len);
-		command->action.part = mc_table_part(command->action.hash);
-
 #if ENABLE_MEMCACHE_DELEGATE
+	if (command->type->kind != MC_COMMAND_CUSTOM) {
 		command->result_type = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->exec,
 						   (mm_value_t) command);
 		mm_future_start(command->future, command->action.part->core);
 		return;
-#endif
 	}
+#endif
 
 	command->result = (command->type->exec)((mm_value_t) command);
 }
@@ -250,7 +250,6 @@ mc_command_exec_set(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_action_create(&command->action);
 	mc_entry_set(command->action.new_entry, &command->action,
 		     params->flags, params->exptime, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
@@ -274,7 +273,6 @@ mc_command_exec_add(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_action_create(&command->action);
 	mc_entry_set(command->action.new_entry, &command->action,
 		     params->flags, params->exptime, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
@@ -300,7 +298,6 @@ mc_command_exec_replace(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_action_create(&command->action);
 	mc_entry_set(command->action.new_entry, &command->action,
 		     params->flags, params->exptime, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
@@ -326,7 +323,6 @@ mc_command_exec_cas(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_action_create(&command->action);
 	mc_entry_set(command->action.new_entry, &command->action,
 		     params->flags, params->exptime, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
@@ -370,12 +366,10 @@ mc_command_exec_append(mm_value_t arg)
 		mc_command_process_value(new_entry, params, old_entry->value_len);
 		command->action.stamp = old_entry->stamp;
 
-		mc_action_finish(&command->action);
 		mc_action_compare_and_update(&command->action, true, false);
-
 		if (command->action.entry_match)
 			break;
-	} 
+	}
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -411,15 +405,12 @@ mc_command_exec_prepend(mm_value_t arg)
 		char *new_value = mc_entry_getvalue(new_entry);
 		mc_command_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
-
 		command->action.stamp = old_entry->stamp;
-		mc_action_finish(&command->action);
 
 		mc_action_compare_and_update(&command->action, true, false);
-
 		if (command->action.entry_match)
 			break;
-	} 
+	}
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -450,9 +441,7 @@ mc_command_exec_incr(mm_value_t arg)
 			break;
 		}
 		value += command->params.val64;
-
 		command->action.stamp = command->action.old_entry->stamp;
-		mc_action_finish(&command->action);
 
 		mc_action_create(&command->action);
 		mc_entry_setnum(command->action.new_entry, &command->action,
@@ -460,11 +449,11 @@ mc_command_exec_incr(mm_value_t arg)
 				command->action.old_entry->exp_time,
 				value);
 
-		mc_action_compare_and_update(&command->action, true, true);
-
+		mc_action_compare_and_update(&command->action, true,
+					     !command->noreply);
 		if (command->action.entry_match)
 			break;
-	} 
+	}
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -500,9 +489,7 @@ mc_command_exec_decr(mm_value_t arg)
 			value -= command->params.val64;
 		else
 			value = 0;
-
 		command->action.stamp = command->action.old_entry->stamp;
-		mc_action_finish(&command->action);
 
 		mc_action_create(&command->action);
 		mc_entry_setnum(command->action.new_entry, &command->action,
@@ -510,11 +497,11 @@ mc_command_exec_decr(mm_value_t arg)
 				command->action.old_entry->exp_time,
 				value);
 
-		mc_action_compare_and_update(&command->action, true, true);
-
+		mc_action_compare_and_update(&command->action, true,
+					     !command->noreply);
 		if (command->action.entry_match)
 			break;
-	} 
+	}
 
 	mc_result_t rc;
 	if (command->noreply)
