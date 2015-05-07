@@ -37,7 +37,7 @@ static uint32_t
 mc_parser_exptime(uint32_t exptime)
 {
 	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
-		exptime += mm_core->time_manager.real_time / 1000000;
+		exptime += mm_core_self()->time_manager.real_time / 1000000;
 	return exptime;
 }
 
@@ -591,13 +591,13 @@ again:
 				goto again;
 
 			case S_SET_3:
-				command->params.set.flags = num32;
+				command->action.new_entry->flags = num32;
 				state = S_NUM32;
 				shift = S_SET_4;
 				goto again;
 
 			case S_SET_4:
-				command->params.set.exptime = mc_parser_exptime(num32);
+				command->action.new_entry->exp_time = mc_parser_exptime(num32);
 				state = S_NUM32;
 				shift = S_SET_5;
 				goto again;

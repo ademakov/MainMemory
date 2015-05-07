@@ -26,14 +26,11 @@
 #include <ctype.h>
 
 void
-mc_entry_set(struct mc_entry *entry, struct mc_action *action,
-	     uint32_t flags, uint32_t exp_time, uint32_t value_len)
+mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t value_len)
 {
 	entry->hash = action->hash;
 	entry->key_len = action->key_len;
 	entry->value_len = value_len;
-	entry->flags = flags;
-	entry->exp_time = exp_time;
 
 	mm_link_init(&entry->chunks);
 	size_t size = mc_entry_sum_length(action->key_len, value_len);
@@ -45,8 +42,7 @@ mc_entry_set(struct mc_entry *entry, struct mc_action *action,
 }
 
 void
-mc_entry_setnum(struct mc_entry *entry, struct mc_action *action,
-		uint32_t flags, uint32_t exp_time, uint64_t value)
+mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
 {
 	char buffer[32];
 	size_t value_len = 0;
@@ -56,7 +52,7 @@ mc_entry_setnum(struct mc_entry *entry, struct mc_action *action,
 		value /= 10;
 	} while (value);
 
-	mc_entry_set(entry, action, flags, exp_time, value_len);
+	mc_entry_set(entry, action, value_len);
 
 	char *v = mc_entry_getvalue(entry);
 	do {

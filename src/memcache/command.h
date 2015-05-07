@@ -103,9 +103,6 @@ struct mc_command_params_set
 	struct mm_buffer_segment *seg;
 	const char *start;
 	uint32_t bytes;
-
-	uint32_t flags;
-	uint32_t exptime;
 };
 
 struct mc_command_params_slabs

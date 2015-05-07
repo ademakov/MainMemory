@@ -87,12 +87,10 @@ mc_entry_getvalue(struct mc_entry *entry)
 	return chunk->data + entry->key_len;
 }
 
-void mc_entry_set(struct mc_entry *entry, struct mc_action *action,
-	          uint32_t flags, uint32_t exp_time, uint32_t data_len)
+void mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t data_len)
 	__attribute__((nonnull(1, 2)));
 
-void mc_entry_setnum(struct mc_entry *entry, struct mc_action *action,
-	             uint32_t flags, uint32_t exp_time, uint64_t value)
+void mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
 	__attribute__((nonnull(1)));
 
 bool mc_entry_getnum(struct mc_entry *entry, uint64_t *value)

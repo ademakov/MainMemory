@@ -31,7 +31,6 @@
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
 
-static mm_timeval_t mc_curtime;
 static mm_timeval_t mc_exptime;
 
 static struct mm_pool mc_command_pool;
@@ -180,6 +179,13 @@ mc_command_execute(struct mc_command *command)
 }
 
 static void
+mc_command_copy_extra(struct mc_entry *new_entry, struct mc_entry *old_entry)
+{
+	new_entry->flags = old_entry->flags;
+	new_entry->exp_time = old_entry->exp_time;
+}
+
+static void
 mc_command_process_value(struct mc_entry *entry,
 			 struct mc_command_params_set *params,
 			 uint32_t offset)
@@ -250,8 +256,7 @@ mc_command_exec_set(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action,
-		     params->flags, params->exptime, params->bytes);
+	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_upsert(&command->action);
 
@@ -273,8 +278,7 @@ mc_command_exec_add(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action,
-		     params->flags, params->exptime, params->bytes);
+	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_insert(&command->action);
 
@@ -298,8 +302,7 @@ mc_command_exec_replace(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action,
-		     params->flags, params->exptime, params->bytes);
+	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_update(&command->action);
 
@@ -323,8 +326,7 @@ mc_command_exec_cas(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action,
-		     params->flags, params->exptime, params->bytes);
+	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
 	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_compare_and_update(&command->action, false, false);
 
@@ -359,8 +361,8 @@ mc_command_exec_append(mm_value_t arg)
 
 		mc_action_create(&command->action);
 		struct mc_entry *new_entry = command->action.new_entry;
-		mc_entry_set(new_entry, &command->action,
-			     params->flags, params->exptime, value_len);
+		mc_entry_set(new_entry, &command->action, value_len);
+		mc_command_copy_extra(new_entry, old_entry);
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
 		mc_command_process_value(new_entry, params, old_entry->value_len);
@@ -400,8 +402,8 @@ mc_command_exec_prepend(mm_value_t arg)
 
 		mc_action_create(&command->action);
 		struct mc_entry *new_entry = command->action.new_entry;
-		mc_entry_set(new_entry, &command->action,
-			     params->flags, params->exptime, value_len);
+		mc_entry_set(new_entry, &command->action, value_len);
+		mc_command_copy_extra(new_entry, old_entry);
 		char *new_value = mc_entry_getvalue(new_entry);
 		mc_command_process_value(new_entry, params, 0);
 		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
@@ -444,10 +446,8 @@ mc_command_exec_incr(mm_value_t arg)
 		command->action.stamp = command->action.old_entry->stamp;
 
 		mc_action_create(&command->action);
-		mc_entry_setnum(command->action.new_entry, &command->action,
-				command->action.old_entry->flags,
-				command->action.old_entry->exp_time,
-				value);
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+		mc_command_copy_extra(command->action.new_entry, command->action.old_entry);
 
 		mc_action_compare_and_update(&command->action, true,
 					     !command->noreply);
@@ -492,10 +492,8 @@ mc_command_exec_decr(mm_value_t arg)
 		command->action.stamp = command->action.old_entry->stamp;
 
 		mc_action_create(&command->action);
-		mc_entry_setnum(command->action.new_entry, &command->action,
-				command->action.old_entry->flags,
-				command->action.old_entry->exp_time,
-				value);
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+		mc_command_copy_extra(command->action.new_entry, command->action.old_entry);
 
 		mc_action_compare_and_update(&command->action, true,
 					     !command->noreply);
@@ -607,7 +605,8 @@ mc_command_exec_flush_all(mm_value_t arg)
 	struct mc_command *command = (struct mc_command *) arg;
 
 	// TODO: really use the exptime.
-	mc_exptime = mc_curtime + command->params.val32 * 1000000ull;
+	mm_timeval_t time = mm_core_self()->time_manager.time;
+	mc_exptime = time + command->params.val32 * 1000000ull;
 
 	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
 #if ENABLE_MEMCACHE_DELEGATE
