@@ -430,7 +430,7 @@ mc_table_term(void)
 					containerof(link, struct mc_entry, link);
 				link = link->next;
 
-				mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
+				mc_entry_free_chunks(entry);
 			}
 		}
 	}

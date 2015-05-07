@@ -87,6 +87,12 @@ mc_entry_getvalue(struct mc_entry *entry)
 	return chunk->data + entry->key_len;
 }
 
+static inline void
+mc_entry_free_chunks(struct mc_entry *entry)
+{
+	mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
+}
+
 void mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t data_len)
 	__attribute__((nonnull(1, 2)));
 
