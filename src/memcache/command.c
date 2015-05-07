@@ -359,7 +359,6 @@ mc_command_exec_append(mm_value_t arg)
 		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		mc_action_create(&command->action);
 		struct mc_entry *new_entry = command->action.new_entry;
 		mc_entry_set(new_entry, &command->action, value_len);
 		mc_command_copy_extra(new_entry, old_entry);
@@ -400,7 +399,6 @@ mc_command_exec_prepend(mm_value_t arg)
 		size_t value_len = old_entry->value_len + params->bytes;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		mc_action_create(&command->action);
 		struct mc_entry *new_entry = command->action.new_entry;
 		mc_entry_set(new_entry, &command->action, value_len);
 		mc_command_copy_extra(new_entry, old_entry);
@@ -440,14 +438,21 @@ mc_command_exec_incr(mm_value_t arg)
 		uint64_t value;
 		if (!mc_entry_getnum(command->action.old_entry, &value)) {
 			mc_action_finish(&command->action);
+			if (command->action.new_entry != NULL)
+				mc_action_cancel(&command->action);
 			break;
 		}
 		value += command->params.val64;
 		command->action.stamp = command->action.old_entry->stamp;
 
-		mc_action_create(&command->action);
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			mc_command_copy_extra(command->action.new_entry,
+					      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
 		mc_entry_setnum(command->action.new_entry, &command->action, value);
-		mc_command_copy_extra(command->action.new_entry, command->action.old_entry);
 
 		mc_action_compare_and_update(&command->action, true,
 					     !command->noreply);
@@ -483,6 +488,8 @@ mc_command_exec_decr(mm_value_t arg)
 		uint64_t value;
 		if (!mc_entry_getnum(command->action.old_entry, &value)) {
 			mc_action_finish(&command->action);
+			if (command->action.new_entry != NULL)
+				mc_action_cancel(&command->action);
 			break;
 		}
 		if (value > command->params.val64)
@@ -491,9 +498,14 @@ mc_command_exec_decr(mm_value_t arg)
 			value = 0;
 		command->action.stamp = command->action.old_entry->stamp;
 
-		mc_action_create(&command->action);
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			mc_command_copy_extra(command->action.new_entry,
+					      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
 		mc_entry_setnum(command->action.new_entry, &command->action, value);
-		mc_command_copy_extra(command->action.new_entry, command->action.old_entry);
 
 		mc_action_compare_and_update(&command->action, true,
 					     !command->noreply);

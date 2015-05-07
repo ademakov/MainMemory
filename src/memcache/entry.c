@@ -32,7 +32,6 @@ mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t value_le
 	entry->key_len = action->key_len;
 	entry->value_len = value_len;
 
-	mm_link_init(&entry->chunks);
 	size_t size = mc_entry_sum_length(action->key_len, value_len);
 	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
 	mm_link_insert(&entry->chunks, &chunk->base.link);
