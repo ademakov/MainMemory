@@ -185,36 +185,6 @@ mc_command_copy_extra(struct mc_entry *new_entry, struct mc_entry *old_entry)
 	new_entry->exp_time = old_entry->exp_time;
 }
 
-static void
-mc_command_process_value(struct mc_entry *entry,
-			 struct mc_command_params_set *params,
-			 uint32_t offset)
-{
-	ENTER();
-
-	const char *src = params->start;
-	uint32_t bytes = params->bytes;
-	struct mm_buffer_segment *seg = params->seg;
-	ASSERT(src >= seg->data && src <= seg->data + seg->size);
-
-	char *dst = mc_entry_getvalue(entry) + offset;
-	for (;;) {
-		uint32_t n = (seg->data + seg->size) - src;
-		if (n >= bytes) {
-			memcpy(dst, src, bytes);
-			break;
-		}
-
-		memcpy(dst, src, n);
-		seg = seg->next;
-		src = seg->data;
-		dst += n;
-		bytes -= n;
-	}
-
-	LEAVE();
-}
-
 static mm_value_t
 mc_command_process_get2(mm_value_t arg, mc_result_t entry_rc)
 {
@@ -254,10 +224,7 @@ mc_command_exec_set(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
-	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_upsert(&command->action);
 
 	mc_result_t rc;
@@ -276,10 +243,7 @@ mc_command_exec_add(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
-	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_insert(&command->action);
 
 	mc_result_t rc;
@@ -300,10 +264,7 @@ mc_command_exec_replace(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
-	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_update(&command->action);
 
 	mc_result_t rc;
@@ -324,10 +285,7 @@ mc_command_exec_cas(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
 
-	mc_entry_set(command->action.new_entry, &command->action, params->bytes);
-	mc_command_process_value(command->action.new_entry, params, 0);
 	mc_action_compare_and_update(&command->action, false, false);
 
 	mc_result_t rc;
@@ -350,27 +308,37 @@ mc_command_exec_append(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
+	struct mc_entry *new_entry = command->action.new_entry;
+
+	char *append_value = mc_entry_getvalue(new_entry);
+	uint32_t append_value_len = new_entry->value_len;
+	struct mm_link chunks = new_entry->chunks;
+	mm_link_init(&new_entry->chunks);
 
 	mc_action_lookup(&command->action);
 
 	while (command->action.old_entry != NULL) {
 		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + params->bytes;
+		size_t value_len = old_entry->value_len + append_value_len;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		struct mc_entry *new_entry = command->action.new_entry;
-		mc_entry_set(new_entry, &command->action, value_len);
+		new_entry->value_len = value_len;
+		mc_entry_free_chunks(new_entry);
+		mc_entry_alloc_chunks(new_entry);
+		mc_entry_setkey(new_entry, command->action.key);
 		mc_command_copy_extra(new_entry, old_entry);
+
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
-		mc_command_process_value(new_entry, params, old_entry->value_len);
+		memcpy(new_value + old_entry->value_len, append_value, append_value_len);
 		command->action.stamp = old_entry->stamp;
 
 		mc_action_compare_and_update(&command->action, true, false);
 		if (command->action.entry_match)
 			break;
 	}
+
+	mm_chunk_destroy_chain(mm_link_head(&chunks));
 
 	mc_result_t rc;
 	if (command->noreply)
@@ -390,27 +358,37 @@ mc_command_exec_prepend(mm_value_t arg)
 	ENTER();
 
 	struct mc_command *command = (struct mc_command *) arg;
-	struct mc_command_params_set *params = &command->params.set;
+	struct mc_entry *new_entry = command->action.new_entry;
+
+	char *prepend_value = mc_entry_getvalue(new_entry);
+	uint32_t prepend_value_len = new_entry->value_len;
+	struct mm_link chunks = new_entry->chunks;
+	mm_link_init(&new_entry->chunks);
 
 	mc_action_lookup(&command->action);
 
 	while (command->action.old_entry != NULL) {
 		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + params->bytes;
+		size_t value_len = old_entry->value_len + prepend_value_len;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		struct mc_entry *new_entry = command->action.new_entry;
-		mc_entry_set(new_entry, &command->action, value_len);
+		new_entry->value_len = value_len;
+		mc_entry_free_chunks(new_entry);
+		mc_entry_alloc_chunks(new_entry);
+		mc_entry_setkey(new_entry, command->action.key);
 		mc_command_copy_extra(new_entry, old_entry);
+
 		char *new_value = mc_entry_getvalue(new_entry);
-		mc_command_process_value(new_entry, params, 0);
-		memcpy(new_value + params->bytes, old_value, old_entry->value_len);
+		memcpy(new_value, prepend_value, prepend_value_len);
+		memcpy(new_value + prepend_value_len, old_value, old_entry->value_len);
 		command->action.stamp = old_entry->stamp;
 
 		mc_action_compare_and_update(&command->action, true, false);
 		if (command->action.entry_match)
 			break;
 	}
+
+	mm_chunk_destroy_chain(mm_link_head(&chunks));
 
 	mc_result_t rc;
 	if (command->noreply)

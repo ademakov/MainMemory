@@ -20,6 +20,7 @@
 #include "memcache/action.h"
 #include "memcache/entry.h"
 
+#include "base/bitops.h"
 #include "base/log/trace.h"
 
 #define MC_TABLE_STRIDE		64
@@ -394,6 +395,7 @@ mc_action_create_low(struct mc_action *action)
 	mc_table_freelist_unlock(action->part);
 	mc_table_reserve_entries(action->part);
 
+	action->new_entry->hash = action->hash;
 	mm_link_init(&action->new_entry->chunks);
 
 	LEAVE();

@@ -24,6 +24,7 @@
 
 #include "base/list.h"
 #include "base/mem/chunk.h"
+#include "core/core.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
 # include "arch/atomic.h"
@@ -79,6 +80,13 @@ mc_entry_getkey(struct mc_entry *entry)
 	return chunk->data;
 }
 
+static inline void
+mc_entry_setkey(struct mc_entry *entry, const char *key)
+{
+	char *entry_key = mc_entry_getkey(entry);
+	memcpy(entry_key, key, entry->key_len);
+}
+
 static inline char *
 mc_entry_getvalue(struct mc_entry *entry)
 {
@@ -88,18 +96,24 @@ mc_entry_getvalue(struct mc_entry *entry)
 }
 
 static inline void
+mc_entry_alloc_chunks(struct mc_entry *entry)
+{
+	ASSERT(mm_link_empty(&entry->chunks));
+	size_t size = mc_entry_size(entry);
+	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	mm_link_insert(&entry->chunks, &chunk->base.link);
+}
+
+static inline void
 mc_entry_free_chunks(struct mc_entry *entry)
 {
 	mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
 }
 
-void mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t data_len)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1, 2)))
+mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value);
 
-void mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
-	__attribute__((nonnull(1)));
-
-bool mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
-	__attribute__((nonnull(1, 2)));
+bool __attribute__((nonnull(1, 2)))
+mc_entry_getnum(struct mc_entry *entry, uint64_t *value);
 
 #endif /* MEMCACHE_ENTRY_H */

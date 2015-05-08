@@ -19,28 +19,10 @@
 
 #include "memcache/entry.h"
 #include "memcache/action.h"
-#include "memcache/table.h"
-
-#include "core/core.h"
 
 #include <ctype.h>
 
-void
-mc_entry_set(struct mc_entry *entry, struct mc_action *action, uint32_t value_len)
-{
-	entry->hash = action->hash;
-	entry->key_len = action->key_len;
-	entry->value_len = value_len;
-
-	size_t size = mc_entry_sum_length(action->key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
-	mm_link_insert(&entry->chunks, &chunk->base.link);
-
-	char *entry_key = mc_entry_getkey(entry);
-	memcpy(entry_key, action->key, entry->key_len);
-}
-
-void
+void __attribute__((nonnull(1, 2)))
 mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
 {
 	char buffer[32];
@@ -51,7 +33,10 @@ mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value
 		value /= 10;
 	} while (value);
 
-	mc_entry_set(entry, action, value_len);
+	entry->key_len = action->key_len;
+	entry->value_len = value_len;
+	mc_entry_alloc_chunks(entry);
+	mc_entry_setkey(entry, action->key);
 
 	char *v = mc_entry_getvalue(entry);
 	do {
@@ -60,7 +45,7 @@ mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value
 	} while (value_len);
 }
 
-bool
+bool __attribute__((nonnull(1, 2)))
 mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
 {
 	if (entry->value_len == 0)

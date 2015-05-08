@@ -98,13 +98,6 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  * Command data.
  **********************************************************************/
 
-struct mc_command_params_set
-{
-	struct mm_buffer_segment *seg;
-	const char *start;
-	uint32_t bytes;
-};
-
 struct mc_command_params_slabs
 {
 	uint32_t nopts;
@@ -117,7 +110,6 @@ struct mc_command_params_stats
 
 union mc_command_params
 {
-	struct mc_command_params_set set;
 	struct mc_command_params_slabs slabs;
 	struct mc_command_params_stats stats;
 	struct mm_net_socket *sock;

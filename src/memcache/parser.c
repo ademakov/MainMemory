@@ -92,26 +92,34 @@ mc_parser_scan_value(struct mc_parser *parser)
 
 	bool rc = true;
 
-	// Store the start position.
-  	parser->command->params.set.seg = parser->cursor.seg;
-	parser->command->params.set.start = parser->cursor.ptr;
+	struct mc_command *command = parser->command;
+	struct mc_action *action = &command->action;
+	struct mc_entry *entry = action->new_entry;
+
+	// Initialize entry data memory and key.
+	mc_entry_alloc_chunks(entry);
+	mc_entry_setkey(entry, action->key);
 
 	// Move over the required number of bytes.
-	uint32_t bytes = parser->command->params.set.bytes;
+	char *value = mc_entry_getvalue(entry);
+	uint32_t nbytes = entry->value_len;
 	for (;;) {
 		uint32_t avail = parser->cursor.end - parser->cursor.ptr;
-		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) bytes);
-		if (avail > bytes) {
-			parser->cursor.ptr += bytes;
+		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) nbytes);
+		if (avail > nbytes) {
+			memcpy(value, parser->cursor.ptr, nbytes);
+			parser->cursor.ptr += nbytes;
 			break;
 		}
 
+		memcpy(value, parser->cursor.ptr, avail);
 		parser->cursor.ptr += avail;
-		bytes -= avail;
+		nbytes -= avail;
+		value += avail;
 
 		if (!mm_netbuf_read_next(&parser->state->sock, &parser->cursor)) {
 			// Try to read the value and required LF and optional CR.
-			mm_netbuf_demand(&parser->state->sock, bytes + 2);
+			mm_netbuf_demand(&parser->state->sock, nbytes + 2);
 			ssize_t n = mm_netbuf_fill(&parser->state->sock);
 			if (n <= 0) {
 				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
@@ -603,7 +611,8 @@ again:
 				goto again;
 
 			case S_SET_5:
-				command->params.set.bytes = num32;
+				command->action.new_entry->key_len = command->action.key_len;
+				command->action.new_entry->value_len = num32;
 				if (command->type->tag == mc_command_cas) {
 					state = S_NUM64;
 					shift = S_CAS;
@@ -822,6 +831,10 @@ again:
 				}
 
 			case S_ERROR:
+				if (parser->command->action.new_entry != NULL) {
+					mc_action_cancel(&parser->command->action);
+					parser->command->action.new_entry = NULL;
+				}
 				if (parser->command->next != NULL) {
 					command = parser->command->next;
 					do {
