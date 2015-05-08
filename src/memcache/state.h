@@ -25,6 +25,10 @@
 #include "base/log/trace.h"
 #include "net/netbuf.h"
 
+#define MC_PROTOCOL_INIT	0
+#define MC_PROTOCOL_ASCII	1
+#define MC_PROTOCOL_BINARY	2
+
 struct mc_state
 {
 	// The client socket,
@@ -38,6 +42,9 @@ struct mc_state
 	// Command processing queue.
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
+
+	/* Memcache protocol. */
+	uint8_t protocol;
 
 	// Flags.
 	bool error;

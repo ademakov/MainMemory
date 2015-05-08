@@ -54,6 +54,8 @@ mc_state_prepare(struct mm_net_socket *sock)
 	state->command_head = NULL;
 	state->command_tail = NULL;
 
+	state->protocol = MC_PROTOCOL_INIT;
+
 	state->error = false;
 	state->trash = false;
 	state->dirty = false;

@@ -18,6 +18,7 @@
  */
 
 #include "memcache/memcache.h"
+#include "memcache/binary.h"
 #include "memcache/command.h"
 #include "memcache/entry.h"
 #include "memcache/parser.h"
@@ -188,6 +189,14 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		mm_netbuf_close(&state->sock);
 		break;
 
+	case MC_RESULT_BINARY_NOOP:
+		mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+		break;
+
+	case MC_RESULT_BINARY_UNKNOWN:
+		mc_binary_status(state, command, MC_BINARY_STATUS_UNKNOWN_COMMAND);
+		break;
+
 	default:
 		ABORT();
 	}
@@ -292,9 +301,15 @@ retry:
 	struct mc_parser parser;
 	mc_parser_start(&parser, state);
 
-parse:
 	// Try to parse the received input.
-	if (!mc_parser_parse(&parser)) {
+	bool rc;
+parse:
+	if (parser.state->protocol == MC_PROTOCOL_BINARY)
+		rc = mc_binary_parse(&parser);
+	else
+		rc = mc_parser_parse(&parser);
+
+	if (!rc) {
 		if (parser.command != NULL) {
 			mc_command_destroy(sock->event.core, parser.command);
 			parser.command = NULL;

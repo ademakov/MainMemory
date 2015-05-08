@@ -18,6 +18,7 @@
  */
 
 #include "memcache/parser.h"
+#include "memcache/binary.h"
 #include "memcache/state.h"
 
 #include "base/mem/alloc.h"
@@ -47,6 +48,17 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 	mm_netbuf_read_first(&state->sock, &parser->cursor);
 	if (state->start_ptr != NULL)
 		mm_slider_fforward(&parser->cursor, state->start_ptr);
+
+	if (state->protocol == MC_PROTOCOL_INIT) {
+		uint8_t c = * (uint8_t *) parser->cursor.ptr;
+		if (c == MC_BINARY_REQUEST) {
+			DEBUG("binary protocol detected");
+			state->protocol = MC_PROTOCOL_BINARY;
+		} else {
+			DEBUG("ASCII protocol detected");
+			state->protocol = MC_PROTOCOL_ASCII;
+		}
+	}
 
 	parser->state = state;
 	parser->command = NULL;
@@ -100,9 +112,9 @@ mc_parser_scan_value(struct mc_parser *parser)
 				rc = false;
 				goto leave;
 			}
-			mm_slider_reset_used(&parser->cursor);
-			available = mm_slider_getsize_used(&parser->cursor);
+			available += n;
 		} while (required > available);
+		mm_slider_reset_used(&parser->cursor);
 	}
 
 	// Read the required number of bytes from buffer.
@@ -853,6 +865,7 @@ again:
 			// The client looks insane. Quit fast.
 			if (too_much) {
 				parser->state->trash = true;
+				rc = false;
 				goto leave;
 			}
 		}

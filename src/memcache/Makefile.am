@@ -6,6 +6,7 @@ AM_CFLAGS = -Wall -Wextra
 
 libmemcache_a_SOURCES = \
 	action.c action.h \
+	binary.c binary.h \
 	command.c command.h \
 	entry.c entry.h \
 	memcache.c memcache.h \

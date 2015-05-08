@@ -50,6 +50,9 @@ typedef enum
 
 	MC_RESULT_QUIT,
 
+	MC_RESULT_BINARY_NOOP,
+	MC_RESULT_BINARY_UNKNOWN,
+
 } mc_result_t;
 
 #endif /* MEMCACHE_RESULT_H */

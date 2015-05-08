@@ -108,10 +108,17 @@ struct mc_command_params_stats
 	uint32_t nopts;
 };
 
+struct mc_command_params_binary
+{
+	uint32_t opaque;
+	uint8_t opcode;
+};
+
 union mc_command_params
 {
 	struct mc_command_params_slabs slabs;
 	struct mc_command_params_stats stats;
+	struct mc_command_params_binary binary;
 	struct mm_net_socket *sock;
 	uint64_t val64;
 	uint32_t val32;
