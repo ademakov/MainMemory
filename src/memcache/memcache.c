@@ -231,7 +231,7 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 
 	size_t size = 0;
 
-	struct mm_buffer_cursor cur;
+	struct mm_slider cur;
 	bool rc = mm_netbuf_read_first(&state->sock, &cur);
 	while (rc) {
 		if (ptr >= cur.ptr && ptr <= cur.end) {
@@ -243,7 +243,7 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 		}
 
 		size += cur.end - cur.ptr;
-		rc = mm_netbuf_read_next(&state->sock, &cur);
+		rc = mm_slider_next_used(&cur);
 	}
 
 	if (size > 0)
@@ -318,7 +318,7 @@ parse:
 
 	// If there is more input in the buffer then try to parse the next
 	// command.
-	if (!mm_netbuf_read_end(&state->sock, &parser.cursor))
+	if (!mm_slider_empty(&parser.cursor))
 		goto parse;
 
 leave:

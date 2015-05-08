@@ -51,8 +51,8 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock)
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
-	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_tail(rbuf, &cur);
+	struct mm_slider cur;
+	bool rc = mm_slider_first_free(&cur, rbuf);
 	while (rc) {
 		size_t len = cur.end - cur.ptr;
 		if (likely(len)) {
@@ -65,7 +65,7 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock)
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_buffer_tail_next(rbuf, &cur);
+		rc = mm_slider_next_free(&cur);
 	}
 
 	if (unlikely(n <= 0)) {
@@ -101,8 +101,8 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
-	struct mm_buffer_cursor cur;
-	bool rc = mm_buffer_head(tbuf, &cur);
+	struct mm_slider cur;
+	bool rc = mm_slider_first_used(&cur, tbuf);
 	while (rc) {
 		size_t len = cur.end - cur.ptr;
 		if (likely(len)) {
@@ -115,7 +115,7 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_buffer_head_next(tbuf, &cur);
+		rc = mm_slider_next_used(&cur);
 	}
 
 	if (unlikely(n <= 0)) {

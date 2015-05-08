@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/mem/buffer.h"
+#include "base/mem/slider.h"
 #include "net/net.h"
 
 struct mm_netbuf_socket
@@ -89,27 +90,9 @@ mm_netbuf_read_empty(struct mm_netbuf_socket *sock)
 }
 
 static inline bool
-mm_netbuf_read_first(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
+mm_netbuf_read_first(struct mm_netbuf_socket *sock, struct mm_slider *cur)
 {
-	return mm_buffer_head(&sock->rbuf, cur);
-}
-
-static inline bool
-mm_netbuf_read_next(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
-{
-	return mm_buffer_head_next(&sock->rbuf, cur);
-}
-
-static inline void
-mm_netbuf_read_more(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
-{
-	mm_buffer_head_size(&sock->rbuf, cur);
-}
-
-static inline bool
-mm_netbuf_read_end(struct mm_netbuf_socket *sock, struct mm_buffer_cursor *cur)
-{
-	return mm_buffer_depleted(&sock->rbuf, cur);
+	return mm_slider_first_used(cur, &sock->rbuf);
 }
 
 void __attribute__((nonnull(1, 2))) __attribute__((format(printf, 2, 3)))

@@ -1,7 +1,7 @@
 /*
  * base/mem/buffer.h - MainMemory data buffers.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -95,7 +95,7 @@ mm_buffer_getsize(struct mm_buffer *buf)
 }
 
 static inline size_t __attribute__((nonnull(1)))
-mm_buffer_getfree(struct mm_buffer *buf)
+mm_buffer_getsize_free(struct mm_buffer *buf)
 {
 	size_t size = 0;
 	struct mm_buffer_segment *seg = buf->tail_seg;
@@ -105,7 +105,7 @@ mm_buffer_getfree(struct mm_buffer *buf)
 }
 
 static inline size_t __attribute__((nonnull(1)))
-mm_buffer_getused(struct mm_buffer *buf)
+mm_buffer_getsize_used(struct mm_buffer *buf)
 {
 	size_t size = 0;
 	struct mm_buffer_segment *seg = buf->head_seg;
@@ -147,108 +147,5 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va);
 void __attribute__((nonnull(1, 2)))
 mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data);
-
-/**********************************************************************
- * Buffer cursor.
- **********************************************************************/
-
-struct mm_buffer_cursor
-{
-	/* Current data pointer. */
-	char *ptr;
-	/* End of data pointer. */
-	char *end;
-	/* Current segment. */
-	struct mm_buffer_segment *seg;
-};
-
-static inline bool
-mm_buffer_tail(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	if (buf->tail_seg == NULL)
-		return false;
-
-	cur->seg = buf->tail_seg;
-	cur->ptr = cur->seg->data + buf->tail_off;
-	cur->end = cur->seg->data + cur->seg->size;
-	return true;
-}
-
-static inline bool
-mm_buffer_tail_next(struct mm_buffer *buf __attribute__((unused)),
-		    struct mm_buffer_cursor *cur)
-{
-	if (cur->seg->next == NULL)
-		return false;
-
-	cur->seg = cur->seg->next;
-	cur->ptr = cur->seg->data;
-	cur->end = cur->seg->data + cur->seg->size;
-	return true;
-}
-
-static inline void
-mm_buffer_head_size(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	if (cur->seg != buf->tail_seg)
-		cur->end = cur->seg->data + cur->seg->size;
-	else
-		cur->end = cur->seg->data + buf->tail_off;
-}
-
-static inline bool
-mm_buffer_head(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	if (buf->head_seg == NULL)
-		return false;
-
-	cur->seg = buf->head_seg;
-	cur->ptr = cur->seg->data + buf->head_off;
-	mm_buffer_head_size(buf, cur);
-	return true;
-}
-
-static inline bool
-mm_buffer_head_next(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	if (cur->seg == buf->tail_seg)
-		return false;
-
-	cur->seg = cur->seg->next;
-	cur->ptr = cur->seg->data;
-	mm_buffer_head_size(buf, cur);
-	return true;
-}
-
-static inline bool
-mm_buffer_depleted(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	// Assume that the cursor size is up to date.
-	ASSERT(cur->end == (cur->seg != buf->tail_seg
-			    ? cur->seg->data + cur->seg->size
-			    : cur->seg->data + buf->tail_off));
-	if (cur->ptr < cur->end)
-		return false;
-	if (cur->seg == buf->tail_seg)
-		return true;
-	if (cur->seg->next == buf->tail_seg && buf->tail_off == 0)
-		return true;
-	return false;
-}
-
-static inline size_t
-mm_buffer_leftover(struct mm_buffer *buf, struct mm_buffer_cursor *cur)
-{
-	size_t size = cur->end - cur->ptr;
-	if (cur->seg != buf->tail_seg) {
-		struct mm_buffer_segment *seg = cur->seg->next;
-		while (seg != buf->tail_seg) {
-			size += seg->size;
-			seg = seg->next;
-		}
-		size += buf->tail_off;
-	}
-	return size;
-}
 
 #endif /* BASE_MEM_BUFFER_H */

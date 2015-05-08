@@ -27,12 +27,6 @@
 #define MC_KEY_LEN_MAX		250
 
 
-static inline bool
-mc_cursor_contains(struct mm_buffer_cursor *cur, const char *ptr)
-{
-	return ptr >= cur->ptr && ptr < cur->end;
-}
-
 static uint32_t
 mc_parser_exptime(uint32_t exptime)
 {
@@ -51,14 +45,8 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 	DEBUG("Start parser.");
 
 	mm_netbuf_read_first(&state->sock, &parser->cursor);
-	if (state->start_ptr != NULL) {
-		while (!mc_cursor_contains(&parser->cursor, state->start_ptr)) {
-			mm_netbuf_read_next(&state->sock, &parser->cursor);
-		}
-		if (parser->cursor.ptr < state->start_ptr) {
-			parser->cursor.ptr = state->start_ptr;
-		}
-	}
+	if (state->start_ptr != NULL)
+		mm_slider_fforward(&parser->cursor, state->start_ptr);
 
 	parser->state = state;
 	parser->command = NULL;
@@ -69,7 +57,7 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 static bool
 mc_parser_scan_lf(struct mc_parser *parser, char *s)
 {
-	ASSERT(mc_cursor_contains(&parser->cursor, s));
+	ASSERT(mm_slider_contains(&parser->cursor, s));
 
 	if ((s + 1) < parser->cursor.end)
 		return *(s + 1) == '\n';
@@ -89,7 +77,6 @@ static bool
 mc_parser_scan_value(struct mc_parser *parser)
 {
 	ENTER();
-
 	bool rc = true;
 
 	struct mc_command *command = parser->command;
@@ -100,38 +87,26 @@ mc_parser_scan_value(struct mc_parser *parser)
 	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, action->key);
 
-	// Move over the required number of bytes.
-	char *value = mc_entry_getvalue(entry);
-	uint32_t nbytes = entry->value_len;
-	for (;;) {
-		uint32_t avail = parser->cursor.end - parser->cursor.ptr;
-		DEBUG("parse data: avail = %ld, bytes = %ld", (long) avail, (long) nbytes);
-		if (avail > nbytes) {
-			memcpy(value, parser->cursor.ptr, nbytes);
-			parser->cursor.ptr += nbytes;
-			break;
+	// Try to read the value and required LF and optional CR.
+	uint32_t required = entry->value_len + 2;
+	uint32_t available = mm_slider_getsize_used(&parser->cursor);
+	if (required > available) {
+		mm_netbuf_demand(&parser->state->sock, required - available);
+		ssize_t n = mm_netbuf_fill(&parser->state->sock);
+		if (n <= 0) {
+			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+				parser->state->error = true;
+			rc = false;
+			goto leave;
 		}
-
-		memcpy(value, parser->cursor.ptr, avail);
-		parser->cursor.ptr += avail;
-		nbytes -= avail;
-		value += avail;
-
-		if (!mm_netbuf_read_next(&parser->state->sock, &parser->cursor)) {
-			// Try to read the value and required LF and optional CR.
-			mm_netbuf_demand(&parser->state->sock, nbytes + 2);
-			ssize_t n = mm_netbuf_fill(&parser->state->sock);
-			if (n <= 0) {
-				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-					parser->state->error = true;
-				rc = false;
-				break;
-			}
-
-			mm_netbuf_read_more(&parser->state->sock, &parser->cursor);
-		}
+		mm_slider_reset_used(&parser->cursor);
 	}
 
+	// Read the required number of bytes.
+	char *value = mc_entry_getvalue(entry);
+	mm_slider_read(&parser->cursor, value, entry->value_len);
+
+leave:
 	LEAVE();
 	return rc;
 }
@@ -899,7 +874,7 @@ again:
 			}
 		}
 
-		rc = mm_netbuf_read_next(&parser->state->sock, &parser->cursor);
+		rc = mm_slider_next_used(&parser->cursor);
 
 	} while (rc);
 
