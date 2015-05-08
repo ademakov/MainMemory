@@ -146,7 +146,7 @@ mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes)
 }
 
 ssize_t __attribute__((nonnull(1, 2)))
-mm_netbuf_write(struct mm_netbuf_socket *sock, const char *data, size_t size)
+mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
 {
 	return mm_buffer_write(&sock->tbuf, data, size);
 }
