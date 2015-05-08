@@ -88,21 +88,24 @@ mc_parser_scan_value(struct mc_parser *parser)
 	mc_entry_setkey(entry, action->key);
 
 	// Try to read the value and required LF and optional CR.
-	uint32_t required = entry->value_len + 2;
+	uint32_t required = entry->value_len + 1;
 	uint32_t available = mm_slider_getsize_used(&parser->cursor);
 	if (required > available) {
-		mm_netbuf_demand(&parser->state->sock, required - available);
-		ssize_t n = mm_netbuf_fill(&parser->state->sock);
-		if (n <= 0) {
-			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-				parser->state->error = true;
-			rc = false;
-			goto leave;
-		}
-		mm_slider_reset_used(&parser->cursor);
+		mm_netbuf_demand(&parser->state->sock, required - available + 1);
+		do {
+			ssize_t n = mm_netbuf_fill(&parser->state->sock);
+			if (n <= 0) {
+				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+					parser->state->error = true;
+				rc = false;
+				goto leave;
+			}
+			mm_slider_reset_used(&parser->cursor);
+			available = mm_slider_getsize_used(&parser->cursor);
+		} while (required > available);
 	}
 
-	// Read the required number of bytes.
+	// Read the required number of bytes from buffer.
 	char *value = mc_entry_getvalue(entry);
 	mm_slider_read(&parser->cursor, value, entry->value_len);
 
