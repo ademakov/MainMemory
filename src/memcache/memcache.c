@@ -337,10 +337,12 @@ parse:
 	// Process the parsed command.
 	mc_process_command(state, parser.command);
 
-	// If there is more input in the buffer then try to parse the next
-	// command.
-	if (!mm_slider_empty(&parser.cursor))
+	// If there is more input in the buffer then try to parse
+	// the next command.
+	if (!mm_slider_empty(&parser.cursor)) {
+		parser.command = NULL;
 		goto parse;
+	}
 
 leave:
 	LEAVE();
