@@ -49,8 +49,6 @@ mc_state_prepare(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	state->start_ptr = NULL;
-
 	state->command_head = NULL;
 	state->command_tail = NULL;
 
@@ -113,7 +111,6 @@ mc_state_detach(struct mm_net_socket *sock)
 
 	if (state->dirty) {
 		mm_netbuf_cleanup(&state->sock);
-		state->start_ptr = NULL;
 		state->dirty = false;
 	}
 

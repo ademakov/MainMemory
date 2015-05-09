@@ -142,8 +142,6 @@ struct mc_command
 #endif
 
 	struct mc_command *next;
-
-	char *end_ptr;
 };
 
 const char * mc_command_name(mc_command_t tag);

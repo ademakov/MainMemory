@@ -46,8 +46,6 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 	DEBUG("Start parser.");
 
 	mm_netbuf_read_first(&state->sock, &parser->cursor);
-	if (state->start_ptr != NULL)
-		mm_slider_fforward(&parser->cursor, state->start_ptr);
 
 	if (state->protocol == MC_PROTOCOL_INIT) {
 		uint8_t c = * (uint8_t *) parser->cursor.ptr;
@@ -569,7 +567,6 @@ again:
 					goto again;
 				} else {
 					state = S_KEY;
-					command->end_ptr = s;
 					command->next = mc_command_create(core);
 					command->next->type = command->type;
 					command = command->next;
@@ -813,7 +810,6 @@ again:
 			case S_EOL_1:
 				if (likely(c == '\n')) {
 					parser->cursor.ptr = s + 1;
-					command->end_ptr = parser->cursor.ptr;
 					goto leave;
 				} else {
 					state = S_ERROR;
@@ -846,7 +842,6 @@ again:
 			case S_ERROR_1:
 				if (c == '\n') {
 					parser->cursor.ptr = s + 1;
-					command->end_ptr = parser->cursor.ptr;
 					command->result = MC_RESULT_ERROR;
 					goto leave;
 				} else {

@@ -31,6 +31,7 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
+#include "base/log/error.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/chunk.h"
@@ -250,9 +251,6 @@ mc_release_buffers(struct mc_state *state, char *ptr)
 	bool rc = mm_netbuf_read_first(&state->sock, &cur);
 	while (rc) {
 		if (ptr >= cur.ptr && ptr <= cur.end) {
-			// The buffer is (might be) still in use.
-			if (ptr == cur.end && state->start_ptr == cur.end)
-				state->start_ptr = NULL;
 			size += ptr - cur.ptr;
 			break;
 		}
@@ -274,12 +272,6 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	// Reset the buffer state.
-	if (mm_netbuf_read_empty(&state->sock)) {
-		mm_netbuf_read_reset(&state->sock);
-		state->start_ptr = NULL;
-	}
-
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
 	mm_netbuf_demand(&state->sock, 1);
@@ -297,7 +289,6 @@ retry:
 			struct mc_command *command = mc_command_create(sock->event.core);
 			command->type = &mc_desc_quit;
 			command->params.sock = sock;
-			command->end_ptr = state->start_ptr;
 			mc_process_command(state, command);
 		}
 		goto leave;
@@ -310,7 +301,7 @@ retry:
 	// Try to parse the received input.
 	bool rc;
 parse:
-	if (parser.state->protocol == MC_PROTOCOL_BINARY)
+	if (state->protocol == MC_PROTOCOL_BINARY)
 		rc = mc_binary_parse(&parser);
 	else
 		rc = mc_parser_parse(&parser);
@@ -322,6 +313,7 @@ parse:
 		}
 		if (state->trash) {
 			mm_netbuf_close(&state->sock);
+			mm_warning(0, "disconnect odd client");
 			goto leave;
 		}
 
@@ -331,11 +323,11 @@ parse:
 		goto retry;
 	}
 
-	// Mark the parsed input as consumed.
-	state->start_ptr = parser.cursor.ptr;
-
 	// Process the parsed command.
 	mc_process_command(state, parser.command);
+
+	// Mark the parsed input as consumed.
+	mc_release_buffers(state, parser.cursor.ptr);
 
 	// If there is more input in the buffer then try to parse
 	// the next command.
@@ -343,6 +335,9 @@ parse:
 		parser.command = NULL;
 		goto parse;
 	}
+
+	// Reset the buffer state.
+	mm_netbuf_read_reset(&state->sock);
 
 leave:
 	LEAVE();
@@ -373,9 +368,6 @@ mc_writer_routine(struct mm_net_socket *sock)
 
 	// Transmit buffered results.
 	mc_transmit_flush(state);
-
-	// Free the receive buffers.
-	mc_release_buffers(state, command->end_ptr);
 
 	// Release the command data
 	for (;;) {

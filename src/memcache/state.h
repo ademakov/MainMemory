@@ -34,11 +34,6 @@ struct mc_state
 	// The client socket,
 	struct mm_netbuf_socket sock;
 
-	// Current parse position.
-	char *start_ptr;
-	// Last processed position.
-	char *end_ptr;
-
 	// Command processing queue.
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
