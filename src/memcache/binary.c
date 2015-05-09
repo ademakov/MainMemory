@@ -87,8 +87,18 @@ mc_binary_parse(struct mc_parser *parser)
 	command->params.binary.opcode = header.opcode;
 
 	switch (header.opcode) {
+	case MC_BINARY_OPCODE_QUIT:
+		mm_net_shutdown_reader(&parser->state->sock.sock);
+		parser->command->result = MC_RESULT_BINARY_QUIT;
+		break;
+
 	case MC_BINARY_OPCODE_NOOP:
 		parser->command->result = MC_RESULT_BINARY_NOOP;
+		break;
+
+	case MC_BINARY_OPCODE_QUITQ:
+		mm_net_shutdown_reader(&parser->state->sock.sock);
+		parser->command->result = MC_RESULT_QUIT;
 		break;
 
 	default:

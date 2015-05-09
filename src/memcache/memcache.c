@@ -189,6 +189,12 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 		mm_netbuf_close(&state->sock);
 		break;
 
+	case MC_RESULT_BINARY_QUIT:
+		mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+		mc_transmit_flush(state);
+		mm_netbuf_close(&state->sock);
+		break;
+
 	case MC_RESULT_BINARY_NOOP:
 		mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
 		break;
