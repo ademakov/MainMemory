@@ -821,10 +821,15 @@ again:
 				}
 
 			case S_ERROR:
-				if (parser->command->action.new_entry != NULL) {
-					mc_action_cancel(&parser->command->action);
-					parser->command->action.new_entry = NULL;
+				// If it was a SET command then it is required
+				// to free a newly created entry.
+				if (command->action.new_entry != NULL) {
+					mc_action_cancel(&command->action);
+					command->action.new_entry = NULL;
 				}
+				// If it was a GET command then it is required
+				// to destroy all commands past the first one.
+				// The first one is for the error response.
 				if (parser->command->next != NULL) {
 					command = parser->command->next;
 					do {
