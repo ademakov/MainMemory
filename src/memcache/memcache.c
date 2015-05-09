@@ -450,7 +450,7 @@ mm_memcache_init(const struct mm_memcache_config *config)
 
 	// Determine the required memcache table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_bitset_prepare(&mc_config.affinity, &mm_alloc_global, mm_core_getnum());
+	mm_bitset_prepare(&mc_config.affinity, &mm_common_space.arena, mm_core_getnum());
 	if (config != NULL)
 		mm_bitset_or(&mc_config.affinity, &config->affinity);
 	if (!mm_bitset_any(&mc_config.affinity))

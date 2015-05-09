@@ -402,7 +402,7 @@ mc_table_init(const struct mm_memcache_config *config)
 	mm_core_t index = 0;
 	ASSERT(nparts <= mm_core_getnum());
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
-		if (mm_bitset_test(&mc_config.affinity, core)) {
+		if (mm_bitset_test(&config->affinity, core)) {
 			mc_table_init_part(index++, core);
 		}
 	}

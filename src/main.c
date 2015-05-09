@@ -130,7 +130,7 @@ mm_server_init(void)
 	struct mm_memcache_config memcache_config;
 	memcache_config.volume = 64 * 1024 * 1024;
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_bitset_prepare(&memcache_config.affinity, &mm_alloc_global, 8);
+	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.arena, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
 	mm_bitset_set(&memcache_config.affinity, 7);
 #else

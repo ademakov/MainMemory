@@ -167,7 +167,7 @@ mc_command_execute(struct mc_command *command)
 
 #if ENABLE_MEMCACHE_DELEGATE
 	if (command->type->kind != MC_COMMAND_CUSTOM) {
-		command->result_type = MC_RESULT_FUTURE;
+		command->result = MC_RESULT_FUTURE;
 		command->future = mm_future_create(command->type->exec,
 						   (mm_value_t) command);
 		mm_future_start(command->future, command->action.part->core);
@@ -587,6 +587,17 @@ mc_command_exec_stats(mm_value_t arg)
 	return rc;
 }
 
+#if ENABLE_MEMCACHE_DELEGATE
+static mm_value_t
+mc_command_exec_flush(mm_value_t arg)
+{
+	struct mc_action action;
+	action.part = &mc_table.parts[arg];
+	mc_action_flush(&action);
+	return 0;
+}
+#endif
+
 static mm_value_t
 mc_command_exec_flush_all(mm_value_t arg)
 {
@@ -601,7 +612,7 @@ mc_command_exec_flush_all(mm_value_t arg)
 	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
 #if ENABLE_MEMCACHE_DELEGATE
 		struct mc_tpart *part = &mc_table.parts[i];
-		mm_core_post(part->core, mc_process_flush, i);
+		mm_core_post(part->core, mc_command_exec_flush, i);
 #else
 		struct mc_action action;
 		action.part = &mc_table.parts[i];

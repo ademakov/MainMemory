@@ -23,7 +23,10 @@
 #include "memcache/memcache.h"
 #include "memcache/action.h"
 #include "memcache/result.h"
-#include "core/future.h"
+
+#if ENABLE_MEMCACHE_DELEGATE
+# include "core/future.h"
+#endif
 
 /**********************************************************************
  * Command type declarations.
