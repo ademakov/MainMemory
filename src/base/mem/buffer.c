@@ -29,13 +29,13 @@
  **********************************************************************/
 
 static struct mm_buffer_segment *
-mm_buffer_segment_create(mm_arena_t arena, char *data, size_t size,
+mm_buffer_segment_create(struct mm_buffer *buf, char *data, size_t size,
 			 mm_buffer_release_t release,
 			 uintptr_t release_data)
 {
 	ENTER();
 
-	struct mm_buffer_segment *seg = mm_arena_alloc(arena, sizeof *seg);
+	struct mm_buffer_segment *seg = mm_arena_alloc(buf->arena, sizeof *seg);
 	seg->data = data;
 	seg->size = size;
 	seg->next = NULL;
@@ -46,14 +46,14 @@ mm_buffer_segment_create(mm_arena_t arena, char *data, size_t size,
 	return seg;
 }
 
-static void
-mm_buffer_segment_destroy(mm_arena_t arena, struct mm_buffer_segment *seg)
+void
+mm_buffer_segment_destroy(struct mm_buffer *buf, struct mm_buffer_segment *seg)
 {
 	ENTER();
 
 	if (seg->release != NULL)
 		(*seg->release)(seg->release_data);
-	mm_arena_free(arena, seg);
+	mm_arena_free(buf->arena, seg);
 
 	LEAVE();
 }
@@ -98,7 +98,7 @@ mm_buffer_chunk_reserve(struct mm_buffer *buf, size_t desired_size)
 
 	// Create a buffer segment based on the chunk.
 	struct mm_buffer_segment *seg
-		= mm_buffer_segment_create(buf->arena, chunk->data, size,
+		= mm_buffer_segment_create(buf, chunk->data, size,
 					   mm_buffer_chunk_release,
 					   (uintptr_t) chunk);
 
@@ -165,7 +165,7 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 	struct mm_buffer_segment *seg = buf->head_seg;
 	while (seg != NULL) {
 		struct mm_buffer_segment *next = seg->next;
-		mm_buffer_segment_destroy(buf->arena, seg);
+		mm_buffer_segment_destroy(buf, seg);
 		seg = next;
 	}
 
@@ -189,7 +189,7 @@ mm_buffer_rectify(struct mm_buffer *buf)
 	} else if (seg->release != NULL) {
 		buf->tail_seg = seg->next;
 		buf->head_seg = seg->next;
-		mm_buffer_segment_destroy(buf->arena, seg);
+		mm_buffer_segment_destroy(buf, seg);
 	}
 
 	buf->tail_off = 0;
@@ -264,7 +264,7 @@ mm_buffer_flush(struct mm_buffer *buf, size_t size)
 		buf->head_seg = seg->next;
 		buf->head_off = 0;
 
-		mm_buffer_segment_destroy(buf->arena, seg);
+		mm_buffer_segment_destroy(buf, seg);
 
 		seg = buf->head_seg;
 		n = seg->size;
@@ -307,7 +307,7 @@ mm_buffer_read(struct mm_buffer *buf, void *ptr, size_t size)
 		buf->head_seg = seg->next;
 		buf->head_off = 0;
 
-		mm_buffer_segment_destroy(buf->arena, seg);
+		mm_buffer_segment_destroy(buf, seg);
 
 		seg = buf->head_seg;
 		p = seg->data;
@@ -423,7 +423,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 
 	// Create a new segment and insert it where appropriate.
 	struct mm_buffer_segment *seg
-		= mm_buffer_segment_create(buf->arena, data, size,
+		= mm_buffer_segment_create(buf, data, size,
 					   release, release_data);
 	if (buf->tail_seg == NULL) {
 		seg->next = NULL;
@@ -445,7 +445,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		// Split the in_seg segment into two parts.
 		struct mm_buffer_segment *ls, *rs;
 		ls = buf->tail_seg;
-		rs = mm_buffer_segment_create(buf->arena,
+		rs = mm_buffer_segment_create(buf,
 					      ls->data + buf->tail_off,
 					      ls->size - buf->tail_off,
 					      ls->release, ls->release_data);

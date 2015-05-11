@@ -241,31 +241,6 @@ mc_process_command(struct mc_state *state, struct mc_command *first)
 }
 
 static void
-mc_release_buffers(struct mc_state *state, char *ptr)
-{
-	ENTER();
-
-	size_t size = 0;
-
-	struct mm_slider cur;
-	bool rc = mm_netbuf_read_first(&state->sock, &cur);
-	while (rc) {
-		if (ptr >= cur.ptr && ptr <= cur.end) {
-			size += ptr - cur.ptr;
-			break;
-		}
-
-		size += cur.end - cur.ptr;
-		rc = mm_slider_next_used(&cur);
-	}
-
-	if (size > 0)
-		mm_netbuf_reduce(&state->sock, size);
-
-	LEAVE();
-}
-
-static void
 mc_reader_routine(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -327,7 +302,7 @@ parse:
 	mc_process_command(state, parser.command);
 
 	// Mark the parsed input as consumed.
-	mc_release_buffers(state, parser.cursor.ptr);
+	mm_slider_flush(&parser.cursor);
 
 	// If there is more input in the buffer then try to parse
 	// the next command.

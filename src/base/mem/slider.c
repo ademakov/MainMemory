@@ -20,6 +20,26 @@
 #include "base/mem/slider.h"
 #include "base/log/trace.h"
 
+void __attribute__((nonnull(1)))
+mm_slider_fforward(struct mm_slider *slider, const char *ptr)
+{
+	ENTER();
+
+	for (;;) {
+		if (mm_slider_contains(slider, ptr)) {
+			slider->ptr = (char *) ptr;
+			break;
+		}
+		if (!mm_slider_next_used(slider)) {
+			struct mm_buffer *buffer = slider->buf;
+			slider->ptr = buffer->tail_seg->data + buffer->tail_off;
+			break;
+		}
+	}
+
+	LEAVE();
+}
+
 size_t __attribute__((nonnull(1, 2)))
 mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 {

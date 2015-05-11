@@ -108,6 +108,24 @@ mm_slider_next_used(struct mm_slider *slider)
 	return true;
 }
 
+static inline void __attribute__((nonnull(1)))
+mm_slider_fill(struct mm_slider *slider)
+{
+	slider->buf->tail_seg = slider->seg;
+	slider->buf->tail_off = slider->ptr - slider->seg->data;
+}
+
+static inline void __attribute__((nonnull(1)))
+mm_slider_flush(struct mm_slider *slider)
+{
+	while (slider->buf->head_seg != slider->seg) {
+		struct mm_buffer_segment *seg = slider->buf->head_seg;
+		slider->buf->head_seg = seg->next;
+		mm_buffer_segment_destroy(slider->buf, seg);
+	}
+	slider->buf->head_off = slider->ptr - slider->seg->data;
+}
+
 static inline bool __attribute__((nonnull(1)))
 mm_slider_empty(struct mm_slider *slider)
 {
@@ -145,27 +163,14 @@ mm_slider_getsize_used(struct mm_slider *slider)
 	return size;
 }
 
-static inline bool
+static inline bool __attribute__((nonnull(1)))
 mm_slider_contains(struct mm_slider *slider, const char *ptr)
 {
 	return ptr >= slider->ptr && ptr < slider->end;
 }
 
-static inline void
-mm_slider_fforward(struct mm_slider *slider, const char *ptr)
-{
-	for (;;) {
-		if (mm_slider_contains(slider, ptr)) {
-			slider->ptr = (char *) ptr;
-			break;
-		}
-		if (!mm_slider_next_used(slider)) {
-			struct mm_buffer *buffer = slider->buf;
-			slider->ptr = buffer->tail_seg->data + buffer->tail_off;
-			break;
-		}
-	}
-}
+void __attribute__((nonnull(1)))
+mm_slider_fforward(struct mm_slider *slider, const char *ptr);
 
 size_t __attribute__((nonnull(1, 2)))
 mm_slider_read(struct mm_slider *slider, void *ptr, size_t size);

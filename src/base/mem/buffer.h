@@ -148,4 +148,7 @@ void __attribute__((nonnull(1, 2)))
 mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data);
 
+void __attribute__((nonnull(1, 2)))
+mm_buffer_segment_destroy(struct mm_buffer *buf, struct mm_buffer_segment *seg);
+
 #endif /* BASE_MEM_BUFFER_H */
