@@ -449,9 +449,11 @@ retry:
 	srv->client_count++;
 
 	// Request required I/O tasks.
-	if ((srv->proto->flags & MM_NET_INBOUND) != 0)
+	if (srv->proto->reader != NULL
+	    && (srv->proto->flags & MM_NET_INBOUND) != 0)
 		sock->flags |= MM_NET_READER_PENDING;
-	if ((srv->proto->flags & MM_NET_OUTBOUND) != 0)
+	if (srv->proto->writer != NULL
+	    && (srv->proto->flags & MM_NET_OUTBOUND) != 0)
 		sock->flags |= MM_NET_WRITER_PENDING;
 
 	// Request protocol handler routine.
@@ -706,6 +708,8 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
+	if (sock->server->proto->reader == NULL)
+		goto leave;
 
 	if ((sock->flags & MM_NET_READER_SPAWNED) != 0) {
 		// If a reader is already active then remember to start another
@@ -733,6 +737,8 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
+	if (sock->server->proto->writer == NULL)
+		goto leave;
 
 	if ((sock->flags & MM_NET_WRITER_SPAWNED) != 0) {
 		// If a writer is already active then remember to start another
@@ -758,16 +764,12 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(sock->event.core == mm_core_selfid());
 
-	struct mm_task *task = sock->reader;
-	if (unlikely(task == NULL))
-		goto leave;
+	struct mm_task *task = mm_task_self();
 	if (unlikely((task->flags & MM_TASK_READING) == 0))
 		goto leave;
 
 	// Unbind the current task from the socket.
-	ASSERT(sock->reader == mm_task_self());
 	task->flags &= ~MM_TASK_READING;
-	sock->reader = NULL;
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
@@ -799,16 +801,12 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(sock->event.core == mm_core_selfid());
 
-	struct mm_task *task = sock->writer;
-	if (unlikely(task == NULL))
-		goto leave;
+	struct mm_task *task = mm_task_self();
 	if (unlikely((task->flags & MM_TASK_WRITING) == 0))
 		goto leave;
 
 	// Unbind the current task from the socket.
-	ASSERT(sock->writer == mm_task_self());
 	task->flags &= ~MM_TASK_WRITING;
-	sock->writer = NULL;
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
@@ -921,7 +919,6 @@ mm_net_reader(mm_value_t arg)
 	// Register the reader task.
 	struct mm_task *task = mm_task_self();
 	task->flags |= MM_TASK_READING;
-	sock->reader = task;
 
 	// Run the protocol handler routine.
 	(sock->server->proto->reader)(sock);
@@ -944,7 +941,6 @@ mm_net_writer(mm_value_t arg)
 	// Register the writer task.
 	struct mm_task *task = mm_task_self();
 	task->flags |= MM_TASK_WRITING;
-	sock->writer = task;
 
 	// Run the protocol handler routine.
 	(sock->server->proto->writer)(sock);
@@ -1187,11 +1183,15 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 
 	// Block the task waiting for the socket to become read ready.
 	if (deadline == MM_TIMEVAL_MAX) {
+		sock->reader = mm_task_self();
 		mm_task_block();
+		sock->reader = NULL;
 		rc = 0;
 	} else if (mm_core->time_manager.time < deadline) {
 		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
+		sock->reader = mm_task_self();
 		mm_timer_block(timeout);
+		sock->reader = NULL;
 		rc = 0;
 	} else {
 		if (sock->read_timeout != 0)
@@ -1231,11 +1231,15 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 
 	// Block the task waiting for the socket to become write ready.
 	if (deadline == MM_TIMEVAL_MAX) {
+		sock->writer = mm_task_self();
 		mm_task_block();
+		sock->writer = NULL;
 		rc = 0;
 	} else  if (mm_core->time_manager.time < deadline) {
 		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
+		sock->writer = mm_task_self();
 		mm_timer_block(timeout);
+		sock->writer = NULL;
 		rc = 0;
 	} else {
 		if (sock->write_timeout != 0)
