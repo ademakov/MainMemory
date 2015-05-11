@@ -1,7 +1,7 @@
 /*
  * net/netbuf.c - MainMemory buffered network I/O.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
