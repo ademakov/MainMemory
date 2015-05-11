@@ -220,27 +220,33 @@ mc_transmit(struct mc_state *state, struct mc_command *command)
 
 #define MC_READ_TIMEOUT		10000
 
-static mm_value_t
-mc_process_command(struct mc_state *state, struct mc_command *first)
+static void
+mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
  
-	struct mc_command *last = first;
-	if (likely(first->type != NULL)) {
-		DEBUG("command %s", mc_command_name(first->type->tag));
-		for (;;) {
-			mc_command_execute(last);
-			if (last->next == NULL)
-				break;
-			last = last->next;
-		}
-	}
+	do {
+		struct mc_command *next = command->next;
 
-	mc_queue_command(state, first, last);
-	mm_net_spawn_writer(&state->sock.sock);
+		// Handle the command if it has associated
+		// execution routine.
+		if (command->type != NULL)
+			mc_command_execute(command);
+
+		// Put the command result into the transmit buffer.
+		mc_transmit(state, command);
+
+		// Release the command data
+		mc_command_destroy(mm_core_selfid(), command);
+
+		command = next;
+
+	} while (command != NULL);
+
+	// Transmit buffered results.
+	mc_transmit_flush(state);
 
 	LEAVE();
-	return 0;
 }
 
 static void
@@ -321,50 +327,6 @@ leave:
 	LEAVE();
 }
 
-static void
-mc_writer_routine(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	// Check to see if there at least one ready result.
-	struct mc_command *command = state->command_head;
-	if (unlikely(command == NULL))
-		goto leave;
-
-	// Put the results into the transmit buffer.
-	for (;;) {
-		mc_transmit(state, command);
-
-		struct mc_command *next = command->next;
-		if (next == NULL)
-			break;
-
-		command = next;
-	}
-
-	// Transmit buffered results.
-	mc_transmit_flush(state);
-
-	// Release the command data
-	for (;;) {
-		struct mc_command *head = state->command_head;
-		state->command_head = head->next;
-		if (state->command_head == NULL)
-			state->command_tail = NULL;
-
-		mc_command_destroy(sock->event.core, head);
-
-		if (head == command) {
-			break;
-		}
-	}
-
-leave:
-	LEAVE();
-}
-
 /**********************************************************************
  * Module Entry Points.
  **********************************************************************/
@@ -411,7 +373,6 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		.attach = mc_state_attach,
 		.detach = mc_state_detach,
 		.reader = mc_reader_routine,
-		.writer = mc_writer_routine,
 	};
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
