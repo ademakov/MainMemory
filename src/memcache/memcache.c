@@ -49,8 +49,11 @@ mc_transmit_unref(uintptr_t data)
 {
 	ENTER();
 
+	struct mc_entry *entry = (struct mc_entry *) data;
+
 	struct mc_action action;
-	action.old_entry = (struct mc_entry *) data;
+	action.part = mc_table_part(entry->hash);
+	action.old_entry = entry;
 	mc_action_finish(&action);
 
 	LEAVE();
