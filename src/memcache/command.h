@@ -24,10 +24,6 @@
 #include "memcache/action.h"
 #include "memcache/result.h"
 
-#if ENABLE_MEMCACHE_DELEGATE
-# include "core/future.h"
-#endif
-
 /**********************************************************************
  * Command type declarations.
  **********************************************************************/
@@ -137,10 +133,6 @@ struct mc_command
 	bool noreply;
 	bool own_key;
 
-#if ENABLE_MEMCACHE_DELEGATE
-	struct mm_future *future;
-#endif
-
 	struct mc_command *next;
 };
 
@@ -156,21 +148,18 @@ void mc_command_stop(void);
 struct mc_command * mc_command_create(mm_core_t core);
 void mc_command_destroy(mm_core_t core, struct mc_command *command);
 
-void mc_command_execute(struct mc_command *command);
+static inline void
+mc_command_execute(struct mc_command *command)
+{
+	if (unlikely(command->result != MC_RESULT_NONE))
+		return;
+	command->result = (command->type->exec)((mm_value_t) command);
+}
 
 static inline mc_result_t
 mc_command_result(struct mc_command *command)
 {
-	mc_result_t result = command->result;
-#if ENABLE_MEMCACHE_DELEGATE
-	if (result == MC_RESULT_FUTURE) {
-		result = mm_future_wait(command->future);
-		if (mm_future_is_canceled(command->future))
-			result = MC_RESULT_CANCELED;
-		command->result = result;
-	}
-#endif
-	return result;
+	return command->result;
 }
 
 #endif /* MEMCACHE_COMMAND_H */

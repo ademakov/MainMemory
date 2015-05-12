@@ -145,10 +145,7 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 		break;
 	}
 
-#if ENABLE_MEMCACHE_DELEGATE
-	if (command->future != NULL)
-		mm_future_destroy(command->future);
-#endif
+	mc_action_cleanup(&command->action);
 
 	mm_pool_shared_free_low(core, &mc_command_pool, command);
 
@@ -158,25 +155,6 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 /**********************************************************************
  * Command Processing.
  **********************************************************************/
-
-void
-mc_command_execute(struct mc_command *command)
-{
-	if (unlikely(command->result != MC_RESULT_NONE))
-		return;
-
-#if ENABLE_MEMCACHE_DELEGATE
-	if (command->type->kind != MC_COMMAND_CUSTOM) {
-		command->result = MC_RESULT_FUTURE;
-		command->future = mm_future_create(command->type->exec,
-						   (mm_value_t) command);
-		mm_future_start(command->future, command->action.part->core);
-		return;
-	}
-#endif
-
-	command->result = (command->type->exec)((mm_value_t) command);
-}
 
 static void
 mc_command_copy_extra(struct mc_entry *new_entry, struct mc_entry *old_entry)

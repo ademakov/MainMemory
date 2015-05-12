@@ -28,6 +28,9 @@
 #if ENABLE_MEMCACHE_COMBINER
 # include "base/combiner.h"
 #endif
+#if ENABLE_MEMCACHE_DELEGATE
+# include "core/future.h"
+#endif
 
 #if ENABLE_MEMCACHE_COMBINER
 typedef enum {
@@ -78,6 +81,9 @@ struct mc_action
 #if ENABLE_MEMCACHE_COMBINER
 	mc_action_t action;
 #endif
+#if ENABLE_MEMCACHE_DELEGATE
+	struct mm_future future;
+#endif
 
 	/* Input flag indicating if update should check entry stamp. */
 	bool match_stamp;
@@ -122,6 +128,14 @@ void mc_action_evict_low(struct mc_action *action)
 void mc_action_flush_low(struct mc_action *action)
 	__attribute__((nonnull(1)));
 
+static inline void __attribute__((nonnull(1)))
+mc_action_cleanup(struct mc_action *action __attribute__((unused)))
+{
+#if ENABLE_MEMCACHE_DELEGATE
+	mm_future_unique_cleanup(&action->future);
+#endif
+}
+
 static inline void
 mc_action_hash(struct mc_action *action)
 {
@@ -136,16 +150,42 @@ mc_action_wait(struct mc_action *action __attribute__((unused)))
 	while (action->action != MC_ACTION_DONE)
 		mm_spin_pause();
 	mm_memory_load_fence();
+#elif ENABLE_MEMCACHE_DELEGATE
+	mm_future_unique_wait(&action->future);
 #endif
 }
+
+#if ENABLE_MEMCACHE_COMBINER
+static inline void
+mc_combiner_execute(struct mc_action *action,
+		    mc_action_t action_tag)
+{
+	action->action = action_tag;
+	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
+	mc_action_wait(action);
+}
+#endif
+
+#if ENABLE_MEMCACHE_DELEGATE
+static inline void
+mc_delegate_execute(struct mc_action *action,
+		    void (*action_routine)(struct mc_action *))
+{
+	mm_future_unique_prepare(&action->future,
+				 (mm_routine_t) action_routine,
+				 (mm_value_t) action);
+	mm_future_unique_start(&action->future, action->part->core);
+	mc_action_wait(action);
+}
+#endif
 
 static inline void
 mc_action_lookup(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_LOOKUP;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_LOOKUP);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_lookup_low);
 #else
 	mc_action_lookup_low(action);
 #endif
@@ -155,9 +195,9 @@ static inline void
 mc_action_finish(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_FINISH;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_FINISH);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_finish_low);
 #else
 	mc_action_finish_low(action);
 #endif
@@ -167,9 +207,9 @@ static inline void
 mc_action_delete(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_DELETE;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_DELETE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_delete_low);
 #else
 	mc_action_delete_low(action);
 #endif
@@ -179,9 +219,9 @@ static inline void
 mc_action_create(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_CREATE;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_CREATE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_create_low);
 #else
 	mc_action_create_low(action);
 #endif
@@ -191,9 +231,9 @@ static inline void
 mc_action_cancel(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_CANCEL;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_CANCEL);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_cancel_low);
 #else
 	mc_action_cancel_low(action);
 #endif
@@ -203,9 +243,9 @@ static inline void
 mc_action_insert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_INSERT;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_INSERT);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_insert_low);
 #else
 	mc_action_insert_low(action);
 #endif
@@ -218,9 +258,9 @@ mc_action_update(struct mc_action *action)
 	action->use_old_entry = false;
 	action->use_new_entry = false;
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_UPDATE;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_UPDATE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_update_low);
 #else
 	mc_action_update_low(action);
 #endif
@@ -235,9 +275,9 @@ mc_action_compare_and_update(struct mc_action *action,
 	action->use_old_entry = use_old_entry;
 	action->use_new_entry = use_new_entry;
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_UPDATE;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_UPDATE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_update_low);
 #else
 	mc_action_update_low(action);
 #endif
@@ -247,9 +287,9 @@ static inline void
 mc_action_upsert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_UPSERT;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_UPSERT);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_upsert_low);
 #else
 	mc_action_upsert_low(action);
 #endif
@@ -259,9 +299,9 @@ static inline void
 mc_action_stride(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_STRIDE;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_STRIDE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_stride_low);
 #else
 	mc_action_stride_low(action);
 #endif
@@ -271,9 +311,9 @@ static inline void
 mc_action_evict(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_EVICT;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_EVICT);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_evict_low);
 #else
 	mc_action_evict_low(action);
 #endif
@@ -283,9 +323,9 @@ static inline void
 mc_action_flush(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	action->action = MC_ACTION_FLUSH;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
-	mc_action_wait(action);
+	mc_combiner_execute(action, MC_ACTION_FLUSH);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_flush_low);
 #else
 	mc_action_flush_low(action);
 #endif
