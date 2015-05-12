@@ -1,7 +1,7 @@
 /*
  * core/future.h - MainMemory delayed computation tasks.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,39 +51,82 @@ struct mm_future
 	struct mm_waitset waitset;
 };
 
+/**********************************************************************
+ * Futures global data initialization and cleanup.
+ **********************************************************************/
+
 void mm_future_init(void);
 
-struct mm_future *mm_future_create(mm_routine_t start, mm_value_t start_arg)
-	__attribute__((nonnull(1)));
+/**********************************************************************
+ * Futures with multiple waiter tasks.
+ **********************************************************************/
 
-void mm_future_destroy(struct mm_future *future)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg);
 
-mm_value_t mm_future_start(struct mm_future *future, mm_core_t core)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_future_cleanup(struct mm_future *future);
 
-void mm_future_cancel(struct mm_future *future)
-	__attribute__((nonnull(1)));
+struct mm_future * __attribute__((nonnull(1)))
+mm_future_create(mm_routine_t start, mm_value_t start_arg);
 
-mm_value_t mm_future_wait(struct mm_future *future)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_future_destroy(struct mm_future *future);
 
-mm_value_t mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
-	__attribute__((nonnull(1)));
+mm_value_t __attribute__((nonnull(1)))
+mm_future_start(struct mm_future *future, mm_core_t core);
 
-static inline bool
+mm_value_t __attribute__((nonnull(1)))
+mm_future_wait(struct mm_future *future);
+
+mm_value_t __attribute__((nonnull(1)))
+mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout);
+
+/**********************************************************************
+ * Futures with single waiter task.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg);
+
+void __attribute__((nonnull(1)))
+mm_future_unique_cleanup(struct mm_future *future);
+
+struct mm_future * __attribute__((nonnull(1)))
+mm_future_unique_create(mm_routine_t start, mm_value_t start_arg);
+
+void __attribute__((nonnull(1)))
+mm_future_unique_destroy(struct mm_future *future);
+
+mm_value_t __attribute__((nonnull(1)))
+mm_future_unique_start(struct mm_future *future, mm_core_t core);
+
+mm_value_t __attribute__((nonnull(1)))
+mm_future_unique_wait(struct mm_future *future);
+
+mm_value_t __attribute__((nonnull(1)))
+mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout);
+
+/**********************************************************************
+ * Routines common for any kind of future.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_future_cancel(struct mm_future *future);
+
+static inline bool __attribute__((nonnull(1)))
 mm_future_is_started(struct mm_future *future)
 {
 	return mm_memory_load(future->result) != MM_RESULT_DEFERRED;
 }
 
-static inline bool
+static inline bool __attribute__((nonnull(1)))
 mm_future_is_canceled(struct mm_future *future)
 {
 	return mm_memory_load(future->result) == MM_RESULT_CANCELED;
 }
 
-static inline bool
+static inline bool __attribute__((nonnull(1)))
 mm_future_is_finished(struct mm_future *future)
 {
 	mm_value_t value = mm_memory_load(future->result);

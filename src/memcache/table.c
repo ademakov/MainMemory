@@ -295,7 +295,6 @@ mc_table_init_part(mm_core_t index, mm_core_t core)
 	part->volume = 0;
 
 	mm_waitset_prepare(&part->waitset);
-	mm_waitset_pin(&part->waitset, core);
 
 #if ENABLE_MEMCACHE_COMBINER
 	part->combiner = mm_combiner_create(mc_action_perform,

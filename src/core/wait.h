@@ -1,7 +1,7 @@
 /*
  * core/wait.h - MainMemory wait queues.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,15 +41,21 @@ struct mm_wait_cache
 /* A set of tasks waiting on an entity shared between cores. */
 struct mm_waitset
 {
-	/* The task queue. */
-	struct mm_link set;
-	/* The core the waitset is pinned to. It is equal to
-	   MM_CORE_NONE in case the waitset is not pinned. */
+	union
+	{
+		/* The task queue. */
+		struct mm_link set;
+		struct mm_task *task;
+	};
+	/* The core the wait-set is pinned to. It is equal to
+	   MM_CORE_NONE in case the wait-set is not pinned. */
 	mm_core_t core;
+	/* The wait-set has single waiting task. */
+	bool signal;
 };
 
 /**********************************************************************
- * Wait entry global data initialization and cleanup.
+ * Wait-set global data initialization and cleanup.
  **********************************************************************/
 
 void mm_wait_init(void);
@@ -67,44 +73,51 @@ void mm_wait_cache_truncate(struct mm_wait_cache *cache)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************
- * Wait-set initialization and cleanup.
+ * Shared inter-core wait-sets with locking.
  **********************************************************************/
 
-void mm_waitset_prepare(struct mm_waitset *waitset)
-	__attribute__((nonnull(1)));
-void mm_waitset_cleanup(struct mm_waitset *waitset)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_waitset_prepare(struct mm_waitset *waitset);
 
-static inline void
-mm_waitset_pin(struct mm_waitset *waitset, mm_core_t core)
-{
-	waitset->core = core;
-}
+void __attribute__((nonnull(1, 2)))
+mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock);
+
+void __attribute__((nonnull(1, 2)))
+mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout);
+
+void __attribute__((nonnull(1, 2)))
+mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock);
 
 /**********************************************************************
  * Private single-core wait-sets.
  **********************************************************************/
 
-void mm_waitset_local_wait(struct mm_waitset *waitset)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core);
 
-void mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_waitset_local_wait(struct mm_waitset *waitset);
 
-void mm_waitset_local_broadcast(struct mm_waitset *waitset)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout);
+
+void __attribute__((nonnull(1)))
+mm_waitset_local_broadcast(struct mm_waitset *waitset);
 
 /**********************************************************************
- * Shared inter-core wait-sets with locking.
+ * Shared inter-core wait-set with single waiter task.
  **********************************************************************/
 
-void mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1)))
+mm_waitset_unique_prepare(struct mm_waitset *waitset);
 
-void mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1)))
+mm_waitset_unique_wait(struct mm_waitset *waitset);
 
-void mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1)))
+mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout);
+
+void __attribute__((nonnull(1)))
+mm_waitset_unique_signal(struct mm_waitset *waitset);
 
 #endif /* CORE_WAIT_H */

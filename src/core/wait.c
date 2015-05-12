@@ -1,7 +1,7 @@
 /*
  * core/wait.c - MainMemory wait queues.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -197,10 +197,10 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 }
 
 /**********************************************************************
- * Wait-set initialization and cleanup.
+ * Shared inter-core wait-sets with locking.
  **********************************************************************/
 
-void
+void __attribute__((nonnull(1)))
 mm_waitset_prepare(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -210,89 +210,6 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 
 	LEAVE();
 }
-
-void
-mm_waitset_cleanup(struct mm_waitset *waitset __attribute__((unused)))
-{
-	ENTER();
-	// TODO: ensure the waitset is empty.
-	LEAVE();
-}
-
-/**********************************************************************
- * Private single-core wait-sets.
- **********************************************************************/
-
-void
-mm_waitset_local_wait(struct mm_waitset *waitset)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
-
-	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
-
-	// Wait for a wakeup signal.
-	mm_task_block();
-
-	wait->task = NULL;
-
-	LEAVE();
-}
-
-void
-mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
-
-	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
-
-	// Wait for a wakeup signal.
-	mm_timer_block(timeout);
-
-	wait->task = NULL;
-
-	LEAVE();
-}
-
-void
-mm_waitset_local_broadcast(struct mm_waitset *waitset)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
-
-	// Capture the waitset.
-	struct mm_link set = waitset->set;
-	mm_link_init(&waitset->set);
-
-	while (!mm_link_empty(&set)) {
-		// Get the next wait entry.
-		struct mm_link *link = mm_link_delete_head(&set);
-		struct mm_wait *wait = containerof(link, struct mm_wait, link);
-		struct mm_task *task = wait->task;
-
-		if (likely(task != NULL)) {
-			// Run the task if it has not been reset.
-			wait->task = NULL;
-			mm_task_run(task);
-		}
-
-		// Return unused wait entry to the pool.
-		mm_wait_cache_put(&mm_core->wait_cache, wait);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Shared inter-core wait-sets with locking.
- **********************************************************************/
 
 void
 mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
@@ -366,6 +283,165 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
 			mm_wait_cache_put(&mm_core->wait_cache, wait);
 		}
 	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Private single-core wait-sets.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core)
+{
+	ENTER();
+	ASSERT(core != MM_CORE_NONE && core != MM_CORE_SELF);
+
+	mm_link_init(&waitset->set);
+	waitset->core = core;
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_local_wait(struct mm_waitset *waitset)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_selfid());
+
+	// Enqueue the task.
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
+	wait->task = mm_task_self();
+	mm_link_insert(&waitset->set, &wait->link);
+
+	// Wait for a wakeup signal.
+	mm_task_block();
+
+	wait->task = NULL;
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_selfid());
+
+	// Enqueue the task.
+	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
+	wait->task = mm_task_self();
+	mm_link_insert(&waitset->set, &wait->link);
+
+	// Wait for a wakeup signal.
+	mm_timer_block(timeout);
+
+	wait->task = NULL;
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_local_broadcast(struct mm_waitset *waitset)
+{
+	ENTER();
+	ASSERT(waitset->core == mm_core_selfid());
+
+	// Capture the waitset.
+	struct mm_link set = waitset->set;
+	mm_link_init(&waitset->set);
+
+	while (!mm_link_empty(&set)) {
+		// Get the next wait entry.
+		struct mm_link *link = mm_link_delete_head(&set);
+		struct mm_wait *wait = containerof(link, struct mm_wait, link);
+		struct mm_task *task = wait->task;
+
+		if (likely(task != NULL)) {
+			// Run the task if it has not been reset.
+			wait->task = NULL;
+			mm_task_run(task);
+		}
+
+		// Return unused wait entry to the pool.
+		mm_wait_cache_put(&mm_core->wait_cache, wait);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Shared inter-core wait-set with single waiter task.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_waitset_unique_prepare(struct mm_waitset *waitset)
+{
+	ENTER();
+
+	waitset->task = NULL;
+	waitset->core = MM_CORE_SELF;
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_unique_wait(struct mm_waitset *waitset)
+{
+	ENTER();
+
+	// Advertise the waiting task.
+	mm_memory_store(waitset->task, mm_task_self());
+	mm_memory_strict_fence(); // TODO: store_load fence
+
+	if (!mm_memory_load(waitset->signal)) {
+		// Wait for a wakeup signal.
+		mm_task_block();
+	}
+
+	// Reset the task reference.
+	mm_memory_store(waitset->signal, false);
+	mm_memory_store_fence();
+	mm_memory_store(waitset->task, NULL);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
+{
+	ENTER();
+
+	// Advertise the waiting task.
+	mm_memory_store(waitset->task, mm_task_self());
+	mm_memory_strict_fence(); // TODO: store_load fence
+
+	if (!mm_memory_load(waitset->signal)) {
+		// Wait for a wakeup signal.
+		mm_timer_block(timeout);
+	}
+
+	// Reset the task reference.
+	mm_memory_store(waitset->signal, false);
+	mm_memory_store_fence();
+	mm_memory_store(waitset->task, NULL);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_waitset_unique_signal(struct mm_waitset *waitset)
+{
+	ENTER();
+
+	// Note the signal.
+	mm_memory_store(waitset->signal, true);
+	mm_memory_strict_fence(); // TODO: store_load fence
+
+	// Wake up the waiting task, if any.
+	struct mm_task *task = mm_memory_load(waitset->task);
+	if (likely(task != NULL))
+		mm_core_run_task(task);
 
 	LEAVE();
 }
