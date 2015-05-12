@@ -205,7 +205,7 @@ mm_future_start(struct mm_future *future, mm_core_t core)
 
 	// Initiate execution of the future routine.
 	if (result == MM_RESULT_DEFERRED) {
-		mm_core_post(core, mm_future_routine, (mm_value_t) future);
+		mm_core_post_work(core, &future->work);
 		result = MM_RESULT_NOTREADY;
 	}
 
@@ -376,7 +376,7 @@ mm_future_unique_start(struct mm_future *future, mm_core_t core)
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED) {
 		future->result = result = MM_RESULT_NOTREADY;
-		mm_core_post(core, mm_future_routine, (mm_value_t) future);
+		mm_core_post_work(core, &future->work);
 	}
 
 	LEAVE();
