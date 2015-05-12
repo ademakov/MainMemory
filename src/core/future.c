@@ -29,28 +29,30 @@
 static struct mm_pool mm_future_pool;
 
 static void
-mm_future_finish(struct mm_work *work, mm_value_t result)
+mm_future_prepare_low(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
-	ENTER();
+	future->task = NULL;
+	future->start = start;
+	future->start_arg = start_arg;
+	future->result = MM_RESULT_DEFERRED;
+	future->cancel = false;
+}
 
-	struct mm_future *future = containerof(work, struct mm_future, work);
-	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
+static void
+mm_future_cleanup_low(struct mm_future *future)
+{
+	mm_value_t result = mm_memory_load(future->result);
+	if (result != MM_RESULT_DEFERRED) {
+		if (unlikely(result == MM_RESULT_NOTREADY))
+			mm_fatal(0, "Destroying a running future object.");
 
-	// Synchronize with waiters.
-	mm_task_lock(&future->lock);
-
-	// Store the result.
-	mm_memory_store(future->result, result);
-
-	// Wakeup all the waiters.
-	mm_waitset_broadcast(&future->waitset, &future->lock);
-
-	// Advertise the future task has finished. This must be the last
-	// access to the future structure performed by the task.
-	mm_memory_store_fence();
-	mm_memory_store(future->task, NULL);
-
-	LEAVE();
+		// There is a chance that the future task is still running
+		// at this point. It is required to wait until it cannot
+		// access the future structure anymore.
+		uint32_t count = 0;
+		while (mm_memory_load(future->task) != NULL)
+			count = mm_backoff(count);
+	}
 }
 
 static mm_value_t
@@ -77,37 +79,6 @@ mm_future_routine(mm_value_t arg)
 
 	LEAVE();
 	return result;
-}
-
-static void
-mm_future_prepare_low(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
-{
-	mm_work_prepare(&future->work,
-			mm_future_routine, (mm_value_t) future,
-			mm_future_finish);
-	future->task = NULL;
-	future->start = start;
-	future->start_arg = start_arg;
-	future->result = MM_RESULT_DEFERRED;
-	future->cancel = false;
-	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-}
-
-static void
-mm_future_cleanup_low(struct mm_future *future)
-{
-	mm_value_t result = mm_memory_load(future->result);
-	if (result != MM_RESULT_DEFERRED) {
-		if (unlikely(result == MM_RESULT_NOTREADY))
-			mm_fatal(0, "Destroying a running future object.");
-
-		// There is a chance that the future task is still running
-		// at this point. It is required to wait until it cannot
-		// access the future structure anymore.
-		uint32_t count = 0;
-		while (mm_memory_load(future->task) != NULL)
-			count = mm_backoff(count);
-	}
 }
 
 /**********************************************************************
@@ -149,12 +120,41 @@ mm_future_init(void)
  * Futures with multiple waiter tasks.
  **********************************************************************/
 
+static void
+mm_future_finish(struct mm_work *work, mm_value_t result)
+{
+	ENTER();
+
+	struct mm_future *future = containerof(work, struct mm_future, work);
+	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
+
+	// Synchronize with waiters.
+	mm_task_lock(&future->lock);
+
+	// Store the result.
+	mm_memory_store(future->result, result);
+
+	// Wakeup all the waiters.
+	mm_waitset_broadcast(&future->waitset, &future->lock);
+
+	// Advertise the future task has finished. This must be the last
+	// access to the future structure performed by the task.
+	mm_memory_store_fence();
+	mm_memory_store(future->task, NULL);
+
+	LEAVE();
+}
+
 void __attribute__((nonnull(1)))
 mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
 	mm_future_prepare_low(future, start, start_arg);
+	mm_work_prepare(&future->work,
+			mm_future_routine, (mm_value_t) future,
+			mm_future_finish);
+	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
 	mm_waitset_prepare(&future->waitset);
 
 	LEAVE();
@@ -298,12 +298,37 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
  * Futures with single waiter task.
  **********************************************************************/
 
+static void
+mm_future_unique_finish(struct mm_work *work, mm_value_t result)
+{
+	ENTER();
+
+	struct mm_future *future = containerof(work, struct mm_future, work);
+	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
+
+	// Store the result.
+	mm_memory_store(future->result, result);
+
+	// Wakeup all the waiters.
+	mm_waitset_unique_signal(&future->waitset);
+
+	// Advertise the future task has finished. This must be the last
+	// access to the future structure performed by the task.
+	mm_memory_store_fence();
+	mm_memory_store(future->task, NULL);
+
+	LEAVE();
+}
+
 void __attribute__((nonnull(1)))
 mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
 	mm_future_prepare_low(future, start, start_arg);
+	mm_work_prepare(&future->work,
+			mm_future_routine, (mm_value_t) future,
+			mm_future_unique_finish);
 	mm_waitset_unique_prepare(&future->waitset);
 
 	LEAVE();
