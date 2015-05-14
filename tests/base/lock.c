@@ -10,7 +10,7 @@ mm_thread_lock_t g_lock = MM_THREAD_LOCK_INIT;
 size_t g_nexec = 0;
 
 void
-execute(void *arg __attribute__((unused)))
+execute(void *arg __unused)
 {
 	mm_thread_lock(&g_lock);
 	delay_consumer();
@@ -19,7 +19,7 @@ execute(void *arg __attribute__((unused)))
 }
 
 void
-routine(void *arg __attribute__((unused)))
+routine(void *arg __unused)
 {
 	size_t i;
 	for (i = 0; i < g_consumer_data_size; i++) {

@@ -11,14 +11,14 @@ struct mm_combiner *g_combiner;
 size_t g_nexec = 0;
 
 void
-execute(uintptr_t unused __attribute__((unused)))
+execute(uintptr_t unused __unused)
 {
 	delay_consumer();
 	g_nexec++;
 }
 
 void
-routine(void *arg __attribute__((unused)))
+routine(void *arg __unused)
 {
 	size_t i;
 	for (i = 0; i < g_consumer_data_size; i++) {

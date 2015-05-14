@@ -76,6 +76,8 @@
 #define __align(x)		__attribute__((aligned(x)))
 #define __align_cacheline	__align(MM_CACHELINE)
 
+#define __unused		__attribute__((unused))
+
 /**********************************************************************
  * Compiler Memory Ordering.
  **********************************************************************/

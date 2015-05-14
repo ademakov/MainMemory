@@ -38,7 +38,7 @@
 static mm_event_hid_t mm_selfpipe_handler;
 
 static void
-mm_selfpipe_ready(mm_event_t event __attribute__((unused)), void *data)
+mm_selfpipe_ready(mm_event_t event __unused, void *data)
 {
 	ENTER();
 

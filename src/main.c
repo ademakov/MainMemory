@@ -41,7 +41,7 @@ static struct mm_net_server *mm_ucmd_server;
 static struct mm_net_server *mm_icmd_server;
 
 static void
-mm_term_handler(int signo __attribute__((unused)))
+mm_term_handler(int signo __unused)
 {
 	ENTER();
 

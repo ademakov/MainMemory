@@ -575,8 +575,8 @@ mc_command_execute_ascii_touch(struct mc_state *state,
 }
 
 static void
-mc_command_execute_ascii_slabs(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_ascii_slabs(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	WRITE(&state->sock, mc_result_not_implemented);
 }
@@ -637,7 +637,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_version(struct mc_state *state,
-				 struct mc_command *command __attribute__((unused)))
+				 struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -664,7 +664,7 @@ mc_command_execute_ascii_verbosity(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_quit(struct mc_state *state,
-			      struct mc_command *command __attribute__((unused)))
+			      struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -675,7 +675,7 @@ mc_command_execute_ascii_quit(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_error(struct mc_state *state,
-			       struct mc_command *command __attribute__((unused)))
+			       struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -685,168 +685,168 @@ mc_command_execute_ascii_error(struct mc_state *state,
 }
 
 static void
-mc_command_execute_binary_get(struct mc_state *state __attribute__((unused)),
-			      struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_get(struct mc_state *state __unused,
+			      struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getq(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_getq(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getk(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_getk(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getkq(struct mc_state *state __attribute__((unused)),
-				struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_getkq(struct mc_state *state __unused,
+				struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_set(struct mc_state *state __attribute__((unused)),
-			      struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_set(struct mc_state *state __unused,
+			      struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_setq(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_setq(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_add(struct mc_state *state __attribute__((unused)),
-			      struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_add(struct mc_state *state __unused,
+			      struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_addq(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_addq(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_replace(struct mc_state *state __attribute__((unused)),
-				  struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_replace(struct mc_state *state __unused,
+				  struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_replaceq(struct mc_state *state __attribute__((unused)),
-				   struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_replaceq(struct mc_state *state __unused,
+				   struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_append(struct mc_state *state __attribute__((unused)),
-				 struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_append(struct mc_state *state __unused,
+				 struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_appendq(struct mc_state *state __attribute__((unused)),
-				  struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_appendq(struct mc_state *state __unused,
+				  struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prepend(struct mc_state *state __attribute__((unused)),
-				  struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_prepend(struct mc_state *state __unused,
+				  struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prependq(struct mc_state *state __attribute__((unused)),
-				   struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_prependq(struct mc_state *state __unused,
+				   struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_increment(struct mc_state *state __attribute__((unused)),
-				    struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_increment(struct mc_state *state __unused,
+				    struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_incrementq(struct mc_state *state __attribute__((unused)),
-				     struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_incrementq(struct mc_state *state __unused,
+				     struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_decrement(struct mc_state *state __attribute__((unused)),
-				    struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_decrement(struct mc_state *state __unused,
+				    struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_decrementq(struct mc_state *state __attribute__((unused)),
-				     struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_decrementq(struct mc_state *state __unused,
+				     struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_delete(struct mc_state *state __attribute__((unused)),
-				 struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_delete(struct mc_state *state __unused,
+				 struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_deleteq(struct mc_state *state __attribute__((unused)),
-				  struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_deleteq(struct mc_state *state __unused,
+				  struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_noop(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_noop(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -856,8 +856,8 @@ mc_command_execute_binary_noop(struct mc_state *state __attribute__((unused)),
 }
 
 static void
-mc_command_execute_binary_quit(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_quit(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -867,8 +867,8 @@ mc_command_execute_binary_quit(struct mc_state *state __attribute__((unused)),
 }
 
 static void
-mc_command_execute_binary_quitq(struct mc_state *state __attribute__((unused)),
-				struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_quitq(struct mc_state *state __unused,
+				struct mc_command *command __unused)
 {
 	ENTER();
 
@@ -879,32 +879,32 @@ mc_command_execute_binary_quitq(struct mc_state *state __attribute__((unused)),
 }
 
 static void
-mc_command_execute_binary_flush(struct mc_state *state __attribute__((unused)),
-				struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_flush(struct mc_state *state __unused,
+				struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_flushq(struct mc_state *state __attribute__((unused)),
-				 struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_flushq(struct mc_state *state __unused,
+				 struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_version(struct mc_state *state __attribute__((unused)),
-				  struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_version(struct mc_state *state __unused,
+				  struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_stat(struct mc_state *state __attribute__((unused)),
-			       struct mc_command *command __attribute__((unused)))
+mc_command_execute_binary_stat(struct mc_state *state __unused,
+			       struct mc_command *command __unused)
 {
 	ENTER();
 	LEAVE();

@@ -115,7 +115,7 @@ mm_wait_cache_prepare(struct mm_wait_cache *cache)
 }
 
 void
-mm_wait_cache_cleanup(struct mm_wait_cache *cache __attribute__((unused)))
+mm_wait_cache_cleanup(struct mm_wait_cache *cache __unused)
 {
 	ENTER();
 	LEAVE();
