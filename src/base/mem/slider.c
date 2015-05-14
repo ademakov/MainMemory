@@ -47,7 +47,7 @@ mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 	size_t o_size = size;
 	char *data = ptr;
 
-	do {
+	for (;;) {
 		uint32_t n = slider->end - slider->ptr;
 		if (n >= size) {
 			memcpy(data, slider->ptr, size);
@@ -60,7 +60,11 @@ mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 		data += n;
 		size -= n;
 
-	} while (mm_slider_next_used(slider));
+		if (!mm_slider_next_used(slider)) {
+			slider->ptr += n;
+			break;
+		}
+	}
 
 	LEAVE();
 	return (o_size - size);
@@ -73,7 +77,7 @@ mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size)
 	size_t o_size = size;
 	const char *data = ptr;
 
-	do {
+	for (;;) {
 		uint32_t n = slider->end - slider->ptr;
 		if (n >= size) {
 			memcpy(slider->ptr, data, size);
@@ -86,7 +90,11 @@ mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size)
 		data += n;
 		size -= n;
 
-	} while (mm_slider_next_free(slider));
+		if (!mm_slider_next_free(slider)) {
+			slider->ptr += n;
+			break;
+		}
+	}
 
 	LEAVE();
 	return (o_size - size);
