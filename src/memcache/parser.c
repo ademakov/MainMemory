@@ -130,20 +130,10 @@ mc_parser_handle_option(struct mc_command *command)
 {
 	ENTER();
 
-	if (command->type != NULL) {
-
-		switch (command->type->tag) {
-		case mc_command_slabs:
-			command->params.slabs.nopts++;
-			break;
-
-		case mc_command_stats:
-			command->params.stats.nopts++;
-			break;
-
-		default:
-			break;
-		}
+	if (command->type == &mc_command_ascii_stats) {
+		command->params.stats.nopts++;
+	} else if (command->type == &mc_command_ascii_slabs) {
+		command->params.slabs.nopts++;
 	}
 
 	LEAVE();
@@ -280,106 +270,105 @@ again:
 
 #define Cx4(a, b, c, d) (((a) << 24) | ((b) << 16) | ((c) << 8) | (d))
 				if (start == Cx4('g', 'e', 't', ' ')) {
-					command->type = &mc_desc_get;
+					command->type = &mc_command_ascii_get;
 					state = S_SPACE;
 					shift = S_GET_1;
 					break;
 				} else if (start == Cx4('s', 'e', 't', ' ')) {
-					command->type = &mc_desc_set;
+					command->type = &mc_command_ascii_set;
 					state = S_SPACE;
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('r', 'e', 'p', 'l')) {
-					command->type = &mc_desc_replace;
+					command->type = &mc_command_ascii_replace;
 					state = S_MATCH;
 					match = "ace";
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('d', 'e', 'l', 'e')) {
-					command->type = &mc_desc_delete;
+					command->type = &mc_command_ascii_delete;
 					state = S_MATCH;
 					match = "te";
 					shift = S_DELETE_1;
 					break;
 				} else if (start == Cx4('a', 'd', 'd', ' ')) {
-					command->type = &mc_desc_add;
+					command->type = &mc_command_ascii_add;
 					state = S_SPACE;
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('i', 'n', 'c', 'r')) {
-					command->type = &mc_desc_incr;
+					command->type = &mc_command_ascii_incr;
 					state = S_MATCH;
 					//match = "";
 					shift = S_ARITH_1;
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
-					command->type = &mc_desc_decr;
+					command->type = &mc_command_ascii_decr;
 					state = S_MATCH;
 					//match = "";
 					shift = S_ARITH_1;
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
-					command->type = &mc_desc_gets;
+					command->type = &mc_command_ascii_gets;
 					state = S_MATCH;
 					//match = "";
 					shift = S_GET_1;
 					break;
 				} else if (start == Cx4('c', 'a', 's', ' ')) {
-					command->type = &mc_desc_cas;
+					command->type = &mc_command_ascii_cas;
 					state = S_SPACE;
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
-					command->type = &mc_desc_append;
+					command->type = &mc_command_ascii_append;
 					state = S_MATCH;
 					match = "nd";
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
-					command->type = &mc_desc_prepend;
+					command->type = &mc_command_ascii_prepend;
 					state = S_MATCH;
 					match = "end";
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('t', 'o', 'u', 'c')) {
-					command->type = &mc_desc_touch;
+					command->type = &mc_command_ascii_touch;
 					state = S_MATCH;
 					match = "h";
 					shift = S_TOUCH_1;
 					break;
 				} else if (start == Cx4('s', 'l', 'a', 'b')) {
-					command->type = &mc_desc_slabs;
+					command->type = &mc_command_ascii_slabs;
 					state = S_MATCH;
 					match = "s";
 					shift = S_OPT;
 					break;
 				} else if (start == Cx4('s', 't', 'a', 't')) {
-					command->type = &mc_desc_stats;
+					command->type = &mc_command_ascii_stats;
 					state = S_MATCH;
 					match = "s";
 					shift = S_OPT;
 					break;
 				} else if (start == Cx4('f', 'l', 'u', 's')) {
-					command->type = &mc_desc_flush_all;
+					command->type = &mc_command_ascii_flush_all;
 					state = S_MATCH;
 					match = "h_all";
 					shift = S_FLUSH_ALL_1;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 's')) {
-					command->type = &mc_desc_version;
+					command->type = &mc_command_ascii_version;
 					state = S_MATCH;
 					match = "ion";
 					shift = S_EOL;
 					break;
 				} else if (start == Cx4('v', 'e', 'r', 'b')) {
-					command->type = &mc_desc_verbosity;
+					command->type = &mc_command_ascii_verbosity;
 					state = S_MATCH;
 					match = "osity";
 					shift = S_VERBOSITY_1;
 					break;
 				} else if (start == Cx4('q', 'u', 'i', 't')) {
-					command->type = &mc_desc_quit;
-					command->params.sock = &parser->state->sock.sock;
+					command->type = &mc_command_ascii_quit;
 					state = S_SPACE;
 					shift = S_EOL;
 					break;
@@ -600,7 +589,7 @@ again:
 			case S_SET_5:
 				command->action.new_entry->key_len = command->action.key_len;
 				command->action.new_entry->value_len = num32;
-				if (command->type->tag == mc_command_cas) {
+				if (command->type == &mc_command_ascii_cas) {
 					state = S_NUM64;
 					shift = S_CAS;
 					goto again;
@@ -837,12 +826,12 @@ again:
 					parser->command->next = NULL;
 					command = parser->command;
 				}
+				command->type = &mc_command_ascii_error;
 				state = S_ERROR_1;
 				// FALLTHRU
 			case S_ERROR_1:
 				if (c == '\n') {
 					parser->cursor.ptr = s + 1;
-					command->result = MC_RESULT_ERROR;
 					goto leave;
 				} else {
 					// Skip char.

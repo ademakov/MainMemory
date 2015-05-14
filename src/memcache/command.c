@@ -18,7 +18,9 @@
  */
 
 #include "memcache/command.h"
+#include "memcache/binary.h"
 #include "memcache/entry.h"
+#include "memcache/state.h"
 #include "memcache/table.h"
 
 #include "core/task.h"
@@ -35,45 +37,40 @@ static mm_timeval_t mc_exptime;
 
 static struct mm_pool mc_command_pool;
 
+static char mc_result_nl[] = "\r\n";
+static char mc_result_ok[] = "OK\r\n";
+static char mc_result_end[] = "END\r\n";
+static char mc_result_end2[] = "\r\nEND\r\n";
+static char mc_result_error[] = "ERROR\r\n";
+static char mc_result_exists[] = "EXISTS\r\n";
+static char mc_result_stored[] = "STORED\r\n";
+static char mc_result_deleted[] = "DELETED\r\n";
+static char mc_result_touched[] = "TOUCHED\r\n";
+static char mc_result_not_found[] = "NOT_FOUND\r\n";
+static char mc_result_not_stored[] = "NOT_STORED\r\n";
+static char mc_result_delta_non_num[] = "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n";
+static char mc_result_not_implemented[] = "SERVER_ERROR not implemented\r\n";
+static char mc_result_version[] = "VERSION " PACKAGE_STRING "\r\n";
+
+#define RES_N(res)		(sizeof(res) - 1)
+#define WRITE(sock, res)	mm_netbuf_write(sock, res, RES_N(res))
+
 /**********************************************************************
  * Command type declarations.
  **********************************************************************/
 
 /*
- * Define command names.
- */
-
-#if ENABLE_DEBUG
-
-#define MC_COMMAND_NAME(cmd, value)	#cmd,
-
-static const char *mc_command_names[] = {
-	MC_COMMAND_LIST(MC_COMMAND_NAME)
-};
-
-#undef MC_COMMAND_NAME
-
-const char *
-mc_command_name(mc_command_t tag)
-{
-	static const size_t n = sizeof(mc_command_names) / sizeof(*mc_command_names);
-	if (tag >= n)
-		return "invalid command";
-	return mc_command_names[tag];
-}
-
-#endif
-
-/*
  * Define command handling info.
  */
 
-#define MC_COMMAND_TYPE(cmd, value)				\
-	static mm_value_t mc_command_exec_##cmd(mm_value_t);	\
-	struct mc_command_type mc_desc_##cmd = {		\
-		.tag = mc_command_##cmd,			\
-		.exec = mc_command_exec_##cmd,			\
-		.kind = value,					\
+#define MC_COMMAND_TYPE(cmd, value)			\
+	static void					\
+	mc_command_execute_##cmd(struct mc_state *,	\
+				 struct mc_command *);	\
+	struct mc_command_type mc_command_##cmd = {	\
+		.exec = mc_command_execute_##cmd,	\
+		.kind = value,				\
+		.name = #cmd				\
 	};
 
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
@@ -128,23 +125,6 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 	if (command->own_key)
 		mm_local_free((char *) command->action.key);
 
-	switch (mc_command_result(command)) {
-	case MC_RESULT_VALUE:
-		command->action.old_entry = command->action.new_entry;
-	case MC_RESULT_ENTRY:
-	case MC_RESULT_ENTRY_CAS:
-		mc_action_finish(&command->action);
-		break;
-
-	case MC_RESULT_NONE:
-		if (command->action.new_entry != NULL)
-			mc_action_cancel(&command->action);
-		break;
-
-	default:
-		break;
-	}
-
 	mc_action_cleanup(&command->action);
 
 	mm_pool_shared_free_low(core, &mc_command_pool, command);
@@ -157,135 +137,201 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
  **********************************************************************/
 
 static void
+mc_command_quit(struct mc_state *state)
+{
+	mm_netbuf_flush(&state->sock);
+	mm_netbuf_close(&state->sock);
+}
+
+static void
 mc_command_copy_extra(struct mc_entry *new_entry, struct mc_entry *old_entry)
 {
 	new_entry->flags = old_entry->flags;
 	new_entry->exp_time = old_entry->exp_time;
 }
 
-static mm_value_t
-mc_command_process_get2(mm_value_t arg, mc_result_t entry_rc)
+static void
+mc_command_transmit_unref(uintptr_t data)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
+	struct mc_entry *entry = (struct mc_entry *) data;
+
+	struct mc_action action;
+	action.part = mc_table_part(entry->hash);
+	action.old_entry = entry;
+	mc_action_finish(&action);
+
+	LEAVE();
+}
+
+static void
+mc_command_transmit_entry(struct mc_state *state,
+			  struct mc_command *command,
+			  bool cas)
+{
+	ENTER();
+
+	struct mc_entry *entry = command->action.old_entry;
+	const char *key = mc_entry_getkey(entry);
+	char *value = mc_entry_getvalue(entry);
+	uint8_t key_len = entry->key_len;
+	uint32_t value_len = entry->value_len;
+
+	if (cas) {
+		mm_netbuf_printf(
+			&state->sock,
+			"VALUE %.*s %u %u %llu\r\n",
+			key_len, key,
+			entry->flags, value_len,
+			(unsigned long long) entry->stamp);
+	} else {
+		mm_netbuf_printf(
+			&state->sock,
+			"VALUE %.*s %u %u\r\n",
+			key_len, key,
+			entry->flags, value_len);
+	}
+
+	mm_netbuf_splice(&state->sock, value, value_len,
+			 mc_command_transmit_unref, (uintptr_t) entry);
+
+	if (command->params.last)
+		WRITE(&state->sock, mc_result_end2);
+	else
+		WRITE(&state->sock, mc_result_nl);
+
+	LEAVE();
+}
+
+static void
+mc_command_transmit_delta(struct mc_state *state,
+			  struct mc_command *command)
+{
+	ENTER();
+
+	struct mc_entry *entry = command->action.new_entry;
+	char *value = mc_entry_getvalue(entry);
+	uint32_t value_len = entry->value_len;
+
+	mm_netbuf_splice(&state->sock, value, value_len,
+			 mc_command_transmit_unref, (uintptr_t) entry);
+
+	WRITE(&state->sock, mc_result_end);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_ascii_get(struct mc_state *state,
+			     struct mc_command *command)
+{
+	ENTER();
 
 	mc_action_lookup(&command->action);
 
-	mc_result_t rc;
 	if (command->action.old_entry != NULL)
-		rc = entry_rc;
+		mc_command_transmit_entry(state, command, false);
 	else if (command->params.last)
-		rc = MC_RESULT_END;
-	else
-		rc = MC_RESULT_BLANK;
+		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_get(mm_value_t arg)
-{
-	return mc_command_process_get2(arg, MC_RESULT_ENTRY);
-}
-
-static mm_value_t
-mc_command_exec_gets(mm_value_t arg)
-{
-	return mc_command_process_get2(arg, MC_RESULT_ENTRY_CAS);
-}
-
-static mm_value_t
-mc_command_exec_set(mm_value_t arg)
+static void
+mc_command_execute_ascii_gets(struct mc_state *state,
+			      struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
+	mc_action_lookup(&command->action);
+
+	if (command->action.old_entry != NULL)
+		mc_command_transmit_entry(state, command, true);
+	else if (command->params.last)
+		WRITE(&state->sock, mc_result_end);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_ascii_set(struct mc_state *state,
+			     struct mc_command *command)
+{
+	ENTER();
 
 	mc_action_upsert(&command->action);
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_add(mm_value_t arg)
+static void
+mc_command_execute_ascii_add(struct mc_state *state,
+			     struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	mc_action_insert(&command->action);
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry == NULL)
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 	else
-		rc = MC_RESULT_NOT_STORED;
+		WRITE(&state->sock, mc_result_not_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_replace(mm_value_t arg)
+static void
+mc_command_execute_ascii_replace(struct mc_state *state,
+				 struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	mc_action_update(&command->action);
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 	else
-		rc = MC_RESULT_NOT_STORED;
+		WRITE(&state->sock, mc_result_not_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_cas(mm_value_t arg)
+static void
+mc_command_execute_ascii_cas(struct mc_state *state,
+			     struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	mc_action_compare_and_update(&command->action, false, false);
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.entry_match)
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_EXISTS;
+		WRITE(&state->sock, mc_result_exists);
 	else
-		rc = MC_RESULT_NOT_FOUND;
+		WRITE(&state->sock, mc_result_not_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_append(mm_value_t arg)
+static void
+mc_command_execute_ascii_append(struct mc_state *state,
+				struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_entry *new_entry = command->action.new_entry;
 
 	char *append_value = mc_entry_getvalue(new_entry);
@@ -318,24 +364,22 @@ mc_command_exec_append(mm_value_t arg)
 
 	mm_chunk_destroy_chain(mm_link_head(&chunks));
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 	else
-		rc = MC_RESULT_NOT_STORED;
+		WRITE(&state->sock, mc_result_not_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_prepend(mm_value_t arg)
+static void
+mc_command_execute_ascii_prepend(struct mc_state *state,
+				 struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
 	struct mc_entry *new_entry = command->action.new_entry;
 
 	char *prepend_value = mc_entry_getvalue(new_entry);
@@ -368,24 +412,22 @@ mc_command_exec_prepend(mm_value_t arg)
 
 	mm_chunk_destroy_chain(mm_link_head(&chunks));
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_STORED;
+		WRITE(&state->sock, mc_result_stored);
 	else
-		rc = MC_RESULT_NOT_STORED;
+		WRITE(&state->sock, mc_result_not_stored);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_incr(mm_value_t arg)
+static void
+mc_command_execute_ascii_incr(struct mc_state *state,
+			      struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
 	command->action.new_entry = NULL;
 
 	mc_action_lookup(&command->action);
@@ -416,26 +458,24 @@ mc_command_exec_incr(mm_value_t arg)
 			break;
 	}
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.new_entry != NULL)
-		rc = MC_RESULT_VALUE;
+		mc_command_transmit_delta(state, command);
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_INC_DEC_NON_NUM;
+		WRITE(&state->sock, mc_result_delta_non_num);
 	else
-		rc = MC_RESULT_NOT_FOUND;
+		WRITE(&state->sock, mc_result_not_found);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_decr(mm_value_t arg)
+static void
+mc_command_execute_ascii_decr(struct mc_state *state,
+			      struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
 	command->action.new_entry = NULL;
 
 	mc_action_lookup(&command->action);
@@ -469,47 +509,41 @@ mc_command_exec_decr(mm_value_t arg)
 			break;
 	}
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.new_entry != NULL)
-		rc = MC_RESULT_VALUE;
+		mc_command_transmit_delta(state, command);
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_INC_DEC_NON_NUM;
+		WRITE(&state->sock, mc_result_delta_non_num);
 	else
-		rc = MC_RESULT_NOT_FOUND;
+		WRITE(&state->sock, mc_result_not_found);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_delete(mm_value_t arg)
+static void
+mc_command_execute_ascii_delete(struct mc_state *state,
+				struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	mc_action_delete(&command->action);
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_DELETED;
+		WRITE(&state->sock, mc_result_deleted);
 	else
-		rc = MC_RESULT_NOT_FOUND;
+		WRITE(&state->sock, mc_result_not_found);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_touch(mm_value_t arg)
+static void
+mc_command_execute_ascii_touch(struct mc_state *state,
+			       struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	mc_action_lookup(&command->action);
 
@@ -530,39 +564,35 @@ mc_command_exec_touch(mm_value_t arg)
 		mc_action_finish(&command->action);
 	}
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else if (command->action.old_entry != NULL)
-		rc = MC_RESULT_TOUCHED;
+		WRITE(&state->sock, mc_result_touched);
 	else
-		rc = MC_RESULT_NOT_FOUND;
+		WRITE(&state->sock, mc_result_not_found);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_slabs(mm_value_t arg __attribute__((unused)))
+static void
+mc_command_execute_ascii_slabs(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
 {
-	return MC_RESULT_NOT_IMPLEMENTED;
+	WRITE(&state->sock, mc_result_not_implemented);
 }
 
-static mm_value_t
-mc_command_exec_stats(mm_value_t arg)
+static void
+mc_command_execute_ascii_stats(struct mc_state *state,
+			       struct mc_command *command)
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
-
-	mc_result_t rc;
 	if (command->params.stats.nopts)
-		rc = MC_RESULT_NOT_IMPLEMENTED;
+		WRITE(&state->sock, mc_result_not_implemented);
 	else
-		rc = MC_RESULT_END;
+		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
-	return rc;
 }
 
 #if ENABLE_MEMCACHE_DELEGATE
@@ -576,12 +606,11 @@ mc_command_exec_flush(mm_value_t arg)
 }
 #endif
 
-static mm_value_t
-mc_command_exec_flush_all(mm_value_t arg)
+static void
+mc_command_execute_ascii_flush_all(struct mc_state *state,
+				   struct mc_command *command)
 {
 	ENTER();
-
-	struct mc_command *command = (struct mc_command *) arg;
 
 	// TODO: really use the exptime.
 	mm_timeval_t time = mm_core_self()->time_manager.time;
@@ -598,51 +627,296 @@ mc_command_exec_flush_all(mm_value_t arg)
 #endif
 	}
 
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else
-		rc = MC_RESULT_OK;
+		WRITE(&state->sock, mc_result_ok);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_version(mm_value_t arg __attribute__((unused)))
-{
-	return MC_RESULT_VERSION;
-}
-
-static mm_value_t
-mc_command_exec_verbosity(mm_value_t arg)
+static void
+mc_command_execute_ascii_version(struct mc_state *state,
+				 struct mc_command *command __attribute__((unused)))
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
+	WRITE(&state->sock, mc_result_version);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_ascii_verbosity(struct mc_state *state,
+				   struct mc_command *command)
+{
+	ENTER();
 
 	mc_verbose = min(command->params.val32, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
-
-	mc_result_t rc;
 	if (command->noreply)
-		rc = MC_RESULT_BLANK;
+		;
 	else
-		rc = MC_RESULT_OK;
+		WRITE(&state->sock, mc_result_ok);
 
 	LEAVE();
-	return rc;
 }
 
-static mm_value_t
-mc_command_exec_quit(mm_value_t arg)
+static void
+mc_command_execute_ascii_quit(struct mc_state *state,
+			      struct mc_command *command __attribute__((unused)))
 {
 	ENTER();
 
-	struct mc_command *command = (struct mc_command *) arg;
-	mm_net_shutdown_reader(command->params.sock);
+	mc_command_quit(state);
 
 	LEAVE();
-	return MC_RESULT_QUIT;
 }
 
+static void
+mc_command_execute_ascii_error(struct mc_state *state,
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+
+	WRITE(&state->sock, mc_result_error);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_get(struct mc_state *state __attribute__((unused)),
+			      struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_getq(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_getk(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_getkq(struct mc_state *state __attribute__((unused)),
+				struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_set(struct mc_state *state __attribute__((unused)),
+			      struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_setq(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_add(struct mc_state *state __attribute__((unused)),
+			      struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_addq(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_replace(struct mc_state *state __attribute__((unused)),
+				  struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_replaceq(struct mc_state *state __attribute__((unused)),
+				   struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_append(struct mc_state *state __attribute__((unused)),
+				 struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_appendq(struct mc_state *state __attribute__((unused)),
+				  struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_prepend(struct mc_state *state __attribute__((unused)),
+				  struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_prependq(struct mc_state *state __attribute__((unused)),
+				   struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_increment(struct mc_state *state __attribute__((unused)),
+				    struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_incrementq(struct mc_state *state __attribute__((unused)),
+				     struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_decrement(struct mc_state *state __attribute__((unused)),
+				    struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_decrementq(struct mc_state *state __attribute__((unused)),
+				     struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_delete(struct mc_state *state __attribute__((unused)),
+				 struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_deleteq(struct mc_state *state __attribute__((unused)),
+				  struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_noop(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+
+	mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_quit(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+
+	mc_command_quit(state);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_quitq(struct mc_state *state __attribute__((unused)),
+				struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+
+	mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+	mc_command_quit(state);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_flush(struct mc_state *state __attribute__((unused)),
+				struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_flushq(struct mc_state *state __attribute__((unused)),
+				 struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_version(struct mc_state *state __attribute__((unused)),
+				  struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_stat(struct mc_state *state __attribute__((unused)),
+			       struct mc_command *command __attribute__((unused)))
+{
+	ENTER();
+	LEAVE();
+}
+
+static void
+mc_command_execute_binary_unknown(struct mc_state *state,
+				  struct mc_command *command)
+{
+	ENTER();
+
+	mc_binary_status(state, command, MC_BINARY_STATUS_UNKNOWN_COMMAND);
+
+	LEAVE();
+}

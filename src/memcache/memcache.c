@@ -36,183 +36,7 @@
 #include "base/mem/alloc.h"
 #include "base/mem/chunk.h"
 
-#define MC_VERSION	"VERSION " PACKAGE_STRING "\r\n"
-
 struct mm_memcache_config mc_config;
-
-/**********************************************************************
- * Transmitting command results.
- **********************************************************************/
-
-static void
-mc_transmit_unref(uintptr_t data)
-{
-	ENTER();
-
-	struct mc_entry *entry = (struct mc_entry *) data;
-
-	struct mc_action action;
-	action.part = mc_table_part(entry->hash);
-	action.old_entry = entry;
-	mc_action_finish(&action);
-
-	LEAVE();
-}
-
-static void
-mc_transmit_flush(struct mc_state *state)
-{
-	ENTER();
-
-	ssize_t n = mm_netbuf_flush(&state->sock);
-	if (n > 0)
-		mm_netbuf_write_reset(&state->sock);
-
-	LEAVE();
-}
-
-static void
-mc_transmit(struct mc_state *state, struct mc_command *command)
-{
-	ENTER();
-
-	switch (mc_command_result(command)) {
-
-#define SL(x) x, (sizeof (x) - 1)
-
-	case MC_RESULT_BLANK:
-		break;
-
-	case MC_RESULT_OK:
-		mm_netbuf_write(&state->sock, SL("OK\r\n"));
-		break;
-
-	case MC_RESULT_END:
-		mm_netbuf_write(&state->sock, SL("END\r\n"));
-		break;
-
-	case MC_RESULT_ERROR:
-		mm_netbuf_write(&state->sock, SL("ERROR\r\n"));
-		break;
-
-	case MC_RESULT_EXISTS:
-		mm_netbuf_write(&state->sock, SL("EXISTS\r\n"));
-		break;
-
-	case MC_RESULT_STORED:
-		mm_netbuf_write(&state->sock, SL("STORED\r\n"));
-		break;
-
-	case MC_RESULT_DELETED:
-		mm_netbuf_write(&state->sock, SL("DELETED\r\n"));
-		break;
-
-	case MC_RESULT_TOUCHED:
-		mm_netbuf_write(&state->sock, SL("TOUCHED\r\n"));
-		break;
-
-	case MC_RESULT_NOT_FOUND:
-		mm_netbuf_write(&state->sock, SL("NOT_FOUND\r\n"));
-		break;
-
-	case MC_RESULT_NOT_STORED:
-		mm_netbuf_write(&state->sock, SL("NOT_STORED\r\n"));
-		break;
-
-	case MC_RESULT_INC_DEC_NON_NUM:
-		mm_netbuf_write(&state->sock, SL("CLIENT_ERROR cannot increment or decrement non-numeric value\r\n"));
-		break;
-
-	case MC_RESULT_NOT_IMPLEMENTED:
-		mm_netbuf_write(&state->sock, SL("SERVER_ERROR not implemented\r\n"));
-		break;
-
-	case MC_RESULT_CANCELED:
-		mm_netbuf_write(&state->sock, SL("SERVER_ERROR command canceled\r\n"));
-		break;
-
-	case MC_RESULT_VERSION:
-		mm_netbuf_write(&state->sock, SL(MC_VERSION));
-		break;
-
-#undef SL
-
-	case MC_RESULT_ENTRY:
-	case MC_RESULT_ENTRY_CAS: {
-		struct mc_entry *entry = command->action.old_entry;
-		const char *key = mc_entry_getkey(entry);
-		char *value = mc_entry_getvalue(entry);
-		uint8_t key_len = entry->key_len;
-		uint32_t value_len = entry->value_len;
-
-		if (command->result == MC_RESULT_ENTRY) {
-			mm_netbuf_printf(
-				&state->sock,
-				"VALUE %.*s %u %u\r\n",
-				key_len, key,
-				entry->flags, value_len);
-		} else {
-			mm_netbuf_printf(
-				&state->sock,
-				"VALUE %.*s %u %u %llu\r\n",
-				key_len, key,
-				entry->flags, value_len,
-				(unsigned long long) entry->stamp);
-		}
-
-		mm_netbuf_splice(&state->sock, value, value_len,
-				 mc_transmit_unref, (uintptr_t) entry);
-
-		// Prevent extra entry unref on command destruction.
-		command->result = MC_RESULT_BLANK;
-
-		if (command->params.last)
-			mm_netbuf_write(&state->sock, "\r\nEND\r\n", 7);
-		else
-			mm_netbuf_write(&state->sock, "\r\n", 2);
-		break;
-	}
-
-	case MC_RESULT_VALUE: {
-		struct mc_entry *entry = command->action.new_entry;
-		char *value = mc_entry_getvalue(entry);
-		uint32_t value_len = entry->value_len;
-
-		mm_netbuf_splice(&state->sock, value, value_len,
-				 mc_transmit_unref, (uintptr_t) entry);
-
-		// Prevent extra entry unref on command destruction.
-		command->result = MC_RESULT_BLANK;
-
-		mm_netbuf_write(&state->sock, "END\r\n", 5);
-		break;
-	}
-
-	case MC_RESULT_QUIT:
-		mc_transmit_flush(state);
-		mm_netbuf_close(&state->sock);
-		break;
-
-	case MC_RESULT_BINARY_QUIT:
-		mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
-		mc_transmit_flush(state);
-		mm_netbuf_close(&state->sock);
-		break;
-
-	case MC_RESULT_BINARY_NOOP:
-		mc_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
-		break;
-
-	case MC_RESULT_BINARY_UNKNOWN:
-		mc_binary_status(state, command, MC_BINARY_STATUS_UNKNOWN_COMMAND);
-		break;
-
-	default:
-		ABORT();
-	}
-
-	LEAVE();
-}
 
 /**********************************************************************
  * Protocol Handlers.
@@ -226,25 +50,21 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	ENTER();
  
 	do {
-		struct mc_command *next = command->next;
-
 		// Handle the command if it has associated
 		// execution routine.
-		if (command->type != NULL)
-			mc_command_execute(command);
-
-		// Put the command result into the transmit buffer.
-		mc_transmit(state, command);
+		mc_command_execute(state, command);
 
 		// Release the command data
+		struct mc_command *next = command->next;
 		mc_command_destroy(mm_core_selfid(), command);
-
 		command = next;
 
 	} while (command != NULL);
 
 	// Transmit buffered results.
-	mc_transmit_flush(state);
+	ssize_t n = mm_netbuf_flush(&state->sock);
+	if (n > 0)
+		mm_netbuf_write_reset(&state->sock);
 
 	LEAVE();
 }
@@ -271,8 +91,7 @@ retry:
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
 			struct mc_command *command = mc_command_create(sock->event.core);
-			command->type = &mc_desc_quit;
-			command->params.sock = sock;
+			command->type = &mc_command_ascii_quit;
 			mc_process_command(state, command);
 		}
 		goto leave;
