@@ -40,6 +40,58 @@ mm_slider_fforward(struct mm_slider *slider, const char *ptr)
 	LEAVE();
 }
 
+size_t __attribute__((nonnull(1)))
+mm_slider_fill(struct mm_slider *slider, size_t size)
+{
+	ENTER();
+	size_t o_size = size;
+
+	for (;;) {
+		uint32_t n = slider->end - slider->ptr;
+		if (n >= size) {
+			slider->ptr += size;
+			size = 0;
+			break;
+		}
+
+		size -= n;
+
+		if (!mm_slider_next_used(slider)) {
+			slider->ptr += n;
+			break;
+		}
+	}
+
+	LEAVE();
+	return (o_size - size);
+}
+
+size_t __attribute__((nonnull(1)))
+mm_slider_flush(struct mm_slider *slider, size_t size)
+{
+	ENTER();
+	size_t o_size = size;
+
+	for (;;) {
+		uint32_t n = slider->end - slider->ptr;
+		if (n >= size) {
+			slider->ptr += size;
+			size = 0;
+			break;
+		}
+
+		size -= n;
+
+		if (!mm_slider_next_free(slider)) {
+			slider->ptr += n;
+			break;
+		}
+	}
+
+	LEAVE();
+	return (o_size - size);
+}
+
 size_t __attribute__((nonnull(1, 2)))
 mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 {
