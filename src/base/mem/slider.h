@@ -109,14 +109,14 @@ mm_slider_next_used(struct mm_slider *slider)
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_slider_fill(struct mm_slider *slider)
+mm_slider_fill_free(struct mm_slider *slider)
 {
 	slider->buf->tail_seg = slider->seg;
 	slider->buf->tail_off = slider->ptr - slider->seg->data;
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_slider_flush(struct mm_slider *slider)
+mm_slider_flush_used(struct mm_slider *slider)
 {
 	while (slider->buf->head_seg != slider->seg) {
 		struct mm_buffer_segment *seg = slider->buf->head_seg;

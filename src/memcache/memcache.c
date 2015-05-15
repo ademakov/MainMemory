@@ -130,7 +130,7 @@ parse:
 	mc_process_command(state, parser.command);
 
 	// Mark the parsed input as consumed.
-	mm_slider_flush(&parser.cursor);
+	mm_slider_flush_used(&parser.cursor);
 
 	// If there is more input in the buffer then try to parse
 	// the next command.
