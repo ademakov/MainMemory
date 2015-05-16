@@ -20,6 +20,8 @@
 #ifndef BASE_ENDIAN_H
 #define BASE_ENDIAN_H
 
+#include <stdint.h>
+
 #ifndef __BYTE_ORDER__
 # error "Missing predefined macro __BYTE_ORDER__."
 #endif
