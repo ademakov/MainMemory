@@ -1,0 +1,87 @@
+/*
+ * base/endian.h - Byte order operations.
+ *
+ * Copyright (C) 2015  Aleksey Demakov
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#ifndef BASE_ENDIAN_H
+#define BASE_ENDIAN_H
+
+#ifndef __BYTE_ORDER__
+# error "Missing predefined macro __BYTE_ORDER__."
+#endif
+#ifndef __ORDER_BIG_ENDIAN__
+# error "Missing predefined macro __ORDER_BIG_ENDIAN__."
+#endif
+#ifndef __ORDER_LITTLE_ENDIAN__
+# error "Missing predefined macro __ORDER_LITTLE_ENDIAN__."
+#endif
+#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ && \
+    __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+# define "Unsupported byte order."
+#endif
+
+#define mm_bswap16(x)	__builtin_bswap16(x)
+#define mm_bswap32(x)	__builtin_bswap32(x)
+#define mm_bswap64(x)	__builtin_bswap64(x)
+
+#if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
+
+# define mm_be16toh(x)	(x)
+# define mm_be32toh(x)	(x)
+# define mm_be64toh(x)	(x)
+
+# define mm_htobe16(x)	(x)
+# define mm_htobe32(x)	(x)
+# define mm_htobe64(x)	(x)
+
+# define mm_le16toh(x)	mm_bswap16(x)
+# define mm_le32toh(x)	mm_bswap32(x)
+# define mm_le64toh(x)	mm_bswap64(x)
+
+# define mm_htole16(x)	mm_bswap16(x)
+# define mm_htole32(x)	mm_bswap32(x)
+# define mm_htole64(x)	mm_bswap64(x)
+
+#else
+
+# define mm_be16toh(x)	mm_bswap16(x)
+# define mm_be32toh(x)	mm_bswap32(x)
+# define mm_be64toh(x)	mm_bswap64(x)
+
+# define mm_htobe16(x)	mm_bswap16(x)
+# define mm_htobe32(x)	mm_bswap32(x)
+# define mm_htobe64(x)	mm_bswap64(x)
+
+# define mm_le16toh(x)	(x)
+# define mm_le32toh(x)	(x)
+# define mm_le64toh(x)	(x)
+
+# define mm_htole16(x)	(x)
+# define mm_htole32(x)	(x)
+# define mm_htole64(x)	(x)
+
+#endif
+
+#define mm_ntohs(x)	mm_be16toh(x)
+#define mm_ntohl(x)	mm_be32toh(x)
+#define mm_ntohll(x)	mm_be64toh(x)
+
+#define mm_htons(x)	mm_htobe16(x)
+#define mm_htonl(x)	mm_htobe32(x)
+#define mm_htonll(x)	mm_htobe64(x)
+
+#endif /* BASE_ENDIAN_H */

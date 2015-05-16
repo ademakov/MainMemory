@@ -11,6 +11,7 @@ libmmbase_a_SOURCES = \
 	bitset.c bitset.h \
 	cksum.c cksum.h \
 	combiner.c combiner.h \
+	endian.h \
 	hash.c hash.h \
 	list.h \
 	lock.c lock.h \
