@@ -34,9 +34,23 @@
 # define "Unsupported byte order."
 #endif
 
-#define mm_bswap16(x)	__builtin_bswap16(x)
-#define mm_bswap32(x)	__builtin_bswap32(x)
-#define mm_bswap64(x)	__builtin_bswap64(x)
+static inline uint16_t
+mm_bswap16(uint16_t x)
+{
+	return __builtin_bswap16(x);
+}
+
+static inline uint32_t
+mm_bswap32(uint32_t x)
+{
+	return __builtin_bswap32(x);
+}
+
+static inline uint64_t
+mm_bswap64(uint64_t x)
+{
+	return __builtin_bswap64(x);
+}
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
