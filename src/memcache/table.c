@@ -270,7 +270,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core)
+mc_table_init_part(mm_core_t index, mm_core_t core __unused)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
@@ -311,7 +311,7 @@ mc_table_init_part(mm_core_t index, mm_core_t core)
 	part->evicting = false;
 	part->striding = false;
 
-	part->stamp = index;
+	part->stamp = index + 1;
 
 	// Allocate initial space for the table.
 	mc_table_expand(part, mc_table.nentries_increment);
