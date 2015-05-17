@@ -207,6 +207,9 @@ mc_action_bucket_insert(struct mc_action *action,
 	mm_link_insert(bucket, &action->new_entry->link);
 	action->part->stamp += mc_table.nparts;
 	action->part->volume += mc_entry_size(action->new_entry);
+
+	// Store stamp value needed for binary protocol response.
+	action->stamp = action->new_entry->stamp;
 }
 
 static void
@@ -253,8 +256,7 @@ mc_action_bucket_delete(struct mc_action *action,
 static void
 mc_action_bucket_update(struct mc_action *action,
 			struct mm_link *bucket,
-			struct mm_link *freelist,
-			bool match_stamp)
+			struct mm_link *freelist)
 {
 	mc_action_drop_expired(action->part, bucket, freelist);
 	struct mm_link *pred = bucket;
@@ -262,8 +264,8 @@ mc_action_bucket_update(struct mc_action *action,
 		struct mm_link *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_match_entry(action, entry)) {
-			action->entry_match = !match_stamp || action->stamp == entry->stamp;
 			action->old_entry = entry;
+			action->entry_match = !action->stamp || action->stamp == entry->stamp;
 			if (action->entry_match) {
 				uint8_t state = entry->state;
 				mc_action_unlink_entry(action->part, pred, entry);
@@ -461,7 +463,7 @@ mc_action_update_low(struct mc_action *action)
 	uint32_t index = mc_table_index(action->part, action->hash);
 	struct mm_link *bucket = &action->part->buckets[index];
 
-	mc_action_bucket_update(action, bucket, &freelist, action->match_stamp);
+	mc_action_bucket_update(action, bucket, &freelist);
 	if (action->entry_match) {
 		if (action->use_new_entry)
 			mc_action_ref_entry(action->new_entry);

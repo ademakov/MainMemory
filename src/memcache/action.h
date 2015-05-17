@@ -76,6 +76,7 @@ struct mc_action
 	struct mc_entry *new_entry;
 	struct mc_entry *old_entry;
 
+	/* If not zero then match it against old_entry stamp. */
 	uint64_t stamp;
 
 #if ENABLE_MEMCACHE_COMBINER
@@ -85,8 +86,6 @@ struct mc_action
 	struct mm_future future;
 #endif
 
-	/* Input flag indicating if update should check entry stamp. */
-	bool match_stamp;
 	/* Input flags indicating if update should retain old and new
 	   entry references after the action. */
 	bool use_old_entry;
@@ -254,7 +253,6 @@ mc_action_insert(struct mc_action *action)
 static inline void
 mc_action_update(struct mc_action *action)
 {
-	action->match_stamp = false;
 	action->use_old_entry = false;
 	action->use_new_entry = false;
 #if ENABLE_MEMCACHE_COMBINER
@@ -271,7 +269,6 @@ mc_action_compare_and_update(struct mc_action *action,
 			     bool use_old_entry,
 			     bool use_new_entry)
 {
-	action->match_stamp = true;
 	action->use_old_entry = use_old_entry;
 	action->use_new_entry = use_new_entry;
 #if ENABLE_MEMCACHE_COMBINER
