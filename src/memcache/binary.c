@@ -22,7 +22,7 @@
 #include "memcache/parser.h"
 #include "memcache/state.h"
 
-#include "base/endian.h"
+#include "base/bytes.h"
 #include "base/log/trace.h"
 
 static struct mc_command_type *mc_binary_commands[256] = {

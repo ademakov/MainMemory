@@ -1,5 +1,5 @@
 /*
- * base/endian.h - Byte order operations.
+ * base/bytes.h - Byte order operations.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_ENDIAN_H
-#define BASE_ENDIAN_H
+#ifndef BASE_BYTES_H
+#define BASE_BYTES_H
 
 #include <stdint.h>
 
@@ -100,4 +100,4 @@ mm_bswap64(uint64_t x)
 #define mm_htonl(x)	mm_htobe32(x)
 #define mm_htonll(x)	mm_htobe64(x)
 
-#endif /* BASE_ENDIAN_H */
+#endif /* BASE_BYTES_H */

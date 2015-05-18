@@ -9,9 +9,9 @@ libmmbase_a_SOURCES = \
 	barrier.c barrier.h \
 	bitops.h \
 	bitset.c bitset.h \
+	bytes.h \
 	cksum.c cksum.h \
 	combiner.c combiner.h \
-	endian.h \
 	hash.c hash.h \
 	list.h \
 	lock.c lock.h \

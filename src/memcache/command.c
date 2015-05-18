@@ -24,7 +24,7 @@
 #include "memcache/table.h"
 
 #include "core/task.h"
-#include "base/endian.h"
+#include "base/bytes.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/buffer.h"
