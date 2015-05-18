@@ -22,6 +22,9 @@
 
 #include "common.h"
 
+/* Forward declarations. */
+struct mc_parser;
+
 /* Binary protocol magic bytes. */
 #define MC_BINARY_REQUEST			0x80
 #define MC_BINARY_RESPONSE			0x81
@@ -66,17 +69,20 @@
 #define MC_BINARY_STATUS_UNKNOWN_COMMAND	0x81
 #define MC_BINARY_STATUS_OUT_OF_MEMORY		0x82
 
-/* Forward declarations. */
-struct mc_state;
-struct mc_parser;
-struct mc_command;
+struct mc_binary_header
+{
+	uint8_t magic;
+	uint8_t opcode;
+	uint16_t key_len;
+	uint8_t ext_len;
+	uint8_t data_type;
+	uint16_t status;
+	uint32_t body_len;
+	uint32_t opaque;
+	uint64_t stamp;
+};
 
 bool __attribute__((nonnull(1)))
 mc_binary_parse(struct mc_parser *parser);
-
-void __attribute__((nonnull(1, 2)))
-mc_binary_status(struct mc_state *state,
-		 struct mc_command *command,
-		 uint16_t status);
 
 #endif /* MEMCACHE_BINARY_H */

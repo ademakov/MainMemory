@@ -60,13 +60,21 @@ struct mc_entry
 	uint64_t stamp;
 };
 
-static inline size_t
-mc_entry_sum_length(uint8_t key_len, size_t value_len)
+static inline uint32_t
+mc_entry_fix_exptime(uint32_t exptime)
+{
+	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
+		exptime += mm_core_self()->time_manager.real_time / 1000000;
+	return exptime;
+}
+
+static inline uint32_t
+mc_entry_sum_length(uint8_t key_len, uint32_t value_len)
 {
 	return sizeof(struct mc_entry) + key_len + value_len;
 }
 
-static inline size_t
+static inline uint32_t
 mc_entry_size(struct mc_entry *entry)
 {
 	return mc_entry_sum_length(entry->key_len, entry->value_len);
@@ -99,7 +107,7 @@ static inline void
 mc_entry_alloc_chunks(struct mc_entry *entry)
 {
 	ASSERT(mm_link_empty(&entry->chunks));
-	size_t size = mc_entry_size(entry);
+	uint32_t size = mc_entry_size(entry);
 	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
 	mm_link_insert(&entry->chunks, &chunk->base.link);
 }

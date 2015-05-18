@@ -37,6 +37,8 @@
 #define MC_COMMAND_UPDATE	3
 /* A table update command. */
 #define MC_COMMAND_DELETE	4
+/* A table flush command. */
+#define MC_COMMAND_FLUSH	5
 
 /*
  * Some preprocessor magic to emit command definitions.
@@ -57,7 +59,7 @@
 	_(ascii_touch,		MC_COMMAND_UPDATE)	\
 	_(ascii_slabs,		MC_COMMAND_CUSTOM)	\
 	_(ascii_stats,		MC_COMMAND_CUSTOM)	\
-	_(ascii_flush_all,	MC_COMMAND_CUSTOM)	\
+	_(ascii_flush_all,	MC_COMMAND_FLUSH)	\
 	_(ascii_version,	MC_COMMAND_CUSTOM)	\
 	_(ascii_verbosity,	MC_COMMAND_CUSTOM)	\
 	_(ascii_quit,		MC_COMMAND_CUSTOM)	\
@@ -85,11 +87,11 @@
 	_(binary_noop,		MC_COMMAND_CUSTOM)	\
 	_(binary_quit,		MC_COMMAND_CUSTOM)	\
 	_(binary_quitq,		MC_COMMAND_CUSTOM)	\
-	_(binary_flush,		MC_COMMAND_CUSTOM)	\
-	_(binary_flushq,	MC_COMMAND_CUSTOM)	\
+	_(binary_flush,		MC_COMMAND_FLUSH)	\
+	_(binary_flushq,	MC_COMMAND_FLUSH)	\
 	_(binary_version,	MC_COMMAND_CUSTOM)	\
 	_(binary_stat,		MC_COMMAND_CUSTOM)	\
-	_(binary_unknown,	MC_COMMAND_CUSTOM)
+	_(binary_error,		MC_COMMAND_CUSTOM)
 
 /*
  * Declare command handling info.
@@ -132,7 +134,9 @@ struct mc_command_params_stats
 struct mc_command_params_binary
 {
 	uint32_t opaque;
+	uint16_t status;
 	uint8_t opcode;
+	uint32_t val32;
 };
 
 union mc_command_params

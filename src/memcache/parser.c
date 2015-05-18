@@ -28,14 +28,6 @@
 #define MC_KEY_LEN_MAX		250
 
 
-static uint32_t
-mc_parser_exptime(uint32_t exptime)
-{
-	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
-		exptime += mm_core_self()->time_manager.real_time / 1000000;
-	return exptime;
-}
-
 /*
  * Prepare for parsing a command.
  */
@@ -581,7 +573,7 @@ again:
 				goto again;
 
 			case S_SET_4:
-				command->action.new_entry->exp_time = mc_parser_exptime(num32);
+				command->action.new_entry->exp_time = mc_entry_fix_exptime(num32);
 				state = S_NUM32;
 				shift = S_SET_5;
 				goto again;
@@ -662,7 +654,7 @@ again:
 				goto again;
 
 			case S_TOUCH_3:
-				command->params.val32 = mc_parser_exptime(num32);
+				command->params.val32 = mc_entry_fix_exptime(num32);
 				ASSERT(c != ' ');
 				if (c == 'n') {
 					state = S_MATCH;
