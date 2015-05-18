@@ -128,7 +128,7 @@ void mc_action_flush_low(struct mc_action *action)
 	__attribute__((nonnull(1)));
 
 static inline void __attribute__((nonnull(1)))
-mc_action_cleanup(struct mc_action *action __unused)
+mc_action_cleanup(struct mc_action *action __mm_unused__)
 {
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_future_unique_cleanup(&action->future);
@@ -143,7 +143,7 @@ mc_action_hash(struct mc_action *action)
 }
 
 static inline void
-mc_action_wait(struct mc_action *action __unused)
+mc_action_wait(struct mc_action *action __mm_unused__)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	while (action->action != MC_ACTION_DONE)

@@ -25,11 +25,11 @@
 
 struct mm_barrier
 {
-	uint32_t count __align_cacheline;
+	uint32_t count __mm_align_cacheline__;
 
 	mm_atomic_uint32_t value;
 
-	uint32_t sense __align_cacheline;
+	uint32_t sense __mm_align_cacheline__;
 };
 
 struct mm_barrier_local

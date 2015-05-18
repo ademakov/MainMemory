@@ -310,7 +310,7 @@ mm_core_chunk_select(void)
 }
 
 void *
-mm_core_chunk_alloc(mm_chunk_t tag __unused, size_t size)
+mm_core_chunk_alloc(mm_chunk_t tag __mm_unused__, size_t size)
 {
 	ASSERT(tag == mm_core_selfid());
 	return mm_local_alloc(size);
@@ -410,7 +410,7 @@ mm_core_worker_execute(struct mm_work *work)
 }
 
 static void
-mm_core_worker_cleanup(uintptr_t arg __unused)
+mm_core_worker_cleanup(uintptr_t arg __mm_unused__)
 {
 	// Wake up the master possibly waiting for worker availability.
 	if (mm_core->nworkers == mm_core->nworkers_max)

@@ -25,25 +25,25 @@
  **********************************************************************/
 
 static void *
-mm_global_arena_alloc(const struct mm_arena *arena __unused,
+mm_global_arena_alloc(const struct mm_arena *arena __mm_unused__,
 		      size_t size)
 {
 	return mm_global_alloc(size);
 }
 static void *
-mm_global_arena_calloc(const struct mm_arena *arena __unused,
+mm_global_arena_calloc(const struct mm_arena *arena __mm_unused__,
 		       size_t count, size_t size)
 {
 	return mm_global_calloc(count, size);
 }
 static void *
-mm_global_arena_realloc(const struct mm_arena *arena __unused,
+mm_global_arena_realloc(const struct mm_arena *arena __mm_unused__,
 			void *ptr, size_t size)
 {
 	return mm_global_realloc(ptr, size);
 }
 static void
-mm_global_arena_free(const struct mm_arena *arena __unused,
+mm_global_arena_free(const struct mm_arena *arena __mm_unused__,
 		     void *ptr)
 {
 	mm_global_free(ptr);

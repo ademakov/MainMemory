@@ -34,15 +34,15 @@
 struct mm_ring_base
 {
 	/* Consumer data. */
-	mm_atomic_uintptr_t head __align_cacheline;
+	mm_atomic_uintptr_t head __mm_align_cacheline__;
 	mm_thread_lock_t head_lock;
 
 	/* Producer data. */
-	mm_atomic_uintptr_t tail __align_cacheline;
+	mm_atomic_uintptr_t tail __mm_align_cacheline__;
 	mm_thread_lock_t tail_lock;
 
 	/* Shared data. */
-	uintptr_t mask __align_cacheline;
+	uintptr_t mask __mm_align_cacheline__;
 };
 
 void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)

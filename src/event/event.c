@@ -38,8 +38,8 @@ int mm_event_hdesc_table_size;
 
 // A dummy event handler.
 static void
-mm_event_dummy(mm_event_t event __unused,
-	       void *data __unused)
+mm_event_dummy(mm_event_t event __mm_unused__,
+	       void *data __mm_unused__)
 {
 	DEBUG("hmm, dummy event handler invoked.");
 }

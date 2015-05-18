@@ -74,7 +74,7 @@ mm_work_destroy_low(mm_core_t core, struct mm_work *work)
 }
 
 void
-mm_work_complete_noop(struct mm_work *work __unused,
-		      mm_value_t result __unused)
+mm_work_complete_noop(struct mm_work *work __mm_unused__,
+		      mm_value_t result __mm_unused__)
 {
 }

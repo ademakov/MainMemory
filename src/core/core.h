@@ -109,7 +109,7 @@ struct mm_core
 	/* The memory chunks freed by other threads. */
 	MM_RING_SPSC(chunks, MM_CORE_CHUNK_RING_SIZE);
 
-} __align_cacheline;
+} __mm_align_cacheline__;
 
 void mm_core_init(void);
 void mm_core_term(void);

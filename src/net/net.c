@@ -283,13 +283,13 @@ mm_net_alloc_server(void)
  **********************************************************************/
 
 static void
-mm_net_reader_complete(struct mm_work *work, mm_value_t value __unused)
+mm_net_reader_complete(struct mm_work *work, mm_value_t value __mm_unused__)
 {
 	mm_net_yield_reader(containerof(work, struct mm_net_socket, read_work));
 }
 
 static void
-mm_net_writer_complete(struct mm_work *work, mm_value_t value __unused)
+mm_net_writer_complete(struct mm_work *work, mm_value_t value __mm_unused__)
 {
 	mm_net_yield_writer(containerof(work, struct mm_net_socket, write_work));
 }

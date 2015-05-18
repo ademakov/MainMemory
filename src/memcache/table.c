@@ -270,7 +270,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core __unused)
+mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 

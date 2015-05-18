@@ -76,7 +76,7 @@ struct mc_tpart
 	uint64_t stamp;
 	uint64_t flush_stamp;
 
-} __align_cacheline;
+} __mm_align_cacheline__;
 
 /* The table of memcache entries. */
 struct mc_table

@@ -153,13 +153,13 @@ mm_pool_shared_free(struct mm_pool *pool, void *item)
 }
 
 static inline void *
-mm_pool_shared_alloc_low(mm_core_t core __unused, struct mm_pool *pool)
+mm_pool_shared_alloc_low(mm_core_t core __mm_unused__, struct mm_pool *pool)
 {
 	return mm_pool_local_alloc(pool);
 }
 
 static inline void
-mm_pool_shared_free_low(mm_core_t core __unused, struct mm_pool *pool, void *item)
+mm_pool_shared_free_low(mm_core_t core __mm_unused__, struct mm_pool *pool, void *item)
 {
 	mm_pool_local_free(pool, item);
 }
