@@ -62,6 +62,7 @@ mm_slider_fill(struct mm_slider *slider, size_t size)
 		}
 	}
 
+	DEBUG("bytes: %lu", o_size - size);
 	LEAVE();
 	return (o_size - size);
 }
@@ -88,6 +89,7 @@ mm_slider_flush(struct mm_slider *slider, size_t size)
 		}
 	}
 
+	DEBUG("bytes: %lu", o_size - size);
 	LEAVE();
 	return (o_size - size);
 }
@@ -118,6 +120,7 @@ mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 		}
 	}
 
+	DEBUG("bytes: %lu", o_size - size);
 	LEAVE();
 	return (o_size - size);
 }
@@ -148,6 +151,7 @@ mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size)
 		}
 	}
 
+	DEBUG("bytes: %lu", o_size - size);
 	LEAVE();
 	return (o_size - size);
 }
