@@ -206,10 +206,9 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 	mm_slider_read(&parser->cursor, key, key_len);
 
 	struct mc_command *command = parser->command;
-	command->params.delta.delta = mm_ntohll(extras.delta);
-	command->params.delta.value = mm_ntohll(extras.value);
-	command->params.delta.exp_time
-		= mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
+	command->delta = mm_ntohll(extras.delta);
+	command->value = mm_ntohll(extras.value);
+	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
 	command->action.key_len = key_len;
 	command->action.key = key;
 	command->own_key = true;
@@ -229,7 +228,7 @@ mc_binary_read_flush(struct mc_parser *parser)
 	mm_slider_read(&parser->cursor, &exp_time, sizeof exp_time);
 
 	struct mc_command *command = parser->command;
-	command->params.binary.val32 = mm_ntohl(exp_time);
+	command->exp_time = mm_ntohl(exp_time);
 
 	return true;
 }

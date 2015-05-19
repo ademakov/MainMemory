@@ -142,17 +142,6 @@ struct mc_command_params_binary
 	uint32_t opaque;
 	uint16_t status;
 	uint8_t opcode;
-	uint32_t val32;
-};
-
-struct mc_command_params_delta
-{
-	uint32_t opaque;
-	uint16_t status;
-	uint8_t opcode;
-	uint64_t delta;
-	uint64_t value;
-	uint32_t exp_time;
 };
 
 union mc_command_params
@@ -160,10 +149,7 @@ union mc_command_params
 	struct mc_command_params_slabs slabs;
 	struct mc_command_params_stats stats;
 	struct mc_command_params_binary binary;
-	struct mc_command_params_delta delta;
-
-	uint64_t val64;
-	uint32_t val32;
+	bool noreply;
 	bool last;
 };
 
@@ -173,7 +159,11 @@ struct mc_command
 	struct mc_command_type *type;
 	struct mc_action action;
 	union mc_command_params params;
-	bool noreply;
+
+	uint64_t delta;
+	uint64_t value;
+	uint32_t exp_time;
+
 	bool own_key;
 };
 

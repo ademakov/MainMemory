@@ -160,17 +160,18 @@ mc_parser_parse(struct mc_parser *parser)
 		S_SET_5,
 		S_SET_6,
 		S_CAS,
-		S_ARITH_1,
-		S_ARITH_2,
+		S_DELTA_1,
+		S_DELTA_2,
+		S_DELTA_3,
 		S_DELETE_1,
 		S_DELETE_2,
 		S_TOUCH_1,
 		S_TOUCH_2,
 		S_TOUCH_3,
 		S_FLUSH_ALL_1,
+		S_FLUSH_ALL_2,
 		S_VERBOSITY_1,
-		S_VAL32,
-		S_VAL64,
+		S_VERBOSITY_2,
 		S_NOREPLY,
 		S_OPT,
 		S_OPT_N,
@@ -292,13 +293,13 @@ again:
 					command->type = &mc_command_ascii_incr;
 					state = S_MATCH;
 					//match = "";
-					shift = S_ARITH_1;
+					shift = S_DELTA_1;
 					break;
 				} else if (start == Cx4('d', 'e', 'c', 'r')) {
 					command->type = &mc_command_ascii_decr;
 					state = S_MATCH;
 					//match = "";
-					shift = S_ARITH_1;
+					shift = S_DELTA_1;
 					break;
 				} else if (start == Cx4('g', 'e', 't', 's')) {
 					command->type = &mc_command_ascii_gets;
@@ -596,7 +597,7 @@ again:
 				}
 
 			case S_SET_6:
-				command->noreply = true;
+				command->params.noreply = true;
 				state = S_VALUE;
 				goto again;
 
@@ -613,16 +614,29 @@ again:
 					goto again;
 				}
 
-			case S_ARITH_1:
+			case S_DELTA_1:
 				state = S_KEY;
-				shift = S_ARITH_2;
+				shift = S_DELTA_2;
 				goto again;
 
-			case S_ARITH_2:
+			case S_DELTA_2:
 				mc_action_hash(&command->action);
 				state = S_NUM64;
-				shift = S_VAL64;
+				shift = S_DELTA_3;
 				goto again;
+
+			case S_DELTA_3:
+				command->delta = num64;
+				ASSERT(c != ' ');
+				if (c == 'n') {
+					state = S_MATCH;
+					match = "oreply";
+					shift = S_NOREPLY;
+					break;
+				} else {
+					state = S_EOL;
+					goto again;
+				}
 
 			case S_DELETE_1:
 				state = S_KEY;
@@ -654,7 +668,7 @@ again:
 				goto again;
 
 			case S_TOUCH_3:
-				command->params.val32 = mc_entry_fix_exptime(num32);
+				command->exp_time = mc_entry_fix_exptime(num32);
 				ASSERT(c != ' ');
 				if (c == 'n') {
 					state = S_MATCH;
@@ -673,7 +687,7 @@ again:
 					goto again;
 				} else if (c >= '0' && c <= '9') {
 					state = S_NUM32;
-					shift = S_VAL32;
+					shift = S_FLUSH_ALL_2;
 					goto again;
 				} else if (c == 'n') {
 					state = S_MATCH;
@@ -685,19 +699,8 @@ again:
 					goto again;
 				}
 
-			case S_VERBOSITY_1:
-				ASSERT(c != ' ');
-				if (c >= '0' && c <= '9') {
-					state = S_NUM32;
-					shift = S_VAL32;
-					goto again;
-				} else {
-					state = S_ERROR;
-					goto again;
-				}
-
-			case S_VAL32:
-				command->params.val32 = num32;
+			case S_FLUSH_ALL_2:
+				command->exp_time = num32;
 				ASSERT(c != ' ');
 				if (c == 'n') {
 					state = S_MATCH;
@@ -709,8 +712,19 @@ again:
 					goto again;
 				}
 
-			case S_VAL64:
-				command->params.val64 = num64;
+			case S_VERBOSITY_1:
+				ASSERT(c != ' ');
+				if (c >= '0' && c <= '9') {
+					state = S_NUM32;
+					shift = S_VERBOSITY_2;
+					goto again;
+				} else {
+					state = S_ERROR;
+					goto again;
+				}
+
+			case S_VERBOSITY_2:
+				command->value = num32;
 				ASSERT(c != ' ');
 				if (c == 'n') {
 					state = S_MATCH;
@@ -723,7 +737,7 @@ again:
 				}
 
 			case S_NOREPLY:
-				command->noreply = true;
+				command->params.noreply = true;
 				state = S_EOL;
 				goto again;
 

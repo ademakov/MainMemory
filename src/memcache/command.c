@@ -490,7 +490,7 @@ mc_command_execute_ascii_set(struct mc_state *state,
 
 	mc_action_upsert(&command->action);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_stored);
@@ -506,7 +506,7 @@ mc_command_execute_ascii_add(struct mc_state *state,
 
 	mc_action_insert(&command->action);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry == NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -524,7 +524,7 @@ mc_command_execute_ascii_replace(struct mc_state *state,
 
 	mc_action_update(&command->action);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -542,7 +542,7 @@ mc_command_execute_ascii_cas(struct mc_state *state,
 
 	mc_action_compare_and_update(&command->action, false, false);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.entry_match)
 		WRITE(&state->sock, mc_result_stored);
@@ -562,7 +562,7 @@ mc_command_execute_ascii_append(struct mc_state *state,
 
 	mc_command_append(command);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -580,7 +580,7 @@ mc_command_execute_ascii_prepend(struct mc_state *state,
 
 	mc_command_prepend(command);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -606,7 +606,7 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 				mc_action_cancel(&command->action);
 			break;
 		}
-		value += command->params.val64;
+		value += command->delta;
 		command->action.stamp = command->action.old_entry->stamp;
 
 		if (command->action.new_entry == NULL) {
@@ -619,12 +619,12 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 		mc_entry_setnum(command->action.new_entry, &command->action, value);
 
 		mc_action_compare_and_update(&command->action, true,
-					     !command->noreply);
+					     !command->params.noreply);
 		if (command->action.entry_match)
 			break;
 	}
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
@@ -652,8 +652,8 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 				mc_action_cancel(&command->action);
 			break;
 		}
-		if (value > command->params.val64)
-			value -= command->params.val64;
+		if (value > command->delta)
+			value -= command->delta;
 		else
 			value = 0;
 		command->action.stamp = command->action.old_entry->stamp;
@@ -668,12 +668,12 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 		mc_entry_setnum(command->action.new_entry, &command->action, value);
 
 		mc_action_compare_and_update(&command->action, true,
-					     !command->noreply);
+					     !command->params.noreply);
 		if (command->action.entry_match)
 			break;
 	}
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
@@ -693,7 +693,7 @@ mc_command_execute_ascii_delete(struct mc_state *state,
 
 	mc_action_delete(&command->action);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_deleted);
@@ -724,11 +724,11 @@ mc_command_execute_ascii_touch(struct mc_state *state,
 		// or decremented then admittedly we might loose the exptime
 		// update. But after all who is going to ever sensibly use
 		// exptime and incr/decr together?
-		command->action.old_entry->exp_time = command->params.val32;
+		command->action.old_entry->exp_time = command->exp_time;
 		mc_action_finish(&command->action);
 	}
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_touched);
@@ -765,9 +765,9 @@ mc_command_execute_ascii_flush_all(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_flush(command->params.val32);
+	mc_command_flush(command->exp_time);
 
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
@@ -792,9 +792,9 @@ mc_command_execute_ascii_verbosity(struct mc_state *state,
 {
 	ENTER();
 
-	mc_verbose = min(command->params.val32, 2u);
+	mc_verbose = min(command->value, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
-	if (command->noreply)
+	if (command->params.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
@@ -1108,7 +1108,7 @@ mc_command_execute_binary_increment(struct mc_state *state,
 
 	for (;;) {
 		if (command->action.old_entry == NULL) {
-			value = command->params.delta.value;
+			value = command->value;
 			command->action.stamp = 0;
 		} else {
 			if (!mc_entry_getnum(command->action.old_entry, &value)) {
@@ -1117,7 +1117,7 @@ mc_command_execute_binary_increment(struct mc_state *state,
 					mc_action_cancel(&command->action);
 				break;
 			}
-			value += command->params.delta.delta;
+			value += command->delta;
 			command->action.stamp = command->action.old_entry->stamp;
 		}
 
@@ -1155,8 +1155,8 @@ mc_command_execute_binary_increment(struct mc_state *state,
 }
 
 static void
-mc_command_execute_binary_incrementq(struct mc_state *state __mm_unused__,
-				     struct mc_command *command __mm_unused__)
+mc_command_execute_binary_incrementq(struct mc_state *state,
+				     struct mc_command *command)
 {
 	ENTER();
 
@@ -1166,7 +1166,7 @@ mc_command_execute_binary_incrementq(struct mc_state *state __mm_unused__,
 
 	for (;;) {
 		if (command->action.old_entry == NULL) {
-			value = command->params.delta.value;
+			value = command->value;
 			command->action.stamp = 0;
 		} else {
 			if (!mc_entry_getnum(command->action.old_entry, &value)) {
@@ -1175,7 +1175,7 @@ mc_command_execute_binary_incrementq(struct mc_state *state __mm_unused__,
 					mc_action_cancel(&command->action);
 				break;
 			}
-			value += command->params.delta.delta;
+			value += command->delta;
 			command->action.stamp = command->action.old_entry->stamp;
 		}
 
@@ -1213,8 +1213,8 @@ mc_command_execute_binary_incrementq(struct mc_state *state __mm_unused__,
 }
 
 static void
-mc_command_execute_binary_decrement(struct mc_state *state __mm_unused__,
-				    struct mc_command *command __mm_unused__)
+mc_command_execute_binary_decrement(struct mc_state *state,
+				    struct mc_command *command)
 {
 	ENTER();
 
@@ -1224,7 +1224,7 @@ mc_command_execute_binary_decrement(struct mc_state *state __mm_unused__,
 
 	for (;;) {
 		if (command->action.old_entry == NULL) {
-			value = command->params.delta.value;
+			value = command->value;
 			command->action.stamp = 0;
 		} else {
 			if (!mc_entry_getnum(command->action.old_entry, &value)) {
@@ -1233,8 +1233,8 @@ mc_command_execute_binary_decrement(struct mc_state *state __mm_unused__,
 					mc_action_cancel(&command->action);
 				break;
 			}
-			if (value > command->params.delta.delta)
-				value -= command->params.delta.delta;
+			if (value > command->delta)
+				value -= command->delta;
 			else
 				value = 0;
 			command->action.stamp = command->action.old_entry->stamp;
@@ -1274,8 +1274,8 @@ mc_command_execute_binary_decrement(struct mc_state *state __mm_unused__,
 }
 
 static void
-mc_command_execute_binary_decrementq(struct mc_state *state __mm_unused__,
-				     struct mc_command *command __mm_unused__)
+mc_command_execute_binary_decrementq(struct mc_state *state,
+				     struct mc_command *command)
 {
 	ENTER();
 
@@ -1285,7 +1285,7 @@ mc_command_execute_binary_decrementq(struct mc_state *state __mm_unused__,
 
 	for (;;) {
 		if (command->action.old_entry == NULL) {
-			value = command->params.delta.value;
+			value = command->value;
 			command->action.stamp = 0;
 		} else {
 			if (!mc_entry_getnum(command->action.old_entry, &value)) {
@@ -1294,8 +1294,8 @@ mc_command_execute_binary_decrementq(struct mc_state *state __mm_unused__,
 					mc_action_cancel(&command->action);
 				break;
 			}
-			if (value > command->params.val64)
-				value -= command->params.delta.delta;
+			if (value > command->delta)
+				value -= command->delta;
 			else
 				value = 0;
 			command->action.stamp = command->action.old_entry->stamp;
@@ -1408,7 +1408,7 @@ mc_command_execute_binary_flush(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_flush(command->params.binary.val32);
+	mc_command_flush(command->exp_time);
 	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
 
 	LEAVE();
@@ -1420,7 +1420,7 @@ mc_command_execute_binary_flushq(struct mc_state *state __mm_unused__,
 {
 	ENTER();
 
-	mc_command_flush(command->params.binary.val32);
+	mc_command_flush(command->exp_time);
 
 	LEAVE();
 }
