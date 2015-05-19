@@ -155,14 +155,72 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	entry->key_len = key_len;
 	entry->value_len = value_len;
 	entry->flags = mm_ntohl(extras.flags);
-	entry->exp_time = mm_ntohl(extras.flags);
+	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.flags));
 	mm_link_insert(&entry->chunks, &chunk->base.link);
 
 	return true;
 }
 
 static bool
-mc_binary_read_flush_extra(struct mc_parser *parser)
+mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_len)
+{
+	if (!mc_binary_fill(parser, body_len))
+		return false;
+
+	uint32_t value_len = body_len - key_len;
+	uint32_t size = mc_entry_sum_length(key_len, value_len);
+	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	mm_slider_read(&parser->cursor, chunk->data, key_len + value_len);
+
+	struct mc_command *command = parser->command;
+	command->action.key_len = key_len;
+	command->action.key = chunk->data;
+	command->own_key = false;
+
+	mc_action_hash(&command->action);
+	mc_action_create(&command->action);
+
+	struct mc_entry *entry = command->action.new_entry;
+	entry->key_len = key_len;
+	entry->value_len = value_len;
+	mm_link_insert(&entry->chunks, &chunk->base.link);
+
+	return true;
+}
+
+static bool
+mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
+{
+	if (!mc_binary_fill(parser, key_len))
+		return false;
+
+	struct
+	{
+		uint64_t delta;
+		uint64_t value;
+		uint32_t exp_time;
+	} extras;
+	mm_slider_read(&parser->cursor, &extras, 20);
+
+	char *key = mm_local_alloc(key_len);
+	mm_slider_read(&parser->cursor, key, key_len);
+
+	struct mc_command *command = parser->command;
+	command->params.delta.delta = mm_ntohll(extras.delta);
+	command->params.delta.value = mm_ntohll(extras.value);
+	command->params.delta.exp_time
+		= mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
+	command->action.key_len = key_len;
+	command->action.key = key;
+	command->own_key = true;
+
+	mc_action_hash(&command->action);
+
+	return true;
+}
+
+static bool
+mc_binary_read_flush(struct mc_parser *parser)
 {
 	if (!mc_binary_fill(parser, 4))
 		return false;
@@ -240,6 +298,26 @@ mc_binary_parse(struct mc_parser *parser)
 		command->action.stamp = mm_ntohll(header.stamp);
 		break;
 
+	case MC_COMMAND_CONCAT:
+		if (unlikely(ext_len != 0)
+		    || unlikely(key_len == body_len)
+		    || unlikely(key_len == 0)) {
+			rc = mc_binary_invalid_arguments(parser, body_len);
+			goto leave;
+		}
+		rc = mc_binary_read_chunk(parser, body_len, key_len);
+		break;
+
+	case MC_COMMAND_DELTA:
+		if (unlikely(ext_len != 20)
+		    || unlikely(key_len + ext_len != body_len)
+		    || unlikely(key_len == 0)) {
+			rc = mc_binary_invalid_arguments(parser, body_len);
+			goto leave;
+		}
+		rc = mc_binary_read_delta(parser, key_len);
+		break;
+
 	case MC_COMMAND_FLUSH:
 		if (unlikely(ext_len != 0 && ext_len != 4)
 		    || unlikely(key_len != 0)
@@ -248,7 +326,7 @@ mc_binary_parse(struct mc_parser *parser)
 			goto leave;
 		}
 		if (ext_len)
-			rc = mc_binary_read_flush_extra(parser);
+			rc = mc_binary_read_flush(parser);
 		break;
 
 	default:

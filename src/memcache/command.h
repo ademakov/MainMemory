@@ -27,18 +27,24 @@
  * Command type declarations.
  **********************************************************************/
 
-/* A non-table command. */
-#define MC_COMMAND_CUSTOM	0
-/* A table lookup command. */
-#define MC_COMMAND_LOOKUP	1
-/* A table storage command. */
-#define MC_COMMAND_STORAGE	2
-/* A table update command. */
-#define MC_COMMAND_UPDATE	3
-/* A table update command. */
-#define MC_COMMAND_DELETE	4
-/* A table flush command. */
-#define MC_COMMAND_FLUSH	5
+enum mc_command_kind {
+	/* Entry lookup command. */
+	MC_COMMAND_LOOKUP,
+	/* Entry storage command. */
+	MC_COMMAND_STORAGE,
+	/* Entry append/prepend command. */
+	MC_COMMAND_CONCAT,
+	/* Entry delete command. */
+	MC_COMMAND_DELETE,
+	/* Entry inc/dec command. */
+	MC_COMMAND_DELTA,
+	/* Entry touch command. */
+	MC_COMMAND_TOUCH,
+	/* Table flush command. */
+	MC_COMMAND_FLUSH,
+	/* Non-entry command. */
+	MC_COMMAND_CUSTOM,
+};
 
 /*
  * Some preprocessor magic to emit command definitions.
@@ -50,13 +56,13 @@
 	_(ascii_set,		MC_COMMAND_STORAGE)	\
 	_(ascii_add,		MC_COMMAND_STORAGE)	\
 	_(ascii_replace,	MC_COMMAND_STORAGE)	\
-	_(ascii_append,		MC_COMMAND_STORAGE)	\
-	_(ascii_prepend,	MC_COMMAND_STORAGE)	\
+	_(ascii_append,		MC_COMMAND_CONCAT)	\
+	_(ascii_prepend,	MC_COMMAND_CONCAT)	\
 	_(ascii_cas,		MC_COMMAND_STORAGE)	\
-	_(ascii_incr,		MC_COMMAND_UPDATE)	\
-	_(ascii_decr,		MC_COMMAND_UPDATE)	\
+	_(ascii_incr,		MC_COMMAND_DELTA)	\
+	_(ascii_decr,		MC_COMMAND_DELTA)	\
 	_(ascii_delete,		MC_COMMAND_DELETE)	\
-	_(ascii_touch,		MC_COMMAND_UPDATE)	\
+	_(ascii_touch,		MC_COMMAND_TOUCH)	\
 	_(ascii_slabs,		MC_COMMAND_CUSTOM)	\
 	_(ascii_stats,		MC_COMMAND_CUSTOM)	\
 	_(ascii_flush_all,	MC_COMMAND_FLUSH)	\
@@ -74,14 +80,14 @@
 	_(binary_addq,		MC_COMMAND_STORAGE)	\
 	_(binary_replace,	MC_COMMAND_STORAGE)	\
 	_(binary_replaceq,	MC_COMMAND_STORAGE)	\
-	_(binary_append,	MC_COMMAND_STORAGE)	\
-	_(binary_appendq,	MC_COMMAND_STORAGE)	\
-	_(binary_prepend,	MC_COMMAND_STORAGE)	\
-	_(binary_prependq,	MC_COMMAND_STORAGE)	\
-	_(binary_increment,	MC_COMMAND_UPDATE)	\
-	_(binary_incrementq,	MC_COMMAND_UPDATE)	\
-	_(binary_decrement,	MC_COMMAND_UPDATE)	\
-	_(binary_decrementq,	MC_COMMAND_UPDATE)	\
+	_(binary_append,	MC_COMMAND_CONCAT)	\
+	_(binary_appendq,	MC_COMMAND_CONCAT)	\
+	_(binary_prepend,	MC_COMMAND_CONCAT)	\
+	_(binary_prependq,	MC_COMMAND_CONCAT)	\
+	_(binary_increment,	MC_COMMAND_DELTA)	\
+	_(binary_incrementq,	MC_COMMAND_DELTA)	\
+	_(binary_decrement,	MC_COMMAND_DELTA)	\
+	_(binary_decrementq,	MC_COMMAND_DELTA)	\
 	_(binary_delete,	MC_COMMAND_DELETE)	\
 	_(binary_deleteq,	MC_COMMAND_DELETE)	\
 	_(binary_noop,		MC_COMMAND_CUSTOM)	\
@@ -139,11 +145,23 @@ struct mc_command_params_binary
 	uint32_t val32;
 };
 
+struct mc_command_params_delta
+{
+	uint32_t opaque;
+	uint16_t status;
+	uint8_t opcode;
+	uint64_t delta;
+	uint64_t value;
+	uint32_t exp_time;
+};
+
 union mc_command_params
 {
 	struct mc_command_params_slabs slabs;
 	struct mc_command_params_stats stats;
 	struct mc_command_params_binary binary;
+	struct mc_command_params_delta delta;
+
 	uint64_t val64;
 	uint32_t val32;
 	bool last;

@@ -341,6 +341,116 @@ mc_command_transmit_binary_entry(struct mc_state *state,
 }
 
 static void
+mc_command_transmit_binary_value(struct mc_state *state,
+				 struct mc_command *command,
+				 uint64_t value)
+{
+	ENTER();
+
+	struct mc_entry *entry = command->action.new_entry;
+	struct
+	{
+		struct mc_binary_header header;
+		uint64_t value;
+	} packet;
+
+	packet.header.magic = MC_BINARY_RESPONSE;
+	packet.header.status = MC_BINARY_STATUS_NO_ERROR;
+	packet.header.opcode = command->params.binary.opcode;
+	packet.header.opaque = command->params.binary.opaque;
+	packet.header.key_len = 0;
+	packet.header.ext_len = 0;
+	packet.header.data_type = 0;
+	packet.header.body_len = mm_htonl(8);
+	packet.header.stamp = mm_htonll(entry->stamp);
+	packet.value = mm_htonll(value);
+
+	mm_netbuf_write(&state->sock, &packet, 32);
+
+	LEAVE();
+}
+
+static void
+mc_command_append(struct mc_command *command)
+{
+	ENTER();
+
+	struct mc_entry *new_entry = command->action.new_entry;
+
+	char *append_value = mc_entry_getvalue(new_entry);
+	uint32_t append_value_len = new_entry->value_len;
+	struct mm_link chunks = new_entry->chunks;
+	mm_link_init(&new_entry->chunks);
+
+	mc_action_lookup(&command->action);
+
+	while (command->action.old_entry != NULL) {
+		struct mc_entry *old_entry = command->action.old_entry;
+		size_t value_len = old_entry->value_len + append_value_len;
+		char *old_value = mc_entry_getvalue(old_entry);
+
+		new_entry->value_len = value_len;
+		mc_entry_free_chunks(new_entry);
+		mc_entry_alloc_chunks(new_entry);
+		mc_entry_setkey(new_entry, command->action.key);
+		mc_command_copy_extra(new_entry, old_entry);
+
+		char *new_value = mc_entry_getvalue(new_entry);
+		memcpy(new_value, old_value, old_entry->value_len);
+		memcpy(new_value + old_entry->value_len, append_value, append_value_len);
+		command->action.stamp = old_entry->stamp;
+
+		mc_action_compare_and_update(&command->action, true, false);
+		if (command->action.entry_match)
+			break;
+	}
+
+	mm_chunk_destroy_chain(mm_link_head(&chunks));
+
+	LEAVE();
+}
+
+static void
+mc_command_prepend(struct mc_command *command)
+{
+	ENTER();
+
+	struct mc_entry *new_entry = command->action.new_entry;
+
+	char *prepend_value = mc_entry_getvalue(new_entry);
+	uint32_t prepend_value_len = new_entry->value_len;
+	struct mm_link chunks = new_entry->chunks;
+	mm_link_init(&new_entry->chunks);
+
+	mc_action_lookup(&command->action);
+
+	while (command->action.old_entry != NULL) {
+		struct mc_entry *old_entry = command->action.old_entry;
+		size_t value_len = old_entry->value_len + prepend_value_len;
+		char *old_value = mc_entry_getvalue(old_entry);
+
+		new_entry->value_len = value_len;
+		mc_entry_free_chunks(new_entry);
+		mc_entry_alloc_chunks(new_entry);
+		mc_entry_setkey(new_entry, command->action.key);
+		mc_command_copy_extra(new_entry, old_entry);
+
+		char *new_value = mc_entry_getvalue(new_entry);
+		memcpy(new_value, prepend_value, prepend_value_len);
+		memcpy(new_value + prepend_value_len, old_value, old_entry->value_len);
+		command->action.stamp = old_entry->stamp;
+
+		mc_action_compare_and_update(&command->action, true, false);
+		if (command->action.entry_match)
+			break;
+	}
+
+	mm_chunk_destroy_chain(mm_link_head(&chunks));
+
+	LEAVE();
+}
+
+static void
 mc_command_execute_ascii_get(struct mc_state *state,
 			     struct mc_command *command)
 {
@@ -381,7 +491,7 @@ mc_command_execute_ascii_set(struct mc_state *state,
 	mc_action_upsert(&command->action);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_stored);
 
@@ -397,7 +507,7 @@ mc_command_execute_ascii_add(struct mc_state *state,
 	mc_action_insert(&command->action);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry == NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
@@ -415,7 +525,7 @@ mc_command_execute_ascii_replace(struct mc_state *state,
 	mc_action_update(&command->action);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
@@ -433,7 +543,7 @@ mc_command_execute_ascii_cas(struct mc_state *state,
 	mc_action_compare_and_update(&command->action, false, false);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.entry_match)
 		WRITE(&state->sock, mc_result_stored);
 	else if (command->action.old_entry != NULL)
@@ -450,40 +560,10 @@ mc_command_execute_ascii_append(struct mc_state *state,
 {
 	ENTER();
 
-	struct mc_entry *new_entry = command->action.new_entry;
-
-	char *append_value = mc_entry_getvalue(new_entry);
-	uint32_t append_value_len = new_entry->value_len;
-	struct mm_link chunks = new_entry->chunks;
-	mm_link_init(&new_entry->chunks);
-
-	mc_action_lookup(&command->action);
-
-	while (command->action.old_entry != NULL) {
-		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + append_value_len;
-		char *old_value = mc_entry_getvalue(old_entry);
-
-		new_entry->value_len = value_len;
-		mc_entry_free_chunks(new_entry);
-		mc_entry_alloc_chunks(new_entry);
-		mc_entry_setkey(new_entry, command->action.key);
-		mc_command_copy_extra(new_entry, old_entry);
-
-		char *new_value = mc_entry_getvalue(new_entry);
-		memcpy(new_value, old_value, old_entry->value_len);
-		memcpy(new_value + old_entry->value_len, append_value, append_value_len);
-		command->action.stamp = old_entry->stamp;
-
-		mc_action_compare_and_update(&command->action, true, false);
-		if (command->action.entry_match)
-			break;
-	}
-
-	mm_chunk_destroy_chain(mm_link_head(&chunks));
+	mc_command_append(command);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
@@ -498,40 +578,10 @@ mc_command_execute_ascii_prepend(struct mc_state *state,
 {
 	ENTER();
 
-	struct mc_entry *new_entry = command->action.new_entry;
-
-	char *prepend_value = mc_entry_getvalue(new_entry);
-	uint32_t prepend_value_len = new_entry->value_len;
-	struct mm_link chunks = new_entry->chunks;
-	mm_link_init(&new_entry->chunks);
-
-	mc_action_lookup(&command->action);
-
-	while (command->action.old_entry != NULL) {
-		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + prepend_value_len;
-		char *old_value = mc_entry_getvalue(old_entry);
-
-		new_entry->value_len = value_len;
-		mc_entry_free_chunks(new_entry);
-		mc_entry_alloc_chunks(new_entry);
-		mc_entry_setkey(new_entry, command->action.key);
-		mc_command_copy_extra(new_entry, old_entry);
-
-		char *new_value = mc_entry_getvalue(new_entry);
-		memcpy(new_value, prepend_value, prepend_value_len);
-		memcpy(new_value + prepend_value_len, old_value, old_entry->value_len);
-		command->action.stamp = old_entry->stamp;
-
-		mc_action_compare_and_update(&command->action, true, false);
-		if (command->action.entry_match)
-			break;
-	}
-
-	mm_chunk_destroy_chain(mm_link_head(&chunks));
+	mc_command_prepend(command);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
@@ -545,8 +595,6 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 			      struct mc_command *command)
 {
 	ENTER();
-
-	command->action.new_entry = NULL;
 
 	mc_action_lookup(&command->action);
 
@@ -577,7 +625,7 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 	}
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
 	else if (command->action.old_entry != NULL)
@@ -593,8 +641,6 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 			      struct mc_command *command)
 {
 	ENTER();
-
-	command->action.new_entry = NULL;
 
 	mc_action_lookup(&command->action);
 
@@ -628,7 +674,7 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 	}
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
 	else if (command->action.old_entry != NULL)
@@ -648,7 +694,7 @@ mc_command_execute_ascii_delete(struct mc_state *state,
 	mc_action_delete(&command->action);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_deleted);
 	else
@@ -683,7 +729,7 @@ mc_command_execute_ascii_touch(struct mc_state *state,
 	}
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_touched);
 	else
@@ -722,7 +768,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state,
 	mc_command_flush(command->params.val32);
 
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
 
@@ -749,7 +795,7 @@ mc_command_execute_ascii_verbosity(struct mc_state *state,
 	mc_verbose = min(command->params.val32, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
 	if (command->noreply)
-		;
+		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
 
@@ -875,7 +921,7 @@ mc_command_execute_binary_setq(struct mc_state *state,
 	if (command->action.stamp) {
 		mc_action_compare_and_update(&command->action, false, false);
 		if (command->action.entry_match)
-			;
+			/* Be quiet. */;
 		else if (command->action.old_entry != NULL)
 			mc_command_transmit_binary_status(state, command,
 							  MC_BINARY_STATUS_KEY_EXISTS);
@@ -914,7 +960,7 @@ mc_command_execute_binary_addq(struct mc_state *state,
 
 	mc_action_insert(&command->action);
 	if (command->action.old_entry == NULL)
-		;
+		/* Be quiet. */;
 	else
 		mc_command_transmit_binary_status(state, command,
 						  MC_BINARY_STATUS_KEY_EXISTS);
@@ -953,15 +999,15 @@ mc_command_execute_binary_replace(struct mc_state *state,
 }
 
 static void
-mc_command_execute_binary_replaceq(struct mc_state *state __mm_unused__,
-				   struct mc_command *command __mm_unused__)
+mc_command_execute_binary_replaceq(struct mc_state *state,
+				   struct mc_command *command)
 {
 	ENTER();
 
 	if (command->action.stamp) {
 		mc_action_compare_and_update(&command->action, false, false);
 		if (command->action.entry_match)
-			;
+			/* Be quiet. */;
 		else if (command->action.old_entry != NULL)
 			mc_command_transmit_binary_status(state, command,
 							  MC_BINARY_STATUS_KEY_EXISTS);
@@ -971,7 +1017,7 @@ mc_command_execute_binary_replaceq(struct mc_state *state __mm_unused__,
 	} else {
 		mc_action_update(&command->action);
 		if (command->action.old_entry != NULL)
-			;
+			/* Be quiet. */;
 		else
 			mc_command_transmit_binary_status(state, command,
 							  MC_BINARY_STATUS_KEY_NOT_FOUND);
@@ -981,42 +1027,130 @@ mc_command_execute_binary_replaceq(struct mc_state *state __mm_unused__,
 }
 
 static void
-mc_command_execute_binary_append(struct mc_state *state __mm_unused__,
-				 struct mc_command *command __mm_unused__)
+mc_command_execute_binary_append(struct mc_state *state,
+				 struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_append(command);
+
+	if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_stamp(state, command,
+						 command->action.stamp);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_appendq(struct mc_state *state __mm_unused__,
-				  struct mc_command *command __mm_unused__)
+mc_command_execute_binary_appendq(struct mc_state *state,
+				  struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_append(command);
+
+	if (command->action.old_entry != NULL)
+		/* Be quiet. */;
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prepend(struct mc_state *state __mm_unused__,
-				  struct mc_command *command __mm_unused__)
+mc_command_execute_binary_prepend(struct mc_state *state,
+				  struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_prepend(command);
+
+	if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_stamp(state, command,
+						 command->action.stamp);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prependq(struct mc_state *state __mm_unused__,
-				   struct mc_command *command __mm_unused__)
+mc_command_execute_binary_prependq(struct mc_state *state,
+				   struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_prepend(command);
+
+	if (command->action.old_entry != NULL)
+		/* Be quiet. */;
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_increment(struct mc_state *state __mm_unused__,
-				    struct mc_command *command __mm_unused__)
+mc_command_execute_binary_increment(struct mc_state *state,
+				    struct mc_command *command)
 {
 	ENTER();
+
+	uint64_t value;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			value = command->params.delta.value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			value += command->params.delta.delta;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			mc_action_compare_and_update(&command->action, true, false);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	if (command->action.new_entry != NULL)
+		mc_command_transmit_binary_value(state, command, value);
+	else if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
@@ -1025,6 +1159,56 @@ mc_command_execute_binary_incrementq(struct mc_state *state __mm_unused__,
 				     struct mc_command *command __mm_unused__)
 {
 	ENTER();
+
+	uint64_t value;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			value = command->params.delta.value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			value += command->params.delta.delta;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			mc_action_compare_and_update(&command->action, true, false);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	if (command->action.new_entry != NULL)
+		/* Be quiet. */;
+	else if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
@@ -1033,6 +1217,59 @@ mc_command_execute_binary_decrement(struct mc_state *state __mm_unused__,
 				    struct mc_command *command __mm_unused__)
 {
 	ENTER();
+
+	uint64_t value;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			value = command->params.delta.value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			if (value > command->params.delta.delta)
+				value -= command->params.delta.delta;
+			else
+				value = 0;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			mc_action_compare_and_update(&command->action, true, false);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	if (command->action.new_entry != NULL)
+		mc_command_transmit_binary_value(state, command, value);
+	else if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
@@ -1041,6 +1278,59 @@ mc_command_execute_binary_decrementq(struct mc_state *state __mm_unused__,
 				     struct mc_command *command __mm_unused__)
 {
 	ENTER();
+
+	uint64_t value;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			value = command->params.delta.value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			if (value > command->params.val64)
+				value -= command->params.delta.delta;
+			else
+				value = 0;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			mc_action_compare_and_update(&command->action, true, false);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	if (command->action.new_entry != NULL)
+		/* Be quiet. */;
+	else if (command->action.old_entry != NULL)
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else
+		mc_command_transmit_binary_status(state, command,
+						  MC_BINARY_STATUS_KEY_NOT_FOUND);
+
 	LEAVE();
 }
 
