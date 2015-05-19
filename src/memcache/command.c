@@ -450,6 +450,113 @@ mc_command_prepend(struct mc_command *command)
 	LEAVE();
 }
 
+static uint64_t
+mc_command_increment(struct mc_command *command, bool ascii)
+{
+	ENTER();
+	uint64_t value = 0;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			if (ascii)
+				break;
+
+			value = command->value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			value += command->delta;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			bool use_new = ascii && !command->params.noreply;
+			mc_action_compare_and_update(&command->action, true, use_new);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	LEAVE();
+	return value;
+}
+
+static uint64_t
+mc_command_decrement(struct mc_command *command, bool ascii)
+{
+	ENTER();
+	uint64_t value = 0;
+
+	mc_action_lookup(&command->action);
+
+	for (;;) {
+		if (command->action.old_entry == NULL) {
+			if (ascii)
+				break;
+
+			value = command->value;
+			command->action.stamp = 0;
+		} else {
+			if (!mc_entry_getnum(command->action.old_entry, &value)) {
+				mc_action_finish(&command->action);
+				if (command->action.new_entry != NULL)
+					mc_action_cancel(&command->action);
+				break;
+			}
+			if (value > command->delta)
+				value -= command->delta;
+			else
+				value = 0;
+			command->action.stamp = command->action.old_entry->stamp;
+		}
+
+		if (command->action.new_entry == NULL) {
+			mc_action_create(&command->action);
+			if (command->action.old_entry != NULL)
+				mc_command_copy_extra(command->action.new_entry,
+						      command->action.old_entry);
+		} else {
+			mc_entry_free_chunks(command->action.new_entry);
+		}
+		mc_entry_setnum(command->action.new_entry, &command->action, value);
+
+		if (command->action.old_entry == NULL) {
+			mc_action_insert(&command->action);
+			if (command->action.old_entry == NULL)
+				break;
+		} else {
+			bool use_new = ascii && !command->params.noreply;
+			mc_action_compare_and_update(&command->action, true, use_new);
+			if (command->action.entry_match)
+				break;
+		}
+	}
+
+	LEAVE();
+	return value;
+}
+
 static void
 mc_command_execute_ascii_get(struct mc_state *state,
 			     struct mc_command *command)
@@ -596,33 +703,7 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 {
 	ENTER();
 
-	mc_action_lookup(&command->action);
-
-	while (command->action.old_entry != NULL) {
-		uint64_t value;
-		if (!mc_entry_getnum(command->action.old_entry, &value)) {
-			mc_action_finish(&command->action);
-			if (command->action.new_entry != NULL)
-				mc_action_cancel(&command->action);
-			break;
-		}
-		value += command->delta;
-		command->action.stamp = command->action.old_entry->stamp;
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			mc_command_copy_extra(command->action.new_entry,
-					      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		mc_action_compare_and_update(&command->action, true,
-					     !command->params.noreply);
-		if (command->action.entry_match)
-			break;
-	}
+	mc_command_increment(command, true);
 
 	if (command->params.noreply)
 		/* Be quiet. */;
@@ -642,36 +723,7 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 {
 	ENTER();
 
-	mc_action_lookup(&command->action);
-
-	while (command->action.old_entry != NULL) {
-		uint64_t value;
-		if (!mc_entry_getnum(command->action.old_entry, &value)) {
-			mc_action_finish(&command->action);
-			if (command->action.new_entry != NULL)
-				mc_action_cancel(&command->action);
-			break;
-		}
-		if (value > command->delta)
-			value -= command->delta;
-		else
-			value = 0;
-		command->action.stamp = command->action.old_entry->stamp;
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			mc_command_copy_extra(command->action.new_entry,
-					      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		mc_action_compare_and_update(&command->action, true,
-					     !command->params.noreply);
-		if (command->action.entry_match)
-			break;
-	}
+	mc_command_decrement(command, true);
 
 	if (command->params.noreply)
 		/* Be quiet. */;
@@ -1102,45 +1154,7 @@ mc_command_execute_binary_increment(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value;
-
-	mc_action_lookup(&command->action);
-
-	for (;;) {
-		if (command->action.old_entry == NULL) {
-			value = command->value;
-			command->action.stamp = 0;
-		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
-				break;
-			}
-			value += command->delta;
-			command->action.stamp = command->action.old_entry->stamp;
-		}
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
-				break;
-		} else {
-			mc_action_compare_and_update(&command->action, true, false);
-			if (command->action.entry_match)
-				break;
-		}
-	}
+	uint64_t value = mc_command_increment(command, false);
 
 	if (command->action.new_entry != NULL)
 		mc_command_transmit_binary_value(state, command, value);
@@ -1160,45 +1174,7 @@ mc_command_execute_binary_incrementq(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value;
-
-	mc_action_lookup(&command->action);
-
-	for (;;) {
-		if (command->action.old_entry == NULL) {
-			value = command->value;
-			command->action.stamp = 0;
-		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
-				break;
-			}
-			value += command->delta;
-			command->action.stamp = command->action.old_entry->stamp;
-		}
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
-				break;
-		} else {
-			mc_action_compare_and_update(&command->action, true, false);
-			if (command->action.entry_match)
-				break;
-		}
-	}
+	mc_command_increment(command, false);
 
 	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
@@ -1218,48 +1194,7 @@ mc_command_execute_binary_decrement(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value;
-
-	mc_action_lookup(&command->action);
-
-	for (;;) {
-		if (command->action.old_entry == NULL) {
-			value = command->value;
-			command->action.stamp = 0;
-		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
-				break;
-			}
-			if (value > command->delta)
-				value -= command->delta;
-			else
-				value = 0;
-			command->action.stamp = command->action.old_entry->stamp;
-		}
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
-				break;
-		} else {
-			mc_action_compare_and_update(&command->action, true, false);
-			if (command->action.entry_match)
-				break;
-		}
-	}
+	uint64_t value = mc_command_decrement(command, false);
 
 	if (command->action.new_entry != NULL)
 		mc_command_transmit_binary_value(state, command, value);
@@ -1279,48 +1214,7 @@ mc_command_execute_binary_decrementq(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value;
-
-	mc_action_lookup(&command->action);
-
-	for (;;) {
-		if (command->action.old_entry == NULL) {
-			value = command->value;
-			command->action.stamp = 0;
-		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
-				break;
-			}
-			if (value > command->delta)
-				value -= command->delta;
-			else
-				value = 0;
-			command->action.stamp = command->action.old_entry->stamp;
-		}
-
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-		} else {
-			mc_entry_free_chunks(command->action.new_entry);
-		}
-		mc_entry_setnum(command->action.new_entry, &command->action, value);
-
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
-				break;
-		} else {
-			mc_action_compare_and_update(&command->action, true, false);
-			if (command->action.entry_match)
-				break;
-		}
-	}
+	mc_command_decrement(command, false);
 
 	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
