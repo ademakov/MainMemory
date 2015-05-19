@@ -759,7 +759,7 @@ again:
 					state = S_VALUE_1;
 					break;
 				}
-				// FALLTHRU
+				/* no break */
 			case S_VALUE_1:
 				if (likely(c == '\n')) {
 					state = S_VALUE_2;
@@ -787,7 +787,7 @@ again:
 					state = S_EOL_1;
 					break;
 				}
-				// FALLTHRU
+				/* no break */
 			case S_EOL_1:
 				if (likely(c == '\n')) {
 					parser->cursor.ptr = s + 1;
@@ -820,7 +820,7 @@ again:
 				}
 				command->type = &mc_command_ascii_error;
 				state = S_ERROR_1;
-				// FALLTHRU
+				/* no break */
 			case S_ERROR_1:
 				if (c == '\n') {
 					parser->cursor.ptr = s + 1;
