@@ -90,7 +90,7 @@ mc_binary_error(struct mc_parser *parser, uint32_t body_len, uint16_t status)
 	if (!mc_binary_skip(parser, body_len))
 		return false;
 	parser->command->type = &mc_command_binary_error;
-	parser->command->params.binary.status = status;
+	parser->command->value = status;
 	return true;
 }
 

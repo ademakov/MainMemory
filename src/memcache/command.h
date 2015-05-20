@@ -44,6 +44,8 @@ enum mc_command_kind {
 	MC_COMMAND_FLUSH,
 	/* Non-entry command. */
 	MC_COMMAND_CUSTOM,
+	/* Bad command. */
+	MC_COMMAND_ERROR,
 };
 
 /*
@@ -69,7 +71,7 @@ enum mc_command_kind {
 	_(ascii_version,	MC_COMMAND_CUSTOM)	\
 	_(ascii_verbosity,	MC_COMMAND_CUSTOM)	\
 	_(ascii_quit,		MC_COMMAND_CUSTOM)	\
-	_(ascii_error,		MC_COMMAND_CUSTOM)	\
+	_(ascii_error,		MC_COMMAND_ERROR)	\
 	_(binary_get,		MC_COMMAND_LOOKUP)	\
 	_(binary_getq,		MC_COMMAND_LOOKUP)	\
 	_(binary_getk,		MC_COMMAND_LOOKUP)	\
@@ -97,7 +99,7 @@ enum mc_command_kind {
 	_(binary_flushq,	MC_COMMAND_FLUSH)	\
 	_(binary_version,	MC_COMMAND_CUSTOM)	\
 	_(binary_stat,		MC_COMMAND_CUSTOM)	\
-	_(binary_error,		MC_COMMAND_CUSTOM)
+	_(binary_error,		MC_COMMAND_ERROR)
 
 /*
  * Declare command handling info.
@@ -127,30 +129,25 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  * Command data.
  **********************************************************************/
 
-struct mc_command_params_slabs
-{
-	uint32_t nopts;
-};
-
-struct mc_command_params_stats
-{
-	uint32_t nopts;
-};
-
 struct mc_command_params_binary
 {
 	uint32_t opaque;
-	uint16_t status;
 	uint8_t opcode;
 };
 
 union mc_command_params
 {
-	struct mc_command_params_slabs slabs;
-	struct mc_command_params_stats stats;
 	struct mc_command_params_binary binary;
 	bool noreply;
 	bool last;
+};
+
+struct mc_command_slabs
+{
+};
+
+struct mc_command_stats
+{
 };
 
 struct mc_command
@@ -160,9 +157,21 @@ struct mc_command
 	struct mc_action action;
 	union mc_command_params params;
 
-	uint64_t delta;
-	uint64_t value;
-	uint32_t exp_time;
+	union
+	{
+		struct
+		{
+			uint64_t value;
+			uint64_t delta;
+		};
+		struct mc_command_slabs slabs;
+		struct mc_command_stats stats;
+	};
+
+	union {
+		uint32_t exp_time;
+		uint32_t nopts;
+	};
 
 	bool own_key;
 };

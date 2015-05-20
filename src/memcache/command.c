@@ -51,7 +51,7 @@ static char mc_result_not_found[] = "NOT_FOUND\r\n";
 static char mc_result_not_stored[] = "NOT_STORED\r\n";
 static char mc_result_delta_non_num[] = "CLIENT_ERROR cannot increment or decrement non-numeric value\r\n";
 static char mc_result_not_implemented[] = "SERVER_ERROR not implemented\r\n";
-static char mc_result_version[] = "VERSION " PACKAGE_STRING "\r\n";
+static char mc_result_version[] = "VERSION " VERSION "\r\n";
 
 #define RES_N(res)		(sizeof(res) - 1)
 #define WRITE(sock, res)	mm_netbuf_write(sock, res, RES_N(res))
@@ -273,6 +273,32 @@ mc_command_transmit_binary_status(struct mc_state *state,
 	header.stamp = 0;
 
 	mm_netbuf_write(&state->sock, &header, sizeof header);
+
+	LEAVE();
+}
+
+static void
+mc_command_transmit_binary_string(struct mc_state *state,
+				  struct mc_command *command,
+				  uint16_t status,
+				  const char *string,
+				  uint32_t length)
+{
+	ENTER();
+
+	struct mc_binary_header header;
+	header.magic = MC_BINARY_RESPONSE;
+	header.status = mm_htons(status);
+	header.opcode = command->params.binary.opcode;
+	header.opaque = command->params.binary.opaque;
+	header.key_len = 0;
+	header.ext_len = 0;
+	header.data_type = 0;
+	header.body_len = mm_htonl(length);
+	header.stamp = 0;
+
+	mm_netbuf_write(&state->sock, &header, sizeof header);
+	mm_netbuf_write(&state->sock, string, length);
 
 	LEAVE();
 }
@@ -803,7 +829,7 @@ mc_command_execute_ascii_stats(struct mc_state *state,
 {
 	ENTER();
 
-	if (command->params.stats.nopts)
+	if (command->nopts)
 		WRITE(&state->sock, mc_result_not_implemented);
 	else
 		WRITE(&state->sock, mc_result_end);
@@ -1320,18 +1346,26 @@ mc_command_execute_binary_flushq(struct mc_state *state __mm_unused__,
 }
 
 static void
-mc_command_execute_binary_version(struct mc_state *state __mm_unused__,
-				  struct mc_command *command __mm_unused__)
+mc_command_execute_binary_version(struct mc_state *state,
+				  struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_transmit_binary_string(state, command,
+					  MC_BINARY_STATUS_NO_ERROR,
+					  VERSION, RES_N(VERSION));
+
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_stat(struct mc_state *state __mm_unused__,
-			       struct mc_command *command __mm_unused__)
+mc_command_execute_binary_stat(struct mc_state *state,
+			       struct mc_command *command)
 {
 	ENTER();
+
+	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+
 	LEAVE();
 }
 
@@ -1341,8 +1375,7 @@ mc_command_execute_binary_error(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_transmit_binary_status(state, command,
-					  command->params.binary.status);
+	mc_command_transmit_binary_status(state, command, command->value);
 
 	LEAVE();
 }

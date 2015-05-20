@@ -123,9 +123,9 @@ mc_parser_handle_option(struct mc_command *command)
 	ENTER();
 
 	if (command->type == &mc_command_ascii_stats) {
-		command->params.stats.nopts++;
+		command->nopts++;
 	} else if (command->type == &mc_command_ascii_slabs) {
-		command->params.slabs.nopts++;
+		command->nopts++;
 	}
 
 	LEAVE();
