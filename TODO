@@ -2,7 +2,7 @@
 ASAP:
 * improve smp performance
 ** avoid long memcache locks or non-blocking memcache table
-** some form of work stealing
+** socket work stealing
 * polish & optimize
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
@@ -25,10 +25,6 @@ Essentials:
 * refine memcache module:
 ** statistics
 ** add UDP protocol support
-** add binary protocol support
-** for table future-based mode
-*** copy data on client core, add 'enable' work item
-*** release memcache entries with 'unref' work items thus avoid atomic inc/dec
 * correct object destruction and graceful shutdown:
 ** ensure worker & master & aux tasks are finished on shutdown
 ** ensure destroyed socket & server objects are not accessed anymore
@@ -43,6 +39,7 @@ Larger items:
 
 Enhancements:
 * DNS resolver
+* DPDK-based or similar net I/O
 * background workers
 * proper future cancellation
 ** let tasks to be canceled across cores
@@ -52,7 +49,7 @@ Enhancements:
 * exit idle workers pending for too long
 * reap dead tasks pending for too long
 * adopt C11-compatible fences and atomics
-* try to beautify buffer & netbuf interfaces.
+** try to beautify netbuf interface
 * try to separate net I/O proper and reader/writer task layers?
 * non-blocking log
 * non-blocking ring (for producers)
@@ -61,6 +58,11 @@ Enhancements:
 * Brodnik-style pool growth
 * shrink pools on low demand
 * shrink memcache table on low demand
+* generic work stealing
+* NUMA support:
+** NUMA-aware memory allocation
+** NUMA-aware synchronization
+** NUMA-aware work scheduling
 * improve ports:
 ** non-blocking
 ** allow sending other types
