@@ -34,9 +34,9 @@ struct mm_private_space
 {
 	/* The underlying memory space. */
 	mm_mspace_t space;
-	/* Arena without error checking (using *_alloc family). */
+	/* Memory arena without error checking (using *_alloc family). */
 	struct mm_arena uarena;
-	/* Arena with error checking (using *_xalloc family). */
+	/* Memory arena with error checking (using *_xalloc family). */
 	struct mm_arena xarena;
 };
 
@@ -126,9 +126,9 @@ struct mm_common_space
 {
 	/* The underlying memory space. */
 	mm_mspace_t space;
-	/* Arena without error checking (using *_alloc family). */
+	/* Memory arena without error checking (using *_alloc family). */
 	struct mm_arena uarena;
-	/* Arena with error checking (using *_xalloc family). */
+	/* Memory arena with error checking (using *_xalloc family). */
 	struct mm_arena xarena;
 	/* Concurrent access lock. */
 	mm_thread_lock_t lock;
