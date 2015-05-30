@@ -1,4 +1,5 @@
 #include "base/ring.h"
+#include "base/mem/space.h"
 
 #include "params.h"
 #include "runner.h"
@@ -92,6 +93,7 @@ int
 main(int ac, char **av)
 {
 	set_params(ac, av, TEST_RING);
+	mm_common_space_init();
 	init();
 	test2(g_ring,
 	      g_producers == 1 && g_optimize ? single_producer : producer,
