@@ -33,8 +33,8 @@
 #include "base/mem/cdata.h"
 #include "base/mem/chunk.h"
 #include "base/mem/mem.h"
-#include "base/thr/domain.h"
-#include "base/thr/thread.h"
+#include "base/thread/domain.h"
+#include "base/thread/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
 

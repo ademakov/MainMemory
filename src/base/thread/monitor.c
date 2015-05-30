@@ -1,5 +1,5 @@
 /*
- * base/thr/monitor.c - MainMemory monitor thread synchronization.
+ * base/thread/monitor.c - MainMemory monitor thread synchronization.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/thr/monitor.h"
+#include "base/thread/monitor.h"
+
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"

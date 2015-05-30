@@ -1,5 +1,5 @@
 /*
- * base/thr/domain.c - MainMemory thread domain.
+ * base/thread/domain.c - MainMemory thread domain.
  *
  * Copyright (C) 2014-2015  Aleksey Demakov
  *
@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/thr/domain.h"
+#include "base/thread/domain.h"
+
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
 #include "base/mem/space.h"

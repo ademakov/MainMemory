@@ -27,7 +27,7 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/stack.h"
-#include "base/thr/thread.h"
+#include "base/thread/thread.h"
 
 /* Regular task stack size. */
 #define MM_TASK_STACK_SIZE		(32 * 1024)

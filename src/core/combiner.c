@@ -24,7 +24,7 @@
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/mem/space.h"
-#include "base/thr/domain.h"
+#include "base/thread/domain.h"
 
 struct mm_task_combiner *
 mm_task_combiner_create(const char *name,

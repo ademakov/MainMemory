@@ -24,7 +24,7 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
-#include "base/thr/domain.h"
+#include "base/thread/domain.h"
 #include "base/util/format.h"
 
 #define MM_POOL_BLOCK_SIZE	(0x2000)
@@ -464,7 +464,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 #if ENABLE_SMP
 	mm_pool_prepare_low(pool, name, &mm_shared_space.xarena, item_size);
 #else
-	mm_pool_prepare_low(pool, name, &mm_core_set[0].space.xarena, item_size);
+	mm_pool_prepare_low(pool, name, &mm_core_set[0].space->xarena, item_size);
 #endif
 
 	pool->shared = true;

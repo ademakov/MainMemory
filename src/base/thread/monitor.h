@@ -1,5 +1,5 @@
 /*
- * base/thr/monitor.h - MainMemory monitor thread synchronization.
+ * base/thread/monitor.h - MainMemory monitor thread synchronization.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THR_MONITOR_H
-#define	BASE_THR_MONITOR_H
+#ifndef BASE_THREAD_MONITOR_H
+#define BASE_THREAD_MONITOR_H
 
 #include "common.h"
 #include <pthread.h>
@@ -65,4 +65,4 @@ void mm_monitor_wait(struct mm_monitor *monitor)
 bool mm_monitor_timedwait(struct mm_monitor *monitor, mm_timeval_t realtime)
 	__attribute__((nonnull(1)));
 
-#endif /* BASE_THR_MONITOR_H */
+#endif /* BASE_THREAD_MONITOR_H */

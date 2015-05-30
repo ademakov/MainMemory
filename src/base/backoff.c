@@ -18,7 +18,7 @@
  */
 
 #include "base/backoff.h"
-#include "base/thr/thread.h"
+#include "base/thread/thread.h"
 
 static mm_backoff_yield_t mm_backoff_yield;
 

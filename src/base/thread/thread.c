@@ -1,5 +1,5 @@
 /*
- * base/thr/thread.c - MainMemory threads.
+ * base/thread/thread.c - MainMemory threads.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/thr/thread.h"
+#include "base/thread/thread.h"
+
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -25,7 +26,7 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/space.h"
-#include "base/thr/domain.h"
+#include "base/thread/domain.h"
 
 #include <pthread.h>
 #include <sched.h>

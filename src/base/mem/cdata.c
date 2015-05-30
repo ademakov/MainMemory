@@ -24,7 +24,7 @@
 #include "base/log/debug.h"
 #include "base/log/plain.h"
 #include "base/mem/alloc.h"
-#include "base/thr/domain.h"
+#include "base/thread/domain.h"
 #include "base/util/libcall.h"
 
 #define MM_CDATA_ALIGN		(8)

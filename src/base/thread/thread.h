@@ -1,5 +1,5 @@
 /*
- * base/thr/thread.h - MainMemory threads.
+ * base/thread/thread.h - MainMemory threads.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THR_THREAD_H
-#define BASE_THR_THREAD_H
+#ifndef BASE_THREAD_THREAD_H
+#define BASE_THREAD_THREAD_H
 
 #include "common.h"
 
@@ -138,4 +138,4 @@ void mm_thread_yield(void);
 
 void mm_thread_domain_barrier(void);
 
-#endif /* BASE_THR_THREAD_H */
+#endif /* BASE_THREAD_THREAD_H */

@@ -1,5 +1,5 @@
 /*
- * base/thr/domain.h - MainMemory thread domain.
+ * base/thread/domain.h - MainMemory thread domain.
  *
  * Copyright (C) 2014-2015  Aleksey Demakov
  *
@@ -17,15 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THR_DOMAIN_H
-#define	BASE_THR_DOMAIN_H
+#ifndef BASE_THREAD_DOMAIN_H
+#define BASE_THREAD_DOMAIN_H
 
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/barrier.h"
 #include "base/bitset.h"
-#include "base/thr/thread.h"
+#include "base/thread/thread.h"
 
 /* Maximum domain name length (including terminating zero). */
 #define MM_DOMAIN_NAME_SIZE	32
@@ -82,4 +82,4 @@ mm_domain_start(struct mm_domain *domain, mm_routine_t start);
 void __attribute__((nonnull(1)))
 mm_domain_join(struct mm_domain *domain);
 
-#endif /* BASE_THR_DOMAIN_H */
+#endif /* BASE_THREAD_DOMAIN_H */
