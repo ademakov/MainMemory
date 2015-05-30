@@ -117,6 +117,12 @@ mm_mspace_free(mm_mspace_t space, void *ptr)
 	mspace_free(space.opaque, ptr);
 }
 
+void
+mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs)
+{
+	mspace_bulk_free(space.opaque, ptrs, nptrs);
+}
+
 size_t
 mm_mspace_getfootprint(mm_mspace_t space)
 {

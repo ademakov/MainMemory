@@ -75,6 +75,12 @@ void * mm_private_space_xrealloc(struct mm_private_space *space, void *ptr, size
 void mm_private_space_free(struct mm_private_space *space, void *ptr)
 	__attribute__((nonnull(1)));
 
+static inline void __attribute__((nonnull(1)))
+mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t nptrs)
+{
+	mm_mspace_bulk_free(space->space, ptrs, nptrs);
+}
+
 /**********************************************************************
  * Common Memory Space.
  **********************************************************************/
@@ -126,6 +132,14 @@ void * mm_common_space_xrealloc(struct mm_common_space *space, void *ptr, size_t
 
 void mm_common_space_free(struct mm_common_space *space, void *ptr)
 	__attribute__((nonnull(1)));
+
+static inline void __attribute__((nonnull(1)))
+mm_common_space_bulk_free(struct mm_common_space *space, void **ptrs, size_t nptrs)
+{
+	mm_thread_lock(&space->lock);
+	mm_mspace_bulk_free(space->space, ptrs, nptrs);
+	mm_thread_lock(&space->lock);
+}
 
 /**********************************************************************
  * Common Memory Space Default Instance.
