@@ -24,6 +24,7 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/mem/space.h"
 #include "base/thr/domain.h"
 
 #include <pthread.h>
@@ -37,6 +38,9 @@
 
 struct mm_thread
 {
+	/* Private memory space. */
+	struct mm_private_space private_space;
+
 	/* The log message storage. */
 	struct mm_queue log_queue;
 
@@ -118,6 +122,12 @@ void
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 {
 	attr->cpu_tag = cpu_tag;
+}
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setprivatespace(struct mm_thread_attr *attr, bool private_space)
+{
+	attr->private_space = private_space;
 }
 
 void
@@ -252,6 +262,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 	thread->start_arg = start_arg;
 
 	// Set thread attributes.
+	bool private_space = false;
 	if (attr == NULL) {
 		thread->domain = NULL;
 		thread->domain_index = 0;
@@ -261,12 +272,21 @@ mm_thread_create(struct mm_thread_attr *attr,
 		thread->domain = attr->domain;
 		thread->domain_index = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
+		private_space = attr->private_space;
 		if (attr->name[0])
 			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 		else
 			strcpy(thread->name, "unnamed");
 	}
 
+	// Initialize private memory space if required.
+	if (private_space) {
+		mm_private_space_prepare(&thread->private_space);
+	} else {
+		thread->private_space.space.opaque = NULL;
+	}
+
+	// Initialize log message queue.
 	mm_queue_init(&thread->log_queue);
 
 	// Set thread system attributes.
@@ -292,6 +312,9 @@ void
 mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
+
+	if (thread->private_space.space.opaque != NULL)
+		mm_private_space_cleanup(&thread->private_space);
 
 #if ENABLE_TRACE
 	mm_trace_context_cleanup(&thread->trace);
@@ -328,6 +351,14 @@ struct mm_queue *
 mm_thread_getlog(struct mm_thread *thread)
 {
 	return &thread->log_queue;
+}
+
+struct mm_private_space * __attribute__((nonnull(1)))
+mm_thread_getprivatespace(struct mm_thread *thread)
+{
+	if (thread->private_space.space.opaque == NULL)
+		return NULL;
+	return &thread->private_space;
 }
 
 #if ENABLE_TRACE

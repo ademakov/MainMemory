@@ -62,22 +62,24 @@ mm_domain_self(void)
 	return __mm_domain_self;
 }
 
-void mm_domain_prepare(struct mm_domain *domain, const char *name, mm_core_t nthreads)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_domain_prepare(struct mm_domain *domain, const char *name,
+		  mm_core_t nthreads, bool private_space);
 
-void mm_domain_cleanup(struct mm_domain *domain)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_domain_cleanup(struct mm_domain *domain);
 
-void mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag);
 
-void mm_domain_setstack(struct mm_domain *domain, mm_core_t n, void *stack_base, uint32_t stack_size)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_domain_setstack(struct mm_domain *domain, mm_core_t n,
+		   void *stack_base, uint32_t stack_size);
 
-void mm_domain_start(struct mm_domain *domain, mm_routine_t start)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1, 2)))
+mm_domain_start(struct mm_domain *domain, mm_routine_t start);
 
-void mm_domain_join(struct mm_domain *domain)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_domain_join(struct mm_domain *domain);
 
 #endif /* BASE_THR_DOMAIN_H */

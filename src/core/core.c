@@ -678,7 +678,7 @@ mm_core_boot_init(struct mm_core *core)
 {
 	if (MM_CORE_IS_PRIMARY(core)) {
 		// Call the start hooks on the primary core.
-		mm_timer_init(&core->time_manager, &core->space.xarena);
+		mm_timer_init(&core->time_manager, &core->space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(&mm_core_domain);
 
@@ -688,7 +688,7 @@ mm_core_boot_init(struct mm_core *core)
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
 
-		mm_timer_init(&core->time_manager, &core->space.xarena);
+		mm_timer_init(&core->time_manager, &core->space->xarena);
 	}
 }
 
@@ -733,6 +733,7 @@ mm_core_boot(mm_value_t arg)
 
 	// Set the thread-specific data.
 	mm_core = core;
+	mm_core->space = mm_thread_getprivatespace(mm_thread_self());
 
 	// Set pointer to the running task.
 	mm_core->task = mm_core->boot;
@@ -772,8 +773,6 @@ static void
 mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
-
-	mm_private_space_prepare(&core->space);
 
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
@@ -846,8 +845,6 @@ mm_core_term_single(struct mm_core *core)
 	// Flush logs before memory space with possible log chunks is unmapped.
 	mm_log_relay();
 	mm_log_flush();
-
-	mm_private_space_cleanup(&core->space);
 
 	LEAVE();
 }
@@ -937,7 +934,7 @@ mm_core_init(void)
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
-	mm_domain_prepare(&mm_core_domain, "core", mm_core_num);
+	mm_domain_prepare(&mm_core_domain, "core", mm_core_num, true);
 	mm_dispatch_prepare(&mm_core_dispatch);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
@@ -960,7 +957,6 @@ mm_core_term(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
-
 	mm_domain_cleanup(&mm_core_domain);
 
 	mm_core_free_hooks();

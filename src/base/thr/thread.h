@@ -25,6 +25,7 @@
 /* Forward declarations. */
 struct mm_domain;
 struct mm_thread;
+struct mm_private_space;
 #if ENABLE_TRACE
 struct mm_trace_context;
 #endif
@@ -41,6 +42,9 @@ struct mm_thread_attr
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
+
+	/* Enable private memory space. */
+	bool private_space;
 
 	/* The thread stack. */
 	uint32_t stack_size;
@@ -60,30 +64,33 @@ void mm_thread_init();
  * Thread creation routines.
  **********************************************************************/
 
-void mm_thread_attr_init(struct mm_thread_attr *attr)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_attr_init(struct mm_thread_attr *attr);
 
-void mm_thread_attr_setdomain(struct mm_thread_attr *attr,
-			      struct mm_domain *domain,
-			      mm_core_t domain_index)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1, 2)))
+mm_thread_attr_setdomain(struct mm_thread_attr *attr,
+			 struct mm_domain *domain,
+			 mm_core_t domain_index);
 
-void mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
 
-void mm_thread_attr_setstack(struct mm_thread_attr *attr,
-			     void *stack_base, uint32_t stack_size)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_attr_setprivatespace(struct mm_thread_attr *attr, bool private_space);
 
-void mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_attr_setstack(struct mm_thread_attr *attr,
+			void *stack_base, uint32_t stack_size);
 
-struct mm_thread * mm_thread_create(struct mm_thread_attr *attr,
-				    mm_routine_t start, mm_value_t start_arg)
-	__attribute__((nonnull(2)));
+void __attribute__((nonnull(1)))
+mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name);
 
-void mm_thread_destroy(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+struct mm_thread * __attribute__((nonnull(2)))
+mm_thread_create(struct mm_thread_attr *attr,
+		 mm_routine_t start, mm_value_t start_arg);
+
+void __attribute__((nonnull(1)))
+mm_thread_destroy(struct mm_thread *thread);
 
 /**********************************************************************
  * Thread information.
@@ -97,32 +104,35 @@ mm_thread_self(void)
 	return __mm_thread_self;
 }
 
-const char * mm_thread_getname(const struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+const char * __attribute__((nonnull(1)))
+mm_thread_getname(const struct mm_thread *thread);
 
-struct mm_domain * mm_thread_getdomain(const struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+struct mm_domain * __attribute__((nonnull(1)))
+mm_thread_getdomain(const struct mm_thread *thread);
 
-mm_core_t mm_thread_getdomainindex(const struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+mm_core_t __attribute__((nonnull(1)))
+mm_thread_getdomainindex(const struct mm_thread *thread);
 
-struct mm_queue * mm_thread_getlog(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+struct mm_queue * __attribute__((nonnull(1)))
+mm_thread_getlog(struct mm_thread *thread);
+
+struct mm_private_space * __attribute__((nonnull(1)))
+mm_thread_getprivatespace(struct mm_thread *thread);
 
 #if ENABLE_TRACE
-struct mm_trace_context * mm_thread_gettracecontext(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+struct mm_trace_context * __attribute__((nonnull(1)))
+mm_thread_gettracecontext(struct mm_thread *thread);
 #endif
 
 /**********************************************************************
  * Thread control routines.
  **********************************************************************/
 
-void mm_thread_cancel(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_cancel(struct mm_thread *thread);
 
-void mm_thread_join(struct mm_thread *thread)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_join(struct mm_thread *thread);
 
 void mm_thread_yield(void);
 

@@ -27,7 +27,8 @@
 __thread struct mm_domain *__mm_domain_self = NULL;
 
 void
-mm_domain_prepare(struct mm_domain *domain, const char *name, mm_core_t nthreads)
+mm_domain_prepare(struct mm_domain *domain, const char *name,
+		  mm_core_t nthreads, bool private_space)
 {
 	ENTER();
 
@@ -47,6 +48,7 @@ mm_domain_prepare(struct mm_domain *domain, const char *name, mm_core_t nthreads
 	for (mm_core_t i = 0; i < nthreads; i++) {
 		struct mm_thread_attr *thread_attr = &domain->threads[i].thread_attr;
 		mm_thread_attr_init(thread_attr);
+		mm_thread_attr_setprivatespace(thread_attr, private_space);
 
 		// Derive thread name from the domain name.
 		if (name_len) {
@@ -94,7 +96,8 @@ mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag)
 }
 
 void
-mm_domain_setstack(struct mm_domain *domain, mm_core_t n, void *stack_base, uint32_t stack_size)
+mm_domain_setstack(struct mm_domain *domain, mm_core_t n,
+		void *stack_base, uint32_t stack_size)
 {
 	ENTER();
 	ASSERT(n < domain->nthreads);
