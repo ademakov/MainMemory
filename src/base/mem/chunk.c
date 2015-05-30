@@ -29,7 +29,7 @@
 
 static mm_arena_t mm_chunk_arena_table[MM_CHUNK_ARENA_MAX] = {
 	&mm_global_arena,
-	&mm_common_space.arena,
+	&mm_common_space.xarena,
 };
 
 static int mm_chunk_arena_count = 2;

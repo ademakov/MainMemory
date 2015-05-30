@@ -24,212 +24,181 @@
  * Private Memory Space.
  **********************************************************************/
 
-MM_ARENA_VTABLE(mm_private_arena_vtable,
-	mm_private_space_alloc,
-	mm_private_space_calloc,
-	mm_private_space_realloc,
-	mm_private_space_free);
+#define PRIVATE_UARENA_SPACE(x)	containerof(x, struct mm_private_space, uarena)
+#define PRIVATE_XARENA_SPACE(x)	containerof(x, struct mm_private_space, xarena)
 
-MM_ARENA_VTABLE(mm_private_xarena_vtable,
-	mm_private_space_xalloc,
-	mm_private_space_xcalloc,
-	mm_private_space_xrealloc,
-	mm_private_space_free);
-
-void
-mm_private_space_prepare(struct mm_private_space *space, bool xarena)
+static void *
+mm_private_uarena_alloc(mm_arena_t arena, size_t size)
 {
-	if (xarena)
-		space->arena.vtable = &mm_private_xarena_vtable;
-	else
-		space->arena.vtable = &mm_private_arena_vtable;
-	space->space = mm_mspace_create();
+	struct mm_private_space *space = PRIVATE_UARENA_SPACE(arena);
+	return mm_private_space_alloc(space, size);
 }
 
-void
+static void *
+mm_private_uarena_calloc(mm_arena_t arena, size_t count, size_t size)
+{
+	struct mm_private_space *space = PRIVATE_UARENA_SPACE(arena);
+	return mm_private_space_calloc(space, count, size);
+}
+
+static void *
+mm_private_uarena_realloc(mm_arena_t arena, void *ptr, size_t size)
+{
+	struct mm_private_space *space = PRIVATE_UARENA_SPACE(arena);
+	return mm_private_space_realloc(space, ptr, size);
+}
+
+static void
+mm_private_uarena_free(mm_arena_t arena, void *ptr)
+{
+	struct mm_private_space *space = PRIVATE_UARENA_SPACE(arena);
+	mm_private_space_free(space, ptr);
+}
+
+static void *
+mm_private_xarena_alloc(mm_arena_t arena, size_t size)
+{
+	struct mm_private_space *space = PRIVATE_XARENA_SPACE(arena);
+	return mm_private_space_xalloc(space, size);
+}
+
+static void *
+mm_private_xarena_calloc(mm_arena_t arena, size_t count, size_t size)
+{
+	struct mm_private_space *space = PRIVATE_XARENA_SPACE(arena);
+	return mm_private_space_xcalloc(space, count, size);
+}
+
+static void *
+mm_private_xarena_realloc(mm_arena_t arena, void *ptr, size_t size)
+{
+	struct mm_private_space *space = PRIVATE_XARENA_SPACE(arena);
+	return mm_private_space_xrealloc(space, ptr, size);
+}
+
+static void
+mm_private_xarena_free(mm_arena_t arena, void *ptr)
+{
+	struct mm_private_space *space = PRIVATE_XARENA_SPACE(arena);
+	mm_private_space_free(space, ptr);
+}
+
+MM_ARENA_VTABLE(mm_private_uarena_vtable,
+	mm_private_uarena_alloc,
+	mm_private_uarena_calloc,
+	mm_private_uarena_realloc,
+	mm_private_uarena_free);
+
+MM_ARENA_VTABLE(mm_private_xarena_vtable,
+	mm_private_xarena_alloc,
+	mm_private_xarena_calloc,
+	mm_private_xarena_realloc,
+	mm_private_xarena_free);
+
+void __attribute__((nonnull(1)))
+mm_private_space_prepare(struct mm_private_space *space)
+{
+	space->space = mm_mspace_create();
+	space->uarena.vtable = &mm_private_uarena_vtable;
+	space->xarena.vtable = &mm_private_xarena_vtable;
+}
+
+void __attribute__((nonnull(1)))
 mm_private_space_cleanup(struct mm_private_space *space)
 {
 	mm_mspace_destroy(space->space);
 }
 
-void *
-mm_private_space_alloc(struct mm_private_space *space, size_t size)
-{
-	return mm_mspace_alloc(space->space, size);
-}
-
-void *
-mm_private_space_xalloc(struct mm_private_space *space, size_t size)
-{
-	void *ptr = mm_mspace_alloc(space->space, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_private_space_aligned_alloc(struct mm_private_space *space, size_t align, size_t size)
-{
-	return mm_mspace_aligned_alloc(space->space, align, size);
-}
-
-void *
-mm_private_space_aligned_xalloc(struct mm_private_space *space, size_t align, size_t size)
-{
-	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_private_space_calloc(struct mm_private_space *space, size_t count, size_t size)
-{
-	return mm_mspace_calloc(space->space, count, size);
-}
-
-void *
-mm_private_space_xcalloc(struct mm_private_space *space, size_t count, size_t size)
-{
-	void *ptr = mm_mspace_calloc(space->space, count, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_private_space_realloc(struct mm_private_space *space, void *ptr, size_t size)
-{
-	return mm_mspace_realloc(space->space, ptr, size);
-}
-
-void *
-mm_private_space_xrealloc(struct mm_private_space *space, void *ptr, size_t size)
-{
-	ptr = mm_mspace_realloc(space->space, ptr, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void
-mm_private_space_free(struct mm_private_space *space, void *ptr)
-{
-	mm_mspace_free(space->space, ptr);
-}
-
 /**********************************************************************
- * Common Memory Space.
+ * Shared Memory Space.
  **********************************************************************/
 
-MM_ARENA_VTABLE(mm_common_arena_vtable,
-	mm_common_space_alloc,
-	mm_common_space_calloc,
-	mm_common_space_realloc,
-	mm_common_space_free);
+#define SHARED_UARENA_SPACE(x)	containerof(x, struct mm_common_space, uarena)
+#define SHARED_XARENA_SPACE(x)	containerof(x, struct mm_common_space, xarena)
 
-MM_ARENA_VTABLE(mm_common_xarena_vtable,
-	mm_common_space_xalloc,
-	mm_common_space_xcalloc,
-	mm_common_space_xrealloc,
-	mm_common_space_free);
-
-void
-mm_common_space_prepare(struct mm_common_space *space, bool xarena)
+static void *
+mm_shared_uarena_alloc(mm_arena_t arena, size_t size)
 {
-	if (xarena)
-		space->arena.vtable = &mm_common_xarena_vtable;
-	else
-		space->arena.vtable = &mm_common_arena_vtable;
+	struct mm_common_space *space = SHARED_UARENA_SPACE(arena);
+	return mm_common_space_alloc(space, size);
+}
+
+static void *
+mm_shared_uarena_calloc(mm_arena_t arena, size_t count, size_t size)
+{
+	struct mm_common_space *space = SHARED_UARENA_SPACE(arena);
+	return mm_common_space_calloc(space, count, size);
+}
+
+static void *
+mm_shared_uarena_realloc(mm_arena_t arena, void *ptr, size_t size)
+{
+	struct mm_common_space *space = SHARED_UARENA_SPACE(arena);
+	return mm_common_space_realloc(space, ptr, size);
+}
+
+static void
+mm_shared_uarena_free(mm_arena_t arena, void *ptr)
+{
+	struct mm_common_space *space = SHARED_UARENA_SPACE(arena);
+	mm_common_space_free(space, ptr);
+}
+
+static void *
+mm_shared_xarena_alloc(mm_arena_t arena, size_t size)
+{
+	struct mm_common_space *space = SHARED_XARENA_SPACE(arena);
+	return mm_common_space_xalloc(space, size);
+}
+
+static void *
+mm_shared_xarena_calloc(mm_arena_t arena, size_t count, size_t size)
+{
+	struct mm_common_space *space = SHARED_XARENA_SPACE(arena);
+	return mm_common_space_xcalloc(space, count, size);
+}
+
+static void *
+mm_shared_xarena_realloc(mm_arena_t arena, void *ptr, size_t size)
+{
+	struct mm_common_space *space = SHARED_XARENA_SPACE(arena);
+	return mm_common_space_xrealloc(space, ptr, size);
+}
+
+static void
+mm_shared_xarena_free(mm_arena_t arena, void *ptr)
+{
+	struct mm_common_space *space = SHARED_XARENA_SPACE(arena);
+	mm_common_space_free(space, ptr);
+}
+
+MM_ARENA_VTABLE(mm_shared_uarena_vtable,
+	mm_shared_uarena_alloc,
+	mm_shared_uarena_calloc,
+	mm_shared_uarena_realloc,
+	mm_shared_uarena_free);
+
+MM_ARENA_VTABLE(mm_shared_xarena_vtable,
+	mm_shared_xarena_alloc,
+	mm_shared_xarena_calloc,
+	mm_shared_xarena_realloc,
+	mm_shared_xarena_free);
+
+void __attribute__((nonnull(1)))
+mm_common_space_prepare(struct mm_common_space *space)
+{
 	space->space = mm_mspace_create();
+	space->uarena.vtable = &mm_shared_uarena_vtable;
+	space->xarena.vtable = &mm_shared_xarena_vtable;
 	space->lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_common_space_cleanup(struct mm_common_space *space)
 {
 	mm_mspace_destroy(space->space);
-	space->arena.vtable = NULL;
-}
-
-void *
-mm_common_space_alloc(struct mm_common_space *space, size_t size)
-{
-	mm_thread_lock(&space->lock);
-	void *ptr = mm_mspace_alloc(space->space, size);
-	mm_thread_unlock(&space->lock);
-	return ptr;
-}
-
-void *
-mm_common_space_xalloc(struct mm_common_space *space, size_t size)
-{
-	void *ptr = mm_common_space_alloc(space, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_common_space_aligned_alloc(struct mm_common_space *space, size_t align, size_t size)
-{
-	mm_thread_lock(&space->lock);
-	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
-	mm_thread_unlock(&space->lock);
-	return ptr;
-}
-
-void *
-mm_common_space_aligned_xalloc(struct mm_common_space *space, size_t align, size_t size)
-{
-	void *ptr = mm_common_space_aligned_alloc(space, align, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_common_space_calloc(struct mm_common_space *space, size_t count, size_t size)
-{
-	mm_thread_lock(&space->lock);
-	void *ptr = mm_mspace_calloc(space->space, count, size);
-	mm_thread_unlock(&space->lock);
-	return ptr;
-}
-
-void *
-mm_common_space_xcalloc(struct mm_common_space *space, size_t count, size_t size)
-{
-	void *ptr = mm_common_space_calloc(space, count, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_common_space_realloc(struct mm_common_space *space, void *ptr, size_t size)
-{
-	mm_thread_lock(&space->lock);
-	ptr = mm_mspace_realloc(space->space, ptr, size);
-	mm_thread_unlock(&space->lock);
-	return ptr;
-}
-
-void *
-mm_common_space_xrealloc(struct mm_common_space *space, void *ptr, size_t size)
-{
-	ptr = mm_common_space_realloc(space, ptr, size);
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void
-mm_common_space_free(struct mm_common_space *space, void *ptr)
-{
-	mm_thread_lock(&space->lock);
-	mm_mspace_free(space->space, ptr);
-	mm_thread_unlock(&space->lock);
+	space->uarena.vtable = NULL;
+	space->xarena.vtable = NULL;
 }
 
 /**********************************************************************
@@ -241,7 +210,7 @@ struct mm_common_space mm_common_space;
 void
 mm_common_space_init(void)
 {
-	mm_common_space_prepare(&mm_common_space, true);
+	mm_common_space_prepare(&mm_common_space);
 }
 
 void

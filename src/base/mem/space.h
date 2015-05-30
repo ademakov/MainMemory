@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/lock.h"
+#include "base/log/error.h"
 #include "base/mem/alloc.h"
 #include "base/mem/arena.h"
 
@@ -31,51 +32,87 @@
 
 struct mm_private_space
 {
-	/* Arena must be the first field in the structure. */
-	struct mm_arena arena;
 	/* The underlying memory space. */
 	mm_mspace_t space;
+	/* Arena without error checking (using *_alloc family). */
+	struct mm_arena uarena;
+	/* Arena with error checking (using *_xalloc family). */
+	struct mm_arena xarena;
 };
 
-void mm_private_space_prepare(struct mm_private_space *space, bool xarena)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_private_space_prepare(struct mm_private_space *space);
 
-void mm_private_space_cleanup(struct mm_private_space *space)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_private_space_cleanup(struct mm_private_space *space);
 
-void * mm_private_space_alloc(struct mm_private_space *space, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_private_space_alloc(struct mm_private_space *space, size_t size)
+{
+	return mm_mspace_alloc(space->space, size);
+}
 
-void * mm_private_space_xalloc(struct mm_private_space *space, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_private_space_xalloc(struct mm_private_space *space, size_t size)
+{
+	void *ptr = mm_mspace_alloc(space->space, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_private_space_aligned_alloc(struct mm_private_space *space, size_t align, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_private_space_aligned_alloc(struct mm_private_space *space, size_t align, size_t size)
+{
+	return mm_mspace_aligned_alloc(space->space, align, size);
+}
 
-void * mm_private_space_aligned_xalloc(struct mm_private_space *space, size_t align, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_private_space_aligned_xalloc(struct mm_private_space *space, size_t align, size_t size)
+{
+	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_private_space_calloc(struct mm_private_space *space, size_t count, size_t size)
-	__attribute__((malloc));
+static inline void *
+mm_private_space_calloc(struct mm_private_space *space, size_t count, size_t size)
+{
+	return mm_mspace_calloc(space->space, count, size);
+}
 
-void * mm_private_space_xcalloc(struct mm_private_space *space, size_t count, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_private_space_xcalloc(struct mm_private_space *space, size_t count, size_t size)
+{
+	void *ptr = mm_mspace_calloc(space->space, count, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_private_space_realloc(struct mm_private_space *space, void *ptr, size_t size)
-	__attribute__((nonnull(1)));
+static inline void *
+mm_private_space_realloc(struct mm_private_space *space, void *ptr, size_t size)
+{
+	return mm_mspace_realloc(space->space, ptr, size);
+}
 
-void * mm_private_space_xrealloc(struct mm_private_space *space, void *ptr, size_t size)
-	__attribute__((nonnull(1)));
+static inline void *
+mm_private_space_xrealloc(struct mm_private_space *space, void *ptr, size_t size)
+{
+	ptr = mm_mspace_realloc(space->space, ptr, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void mm_private_space_free(struct mm_private_space *space, void *ptr)
-	__attribute__((nonnull(1)));
+static inline void
+mm_private_space_free(struct mm_private_space *space, void *ptr)
+{
+	mm_mspace_free(space->space, ptr);
+}
 
-static inline void __attribute__((nonnull(1)))
+static inline void
 mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t nptrs)
 {
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
@@ -87,51 +124,101 @@ mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t n
 
 struct mm_common_space
 {
-	/* Arena must be the first field in the structure. */
-	struct mm_arena arena;
 	/* The underlying memory space. */
 	mm_mspace_t space;
+	/* Arena without error checking (using *_alloc family). */
+	struct mm_arena uarena;
+	/* Arena with error checking (using *_xalloc family). */
+	struct mm_arena xarena;
 	/* Concurrent access lock. */
 	mm_thread_lock_t lock;
 };
 
-void mm_common_space_prepare(struct mm_common_space *space, bool xarena)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_common_space_prepare(struct mm_common_space *space);
 
-void mm_common_space_cleanup(struct mm_common_space *space)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_common_space_cleanup(struct mm_common_space *space);
 
-void * mm_common_space_alloc(struct mm_common_space *space, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_common_space_alloc(struct mm_common_space *space, size_t size)
+{
+	mm_thread_lock(&space->lock);
+	void *ptr = mm_mspace_alloc(space->space, size);
+	mm_thread_unlock(&space->lock);
+	return ptr;
+}
 
-void * mm_common_space_xalloc(struct mm_common_space *space, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_common_space_xalloc(struct mm_common_space *space, size_t size)
+{
+	void *ptr = mm_common_space_alloc(space, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_common_space_aligned_alloc(struct mm_common_space *space, size_t align, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_common_space_aligned_alloc(struct mm_common_space *space, size_t align, size_t size)
+{
+	mm_thread_lock(&space->lock);
+	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
+	mm_thread_unlock(&space->lock);
+	return ptr;
+}
 
-void * mm_common_space_aligned_xalloc(struct mm_common_space *space, size_t align, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_common_space_aligned_xalloc(struct mm_common_space *space, size_t align, size_t size)
+{
+	void *ptr = mm_common_space_aligned_alloc(space, align, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_common_space_calloc(struct mm_common_space *space, size_t count, size_t size)
-	__attribute__((malloc));
+static inline void *
+mm_common_space_calloc(struct mm_common_space *space, size_t count, size_t size)
+{
+	mm_thread_lock(&space->lock);
+	void *ptr = mm_mspace_calloc(space->space, count, size);
+	mm_thread_unlock(&space->lock);
+	return ptr;
+}
 
-void * mm_common_space_xcalloc(struct mm_common_space *space, size_t count, size_t size)
-	__attribute__((nonnull(1)))
-	__attribute__((malloc));
+static inline void *
+mm_common_space_xcalloc(struct mm_common_space *space, size_t count, size_t size)
+{
+	void *ptr = mm_common_space_calloc(space, count, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void * mm_common_space_realloc(struct mm_common_space *space, void *ptr, size_t size)
-	__attribute__((nonnull(1)));
+static inline void *
+mm_common_space_realloc(struct mm_common_space *space, void *ptr, size_t size)
+{
+	mm_thread_lock(&space->lock);
+	ptr = mm_mspace_realloc(space->space, ptr, size);
+	mm_thread_unlock(&space->lock);
+	return ptr;
+}
 
-void * mm_common_space_xrealloc(struct mm_common_space *space, void *ptr, size_t size)
-	__attribute__((nonnull(1)));
+static inline void *
+mm_common_space_xrealloc(struct mm_common_space *space, void *ptr, size_t size)
+{
+	ptr = mm_common_space_realloc(space, ptr, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
 
-void mm_common_space_free(struct mm_common_space *space, void *ptr)
-	__attribute__((nonnull(1)));
+static inline void
+mm_common_space_free(struct mm_common_space *space, void *ptr)
+{
+	mm_thread_lock(&space->lock);
+	mm_mspace_free(space->space, ptr);
+	mm_thread_unlock(&space->lock);
+}
 
 static inline void __attribute__((nonnull(1)))
 mm_common_space_bulk_free(struct mm_common_space *space, void **ptrs, size_t nptrs)
@@ -153,7 +240,7 @@ void mm_common_space_term(void);
 static inline bool
 mm_common_space_is_ready(void)
 {
-	return (mm_common_space.arena.vtable != NULL);
+	return (mm_common_space.xarena.vtable != NULL);
 }
 
 static inline void *

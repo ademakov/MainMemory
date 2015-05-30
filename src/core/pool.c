@@ -462,9 +462,9 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	ENTER();
 
 #if ENABLE_SMP
-	mm_pool_prepare_low(pool, name, &mm_shared_space.arena, item_size);
+	mm_pool_prepare_low(pool, name, &mm_shared_space.xarena, item_size);
 #else
-	mm_pool_prepare_low(pool, name, &mm_core_set[0].space.arena, item_size);
+	mm_pool_prepare_low(pool, name, &mm_core_set[0].space.xarena, item_size);
 #endif
 
 	pool->shared = true;

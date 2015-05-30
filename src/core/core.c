@@ -656,8 +656,8 @@ static void
 mm_shared_space_init(void)
 {
 #if ENABLE_SMP
-	mm_common_space_prepare(&mm_shared_space, true);
-	mm_shared_chunk_tag = mm_chunk_add_arena(&mm_shared_space.arena);
+	mm_common_space_prepare(&mm_shared_space);
+	mm_shared_chunk_tag = mm_chunk_add_arena(&mm_shared_space.xarena);
 #endif
 }
 
@@ -678,7 +678,7 @@ mm_core_boot_init(struct mm_core *core)
 {
 	if (MM_CORE_IS_PRIMARY(core)) {
 		// Call the start hooks on the primary core.
-		mm_timer_init(&core->time_manager, &core->space.arena);
+		mm_timer_init(&core->time_manager, &core->space.xarena);
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(&mm_core_domain);
 
@@ -688,7 +688,7 @@ mm_core_boot_init(struct mm_core *core)
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
 
-		mm_timer_init(&core->time_manager, &core->space.arena);
+		mm_timer_init(&core->time_manager, &core->space.xarena);
 	}
 }
 
@@ -773,7 +773,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 {
 	ENTER();
 
-	mm_private_space_prepare(&core->space, true);
+	mm_private_space_prepare(&core->space);
 
 	mm_runq_prepare(&core->runq);
 	mm_list_init(&core->idle);
@@ -944,7 +944,7 @@ mm_core_init(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
 
-	mm_bitset_prepare(&mm_core_event_affinity, &mm_common_space.arena, mm_core_num);
+	mm_bitset_prepare(&mm_core_event_affinity, &mm_common_space.xarena, mm_core_num);
 
 	LEAVE();
 }
@@ -955,7 +955,7 @@ mm_core_term(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	mm_bitset_cleanup(&mm_core_event_affinity, &mm_common_space.arena);
+	mm_bitset_cleanup(&mm_core_event_affinity, &mm_common_space.xarena);
 
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);

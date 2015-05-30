@@ -182,8 +182,8 @@ mm_core_getarena(mm_core_t core)
 	if (core == MM_CORE_NONE)
 		return NULL;
 	if (core == MM_CORE_SELF)
-		return &mm_core->space.arena;
-	return &mm_core_set[core].space.arena;
+		return &mm_core->space.xarena;
+	return &mm_core_set[core].space.xarena;
 }
 
 static inline struct mm_core *
