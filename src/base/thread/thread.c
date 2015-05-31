@@ -49,7 +49,7 @@ struct mm_thread
 
 	/* Thread domain. */
 	struct mm_domain *domain;
-	mm_core_t domain_index;
+	mm_thread_t domain_index;
 	struct mm_barrier_local domain_barrier;
 
 	/* Underlying system thread. */
@@ -115,7 +115,7 @@ mm_thread_attr_init(struct mm_thread_attr *attr)
 void
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 struct mm_domain *domain,
-			 mm_core_t domain_index)
+			 mm_thread_t domain_index)
 {
 	attr->domain = domain;
 	attr->domain_index = domain_index;
@@ -360,7 +360,7 @@ mm_thread_getdomain(const struct mm_thread *thread)
 	return thread->domain;
 }
 
-mm_core_t 
+mm_thread_t
 mm_thread_getdomainindex(const struct mm_thread *thread)
 {
 	return thread->domain_index;

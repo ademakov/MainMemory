@@ -39,7 +39,7 @@ struct mm_domain_thread
 struct mm_domain
 {
 	/* Domain threads. */
-	mm_core_t nthreads;
+	mm_thread_t nthreads;
 	struct mm_domain_thread *threads;
 
 	/* Per-thread data. */
@@ -64,16 +64,16 @@ mm_domain_self(void)
 
 void __attribute__((nonnull(1)))
 mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_core_t nthreads, bool private_space);
+		  mm_thread_t nthreads, bool private_space);
 
 void __attribute__((nonnull(1)))
 mm_domain_cleanup(struct mm_domain *domain);
 
 void __attribute__((nonnull(1)))
-mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag);
+mm_domain_setcputag(struct mm_domain *domain, mm_thread_t n, uint32_t cpu_tag);
 
 void __attribute__((nonnull(1)))
-mm_domain_setstack(struct mm_domain *domain, mm_core_t n,
+mm_domain_setstack(struct mm_domain *domain, mm_thread_t n,
 		   void *stack_base, uint32_t stack_size);
 
 void __attribute__((nonnull(1, 2)))

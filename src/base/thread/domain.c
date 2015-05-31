@@ -29,7 +29,7 @@ __thread struct mm_domain *__mm_domain_self = NULL;
 
 void
 mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_core_t nthreads, bool private_space)
+		  mm_thread_t nthreads, bool private_space)
 {
 	ENTER();
 
@@ -46,7 +46,7 @@ mm_domain_prepare(struct mm_domain *domain, const char *name,
 	// Initialize thread data.
 	domain->nthreads = nthreads;
 	domain->threads = mm_common_calloc(nthreads, sizeof(struct mm_domain_thread));
-	for (mm_core_t i = 0; i < nthreads; i++) {
+	for (mm_thread_t i = 0; i < nthreads; i++) {
 		struct mm_thread_attr *thread_attr = &domain->threads[i].thread_attr;
 		mm_thread_attr_init(thread_attr);
 		mm_thread_attr_setprivatespace(thread_attr, private_space);
@@ -75,7 +75,7 @@ mm_domain_cleanup(struct mm_domain *domain)
 	mm_cdata_term(domain);
 
 	// Release thread data.
-	for (mm_core_t i = 0; i < domain->nthreads; i++) {
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		struct mm_domain_thread *thread = &domain->threads[i];
 		mm_thread_destroy(thread->thread);
 	}
@@ -85,7 +85,7 @@ mm_domain_cleanup(struct mm_domain *domain)
 }
 
 void
-mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag)
+mm_domain_setcputag(struct mm_domain *domain, mm_thread_t n, uint32_t cpu_tag)
 {
 	ENTER();
 	ASSERT(n < domain->nthreads);
@@ -97,7 +97,7 @@ mm_domain_setcputag(struct mm_domain *domain, mm_core_t n, uint32_t cpu_tag)
 }
 
 void
-mm_domain_setstack(struct mm_domain *domain, mm_core_t n,
+mm_domain_setstack(struct mm_domain *domain, mm_thread_t n,
 		void *stack_base, uint32_t stack_size)
 {
 	ENTER();
@@ -118,7 +118,7 @@ mm_domain_start(struct mm_domain *domain, mm_routine_t start)
 	mm_barrier_init(&domain->barrier, domain->nthreads);
 
 	// Create and start thread.
-	for (mm_core_t i = 0; i < domain->nthreads; i++) {
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		struct mm_domain_thread *thread = &domain->threads[i];
 		mm_thread_attr_setdomain(&thread->thread_attr, domain, i);
 		thread->thread = mm_thread_create(&thread->thread_attr, start, i);
@@ -132,7 +132,7 @@ mm_domain_join(struct mm_domain *domain)
 {
 	ENTER();
 
-	for (mm_core_t i = 0; i < domain->nthreads; i++) {
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		struct mm_domain_thread *thread = &domain->threads[i];
 		mm_thread_join(thread->thread);
 	}

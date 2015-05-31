@@ -38,7 +38,7 @@ struct mm_thread_attr
 {
 	/* Thread domain. */
 	struct mm_domain *domain;
-	mm_core_t domain_index;
+	mm_thread_t domain_index;
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
@@ -70,7 +70,7 @@ mm_thread_attr_init(struct mm_thread_attr *attr);
 void __attribute__((nonnull(1, 2)))
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 struct mm_domain *domain,
-			 mm_core_t domain_index);
+			 mm_thread_t domain_index);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
@@ -113,7 +113,7 @@ mm_thread_getspace(struct mm_thread *thread);
 struct mm_domain * __attribute__((nonnull(1)))
 mm_thread_getdomain(const struct mm_thread *thread);
 
-mm_core_t __attribute__((nonnull(1)))
+mm_thread_t __attribute__((nonnull(1)))
 mm_thread_getdomainindex(const struct mm_thread *thread);
 
 struct mm_queue * __attribute__((nonnull(1)))
