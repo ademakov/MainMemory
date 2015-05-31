@@ -30,10 +30,10 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
 #include "base/mem/cdata.h"
-#include "base/thr/domain.h"
-#include "base/thr/thread.h"
+#include "base/mem/memory.h"
+#include "base/thread/domain.h"
+#include "base/thread/thread.h"
 
 #include "base/util/format.h"
 
@@ -214,7 +214,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 			struct mm_thread *thread,
 			struct mm_domain *domain)
 {
-	mm_core_t dom_index = mm_thread_getdomainindex(thread);
+	mm_thread_t dom_index = mm_thread_getdomainindex(thread);
 
 	// Try to find domain entry optimistically (w/o acquiring a lock).
 	struct mm_lock_domain_stat *dom_stat
@@ -255,7 +255,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 				 stat_set->location);
 
 	MM_CDATA_ALLOC(domain, name, dom_stat->stat);
-	for (mm_core_t c = 0; c < domain->nthreads; c++) {
+	for (mm_thread_t c = 0; c < domain->nthreads; c++) {
 		struct mm_lock_stat *stat = MM_CDATA_DEREF(c, dom_stat->stat);
 		stat->lock_count = 0;
 		stat->fail_count = 0;
@@ -354,7 +354,7 @@ mm_lock_stats(void)
 			struct mm_lock_domain_stat *dom_stat
 				= containerof(dom_link, struct mm_lock_domain_stat, link);
 			struct mm_domain *domain = dom_stat->domain;
-			for (mm_core_t c = 0; c < domain->nthreads; c++) {
+			for (mm_thread_t c = 0; c < domain->nthreads; c++) {
 				struct mm_lock_stat *stat
 					= MM_CDATA_DEREF(c, dom_stat->stat);
 				struct mm_thread *thread = domain->threads[c].thread;
