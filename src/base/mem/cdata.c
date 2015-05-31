@@ -23,7 +23,7 @@
 #include "base/lock.h"
 #include "base/log/debug.h"
 #include "base/log/plain.h"
-#include "base/mem/alloc.h"
+#include "base/mem/memory.h"
 #include "base/thread/domain.h"
 #include "base/util/libcall.h"
 

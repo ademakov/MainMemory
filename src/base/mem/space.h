@@ -119,10 +119,10 @@ mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t n
 }
 
 /**********************************************************************
- * Common Memory Space.
+ * Shared Memory Space.
  **********************************************************************/
 
-struct mm_common_space
+struct mm_shared_space
 {
 	/* The underlying memory space. */
 	mm_mspace_t space;
@@ -135,13 +135,13 @@ struct mm_common_space
 };
 
 void __attribute__((nonnull(1)))
-mm_common_space_prepare(struct mm_common_space *space);
+mm_shared_space_prepare(struct mm_shared_space *space);
 
 void __attribute__((nonnull(1)))
-mm_common_space_cleanup(struct mm_common_space *space);
+mm_shared_space_cleanup(struct mm_shared_space *space);
 
 static inline void *
-mm_common_space_alloc(struct mm_common_space *space, size_t size)
+mm_shared_space_alloc(struct mm_shared_space *space, size_t size)
 {
 	mm_thread_lock(&space->lock);
 	void *ptr = mm_mspace_alloc(space->space, size);
@@ -150,16 +150,16 @@ mm_common_space_alloc(struct mm_common_space *space, size_t size)
 }
 
 static inline void *
-mm_common_space_xalloc(struct mm_common_space *space, size_t size)
+mm_shared_space_xalloc(struct mm_shared_space *space, size_t size)
 {
-	void *ptr = mm_common_space_alloc(space, size);
+	void *ptr = mm_shared_space_alloc(space, size);
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
 }
 
 static inline void *
-mm_common_space_aligned_alloc(struct mm_common_space *space, size_t align, size_t size)
+mm_shared_space_aligned_alloc(struct mm_shared_space *space, size_t align, size_t size)
 {
 	mm_thread_lock(&space->lock);
 	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
@@ -168,16 +168,16 @@ mm_common_space_aligned_alloc(struct mm_common_space *space, size_t align, size_
 }
 
 static inline void *
-mm_common_space_aligned_xalloc(struct mm_common_space *space, size_t align, size_t size)
+mm_shared_space_aligned_xalloc(struct mm_shared_space *space, size_t align, size_t size)
 {
-	void *ptr = mm_common_space_aligned_alloc(space, align, size);
+	void *ptr = mm_shared_space_aligned_alloc(space, align, size);
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
 }
 
 static inline void *
-mm_common_space_calloc(struct mm_common_space *space, size_t count, size_t size)
+mm_shared_space_calloc(struct mm_shared_space *space, size_t count, size_t size)
 {
 	mm_thread_lock(&space->lock);
 	void *ptr = mm_mspace_calloc(space->space, count, size);
@@ -186,16 +186,16 @@ mm_common_space_calloc(struct mm_common_space *space, size_t count, size_t size)
 }
 
 static inline void *
-mm_common_space_xcalloc(struct mm_common_space *space, size_t count, size_t size)
+mm_shared_space_xcalloc(struct mm_shared_space *space, size_t count, size_t size)
 {
-	void *ptr = mm_common_space_calloc(space, count, size);
+	void *ptr = mm_shared_space_calloc(space, count, size);
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
 }
 
 static inline void *
-mm_common_space_realloc(struct mm_common_space *space, void *ptr, size_t size)
+mm_shared_space_realloc(struct mm_shared_space *space, void *ptr, size_t size)
 {
 	mm_thread_lock(&space->lock);
 	ptr = mm_mspace_realloc(space->space, ptr, size);
@@ -204,16 +204,16 @@ mm_common_space_realloc(struct mm_common_space *space, void *ptr, size_t size)
 }
 
 static inline void *
-mm_common_space_xrealloc(struct mm_common_space *space, void *ptr, size_t size)
+mm_shared_space_xrealloc(struct mm_shared_space *space, void *ptr, size_t size)
 {
-	ptr = mm_common_space_realloc(space, ptr, size);
+	ptr = mm_shared_space_realloc(space, ptr, size);
 	if (unlikely(ptr == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	return ptr;
 }
 
 static inline void
-mm_common_space_free(struct mm_common_space *space, void *ptr)
+mm_shared_space_free(struct mm_shared_space *space, void *ptr)
 {
 	mm_thread_lock(&space->lock);
 	mm_mspace_free(space->space, ptr);
@@ -221,72 +221,11 @@ mm_common_space_free(struct mm_common_space *space, void *ptr)
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_common_space_bulk_free(struct mm_common_space *space, void **ptrs, size_t nptrs)
+mm_shared_space_bulk_free(struct mm_shared_space *space, void **ptrs, size_t nptrs)
 {
 	mm_thread_lock(&space->lock);
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
 	mm_thread_lock(&space->lock);
-}
-
-/**********************************************************************
- * Common Memory Space Default Instance.
- **********************************************************************/
-
-extern struct mm_common_space mm_common_space;
-
-void mm_common_space_init(void);
-void mm_common_space_term(void);
-
-static inline bool
-mm_common_space_is_ready(void)
-{
-	return (mm_common_space.xarena.vtable != NULL);
-}
-
-static inline void *
-mm_common_alloc(size_t size)
-{
-	return mm_common_space_xalloc(&mm_common_space, size);
-}
-
-static inline void *
-mm_common_aligned_alloc(size_t align, size_t size)
-{
-	return mm_common_space_aligned_xalloc(&mm_common_space, align, size);
-}
-
-static inline void *
-mm_common_calloc(size_t count, size_t size)
-{
-	return mm_common_space_xcalloc(&mm_common_space, count, size);
-}
-
-static inline void *
-mm_common_realloc( void *ptr, size_t size)
-{
-	return mm_common_space_xrealloc(&mm_common_space, ptr, size);
-}
-
-static inline void
-mm_common_free(void *ptr)
-{
-	mm_common_space_free(&mm_common_space, ptr);
-}
-
-/**********************************************************************
- * Common Memory Allocation Utilities.
- **********************************************************************/
-
-static inline void *
-mm_common_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_common_alloc(size), ptr, size);
-}
-
-static inline char *
-mm_common_strdup(const char *ptr)
-{
-	return mm_common_memdup(ptr, strlen(ptr) + 1);
 }
 
 #endif /* BASE_MEM_SPACE_H */

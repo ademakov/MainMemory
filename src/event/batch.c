@@ -21,7 +21,7 @@
 
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/mem/memory.h"
 
 #define MM_EVENT_BATCH_NEVENTS_MIN	(512)
 #define MM_EVENT_BATCH_NEVENTS_MAX	(32 * MM_EVENT_BATCH_NEVENTS_MIN)

@@ -106,20 +106,4 @@ void mm_global_free(void *ptr);
 
 size_t mm_global_getallocsize(const void *ptr);
 
-/**********************************************************************
- * Global Memory Allocation Utilities.
- **********************************************************************/
-
-static inline void *
-mm_global_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_global_alloc(size), ptr, size);
-}
-
-static inline char *
-mm_global_strdup(const char *ptr)
-{
-	return mm_global_memdup(ptr, strlen(ptr) + 1);
-}
-
 #endif /* BASE_MEM_ALLOC_H */

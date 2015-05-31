@@ -1,5 +1,4 @@
 #include "base/lock.h"
-#include "base/mem/space.h"
 
 #include "params.h"
 #include "runner.h"
@@ -33,7 +32,6 @@ int
 main(int ac, char **av)
 {
 	set_params(ac, av, TEST_LOCK);
-	mm_common_space_init();
 	test1(NULL, routine);
 	printf("nexec: %zu\n", g_nexec);
 	return EXIT_SUCCESS;

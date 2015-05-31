@@ -36,6 +36,7 @@
 
 #define MM_CHUNK_GLOBAL		MM_CHUNK_IDX_TO_TAG(0)
 #define MM_CHUNK_COMMON		MM_CHUNK_IDX_TO_TAG(1)
+#define MM_CHUNK_SHARED		MM_CHUNK_IDX_TO_TAG(2)
 
 #define MM_CHUNK_IS_ARENA_TAG(t) ((t) > MM_CHUNK_IDX_TO_TAG(MM_CHUNK_ARENA_MAX))
 
@@ -46,8 +47,7 @@ typedef void (*mm_chunk_free_t)(mm_chunk_t tag, void *chunk);
 
 bool mm_chunk_is_private_alloc_ready(void);
 
-void mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
-	__attribute__((nonnull(1, 2)));
+void mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free);
 
 mm_chunk_t mm_chunk_add_arena(mm_arena_t arena)
 	__attribute__((nonnull(1)));

@@ -29,6 +29,7 @@
 
 #include "base/list.h"
 #include "base/mem/chunk.h"
+#include "base/mem/memory.h"
 #include "base/mem/space.h"
 #include "base/log/debug.h"
 #include "base/ring.h"
@@ -77,9 +78,6 @@ struct mm_core
 
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
-
-	/* Private memory space. */
-	struct mm_private_space *space;
 
 	/* Master task. */
 	struct mm_task *master;
@@ -176,16 +174,6 @@ mm_core_getptr(mm_core_t core)
 	return &mm_core_set[core];
 }
 
-static inline mm_arena_t
-mm_core_getarena(mm_core_t core)
-{
-	if (core == MM_CORE_NONE)
-		return NULL;
-	if (core == MM_CORE_SELF)
-		return &mm_core->space->xarena;
-	return &mm_core_set[core].space->xarena;
-}
-
 static inline struct mm_core *
 mm_core_self(void)
 {
@@ -196,139 +184,6 @@ static inline mm_core_t
 mm_core_selfid(void)
 {
 	return mm_core_getid(mm_core_self());
-}
-
-/**********************************************************************
- * Local Core Memory Allocation Routines.
- **********************************************************************/
-
-static inline void *
-mm_local_alloc(size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_private_space_xalloc(core->space, size);
-}
-
-static inline void *
-mm_local_aligned_alloc(size_t align, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_private_space_aligned_xalloc(core->space, align, size);
-}
-
-static inline void *
-mm_local_calloc(size_t count, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_private_space_xcalloc(core->space, count, size);
-}
-
-static inline void *
-mm_local_realloc(void *ptr, size_t size)
-{
-	struct mm_core *core = mm_core_self();
-	return mm_private_space_xrealloc(core->space, ptr, size);
-}
-
-static inline void
-mm_local_free(void *ptr)
-{
-	struct mm_core *core = mm_core_self();
-	mm_private_space_free(core->space, ptr);
-}
-
-/**********************************************************************
- * Local Core Memory Allocation Utilities.
- **********************************************************************/
-
-static inline void *
-mm_local_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_local_alloc(size), ptr, size);
-}
-
-static inline char *
-mm_local_strdup(const char *ptr)
-{
-	return mm_local_memdup(ptr, strlen(ptr) + 1);
-}
-
-/**********************************************************************
- * Cross-Core Memory Allocation Routines.
- **********************************************************************/
-
-#if ENABLE_SMP
-# define MM_CHUNK_SHARED	(mm_shared_chunk_type)
-extern struct mm_common_space mm_shared_space;
-extern mm_chunk_t mm_shared_chunk_tag;
-#else
-# define MM_CHUNK_SHARED	(0)
-#endif
-
-static inline void *
-mm_shared_alloc(size_t size)
-{
-#if ENABLE_SMP
-	return mm_common_space_xalloc(&mm_shared_space, size);
-#else
-	return mm_local_alloc(size);
-#endif
-}
-
-static inline void *
-mm_shared_aligned_alloc(size_t align, size_t size)
-{
-#if ENABLE_SMP
-	return mm_common_space_aligned_xalloc(&mm_shared_space, align, size);
-#else
-	return mm_local_aligned_alloc(align, size);
-#endif
-}
-
-static inline void *
-mm_shared_calloc(size_t count, size_t size)
-{
-#if ENABLE_SMP
-	return mm_common_space_xcalloc(&mm_shared_space, count, size);
-#else
-	return mm_local_calloc(count, size);
-#endif
-}
-
-static inline void *
-mm_shared_realloc(void *ptr, size_t size)
-{
-#if ENABLE_SMP
-	return mm_common_space_xrealloc(&mm_shared_space, ptr, size);
-#else
-	return mm_local_realloc(ptr, size);
-#endif
-}
-
-static inline void
-mm_shared_free(void *ptr)
-{
-#if ENABLE_SMP
-	mm_common_space_free(&mm_shared_space, ptr);
-#else
-	mm_local_free(ptr);
-#endif
-}
-
-/**********************************************************************
- * Cross Core Memory Allocation Utilities.
- **********************************************************************/
-
-static inline void *
-mm_shared_memdup(const void *ptr, size_t size)
-{
-	return memcpy(mm_shared_alloc(size), ptr, size);
-}
-
-static inline char *
-mm_shared_strdup(const char *ptr)
-{
-	return mm_shared_memdup(ptr, strlen(ptr) + 1);
 }
 
 #endif /* CORE_CORE_H */

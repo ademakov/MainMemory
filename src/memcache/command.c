@@ -124,7 +124,7 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 	ENTER();
 
 	if (command->own_key)
-		mm_local_free((char *) command->action.key);
+		mm_private_free((char *) command->action.key);
 
 	mc_action_cleanup(&command->action);
 

@@ -32,7 +32,7 @@
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
 #include "base/mem/chunk.h"
-#include "base/mem/mem.h"
+#include "base/mem/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"
@@ -313,7 +313,7 @@ void *
 mm_core_chunk_alloc(mm_chunk_t tag __mm_unused__, size_t size)
 {
 	ASSERT(tag == mm_core_selfid());
-	return mm_local_alloc(size);
+	return mm_private_alloc(size);
 }
 
 void
@@ -321,7 +321,7 @@ mm_core_chunk_free(mm_chunk_t tag, void *chunk)
 {
 	mm_core_t core = mm_core_selfid();
 	if (core == tag) {
-		mm_local_free(chunk);
+		mm_private_free(chunk);
 	} else {
 		ASSERT(!MM_CHUNK_IS_ARENA_TAG(tag));
 
@@ -355,7 +355,7 @@ mm_core_destroy_chunks(struct mm_core *core)
 	void *chunk;
 	while (mm_ring_spsc_get(&core->chunks, &chunk)) {
 		ASSERT(mm_chunk_gettag((struct mm_chunk *) chunk) == mm_core_selfid());
-		mm_local_free(chunk);
+		mm_private_free(chunk);
 	}
 
 	LEAVE();
@@ -644,41 +644,16 @@ mm_core_hook_param_stop(void (*proc)(void *), void *data)
 }
 
 /**********************************************************************
- * Shared Core Space Initialization and Termination.
- **********************************************************************/
-
-#if ENABLE_SMP
-struct mm_common_space mm_shared_space;
-mm_chunk_t mm_shared_chunk_tag;
-#endif
-
-static void
-mm_shared_space_init(void)
-{
-#if ENABLE_SMP
-	mm_common_space_prepare(&mm_shared_space);
-	mm_shared_chunk_tag = mm_chunk_add_arena(&mm_shared_space.xarena);
-#endif
-}
-
-static void
-mm_shared_space_term(void)
-{
-#if ENABLE_SMP
-	mm_common_space_cleanup(&mm_shared_space);
-#endif
-}
-
-/**********************************************************************
  * Core Initialization and Termination.
  **********************************************************************/
 
 static void
 mm_core_boot_init(struct mm_core *core)
 {
+	struct mm_private_space *space = mm_private_space_get();
 	if (MM_CORE_IS_PRIMARY(core)) {
 		// Call the start hooks on the primary core.
-		mm_timer_init(&core->time_manager, &core->space->xarena);
+		mm_timer_init(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(&mm_core_domain);
 
@@ -688,7 +663,7 @@ mm_core_boot_init(struct mm_core *core)
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
 
-		mm_timer_init(&core->time_manager, &core->space->xarena);
+		mm_timer_init(&core->time_manager, &space->xarena);
 	}
 }
 
@@ -733,7 +708,6 @@ mm_core_boot(mm_value_t arg)
 
 	// Set the thread-specific data.
 	mm_core = core;
-	mm_core->space = mm_thread_getprivatespace(mm_thread_self());
 
 	// Set pointer to the running task.
 	mm_core->task = mm_core->boot;
@@ -920,7 +894,6 @@ mm_core_init(void)
 	mm_thread_init();
 	mm_clock_init();
 
-	mm_shared_space_init();
 	mm_event_init();
 	mm_net_init();
 
@@ -971,7 +944,6 @@ mm_core_term(void)
 	mm_log_relay();
 	mm_log_flush();
 
-	mm_shared_space_term();
 	mm_memory_term();
 
 	LEAVE();

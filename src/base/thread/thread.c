@@ -39,8 +39,10 @@
 
 struct mm_thread
 {
+#if ENABLE_SMP
 	/* Private memory space. */
-	struct mm_private_space private_space;
+	struct mm_private_space space;
+#endif
 
 	/* The log message storage. */
 	struct mm_queue log_queue;
@@ -263,7 +265,9 @@ mm_thread_create(struct mm_thread_attr *attr,
 	thread->start_arg = start_arg;
 
 	// Set thread attributes.
+#if ENABLE_SMP
 	bool private_space = false;
+#endif
 	if (attr == NULL) {
 		thread->domain = NULL;
 		thread->domain_index = 0;
@@ -273,7 +277,9 @@ mm_thread_create(struct mm_thread_attr *attr,
 		thread->domain = attr->domain;
 		thread->domain_index = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
+#if ENABLE_SMP
 		private_space = attr->private_space;
+#endif
 		if (attr->name[0])
 			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 		else
@@ -281,11 +287,13 @@ mm_thread_create(struct mm_thread_attr *attr,
 	}
 
 	// Initialize private memory space if required.
+#if ENABLE_SMP
 	if (private_space) {
-		mm_private_space_prepare(&thread->private_space);
+		mm_private_space_prepare(&thread->space);
 	} else {
-		thread->private_space.space.opaque = NULL;
+		thread->space.space.opaque = NULL;
 	}
+#endif
 
 	// Initialize log message queue.
 	mm_queue_init(&thread->log_queue);
@@ -314,8 +322,10 @@ mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
 
-	if (thread->private_space.space.opaque != NULL)
-		mm_private_space_cleanup(&thread->private_space);
+#if ENABLE_SMP
+	if (thread->space.space.opaque != NULL)
+		mm_private_space_cleanup(&thread->space);
+#endif
 
 #if ENABLE_TRACE
 	mm_trace_context_cleanup(&thread->trace);
@@ -336,6 +346,14 @@ mm_thread_getname(const struct mm_thread *thread)
 	return thread->name;
 }
 
+#if ENABLE_SMP
+struct mm_private_space * __attribute__((nonnull(1)))
+mm_thread_getspace(struct mm_thread *thread)
+{
+	return &thread->space;
+}
+#endif
+
 struct mm_domain *
 mm_thread_getdomain(const struct mm_thread *thread)
 {
@@ -352,14 +370,6 @@ struct mm_queue *
 mm_thread_getlog(struct mm_thread *thread)
 {
 	return &thread->log_queue;
-}
-
-struct mm_private_space * __attribute__((nonnull(1)))
-mm_thread_getprivatespace(struct mm_thread *thread)
-{
-	if (thread->private_space.space.opaque == NULL)
-		return NULL;
-	return &thread->private_space;
 }
 
 #if ENABLE_TRACE

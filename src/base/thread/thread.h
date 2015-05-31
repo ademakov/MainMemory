@@ -107,6 +107,9 @@ mm_thread_self(void)
 const char * __attribute__((nonnull(1)))
 mm_thread_getname(const struct mm_thread *thread);
 
+struct mm_private_space * __attribute__((nonnull(1)))
+mm_thread_getspace(struct mm_thread *thread);
+
 struct mm_domain * __attribute__((nonnull(1)))
 mm_thread_getdomain(const struct mm_thread *thread);
 
@@ -115,9 +118,6 @@ mm_thread_getdomainindex(const struct mm_thread *thread);
 
 struct mm_queue * __attribute__((nonnull(1)))
 mm_thread_getlog(struct mm_thread *thread);
-
-struct mm_private_space * __attribute__((nonnull(1)))
-mm_thread_getprivatespace(struct mm_thread *thread);
 
 #if ENABLE_TRACE
 struct mm_trace_context * __attribute__((nonnull(1)))

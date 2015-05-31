@@ -877,7 +877,7 @@ again:
 			} else {
 				state = S_KEY_COPY;
 
-				char *str = mm_local_alloc(MC_KEY_LEN_MAX);
+				char *str = mm_private_alloc(MC_KEY_LEN_MAX);
 				memcpy(str, command->action.key, len);
 				command->action.key_len = len;
 				command->action.key = str;

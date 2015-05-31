@@ -18,10 +18,11 @@
  */
 
 #include "base/mem/chunk.h"
+
 #include "base/lock.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
-#include "base/mem/space.h"
+#include "base/mem/memory.h"
 
 /**********************************************************************
  * Chunk Tags.
@@ -30,9 +31,10 @@
 static mm_arena_t mm_chunk_arena_table[MM_CHUNK_ARENA_MAX] = {
 	&mm_global_arena,
 	&mm_common_space.xarena,
+	&mm_shared_space.xarena,
 };
 
-static int mm_chunk_arena_count = 2;
+static int mm_chunk_arena_count = 3;
 
 static mm_chunk_alloc_t mm_chunk_alloc = NULL;
 static mm_chunk_free_t mm_chunk_free = NULL;

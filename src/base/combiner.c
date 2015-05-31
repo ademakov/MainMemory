@@ -21,7 +21,7 @@
 #include "base/bitops.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/mem/memory.h"
 
 #define MM_COMBINER_MINIMUM_HANDOFF	4
 #define MM_COMBINER_DEFAULT_HANDOFF	16
