@@ -105,6 +105,9 @@
 /* Infinite timeout. */
 #define MM_TIMEOUT_INFINITE	((mm_timeout_t) -1)
 
+/* A non-existent thread. */
+#define MM_THREAD_NONE		((mm_thread_t) -1)
+
 /* A non-existent core. */
 #define MM_CORE_NONE		((mm_core_t) -1)
 /* A pseudo-core corresponding to the current one. */
@@ -118,6 +121,9 @@ typedef int64_t			mm_timeval_t;
 
 /* Timeout (in microseconds). */
 typedef uint32_t		mm_timeout_t;
+
+/* Thread ID. */
+typedef uint16_t 		mm_thread_t;
 
 /* Core ID. */
 typedef uint16_t		mm_core_t;
