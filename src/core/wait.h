@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "core/lock.h"
+#include "base/lock.h"
 
 /* Forward declaration. */
 struct mm_task;

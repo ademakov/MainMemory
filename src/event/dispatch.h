@@ -21,7 +21,7 @@
 #define EVENT_DISPATCH_H
 
 #include "common.h"
-#include "core/lock.h"
+#include "base/lock.h"
 #include "event/batch.h"
 #include "event/epoll.h"
 #include "event/kqueue.h"

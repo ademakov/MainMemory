@@ -23,7 +23,6 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "core/lock.h"
 #include "base/mem/cdata.h"
 
 /* Forward declaration. */
