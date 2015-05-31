@@ -73,6 +73,10 @@ mm_common_free(void *ptr)
  * Memory Allocation Routines for Regular Threads.
  **********************************************************************/
 
+/*
+ * NB: This code implies there is only one regular thread in non-SMP mode.
+ */
+
 #if ENABLE_SMP
 extern struct mm_shared_space mm_regular_space;
 #else
