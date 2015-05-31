@@ -38,7 +38,7 @@ struct mm_pool_shared
 	MM_CDATA(struct mm_pool_shared_cdata, cdata);
 
 	/* Pool growth lock. */
-	mm_task_lock_t grow_lock;
+	mm_regular_lock_t grow_lock;
 };
 
 #endif
@@ -46,10 +46,10 @@ struct mm_pool_shared
 struct mm_pool_global
 {
 	/* Free list lock. */
-	mm_thread_lock_t free_lock;
+	mm_common_lock_t free_lock;
 
 	/* Pool growth lock. */
-	mm_thread_lock_t grow_lock;
+	mm_common_lock_t grow_lock;
 };
 
 struct mm_pool

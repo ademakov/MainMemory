@@ -35,11 +35,11 @@ struct mm_ring_base
 {
 	/* Consumer data. */
 	mm_atomic_uintptr_t head __mm_align_cacheline__;
-	mm_thread_lock_t head_lock;
+	mm_common_lock_t head_lock;
 
 	/* Producer data. */
 	mm_atomic_uintptr_t tail __mm_align_cacheline__;
-	mm_thread_lock_t tail_lock;
+	mm_common_lock_t tail_lock;
 
 	/* Shared data. */
 	uintptr_t mask __mm_align_cacheline__;
@@ -52,44 +52,44 @@ void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 static inline bool
 mm_ring_producer_locked(struct mm_ring_base *ring)
 {
-	return mm_thread_is_locked(&ring->tail_lock);
+	return mm_common_is_locked(&ring->tail_lock);
 }
 static inline bool
 mm_ring_producer_trylock(struct mm_ring_base *ring)
 {
-	return mm_thread_trylock(&ring->tail_lock);
+	return mm_common_trylock(&ring->tail_lock);
 }
 static inline void
 mm_ring_producer_lock(struct mm_ring_base *ring)
 {
-	mm_thread_lock(&ring->tail_lock);
+	mm_common_lock(&ring->tail_lock);
 }
 static inline void
 mm_ring_producer_unlock(struct mm_ring_base *ring)
 {
-	mm_thread_unlock(&ring->tail_lock);
+	mm_common_unlock(&ring->tail_lock);
 }
 
 /* Multi-consumer task synchronization. */
 static inline bool
 mm_ring_consumer_locked(struct mm_ring_base *ring)
 {
-	return mm_thread_is_locked(&ring->head_lock);
+	return mm_common_is_locked(&ring->head_lock);
 }
 static inline bool
 mm_ring_consumer_trylock(struct mm_ring_base *ring)
 {
-	return mm_thread_trylock(&ring->head_lock);
+	return mm_common_trylock(&ring->head_lock);
 }
 static inline void
 mm_ring_consumer_lock(struct mm_ring_base *ring)
 {
-	mm_thread_lock(&ring->head_lock);
+	mm_common_lock(&ring->head_lock);
 }
 static inline void
 mm_ring_consumer_unlock(struct mm_ring_base *ring)
 {
-	mm_thread_unlock(&ring->head_lock);
+	mm_common_unlock(&ring->head_lock);
 }
 
 /**********************************************************************

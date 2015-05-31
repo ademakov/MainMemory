@@ -45,7 +45,7 @@ struct mm_future
 	mm_atomic_uint8_t cancel;
 
 	/* The internal state lock. */
-	mm_task_lock_t lock;
+	mm_regular_lock_t lock;
 
 	/* The tasks blocked waiting for the future. */
 	struct mm_waitset waitset;

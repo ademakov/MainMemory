@@ -41,10 +41,10 @@ void
 mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 {
 	if ((locks & MM_RING_LOCKED_GET) != 0)
-		ring->head_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+		ring->head_lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
 
 	if ((locks & MM_RING_LOCKED_PUT) != 0)
-		ring->tail_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+		ring->tail_lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
 }
 
 /**********************************************************************

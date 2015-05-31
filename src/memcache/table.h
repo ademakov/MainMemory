@@ -65,8 +65,8 @@ struct mc_tpart
 #elif ENABLE_MEMCACHE_DELEGATE
 	mm_core_t core;
 #elif ENABLE_MEMCACHE_LOCKING
-	mm_task_lock_t lookup_lock;
-	mm_task_lock_t freelist_lock;
+	mm_regular_lock_t lookup_lock;
+	mm_regular_lock_t freelist_lock;
 #endif
 
 	bool evicting;
@@ -145,7 +145,7 @@ static inline void
 mc_table_lookup_lock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
-	mm_task_lock(&part->lookup_lock);
+	mm_regular_lock(&part->lookup_lock);
 #else
 	(void) part;
 #endif
@@ -155,7 +155,7 @@ static inline void
 mc_table_lookup_unlock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
-	mm_task_unlock(&part->lookup_lock);
+	mm_regular_unlock(&part->lookup_lock);
 #else
 	(void) part;
 #endif
@@ -165,7 +165,7 @@ static inline void
 mc_table_freelist_lock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
-	mm_task_lock(&part->freelist_lock);
+	mm_regular_lock(&part->freelist_lock);
 #else
 	(void) part;
 #endif
@@ -175,7 +175,7 @@ static inline void
 mc_table_freelist_unlock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
-	mm_task_unlock(&part->freelist_lock);
+	mm_regular_unlock(&part->freelist_lock);
 #else
 	(void) part;
 #endif

@@ -212,7 +212,7 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 }
 
 void
-mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
+mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 {
 	ENTER();
 
@@ -222,7 +222,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
-	mm_task_unlock(lock);
+	mm_regular_unlock(lock);
 
 	// Wait for a wakeup signal.
 	mm_task_block();
@@ -234,7 +234,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock)
 }
 
 void
-mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout)
+mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -244,7 +244,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeou
 	mm_link_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
-	mm_task_unlock(lock);
+	mm_regular_unlock(lock);
 
 	// Wait for a wakeup signal.
 	mm_timer_block(timeout);
@@ -256,7 +256,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeou
 }
 
 void
-mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
+mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 {
 	ENTER();
 
@@ -265,7 +265,7 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock)
 	mm_link_init(&waitset->set);
 
 	// Release the waitset lock.
-	mm_task_unlock(lock);
+	mm_regular_unlock(lock);
 
 	while (!mm_link_empty(&set)) {
 		// Get the next wait entry.

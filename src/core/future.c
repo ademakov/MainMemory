@@ -129,7 +129,7 @@ mm_future_finish(struct mm_work *work, mm_value_t result)
 	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
 
 	// Synchronize with waiters.
-	mm_task_lock(&future->lock);
+	mm_regular_lock(&future->lock);
 
 	// Store the result.
 	mm_memory_store(future->result, result);
@@ -154,7 +154,7 @@ mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start
 	mm_work_prepare(&future->work,
 			mm_future_routine, (mm_value_t) future,
 			mm_future_finish);
-	future->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	future->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	mm_waitset_prepare(&future->waitset);
 
 	LEAVE();
@@ -230,11 +230,11 @@ mm_future_wait(struct mm_future *future)
 		mm_task_testcancel();
 
 		// Make a synchronized check of the future status.
-		mm_task_lock(&future->lock);
+		mm_regular_lock(&future->lock);
 
 		result = mm_memory_load(future->result);
 		if (result != MM_RESULT_NOTREADY) {
-			mm_task_unlock(&future->lock);
+			mm_regular_unlock(&future->lock);
 			break;
 		}
 
@@ -275,11 +275,11 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		}
 
 		// Make a synchronized check of the future status.
-		mm_task_lock(&future->lock);
+		mm_regular_lock(&future->lock);
 
 		result = mm_memory_load(future->result);
 		if (result != MM_RESULT_NOTREADY) {
-			mm_task_unlock(&future->lock);
+			mm_regular_unlock(&future->lock);
 			break;
 		}
 
@@ -454,7 +454,7 @@ mm_future_cancel(struct mm_future *future)
 	mm_memory_store(future->cancel, true);
 
 	// Make a synchronized check of the future status.
-	mm_task_lock(&future->lock);
+	mm_regular_lock(&future->lock);
 
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_NOTREADY) {
@@ -470,7 +470,7 @@ mm_future_cancel(struct mm_future *future)
 		}
 	}
 
-	mm_task_unlock(&future->lock);
+	mm_regular_unlock(&future->lock);
 
 	LEAVE();
 }

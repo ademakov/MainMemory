@@ -41,7 +41,7 @@ mm_port_create(struct mm_task *task)
 	ENTER();
 
 	struct mm_port *port = mm_global_alloc(sizeof(struct mm_port));
-	port->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	port->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	port->task = task;
 	port->start = 0;
 	port->count = 0;
@@ -75,14 +75,14 @@ mm_port_send_internal(struct mm_port *port,
 	int rc = 0;
 
 again:
-	mm_task_lock(&port->lock);
+	mm_regular_lock(&port->lock);
 	if (unlikely((port->count + count) > MM_PORT_SIZE)) {
 		if (blocking) {
 			mm_waitset_wait(&port->blocked_senders, &port->lock);
 			mm_task_testcancel();
 			goto again;
 		} else {
-			mm_task_unlock(&port->lock);
+			mm_regular_unlock(&port->lock);
 			rc = -1;
 			goto leave;
 		}
@@ -107,7 +107,7 @@ again:
 		*ring_ptr++ = *start++;
 	}
 
-	mm_task_unlock(&port->lock);
+	mm_regular_unlock(&port->lock);
 	mm_core_run_task(port->task);
 
 leave:
@@ -126,9 +126,9 @@ mm_port_receive_internal(struct mm_port *port,
 	int rc = 0;
 
 again:
-	mm_task_lock(&port->lock);
+	mm_regular_lock(&port->lock);
 	if (port->count < count) {
-		mm_task_unlock(&port->lock);
+		mm_regular_unlock(&port->lock);
 		if (blocking) {
 			mm_task_block();
 			mm_task_testcancel();

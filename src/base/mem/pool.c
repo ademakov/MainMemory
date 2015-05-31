@@ -38,10 +38,10 @@ static void
 mm_pool_grow_lock(struct mm_pool *pool)
 {
 	if (pool->global)
-		mm_thread_lock(&pool->global_data.grow_lock);
+		mm_common_lock(&pool->global_data.grow_lock);
 #if ENABLE_SMP
 	else if (pool->shared)
-		mm_task_lock(&pool->shared_data.grow_lock);
+		mm_regular_lock(&pool->shared_data.grow_lock);
 #endif
 }
 
@@ -49,10 +49,10 @@ static void
 mm_pool_grow_unlock(struct mm_pool *pool)
 {
 	if (pool->global)
-		mm_thread_unlock(&pool->global_data.grow_lock);
+		mm_common_unlock(&pool->global_data.grow_lock);
 #if ENABLE_SMP
 	else if (pool->shared)
-		mm_task_unlock(&pool->shared_data.grow_lock);
+		mm_regular_unlock(&pool->shared_data.grow_lock);
 #endif
 }
 
@@ -336,9 +336,9 @@ mm_pool_shared_alloc_low(mm_core_t core, struct mm_pool *pool)
 			item = head;
 		} else {
 			// Allocate a new item.
-			mm_task_lock(&pool->shared_data.grow_lock);
+			mm_regular_lock(&pool->shared_data.grow_lock);
 			item = mm_pool_alloc_new(pool);
-			mm_task_unlock(&pool->shared_data.grow_lock);
+			mm_regular_unlock(&pool->shared_data.grow_lock);
 		}
 	}
 
@@ -468,7 +468,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->global = false;
 
 #if ENABLE_SMP
-	pool->shared_data.grow_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	pool->shared_data.grow_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	char *cdata_name = mm_format(&mm_global_arena, "'%s' memory pool", name);
 	MM_CDATA_ALLOC(mm_domain_self(), cdata_name, pool->shared_data.cdata);
@@ -504,19 +504,19 @@ mm_pool_global_alloc(struct mm_pool *pool)
 {
 	ENTER();
 
-	mm_thread_lock(&pool->global_data.free_lock);
+	mm_common_lock(&pool->global_data.free_lock);
 
 	void *item;
 	if (!mm_link_empty(&pool->free_list)) {
 		item = mm_link_delete_head(&pool->free_list);
 
-		mm_thread_unlock(&pool->global_data.free_lock);
+		mm_common_unlock(&pool->global_data.free_lock);
 	} else {
-		mm_thread_unlock(&pool->global_data.free_lock);
+		mm_common_unlock(&pool->global_data.free_lock);
 
-		mm_thread_lock(&pool->global_data.grow_lock);
+		mm_common_lock(&pool->global_data.grow_lock);
 		item = mm_pool_alloc_new(pool);
-		mm_thread_unlock(&pool->global_data.grow_lock);
+		mm_common_unlock(&pool->global_data.grow_lock);
 	}
 
 	LEAVE();
@@ -529,9 +529,9 @@ mm_pool_global_free(struct mm_pool *pool, void *item)
 	ENTER();
 	ASSERT(mm_pool_contains(pool, item));
 
-	mm_thread_lock(&pool->global_data.free_lock);
+	mm_common_lock(&pool->global_data.free_lock);
 	mm_link_insert(&pool->free_list, (struct mm_link *) item);
-	mm_thread_unlock(&pool->global_data.free_lock);
+	mm_common_unlock(&pool->global_data.free_lock);
 
 	LEAVE();
 }
@@ -546,8 +546,8 @@ mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->shared = false;
 	pool->global = true;
 
-	pool->global_data.free_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
-	pool->global_data.grow_lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	pool->global_data.free_lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
+	pool->global_data.grow_lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
 
 	pool->alloc_item = mm_pool_global_alloc;
 	pool->free_item = mm_pool_global_free;

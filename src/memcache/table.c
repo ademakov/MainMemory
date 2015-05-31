@@ -304,8 +304,8 @@ mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
 	mm_verbose("bind partition %d to core %d", index, core);
 	part->core = core;
 #elif ENABLE_MEMCACHE_LOCKING
-	part->lookup_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
-	part->freelist_lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	part->lookup_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	part->freelist_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 #endif
 
 	part->evicting = false;

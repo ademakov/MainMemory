@@ -131,7 +131,7 @@ struct mm_shared_space
 	/* Memory arena with error checking (using *_xalloc family). */
 	struct mm_arena xarena;
 	/* Concurrent access lock. */
-	mm_thread_lock_t lock;
+	mm_common_lock_t lock;
 };
 
 void __attribute__((nonnull(1)))
@@ -143,9 +143,9 @@ mm_shared_space_cleanup(struct mm_shared_space *space);
 static inline void *
 mm_shared_space_alloc(struct mm_shared_space *space, size_t size)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	void *ptr = mm_mspace_alloc(space->space, size);
-	mm_thread_unlock(&space->lock);
+	mm_common_unlock(&space->lock);
 	return ptr;
 }
 
@@ -161,9 +161,9 @@ mm_shared_space_xalloc(struct mm_shared_space *space, size_t size)
 static inline void *
 mm_shared_space_aligned_alloc(struct mm_shared_space *space, size_t align, size_t size)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	void *ptr = mm_mspace_aligned_alloc(space->space, align, size);
-	mm_thread_unlock(&space->lock);
+	mm_common_unlock(&space->lock);
 	return ptr;
 }
 
@@ -179,9 +179,9 @@ mm_shared_space_aligned_xalloc(struct mm_shared_space *space, size_t align, size
 static inline void *
 mm_shared_space_calloc(struct mm_shared_space *space, size_t count, size_t size)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	void *ptr = mm_mspace_calloc(space->space, count, size);
-	mm_thread_unlock(&space->lock);
+	mm_common_unlock(&space->lock);
 	return ptr;
 }
 
@@ -197,9 +197,9 @@ mm_shared_space_xcalloc(struct mm_shared_space *space, size_t count, size_t size
 static inline void *
 mm_shared_space_realloc(struct mm_shared_space *space, void *ptr, size_t size)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	ptr = mm_mspace_realloc(space->space, ptr, size);
-	mm_thread_unlock(&space->lock);
+	mm_common_unlock(&space->lock);
 	return ptr;
 }
 
@@ -215,17 +215,17 @@ mm_shared_space_xrealloc(struct mm_shared_space *space, void *ptr, size_t size)
 static inline void
 mm_shared_space_free(struct mm_shared_space *space, void *ptr)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	mm_mspace_free(space->space, ptr);
-	mm_thread_unlock(&space->lock);
+	mm_common_unlock(&space->lock);
 }
 
 static inline void __attribute__((nonnull(1)))
 mm_shared_space_bulk_free(struct mm_shared_space *space, void **ptrs, size_t nptrs)
 {
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
-	mm_thread_lock(&space->lock);
+	mm_common_lock(&space->lock);
 }
 
 #endif /* BASE_MEM_SPACE_H */

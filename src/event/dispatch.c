@@ -33,7 +33,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch)
 	mm_core_t ncores = mm_core_getnum();
 	ASSERT(ncores > 0);
 
-	dispatch->lock = (mm_task_lock_t) MM_TASK_LOCK_INIT;
+	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	dispatch->polling_listener = NULL;
 	dispatch->waiting_listeners = mm_common_calloc(ncores, sizeof (struct mm_listener *));
@@ -154,7 +154,7 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 	mm_core_t core = mm_core_selfid();
 
-	mm_task_lock(&dispatch->lock);
+	mm_regular_lock(&dispatch->lock);
 
 	// The first arrived listener is elected to do event poll.
 	if (dispatch->polling_listener == NULL) {
@@ -165,7 +165,7 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		mm_event_batch_append(&listener->changes, &dispatch->pending_changes);
 		mm_event_batch_clear(&dispatch->pending_changes);
 
-		mm_task_unlock(&dispatch->lock);
+		mm_regular_unlock(&dispatch->lock);
 
 		// Get pending incoming events.
 		mm_dispatch_get_pending_events(dispatch, listener, core);
@@ -187,7 +187,7 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		// Get pending incoming events.
 		mm_dispatch_get_pending_events(dispatch, listener, core);
 
-		mm_task_unlock(&dispatch->lock);
+		mm_regular_unlock(&dispatch->lock);
 
 		// Handle finished events.
 		mm_dispatch_finish_events(listener);
@@ -210,7 +210,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 	if (dispatch->polling_listener == listener) {
 		unsigned int nlisteners = 0;
 
-		mm_task_lock(&dispatch->lock);
+		mm_regular_lock(&dispatch->lock);
 
 		// Unregister as polling listener.
 		dispatch->polling_listener = NULL;
@@ -255,7 +255,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		// pending changes.
 		// if (!mm_event_batch_empty(&dispatch->pending_changes)) ...
 
-		mm_task_unlock(&dispatch->lock);
+		mm_regular_unlock(&dispatch->lock);
 
 		for (unsigned int i = 0; i < nlisteners; i++) {
 			struct mm_listener *target = listener->dispatch_targets[i];
@@ -263,13 +263,13 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 		}
 
 	} else {
-		mm_task_lock(&dispatch->lock);
+		mm_regular_lock(&dispatch->lock);
 
 		// Unregister as waiting listener.
 		dispatch->waiting_listeners[core] = NULL;
 		mm_dispatch_get_pending_events(dispatch, listener, core);
 
-		mm_task_unlock(&dispatch->lock);
+		mm_regular_unlock(&dispatch->lock);
 	}
 
 	LEAVE();

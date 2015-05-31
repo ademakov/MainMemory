@@ -92,9 +92,9 @@ struct mm_lock_stat *mm_lock_getstat(struct mm_lock_stat_info *info)
  **********************************************************************/
 
 #if ENABLE_LOCK_STATS
-# define MM_THREAD_LOCK_INIT	{ .lock = MM_LOCK_INIT, .stat = MM_LOCK_STAT_INIT }
+# define MM_COMMON_LOCK_INIT	{ .lock = MM_LOCK_INIT, .stat = MM_LOCK_STAT_INIT }
 #else
-# define MM_THREAD_LOCK_INIT	{ .lock = MM_LOCK_INIT }
+# define MM_COMMON_LOCK_INIT	{ .lock = MM_LOCK_INIT }
 #endif
 
 typedef struct
@@ -105,10 +105,10 @@ typedef struct
 	struct mm_lock_stat_info stat;
 #endif
 
-} mm_thread_lock_t;
+} mm_common_lock_t;
 
 static inline bool
-mm_thread_trylock(mm_thread_lock_t *lock)
+mm_common_trylock(mm_common_lock_t *lock)
 {
 	bool fail = mm_lock_acquire(&lock->lock);
 
@@ -124,7 +124,7 @@ mm_thread_trylock(mm_thread_lock_t *lock)
 }
 
 static inline void
-mm_thread_lock(mm_thread_lock_t *lock)
+mm_common_lock(mm_common_lock_t *lock)
 {
 #if ENABLE_LOCK_STATS
 	uint32_t fail = 0;
@@ -148,13 +148,13 @@ mm_thread_lock(mm_thread_lock_t *lock)
 }
 
 static inline void
-mm_thread_unlock(mm_thread_lock_t *lock)
+mm_common_unlock(mm_common_lock_t *lock)
 {
 	mm_lock_release(&lock->lock);
 }
 
 static inline bool
-mm_thread_is_locked(mm_thread_lock_t *lock)
+mm_common_is_locked(mm_common_lock_t *lock)
 {
 	return mm_lock_is_acquired(&lock->lock);
 }
@@ -168,26 +168,26 @@ mm_thread_is_locked(mm_thread_lock_t *lock)
  */
 
 #if ENABLE_SMP
-# define MM_TASK_LOCK_INIT	{ .lock = MM_THREAD_LOCK_INIT }
+# define MM_REGULAR_LOCK_INIT	{ .lock = MM_COMMON_LOCK_INIT }
 #else
-# define MM_TASK_LOCK_INIT	{ .lock = 0 }
+# define MM_REGULAR_LOCK_INIT	{ .lock = 0 }
 #endif
 
 typedef struct
 {
 #if ENABLE_SMP
-	mm_thread_lock_t lock;
+	mm_common_lock_t lock;
 #else
 	uint8_t lock;
 #endif
 
-} mm_task_lock_t;
+} mm_regular_lock_t;
 
 static inline bool
-mm_task_trylock(mm_task_lock_t *lock)
+mm_regular_trylock(mm_regular_lock_t *lock)
 {
 #if ENABLE_SMP
-	return mm_thread_trylock(&lock->lock);
+	return mm_common_trylock(&lock->lock);
 #else
 	(void) lock;
 	return true;
@@ -195,30 +195,30 @@ mm_task_trylock(mm_task_lock_t *lock)
 }
 
 static inline void
-mm_task_lock(mm_task_lock_t *lock)
+mm_regular_lock(mm_regular_lock_t *lock)
 {
 #if ENABLE_SMP
-	mm_thread_lock(&lock->lock);
+	mm_common_lock(&lock->lock);
 #else
 	(void) lock;
 #endif
 }
 
 static inline void
-mm_task_unlock(mm_task_lock_t *lock)
+mm_regular_unlock(mm_regular_lock_t *lock)
 {
 #if ENABLE_SMP
-	mm_thread_unlock(&lock->lock);
+	mm_common_unlock(&lock->lock);
 #else
 	(void) lock;
 #endif
 }
 
 static inline bool
-mm_task_is_locked(mm_task_lock_t *lock)
+mm_regular_is_locked(mm_regular_lock_t *lock)
 {
 #if ENABLE_SMP
-	return mm_thread_is_locked(&lock->lock);
+	return mm_common_is_locked(&lock->lock);
 #else
 	(void) lock;
 	return false;

@@ -38,7 +38,7 @@ struct mm_dispatch_per_listener
 
 struct mm_dispatch
 {
-	mm_task_lock_t lock;
+	mm_regular_lock_t lock;
 
 	/* The listener elected to do event poll. */
 	struct mm_listener *polling_listener;

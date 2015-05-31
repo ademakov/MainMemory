@@ -41,7 +41,7 @@ struct mm_log_chunk
 // The pending log chunk list.
 static struct mm_queue MM_QUEUE_INIT(mm_log_queue);
 
-static mm_thread_lock_t mm_log_lock = MM_THREAD_LOCK_INIT;
+static mm_common_lock_t mm_log_lock = MM_COMMON_LOCK_INIT;
 static bool mm_log_busy = false;
 
 static struct mm_log_chunk *
@@ -148,9 +148,9 @@ mm_log_relay(void)
 		struct mm_link *head = mm_queue_head(queue);
 		struct mm_link *tail = mm_queue_tail(queue);
 
-		mm_thread_lock(&mm_log_lock);
+		mm_common_lock(&mm_log_lock);
 		mm_queue_splice_tail(&mm_log_queue, head, tail);
-		mm_thread_unlock(&mm_log_lock);
+		mm_common_unlock(&mm_log_lock);
 
 		mm_queue_init(queue);
 	}
@@ -159,10 +159,10 @@ mm_log_relay(void)
 size_t
 mm_log_flush(void)
 {
-	mm_thread_lock(&mm_log_lock);
+	mm_common_lock(&mm_log_lock);
 
 	if (mm_log_busy || mm_queue_empty(&mm_log_queue)) {
-		mm_thread_unlock(&mm_log_lock);
+		mm_common_unlock(&mm_log_lock);
 		// TODO: wait for write completion.
 		return 0;
 	}
@@ -171,7 +171,7 @@ mm_log_flush(void)
 	mm_queue_init(&mm_log_queue);
 	mm_log_busy = true;
 
-	mm_thread_unlock(&mm_log_lock);
+	mm_common_unlock(&mm_log_lock);
 
 	// The number of written bytes.
 	size_t written = 0;

@@ -190,7 +190,7 @@ mm_shared_space_prepare(struct mm_shared_space *space)
 	space->space = mm_mspace_create();
 	space->uarena.vtable = &mm_shared_uarena_vtable;
 	space->xarena.vtable = &mm_shared_xarena_vtable;
-	space->lock = (mm_thread_lock_t) MM_THREAD_LOCK_INIT;
+	space->lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
 }
 
 void __attribute__((nonnull(1)))

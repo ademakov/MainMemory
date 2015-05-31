@@ -80,13 +80,13 @@ void __attribute__((nonnull(1)))
 mm_waitset_prepare(struct mm_waitset *waitset);
 
 void __attribute__((nonnull(1, 2)))
-mm_waitset_wait(struct mm_waitset *waitset, mm_task_lock_t *lock);
+mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock);
 
 void __attribute__((nonnull(1, 2)))
-mm_waitset_timedwait(struct mm_waitset *waitset, mm_task_lock_t *lock, mm_timeout_t timeout);
+mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_timeout_t timeout);
 
 void __attribute__((nonnull(1, 2)))
-mm_waitset_broadcast(struct mm_waitset *waitset, mm_task_lock_t *lock);
+mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock);
 
 /**********************************************************************
  * Private single-core wait-sets.
