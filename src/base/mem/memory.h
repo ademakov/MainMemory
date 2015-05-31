@@ -70,67 +70,67 @@ mm_common_free(void *ptr)
 }
 
 /**********************************************************************
- * Thread-Shared Memory Allocation Routines.
+ * Memory Allocation Routines for Regular Threads.
  **********************************************************************/
 
 #if ENABLE_SMP
-extern struct mm_shared_space mm_shared_space;
+extern struct mm_shared_space mm_regular_space;
 #else
-extern struct mm_private_space mm_shared_space;
+extern struct mm_private_space mm_regular_space;
 #endif
 
 static inline void *
-mm_shared_alloc(size_t size)
+mm_regular_alloc(size_t size)
 {
 #if ENABLE_SMP
-	return mm_shared_space_xalloc(&mm_shared_space, size);
+	return mm_shared_space_xalloc(&mm_regular_space, size);
 #else
-	return mm_private_space_xalloc(&mm_shared_space, size);
-#endif
-}
-
-static inline void *
-mm_shared_aligned_alloc(size_t align, size_t size)
-{
-#if ENABLE_SMP
-	return mm_shared_space_aligned_xalloc(&mm_shared_space, align, size);
-#else
-	return mm_private_space_aligned_alloc(&mm_shared_space, align, size);
+	return mm_private_space_xalloc(&mm_regular_space, size);
 #endif
 }
 
 static inline void *
-mm_shared_calloc(size_t count, size_t size)
+mm_regular_aligned_alloc(size_t align, size_t size)
 {
 #if ENABLE_SMP
-	return mm_shared_space_xcalloc(&mm_shared_space, count, size);
+	return mm_shared_space_aligned_xalloc(&mm_regular_space, align, size);
 #else
-	return mm_private_space_calloc(&mm_shared_space, count, size);
+	return mm_private_space_aligned_alloc(&mm_regular_space, align, size);
 #endif
 }
 
 static inline void *
-mm_shared_realloc(void *ptr, size_t size)
+mm_regular_calloc(size_t count, size_t size)
 {
 #if ENABLE_SMP
-	return mm_shared_space_xrealloc(&mm_shared_space, ptr, size);
+	return mm_shared_space_xcalloc(&mm_regular_space, count, size);
 #else
-	return mm_private_space_realloc(&mm_shared_space, ptr, size);
+	return mm_private_space_calloc(&mm_regular_space, count, size);
+#endif
+}
+
+static inline void *
+mm_regular_realloc(void *ptr, size_t size)
+{
+#if ENABLE_SMP
+	return mm_shared_space_xrealloc(&mm_regular_space, ptr, size);
+#else
+	return mm_private_space_realloc(&mm_regular_space, ptr, size);
 #endif
 }
 
 static inline void
-mm_shared_free(void *ptr)
+mm_regular_free(void *ptr)
 {
 #if ENABLE_SMP
-	mm_shared_space_free(&mm_shared_space, ptr);
+	mm_shared_space_free(&mm_regular_space, ptr);
 #else
-	mm_private_space_free(&mm_shared_space, ptr);
+	mm_private_space_free(&mm_regular_space, ptr);
 #endif
 }
 
 /**********************************************************************
- * Thread-Private Memory Allocation Routines.
+ * Private Memory Allocation Routines for Single Thread.
  **********************************************************************/
 
 static inline struct mm_private_space *
@@ -143,7 +143,7 @@ mm_private_space_get(void)
 		space = NULL;
 	return space;
 #else
-	return &mm_shared_space;
+	return &mm_regular_space;
 #endif
 }
 
@@ -152,10 +152,10 @@ mm_private_alloc(size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (space != NULL)
+	if (likely(space != NULL))
 		return mm_private_space_xalloc(space, size);
 #endif
-	return mm_shared_alloc(size);
+	return mm_regular_alloc(size);
 }
 
 static inline void *
@@ -163,10 +163,10 @@ mm_private_aligned_alloc(size_t align, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (space != NULL)
+	if (likely(space != NULL))
 		return mm_private_space_aligned_xalloc(space, align, size);
 #endif
-	return mm_shared_aligned_alloc(align, size);
+	return mm_regular_aligned_alloc(align, size);
 }
 
 static inline void *
@@ -174,10 +174,10 @@ mm_private_calloc(size_t count, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (space != NULL)
+	if (likely(space != NULL))
 		return mm_private_space_xcalloc(space, count, size);
 #endif
-	return mm_shared_calloc(count, size);
+	return mm_regular_calloc(count, size);
 }
 
 static inline void *
@@ -185,10 +185,10 @@ mm_private_realloc(void *ptr, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (space != NULL)
+	if (likely(space != NULL))
 		return mm_private_space_xrealloc(space, ptr, size);
 #endif
-	return mm_shared_realloc(ptr, size);
+	return mm_regular_realloc(ptr, size);
 }
 
 static inline void
@@ -196,10 +196,12 @@ mm_private_free(void *ptr)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (space != NULL)
+	if (likely(space != NULL)) {
 		mm_private_space_free(space, ptr);
+		return;
+	}
 #endif
-	mm_shared_free(ptr);
+	mm_regular_free(ptr);
 }
 
 /**********************************************************************
@@ -235,23 +237,23 @@ mm_common_strdup(const char *ptr)
 }
 
 /**********************************************************************
- * Thread-Shared Memory Allocation Utilities.
+ * Memory Allocation Utilities for Regular Threads.
  **********************************************************************/
 
 static inline void *
-mm_shared_memdup(const void *ptr, size_t size)
+mm_regular_memdup(const void *ptr, size_t size)
 {
-	return memcpy(mm_shared_alloc(size), ptr, size);
+	return memcpy(mm_regular_alloc(size), ptr, size);
 }
 
 static inline char *
-mm_shared_strdup(const char *ptr)
+mm_regular_strdup(const char *ptr)
 {
-	return mm_shared_memdup(ptr, strlen(ptr) + 1);
+	return mm_regular_memdup(ptr, strlen(ptr) + 1);
 }
 
 /**********************************************************************
- * Thread-Private Memory Allocation Utilities.
+ * Private Memory Allocation Utilities for Single Thread.
  **********************************************************************/
 
 static inline void *

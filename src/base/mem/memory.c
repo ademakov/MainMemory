@@ -23,7 +23,7 @@
  * Common Memory Space.
  **********************************************************************/
 
-struct mm_shared_space mm_common_space = { };
+struct mm_shared_space mm_common_space = {  .space = { NULL } };
 
 static void
 mm_common_space_init(void)
@@ -42,28 +42,28 @@ mm_common_space_term(void)
  **********************************************************************/
 
 #if ENABLE_SMP
-struct mm_shared_space mm_shared_space = {};
+struct mm_shared_space mm_regular_space = { .space = { NULL } };
 #else
-struct mm_private_space mm_shared_space = {};
+struct mm_private_space mm_regular_space = { .space = { NULL } };
 #endif
 
 static void
-mm_shared_space_init(void)
+mm_regular_space_init(void)
 {
 #if ENABLE_SMP
-	mm_shared_space_prepare(&mm_shared_space);
+	mm_shared_space_prepare(&mm_regular_space);
 #else
-	mm_private_space_prepare(&mm_shared_space);
+	mm_private_space_prepare(&mm_regular_space);
 #endif
 }
 
 static void
-mm_shared_space_term(void)
+mm_regular_space_term(void)
 {
 #if ENABLE_SMP
-	mm_shared_space_cleanup(&mm_shared_space);
+	mm_shared_space_cleanup(&mm_regular_space);
 #else
-	mm_private_space_cleanup(&mm_shared_space);
+	mm_private_space_cleanup(&mm_regular_space);
 #endif
 }
 
@@ -80,7 +80,7 @@ mm_memory_init(mm_chunk_select_t select,
 {
 	mm_alloc_init();
 	mm_common_space_init();
-	mm_shared_space_init();
+	mm_regular_space_init();
 	mm_chunk_set_select(select);
 	mm_chunk_set_private_alloc(alloc, free);
 }
@@ -88,7 +88,7 @@ mm_memory_init(mm_chunk_select_t select,
 void
 mm_memory_term(void)
 {
-	mm_shared_space_term();
+	mm_regular_space_term();
 	mm_common_space_term();
 }
 

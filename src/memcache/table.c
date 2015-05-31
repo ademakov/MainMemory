@@ -385,7 +385,7 @@ mc_table_init(const struct mm_memcache_config *config)
 		nentries_increment *= 2;
 
 	// Initialize the table.
-	mc_table.parts = mm_shared_calloc(nparts, sizeof(struct mc_tpart));
+	mc_table.parts = mm_regular_calloc(nparts, sizeof(struct mc_tpart));
 	mc_table.nparts = nparts;
 	mc_table.part_bits = nbits;
 	mc_table.part_mask = nparts - 1;
@@ -435,7 +435,7 @@ mc_table_term(void)
 	}
 
 	// Free the table partitions.
-	mm_shared_free(mc_table.parts);
+	mm_regular_free(mc_table.parts);
 
 	// Compute the reserved address space size.
 	size_t buckets_size = mc_table_buckets_size(mc_table.nparts,

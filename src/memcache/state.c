@@ -24,7 +24,7 @@ mc_state_alloc(void)
 {
 	ENTER();
 
-	struct mc_state *state = mm_shared_alloc(sizeof(struct mc_state));
+	struct mc_state *state = mm_regular_alloc(sizeof(struct mc_state));
 
 	LEAVE();
 	return &state->sock.sock;
@@ -37,7 +37,7 @@ mc_state_free(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	mm_shared_free(state);
+	mm_regular_free(state);
 
 	LEAVE();
 }
