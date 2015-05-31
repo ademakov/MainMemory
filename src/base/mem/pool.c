@@ -1,7 +1,7 @@
 /*
- * core/pool.c - MainMemory memory pools.
+ * base/mem/pool.c - MainMemory memory pools.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/pool.h"
+#include "base/mem/pool.h"
+
 #include "core/core.h"
 
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
+#include "base/mem/memory.h"
 #include "base/thread/domain.h"
 #include "base/util/format.h"
 

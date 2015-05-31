@@ -1,7 +1,7 @@
 /*
- * core/pool.h - MainMemory memory pools.
+ * base/mem/pool.h - MainMemory memory pools.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_POOL_H
-#define CORE_POOL_H
+#ifndef BASE_MEMORY_POOL_H
+#define BASE_MEMORY_POOL_H
 
 #include "common.h"
 #include "base/list.h"
@@ -166,4 +166,4 @@ mm_pool_shared_free_low(mm_core_t core __mm_unused__, struct mm_pool *pool, void
 
 #endif
 
-#endif /* CORE_POOL_H */
+#endif /* BASE_MEMORY_POOL_H */

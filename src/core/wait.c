@@ -19,12 +19,12 @@
 
 #include "core/wait.h"
 #include "core/core.h"
-#include "core/pool.h"
 #include "core/task.h"
 #include "core/timer.h"
 
 #include "base/log/log.h"
 #include "base/log/trace.h"
+#include "base/mem/pool.h"
 
 // An entry for a waiting task.
 struct mm_wait

@@ -19,11 +19,11 @@
 
 #include "core/future.h"
 #include "core/core.h"
-#include "core/pool.h"
 
 #include "base/log/error.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/mem/pool.h"
 
 // The memory pool for futures.
 static struct mm_pool mm_future_pool;

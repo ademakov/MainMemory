@@ -27,7 +27,6 @@
 
 #include "core/core.h"
 #include "core/future.h"
-#include "core/pool.h"
 
 #include "base/bitops.h"
 #include "base/list.h"
@@ -35,6 +34,7 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/chunk.h"
+#include "base/mem/pool.h"
 
 struct mm_memcache_config mc_config;
 

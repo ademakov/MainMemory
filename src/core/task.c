@@ -19,7 +19,6 @@
 
 #include "core/task.h"
 #include "core/core.h"
-#include "core/pool.h"
 #include "core/port.h"
 #include "core/timer.h"
 
@@ -27,6 +26,7 @@
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
 #include "base/mem/stack.h"
+#include "base/mem/pool.h"
 #include "base/thread/thread.h"
 
 /* Regular task stack size. */

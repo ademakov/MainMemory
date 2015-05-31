@@ -19,11 +19,11 @@
 
 #include "core/port.h"
 #include "core/core.h"
-#include "core/pool.h"
 #include "core/task.h"
 
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/mem/pool.h"
 
 void
 mm_port_init(void)

@@ -22,10 +22,9 @@
 
 #include "common.h"
 
-#include "core/pool.h"
-
 #include "base/log/trace.h"
 #include "base/mem/arena.h"
+#include "base/mem/pool.h"
 #include "base/sys/clock.h"
 #include "base/timeq.h"
 

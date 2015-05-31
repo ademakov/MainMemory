@@ -29,6 +29,7 @@ libmmbase_a_SOURCES = \
 	mem/chunk.c mem/chunk.h \
 	mem/malloc.c mem/malloc.h \
 	mem/memory.c mem/memory.h \
+	mem/pool.c mem/pool.h \
 	mem/slider.c mem/slider.h \
 	mem/space.c mem/space.h \
 	mem/stack.c mem/stack.h \

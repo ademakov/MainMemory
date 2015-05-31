@@ -20,7 +20,6 @@
 #include "net/net.h"
 
 #include "core/core.h"
-#include "core/pool.h"
 #include "core/task.h"
 #include "core/timer.h"
 
@@ -32,6 +31,7 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
+#include "base/mem/pool.h"
 #include "base/util/exit.h"
 #include "base/util/format.h"
 

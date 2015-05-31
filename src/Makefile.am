@@ -14,7 +14,6 @@ core_sources = \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
 	core/lock.h \
-	core/pool.c core/pool.h \
 	core/port.c core/port.h \
 	core/runq.c core/runq.h \
 	core/task.c core/task.h \

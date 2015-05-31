@@ -22,7 +22,6 @@
 
 #include "common.h"
 
-#include "core/pool.h"
 #include "core/runq.h"
 #include "core/timer.h"
 #include "core/wait.h"
@@ -30,7 +29,7 @@
 #include "base/list.h"
 #include "base/mem/chunk.h"
 #include "base/mem/memory.h"
-#include "base/mem/space.h"
+#include "base/mem/pool.h"
 #include "base/log/debug.h"
 #include "base/ring.h"
 
