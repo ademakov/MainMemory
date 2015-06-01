@@ -7,6 +7,7 @@ AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 libmmbase_a_SOURCES = \
 	backoff.c backoff.h \
 	barrier.c barrier.h \
+	base.c base.h \
 	bitops.h \
 	bitset.c bitset.h \
 	bytes.h \

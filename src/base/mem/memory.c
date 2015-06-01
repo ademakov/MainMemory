@@ -74,15 +74,15 @@ mm_regular_space_term(void)
 #include "base/mem/chunk.h"
 
 void
-mm_memory_init(mm_chunk_select_t select,
-	       mm_chunk_alloc_t alloc,
-	       mm_chunk_free_t free)
+mm_memory_init(struct mm_memory_params *params)
 {
 	mm_alloc_init();
 	mm_common_space_init();
 	mm_regular_space_init();
-	mm_chunk_set_select(select);
-	mm_chunk_set_private_alloc(alloc, free);
+	if (params != NULL)
+		mm_chunk_set_select(params->select);
+	if (params != NULL)
+		mm_chunk_set_private_alloc(params->alloc, params->free);
 }
 
 void

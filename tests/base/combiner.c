@@ -32,7 +32,7 @@ extern size_t xxx[1000];
 int
 main(int ac, char **av)
 {
-	mm_memory_init(NULL, NULL, NULL);
+	mm_memory_init(NULL);
 	set_params(ac, av, TEST_COMBINER);
 	g_combiner = mm_combiner_create(execute, g_ring_size, g_handoff);
 	test1(NULL, routine);

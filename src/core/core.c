@@ -25,6 +25,7 @@
 
 #include "event/dispatch.h"
 
+#include "base/base.h"
 #include "base/bitset.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -888,11 +889,13 @@ mm_core_init(void)
 	else
 		mm_brief("Running on %d cores.", mm_core_num);
 
-	mm_memory_init(mm_core_chunk_select,
-		       mm_core_chunk_alloc,
-		       mm_core_chunk_free);
-	mm_thread_init();
-	mm_clock_init();
+	struct mm_memory_params params = {
+		mm_core_chunk_select,
+		mm_core_chunk_alloc,
+		mm_core_chunk_free
+	};
+
+	mm_base_init(&params);
 
 	mm_event_init();
 	mm_net_init();
@@ -944,7 +947,7 @@ mm_core_term(void)
 	mm_log_relay();
 	mm_log_flush();
 
-	mm_memory_term();
+	mm_base_term();
 
 	LEAVE();
 }

@@ -276,9 +276,14 @@ mm_private_strdup(const char *ptr)
  * Memory Subsystem Initialization and Termination.
  **********************************************************************/
 
-void mm_memory_init(mm_chunk_select_t select,
-		    mm_chunk_alloc_t alloc,
-		    mm_chunk_free_t free);
+struct mm_memory_params
+{
+	mm_chunk_select_t select;
+	mm_chunk_alloc_t alloc;
+	mm_chunk_free_t free;
+};
+
+void mm_memory_init(struct mm_memory_params *params);
 
 void mm_memory_term(void);
 
