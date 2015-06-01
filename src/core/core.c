@@ -27,6 +27,7 @@
 
 #include "base/base.h"
 #include "base/bitset.h"
+#include "base/topology.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
@@ -44,11 +45,6 @@
 #include <stdio.h>
 #include <unistd.h>
 
-#ifdef HAVE_SYS_SYSCTL_H
-# include <sys/sysctl.h>
-#endif
-
-#define MM_DEFAULT_CORES	1
 #define MM_DEFAULT_WORKERS	256
 
 #if ENABLE_SMP
@@ -824,31 +820,6 @@ mm_core_term_single(struct mm_core *core)
 	LEAVE();
 }
 
-static int
-mm_core_get_ncpu(void)
-{
-#if ENABLE_SMP
-# if defined(HAVE_SYS_SYSCTL_H) && defined(HW_AVAILCPU)
-//#  define SELECTOR "hw.ncpu"
-#  define SELECTOR "hw.activecpu"
-//#  define SELECTOR "hw.physicalcpu"
-	int num;
-	size_t len = sizeof num;
-	if (sysctlbyname(SELECTOR, &num, &len, NULL, 0) < 0)
-		mm_fatal(errno, "Failed to count cores.");
-	return num;
-# elif defined(_SC_NPROCESSORS_ONLN)
-	int nproc_onln = sysconf(_SC_NPROCESSORS_ONLN);
-	if (nproc_onln < 0)
-		mm_fatal(errno, "Failed to count cores.");
-	return nproc_onln;
-# else
-#  error "Unsupported SMP architecture."
-# endif
-#endif
-	return MM_DEFAULT_CORES;
-}
-
 static bool
 mm_core_yield(void)
 {
@@ -882,7 +853,7 @@ mm_core_init(void)
 	ASSERT(mm_core_num == 0);
 
 	// Find the number of CPU cores.
-	mm_core_num = mm_core_get_ncpu();
+	mm_core_num = mm_topology_getncpus();
 	ASSERT(mm_core_num > 0);
 	if (mm_core_num == 1)
 		mm_brief("Running on 1 core.");

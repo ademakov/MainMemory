@@ -18,6 +18,7 @@ libmmbase_a_SOURCES = \
 	lock.c lock.h \
 	ring.c ring.h \
 	timeq.c timeq.h \
+	topology.c topology.h \
 	log/debug.c log/debug.h \
 	log/error.c log/error.h \
 	log/log.c log/log.h \
