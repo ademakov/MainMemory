@@ -1,7 +1,7 @@
 /*
  * base/ring.h - MainMemory single-consumer circular buffer of pointers.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -128,10 +128,14 @@ struct mm_ring_spsc
 	void *ring[0];
 };
 
-struct mm_ring_spsc * mm_ring_spsc_create(size_t size, uint8_t locks);
+struct mm_ring_spsc *
+mm_ring_spsc_create(size_t size, uint8_t locks);
 
-void mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks)
-	__attribute__((nonnull(1)));
+void
+mm_ring_spsc_destroy(struct mm_ring_spsc *ring);
+
+void __attribute__((nonnull(1)))
+mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks);
 
 /* Single-producer enqueue operation. */
 static inline bool
@@ -224,10 +228,14 @@ struct mm_ring_mpmc
 	struct mm_ring_node ring[0];
 };
 
-struct mm_ring_mpmc * mm_ring_mpmc_create(size_t size);
+struct mm_ring_mpmc *
+mm_ring_mpmc_create(size_t size);
 
-void mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
-	__attribute__((nonnull(1)));
+void
+mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring);
+
+void __attribute__((nonnull(1)))
+mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size);
 
 static inline void
 mm_ring_mpmc_busywait(struct mm_ring_node *node, uintptr_t lock)

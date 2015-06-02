@@ -1,7 +1,7 @@
 /*
  * base/ring.h - MainMemory single-consumer circular buffer of pointers.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,6 +66,12 @@ mm_ring_spsc_create(size_t size, uint8_t locks)
 }
 
 void
+mm_ring_spsc_destroy(struct mm_ring_spsc *ring)
+{
+	mm_global_free(ring);
+}
+
+void __attribute__((nonnull(1)))
 mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks)
 {
 	mm_ring_base_prepare(&ring->base, size);
@@ -95,6 +101,12 @@ mm_ring_mpmc_create(size_t size)
 }
 
 void
+mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
+{
+	mm_global_free(ring);
+}
+
+void __attribute__((nonnull(1)))
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 {
 	mm_ring_base_prepare(&ring->base, size);
