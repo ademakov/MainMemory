@@ -53,23 +53,6 @@ mm_chunk_t mm_chunk_add_arena(mm_arena_t arena)
 	__attribute__((nonnull(1)));
 
 /**********************************************************************
- * Chunk Tag Selector.
- **********************************************************************/
-
-typedef mm_chunk_t (*mm_chunk_select_t)(void);
-
-void mm_chunk_set_select(mm_chunk_select_t select);
-
-mm_chunk_t mm_chunk_select_default(void);
-
-static inline mm_chunk_t
-mm_chunk_select(void)
-{
-	extern mm_chunk_select_t __mm_chunk_select;
-	return (*__mm_chunk_select)();
-}
-
-/**********************************************************************
  * Chunk Access.
  **********************************************************************/
 
@@ -126,11 +109,16 @@ mm_chunk_getsize(const struct mm_chunk *chunk)
  * Chunk Creation and Destruction.
  **********************************************************************/
 
-struct mm_chunk * mm_chunk_create(mm_chunk_t type, size_t size);
+mm_chunk_t
+mm_chunk_select(void);
 
-void mm_chunk_destroy(struct mm_chunk *chunk)
-	__attribute__((nonnull(1)));
+struct mm_chunk *
+mm_chunk_create(mm_chunk_t type, size_t size);
 
-void mm_chunk_destroy_chain(struct mm_link *link);
+void __attribute__((nonnull(1)))
+mm_chunk_destroy(struct mm_chunk *chunk);
+
+void
+mm_chunk_destroy_chain(struct mm_link *link);
 
 #endif /* BASE_MEM_CHUNK_H */

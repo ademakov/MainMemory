@@ -34,9 +34,15 @@
 extern struct mm_shared_space mm_common_space;
 
 static inline bool
-mm_common_space_is_ready(void)
+mm_common_space_ready(void)
 {
 	return (mm_common_space.xarena.vtable != NULL);
+}
+
+static inline void
+mm_common_space_reset(void)
+{
+	mm_common_space.xarena.vtable = NULL;
 }
 
 static inline void *
@@ -137,14 +143,20 @@ mm_regular_free(void *ptr)
  * Private Memory Allocation Routines for Single Thread.
  **********************************************************************/
 
+static inline bool
+mm_private_space_ready(struct mm_private_space *space)
+{
+	return space->space.opaque != NULL;
+}
+
 static inline struct mm_private_space *
 mm_private_space_get(void)
 {
 #if ENABLE_SMP
 	struct mm_thread *thread = mm_thread_self();
 	struct mm_private_space *space = mm_thread_getspace(thread);
-	if (space->space.opaque == NULL)
-		space = NULL;
+	if (unlikely(!mm_private_space_ready(space)))
+		return NULL;
 	return space;
 #else
 	return &mm_regular_space;
@@ -278,7 +290,6 @@ mm_private_strdup(const char *ptr)
 
 struct mm_memory_params
 {
-	mm_chunk_select_t select;
 	mm_chunk_alloc_t alloc;
 	mm_chunk_free_t free;
 };

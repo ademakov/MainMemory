@@ -288,21 +288,6 @@ mm_core_receive_tasks(struct mm_core *core)
  * Chunk allocation and reclamation.
  **********************************************************************/
 
-mm_chunk_t
-mm_core_chunk_select(void)
-{
-	mm_chunk_t tag = mm_core_selfid();
-	if (tag == MM_CORE_NONE) {
-		// Common arena could only be used after it gets
-		// initialized during bootstrap.
-		if (likely(mm_common_space_is_ready()))
-			tag = MM_CHUNK_COMMON;
-		else
-			tag = MM_CHUNK_GLOBAL;
-	}
-	return tag;
-}
-
 void *
 mm_core_chunk_alloc(mm_chunk_t tag __mm_unused__, size_t size)
 {
@@ -851,7 +836,6 @@ mm_core_init(void)
 
 	// Initialize the base library.
 	struct mm_memory_params memory_params = {
-		mm_core_chunk_select,
 		mm_core_chunk_alloc,
 		mm_core_chunk_free
 	};

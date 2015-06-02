@@ -82,33 +82,24 @@ mm_chunk_add_arena(mm_arena_t arena)
 }
 
 /**********************************************************************
- * Chunk Tag Selector.
- **********************************************************************/
-
-mm_chunk_select_t __mm_chunk_select = mm_chunk_select_default;
-
-void
-mm_chunk_set_select(mm_chunk_select_t select)
-{
-	if (select == NULL)
-		select = mm_chunk_select_default;
-	__mm_chunk_select = select;
-}
-
-mm_chunk_t
-mm_chunk_select_default(void)
-{
-	// Common arena could only be used after it gets initialized
-	// during bootstrap.
-	if (likely(mm_common_space_is_ready()))
-		return MM_CHUNK_COMMON;
-	else
-		return MM_CHUNK_GLOBAL;
-}
-
-/**********************************************************************
  * Chunk Creation and Destruction.
  **********************************************************************/
+
+mm_chunk_t
+mm_chunk_select(void)
+{
+	struct mm_thread *thread = mm_thread_self();
+	struct mm_private_space *space = mm_thread_getspace(thread);
+	if (!mm_private_space_ready(space)) {
+		// Common arena could only be used after it gets
+		// initialized during bootstrap.
+		if (likely(mm_common_space_ready()))
+			return MM_CHUNK_COMMON;
+		else
+			return MM_CHUNK_GLOBAL;
+	}
+	return mm_thread_getdomainindex(thread);
+}
 
 struct mm_chunk *
 mm_chunk_create(mm_chunk_t tag, size_t size)

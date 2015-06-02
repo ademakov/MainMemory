@@ -36,6 +36,7 @@ static void
 mm_common_space_term(void)
 {
 	mm_shared_space_cleanup(&mm_common_space);
+	mm_common_space_reset();
 }
 
 /**********************************************************************
@@ -78,8 +79,6 @@ mm_memory_init(struct mm_memory_params *params)
 	mm_alloc_init();
 	mm_common_space_init();
 	mm_regular_space_init();
-	if (params != NULL)
-		mm_chunk_set_select(params->select);
 	if (params != NULL)
 		mm_chunk_set_private_alloc(params->alloc, params->free);
 }

@@ -197,6 +197,4 @@ void __attribute__((nonnull(1)))
 mm_shared_space_cleanup(struct mm_shared_space *space)
 {
 	mm_mspace_destroy(space->space);
-	space->uarena.vtable = NULL;
-	space->xarena.vtable = NULL;
 }
