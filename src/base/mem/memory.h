@@ -105,7 +105,7 @@ mm_regular_aligned_alloc(size_t align, size_t size)
 #if ENABLE_SMP
 	return mm_shared_space_aligned_xalloc(&mm_regular_space, align, size);
 #else
-	return mm_private_space_aligned_alloc(&mm_regular_space, align, size);
+	return mm_private_space_aligned_xalloc(&mm_regular_space, align, size);
 #endif
 }
 
@@ -115,7 +115,7 @@ mm_regular_calloc(size_t count, size_t size)
 #if ENABLE_SMP
 	return mm_shared_space_xcalloc(&mm_regular_space, count, size);
 #else
-	return mm_private_space_calloc(&mm_regular_space, count, size);
+	return mm_private_space_xcalloc(&mm_regular_space, count, size);
 #endif
 }
 
@@ -125,7 +125,7 @@ mm_regular_realloc(void *ptr, size_t size)
 #if ENABLE_SMP
 	return mm_shared_space_xrealloc(&mm_regular_space, ptr, size);
 #else
-	return mm_private_space_realloc(&mm_regular_space, ptr, size);
+	return mm_private_space_xrealloc(&mm_regular_space, ptr, size);
 #endif
 }
 
@@ -168,10 +168,10 @@ mm_private_alloc(size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (likely(space != NULL))
-		return mm_private_space_xalloc(space, size);
-#endif
+	return mm_private_space_xalloc(space, size);
+#else
 	return mm_regular_alloc(size);
+#endif
 }
 
 static inline void *
@@ -179,10 +179,10 @@ mm_private_aligned_alloc(size_t align, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (likely(space != NULL))
-		return mm_private_space_aligned_xalloc(space, align, size);
-#endif
+	return mm_private_space_aligned_xalloc(space, align, size);
+#else
 	return mm_regular_aligned_alloc(align, size);
+#endif
 }
 
 static inline void *
@@ -190,10 +190,10 @@ mm_private_calloc(size_t count, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (likely(space != NULL))
-		return mm_private_space_xcalloc(space, count, size);
-#endif
+	return mm_private_space_xcalloc(space, count, size);
+#else
 	return mm_regular_calloc(count, size);
+#endif
 }
 
 static inline void *
@@ -201,10 +201,10 @@ mm_private_realloc(void *ptr, size_t size)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (likely(space != NULL))
-		return mm_private_space_xrealloc(space, ptr, size);
-#endif
+	return mm_private_space_xrealloc(space, ptr, size);
+#else
 	return mm_regular_realloc(ptr, size);
+#endif
 }
 
 static inline void
@@ -212,12 +212,10 @@ mm_private_free(void *ptr)
 {
 #if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
-	if (likely(space != NULL)) {
-		mm_private_space_free(space, ptr);
-		return;
-	}
-#endif
+	mm_private_space_free(space, ptr);
+#else
 	mm_regular_free(ptr);
+#endif
 }
 
 /**********************************************************************
