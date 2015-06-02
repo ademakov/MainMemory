@@ -21,6 +21,9 @@
 #define BASE_THREAD_THREAD_H
 
 #include "common.h"
+#include "base/barrier.h"
+#include "base/list.h"
+#include <pthread.h>
 
 /* Forward declarations. */
 struct mm_domain;
@@ -52,6 +55,43 @@ struct mm_thread_attr
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
+};
+
+/* Thread data. */
+struct mm_thread
+{
+	/* Thread domain. */
+	struct mm_domain *domain;
+	mm_thread_t domain_number;
+
+#if ENABLE_SMP
+	/* Private memory space. */
+	struct mm_private_space space;
+#endif
+
+	/* The log message storage. */
+	struct mm_queue log_queue;
+
+	/* Underlying system thread. */
+	pthread_t system_thread;
+
+	/* Domain threads start/stop synchronization. */
+	struct mm_barrier_local domain_barrier;
+
+	/* CPU affinity tag. */
+	uint32_t cpu_tag;
+
+	/* The thread start routine and its argument. */
+	mm_routine_t start;
+	mm_value_t start_arg;
+
+	/* The thread name. */
+	char name[MM_THREAD_NAME_SIZE];
+
+#if ENABLE_TRACE
+	/* Thread trace context. */
+	struct mm_trace_context trace;
+#endif
 };
 
 /**********************************************************************
@@ -104,24 +144,44 @@ mm_thread_self(void)
 	return __mm_thread_self;
 }
 
-const char * __attribute__((nonnull(1)))
-mm_thread_getname(const struct mm_thread *thread);
+static inline const char * __attribute__((nonnull(1)))
+mm_thread_getname(const struct mm_thread *thread)
+{
+	return thread->name;
+}
 
-struct mm_private_space * __attribute__((nonnull(1)))
-mm_thread_getspace(struct mm_thread *thread);
+static inline struct mm_domain * __attribute__((nonnull(1)))
+mm_thread_getdomain(const struct mm_thread *thread)
+{
+	return thread->domain;
+}
 
-struct mm_domain * __attribute__((nonnull(1)))
-mm_thread_getdomain(const struct mm_thread *thread);
+static inline mm_thread_t __attribute__((nonnull(1)))
+mm_thread_getnumber(const struct mm_thread *thread)
+{
+	return thread->domain_number;
+}
 
-mm_thread_t __attribute__((nonnull(1)))
-mm_thread_getdomainindex(const struct mm_thread *thread);
+#if ENABLE_SMP
+static inline struct mm_private_space * __attribute__((nonnull(1)))
+mm_thread_getspace(struct mm_thread *thread)
+{
+	return &thread->space;
+}
+#endif
 
-struct mm_queue * __attribute__((nonnull(1)))
-mm_thread_getlog(struct mm_thread *thread);
+static inline struct mm_queue * __attribute__((nonnull(1)))
+mm_thread_getlog(struct mm_thread *thread)
+{
+	return &thread->log_queue;
+}
 
 #if ENABLE_TRACE
-struct mm_trace_context * __attribute__((nonnull(1)))
-mm_thread_gettracecontext(struct mm_thread *thread);
+static inline struct mm_trace_context * __attribute__((nonnull(1)))
+mm_thread_gettracecontext(struct mm_thread *thread)
+{
+	return &thread->trace;
+}
 #endif
 
 /**********************************************************************

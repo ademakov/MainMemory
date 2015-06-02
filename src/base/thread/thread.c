@@ -28,7 +28,6 @@
 #include "base/mem/space.h"
 #include "base/thread/domain.h"
 
-#include <pthread.h>
 #include <sched.h>
 
 #if HAVE_MACH_THREAD_POLICY_H
@@ -36,40 +35,6 @@
 # include <mach/thread_act.h>
 # include <mach/thread_policy.h>
 #endif
-
-struct mm_thread
-{
-#if ENABLE_SMP
-	/* Private memory space. */
-	struct mm_private_space space;
-#endif
-
-	/* The log message storage. */
-	struct mm_queue log_queue;
-
-	/* Thread domain. */
-	struct mm_domain *domain;
-	mm_thread_t domain_index;
-	struct mm_barrier_local domain_barrier;
-
-	/* Underlying system thread. */
-	pthread_t system_thread;
-
-	/* The thread start routine and its argument. */
-	mm_routine_t start;
-	mm_value_t start_arg;
-
-	/* CPU affinity tag. */
-	uint32_t cpu_tag;
-
-	/* The thread name. */
-	char name[MM_THREAD_NAME_SIZE];
-
-#if ENABLE_TRACE
-	/* Thread trace context. */
-	struct mm_trace_context trace;
-#endif
-};
 
 static struct mm_thread mm_thread_main = {
 	.log_queue = {
@@ -270,12 +235,12 @@ mm_thread_create(struct mm_thread_attr *attr,
 #endif
 	if (attr == NULL) {
 		thread->domain = NULL;
-		thread->domain_index = 0;
+		thread->domain_number = 0;
 		thread->cpu_tag = 0;
 		strcpy(thread->name, "unnamed");
 	} else {
 		thread->domain = attr->domain;
-		thread->domain_index = attr->domain_index;
+		thread->domain_number = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
 #if ENABLE_SMP
 		private_space = attr->private_space;
@@ -335,50 +300,6 @@ mm_thread_destroy(struct mm_thread *thread)
 
 	LEAVE();
 }
-
-/**********************************************************************
- * Thread information.
- **********************************************************************/
-
-const char *
-mm_thread_getname(const struct mm_thread *thread)
-{
-	return thread->name;
-}
-
-#if ENABLE_SMP
-struct mm_private_space * __attribute__((nonnull(1)))
-mm_thread_getspace(struct mm_thread *thread)
-{
-	return &thread->space;
-}
-#endif
-
-struct mm_domain *
-mm_thread_getdomain(const struct mm_thread *thread)
-{
-	return thread->domain;
-}
-
-mm_thread_t
-mm_thread_getdomainindex(const struct mm_thread *thread)
-{
-	return thread->domain_index;
-}
-
-struct mm_queue *
-mm_thread_getlog(struct mm_thread *thread)
-{
-	return &thread->log_queue;
-}
-
-#if ENABLE_TRACE
-struct mm_trace_context *
-mm_thread_gettracecontext(struct mm_thread *thread)
-{
-	return &thread->trace;
-}
-#endif
 
 /**********************************************************************
  * Thread control routines.
