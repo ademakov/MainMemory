@@ -30,7 +30,7 @@
 
 #include <unistd.h>
 
-struct mm_domain mm_regular_domain;
+struct mm_domain mm_regular_domain = { .nthreads = 0 };
 
 void
 mm_base_init(struct mm_base_params *params)
