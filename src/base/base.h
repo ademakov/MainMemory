@@ -20,13 +20,26 @@
 #ifndef BASE_BASE_H
 #define BASE_BASE_H
 
+#include "common.h"
+
 /* Forward declarations. */
 struct mm_memory_params;
 
+struct mm_base_params
+{
+	const char *regular_name;
+	struct mm_memory_params *memory_params;
+};
+
+extern struct mm_domain mm_regular_domain;
+
 void
-mm_base_init(struct mm_memory_params *);
+mm_base_init(struct mm_base_params *params);
 
 void
 mm_base_term(void);
+
+void
+mm_base_loop(mm_routine_t thread_routine);
 
 #endif /* BASE_BASE_H */

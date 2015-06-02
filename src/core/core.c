@@ -27,7 +27,6 @@
 
 #include "base/base.h"
 #include "base/bitset.h"
-#include "base/topology.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
@@ -43,7 +42,6 @@
 #include "net/net.h"
 
 #include <stdio.h>
-#include <unistd.h>
 
 #define MM_DEFAULT_WORKERS	256
 
@@ -56,7 +54,6 @@
 // The core set.
 mm_core_t mm_core_num;
 struct mm_core *mm_core_set;
-struct mm_domain mm_core_domain;
 
 // A core associated with the running thread.
 __thread struct mm_core *mm_core;
@@ -652,7 +649,7 @@ mm_core_boot_init(struct mm_core *core)
 		// Call the start hooks on the primary core.
 		mm_timer_init(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
-		mm_cdata_summary(&mm_core_domain);
+		mm_cdata_summary(&mm_regular_domain);
 
 		mm_thread_domain_barrier();
 	} else {
@@ -852,21 +849,24 @@ mm_core_init(void)
 	ENTER();
 	ASSERT(mm_core_num == 0);
 
-	// Find the number of CPU cores.
-	mm_core_num = mm_topology_getncpus();
-	ASSERT(mm_core_num > 0);
-	if (mm_core_num == 1)
-		mm_brief("Running on 1 core.");
-	else
-		mm_brief("Running on %d cores.", mm_core_num);
-
-	struct mm_memory_params params = {
+	// Initialize the base library.
+	struct mm_memory_params memory_params = {
 		mm_core_chunk_select,
 		mm_core_chunk_alloc,
 		mm_core_chunk_free
 	};
-
+	struct mm_base_params params = {
+		.regular_name = "core",
+		.memory_params = &memory_params,
+	};
 	mm_base_init(&params);
+
+	// Find the number of CPU cores.
+	mm_core_num = mm_regular_domain.nthreads;
+	if (mm_core_num == 1)
+		mm_brief("Running on 1 core.");
+	else
+		mm_brief("Running on %d cores.", mm_core_num);
 
 	mm_event_init();
 	mm_net_init();
@@ -881,7 +881,6 @@ mm_core_init(void)
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
-	mm_domain_prepare(&mm_core_domain, "core", mm_core_num, true);
 	mm_dispatch_prepare(&mm_core_dispatch);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
@@ -904,7 +903,6 @@ mm_core_term(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
-	mm_domain_cleanup(&mm_core_domain);
 
 	mm_core_free_hooks();
 
@@ -913,10 +911,6 @@ mm_core_term(void)
 	mm_wait_term();
 
 	mm_net_term();
-
-	// Flush logs before memory space with possible log chunks is unmapped.
-	mm_log_relay();
-	mm_log_flush();
 
 	mm_base_term();
 
@@ -963,28 +957,13 @@ mm_core_start(void)
 	// Set core thread attributes.
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
-		mm_domain_setstack(&mm_core_domain, i,
+		mm_domain_setstack(&mm_regular_domain, i,
 				   (char *) core->boot->stack_base + MM_PAGE_SIZE,
 				   core->boot->stack_size - MM_PAGE_SIZE);
-		mm_domain_setcputag(&mm_core_domain, i, i);
 	}
 
-	mm_domain_start(&mm_core_domain, mm_core_boot);
-
-	// Loop until stopped.
-	while (!mm_exit_test()) {
-		size_t logged = mm_log_flush();
-
-		DEBUG("cycle");
-		mm_core_stats();
-		mm_log_relay();
-		mm_log_flush();
-
-		usleep(logged ? 30000 : 3000000);
-	}
-
-	// Wait for core threads completion.
-	mm_domain_join(&mm_core_domain);
+	// Run core threads.
+	mm_base_loop(mm_core_boot);
 
  	LEAVE();
 }
