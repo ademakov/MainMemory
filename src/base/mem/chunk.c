@@ -88,6 +88,7 @@ mm_chunk_add_arena(mm_arena_t arena)
 mm_chunk_t
 mm_chunk_select(void)
 {
+#if ENABLE_SMP
 	struct mm_thread *thread = mm_thread_self();
 	struct mm_private_space *space = mm_thread_getspace(thread);
 	if (!mm_private_space_ready(space)) {
@@ -99,6 +100,17 @@ mm_chunk_select(void)
 			return MM_CHUNK_GLOBAL;
 	}
 	return mm_thread_getdomainindex(thread);
+#else
+	if (mm_domain_self() != &mm_regular_domain) {
+		// Common arena could only be used after it gets
+		// initialized during bootstrap.
+		if (likely(mm_common_space_ready()))
+			return MM_CHUNK_COMMON;
+		else
+			return MM_CHUNK_GLOBAL;
+	}
+	return MM_CHUNK_REGULAR;
+#endif
 }
 
 struct mm_chunk *
@@ -114,10 +126,14 @@ mm_chunk_create(mm_chunk_t tag, size_t size)
 			mm_fatal(0, "chunk allocation arena is not initialized");
 	} else {
 		ASSERT(tag < mm_regular_domain.nthreads);
+#if ENABLE_SMP
 		struct mm_thread *thread = mm_regular_domain.threads[tag].thread;
 		struct mm_private_space *space = mm_thread_getspace(thread);
 		ASSERT(mm_private_space_ready(space));
 		arena = &space->xarena;
+#else
+		arena = &mm_regular_space.xarena;
+#endif
 	}
 
 	struct mm_chunk *chunk = mm_arena_alloc(arena, size);
