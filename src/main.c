@@ -23,6 +23,7 @@
 
 #include "base/bitset.h"
 #include "base/log/error.h"
+#include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
@@ -166,5 +167,7 @@ main(/*int ac, char *av[]*/)
 	mm_core_term();
 
 	LEAVE();
+	mm_log_relay();
+	mm_log_flush();
 	return EXIT_SUCCESS;
 }

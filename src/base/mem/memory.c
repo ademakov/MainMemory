@@ -18,6 +18,7 @@
  */
 
 #include "base/mem/memory.h"
+#include "base/log/log.h"
 
 /**********************************************************************
  * Common Memory Space.
@@ -71,8 +72,6 @@ mm_regular_space_term(void)
  * Memory Subsystem Initialization and Termination.
  **********************************************************************/
 
-#include "base/mem/chunk.h"
-
 void
 mm_memory_init(struct mm_memory_params *params)
 {
@@ -88,6 +87,10 @@ mm_memory_init(struct mm_memory_params *params)
 void
 mm_memory_term(void)
 {
+	// Flush logs before memory space with possible log chunks is unmapped.
+	mm_log_relay();
+	mm_log_flush();
+
 	mm_regular_space_term();
 	mm_common_space_term();
 }
