@@ -290,7 +290,6 @@ mm_private_strdup(const char *ptr)
 
 struct mm_memory_params
 {
-	mm_chunk_alloc_t alloc;
 	mm_chunk_free_t free;
 };
 

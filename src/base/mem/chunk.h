@@ -42,12 +42,11 @@
 
 typedef uint16_t mm_chunk_t;
 
-typedef void * (*mm_chunk_alloc_t)(mm_chunk_t tag, size_t size);
 typedef void (*mm_chunk_free_t)(mm_chunk_t tag, void *chunk);
 
 bool mm_chunk_is_private_alloc_ready(void);
 
-void mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free);
+void mm_chunk_set_private_alloc(mm_chunk_free_t free);
 
 mm_chunk_t mm_chunk_add_arena(mm_arena_t arena)
 	__attribute__((nonnull(1)));

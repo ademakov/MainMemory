@@ -288,13 +288,6 @@ mm_core_receive_tasks(struct mm_core *core)
  * Chunk allocation and reclamation.
  **********************************************************************/
 
-void *
-mm_core_chunk_alloc(mm_chunk_t tag __mm_unused__, size_t size)
-{
-	ASSERT(tag == mm_core_selfid());
-	return mm_private_alloc(size);
-}
-
 void
 mm_core_chunk_free(mm_chunk_t tag, void *chunk)
 {
@@ -836,7 +829,6 @@ mm_core_init(void)
 
 	// Initialize the base library.
 	struct mm_memory_params memory_params = {
-		mm_core_chunk_alloc,
 		mm_core_chunk_free
 	};
 	struct mm_base_params params = {

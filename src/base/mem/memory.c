@@ -80,7 +80,7 @@ mm_memory_init(struct mm_memory_params *params)
 	mm_common_space_init();
 	mm_regular_space_init();
 	if (params != NULL)
-		mm_chunk_set_private_alloc(params->alloc, params->free);
+		mm_chunk_set_private_alloc(params->free);
 }
 
 void

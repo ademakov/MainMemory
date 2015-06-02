@@ -19,10 +19,12 @@
 
 #include "base/mem/chunk.h"
 
+#include "base/base.h"
 #include "base/lock.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/mem/memory.h"
+#include "base/thread/domain.h"
 
 /**********************************************************************
  * Chunk Tags.
@@ -36,7 +38,6 @@ static mm_arena_t mm_chunk_arena_table[MM_CHUNK_ARENA_MAX] = {
 
 static int mm_chunk_arena_count = 3;
 
-static mm_chunk_alloc_t mm_chunk_alloc = NULL;
 static mm_chunk_free_t mm_chunk_free = NULL;
 
 static mm_lock_t mm_chunk_lock = MM_LOCK_INIT;
@@ -44,20 +45,19 @@ static mm_lock_t mm_chunk_lock = MM_LOCK_INIT;
 bool
 mm_chunk_is_private_alloc_ready(void)
 {
-	return (mm_chunk_alloc != NULL);
+	return (mm_chunk_free != NULL);
 }
 
 void
-mm_chunk_set_private_alloc(mm_chunk_alloc_t alloc, mm_chunk_free_t free)
+mm_chunk_set_private_alloc(mm_chunk_free_t free)
 {
 	mm_global_lock(&mm_chunk_lock);
 
 	// If chunk allocation routines are replaced when there are already
 	// some allocated chunks then it might explode on freeing them.
-	if (mm_chunk_alloc != NULL || mm_chunk_free != NULL)
+	if (mm_chunk_free != NULL)
 		mm_fatal(0, "private chunk allocation might only be initialized once");
 
-	mm_chunk_alloc = alloc;
 	mm_chunk_free = free;
 
 	mm_global_unlock(&mm_chunk_lock);
@@ -106,19 +106,21 @@ mm_chunk_create(mm_chunk_t tag, size_t size)
 {
 	size += sizeof(struct mm_chunk);
 
-	struct mm_chunk *chunk;
+	mm_arena_t arena;
 	if (MM_CHUNK_IS_ARENA_TAG(tag)) {
 		int idx = MM_CHUNK_TAG_TO_IDX(tag);
-		mm_arena_t arena = mm_chunk_arena_table[idx];
+		arena = mm_chunk_arena_table[idx];
 		if (unlikely(arena == NULL))
 			mm_fatal(0, "chunk allocation arena is not initialized");
-		chunk = mm_arena_alloc(arena, size);
 	} else {
-		if (unlikely(mm_chunk_alloc == NULL))
-			mm_fatal(0, "private chunk allocation is not initialized");
-		chunk = mm_chunk_alloc(tag, size);
+		ASSERT(tag < mm_regular_domain.nthreads);
+		struct mm_thread *thread = mm_regular_domain.threads[tag].thread;
+		struct mm_private_space *space = mm_thread_getspace(thread);
+		ASSERT(mm_private_space_ready(space));
+		arena = &space->xarena;
 	}
 
+	struct mm_chunk *chunk = mm_arena_alloc(arena, size);
 	chunk->base.tag = tag;
 	mm_link_init(&chunk->base.link);
 
