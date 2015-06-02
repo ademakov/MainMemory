@@ -19,8 +19,7 @@
 
 #include "base/mem/pool.h"
 
-#include "core/core.h"
-
+#include "base/base.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
@@ -360,7 +359,7 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 	if (cdata->cache_size < MM_POOL_FREE_THRESHOLD) {
 		cdata->cache_full = false;
 	} else {
-		uint32_t aver = pool->item_last / mm_core_getnum();
+		uint32_t aver = pool->item_last / mm_regular_domain.nthreads;
 		if (cdata->cache_full) {
 			if (cdata->cache_size < (aver - aver / 8))
 				cdata->cache_full = false;
@@ -380,7 +379,7 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 		// Collect items that might be subjects to ABA-problem.
 		int nguards = 0;
 		struct mm_link **guards = cdata->guard_buffer;
-		mm_core_t n = mm_core_getnum();
+		mm_core_t n = mm_regular_domain.nthreads;
 		for (mm_core_t i = 0; i < n; i++) {
 			struct mm_pool_shared_cdata *cd =
 				MM_CDATA_DEREF(i, pool->shared_data.cdata);
@@ -446,13 +445,17 @@ mm_pool_shared_free_low(mm_core_t core, struct mm_pool *pool, void *item)
 void *
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
-	return mm_pool_shared_alloc_low(mm_core_selfid(), pool);
+	struct mm_thread *thread = mm_thread_self();
+	mm_thread_t thread_id = mm_thread_getdomainindex(thread);
+	return mm_pool_shared_alloc_low(thread_id, pool);
 }
 
 void
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
-	mm_pool_shared_free_low(mm_core_selfid(), pool, item);
+	struct mm_thread *thread = mm_thread_self();
+	mm_thread_t thread_id = mm_thread_getdomainindex(thread);
+	mm_pool_shared_free_low(thread_id, pool, item);
 }
 
 #endif
@@ -472,7 +475,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 
 	char *cdata_name = mm_format(&mm_global_arena, "'%s' memory pool", name);
 	MM_CDATA_ALLOC(mm_domain_self(), cdata_name, pool->shared_data.cdata);
-	mm_core_t n = mm_core_getnum();
+	mm_core_t n = mm_regular_domain.nthreads;
 	for (mm_core_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =
 			MM_CDATA_DEREF(i, pool->shared_data.cdata);
