@@ -18,6 +18,7 @@
  */
 
 #include "base/topology.h"
+#include "base/log/error.h"
 
 #include <unistd.h>
 
