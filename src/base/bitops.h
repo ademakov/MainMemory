@@ -106,4 +106,32 @@
 		(_x + _p - 1) & ~(_p - 1);		\
 	})
 
+/* Count all bits in an integer. */
+#define mm_nbits(x) ({						\
+		unsigned _r;					\
+		if (sizeof(typeof(x)) <= sizeof(int))		\
+			_r = 8 * sizeof(int);			\
+		else if (sizeof(typeof(x)) <= sizeof(long))	\
+			_r = 8 * sizeof(long);			\
+		else						\
+			_r = 8 * sizeof(long long);		\
+		_r;						\
+	})
+
+/* Round down to a nearest power of 2. */
+#define mm_lower_pow2(x) ({					\
+		typeof(x) __x = x;				\
+		typeof(x) __r = 1;				\
+		((__x < 2) ? __x :				\
+		 __r << (mm_nbits(__x) - 1 - mm_clz(__x)));	\
+	})
+
+/* Round up to a nearest power of 2. */
+#define mm_upper_pow2(x) ({					\
+		typeof(x) __x = x;				\
+		typeof(x) __r = 1;				\
+		((__x < 2) ? __x :				\
+		 __r << (mm_nbits(__x) - mm_clz(__x - 1)));	\
+	})
+
 #endif /* BASE_BITOPS_H */
