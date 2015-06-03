@@ -446,7 +446,7 @@ void *
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
 	struct mm_thread *thread = mm_thread_self();
-	mm_thread_t thread_id = mm_thread_getdomainindex(thread);
+	mm_thread_t thread_id = mm_thread_getnumber(thread);
 	return mm_pool_shared_alloc_low(thread_id, pool);
 }
 
@@ -454,7 +454,7 @@ void
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
 	struct mm_thread *thread = mm_thread_self();
-	mm_thread_t thread_id = mm_thread_getdomainindex(thread);
+	mm_thread_t thread_id = mm_thread_getnumber(thread);
 	mm_pool_shared_free_low(thread_id, pool, item);
 }
 
