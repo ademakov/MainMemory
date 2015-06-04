@@ -23,7 +23,6 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/mem/alloc.h"
-#include "base/mem/arena.h"
 
 struct mm_thread;
 
