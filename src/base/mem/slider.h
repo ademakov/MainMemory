@@ -121,7 +121,7 @@ mm_slider_flush_used(struct mm_slider *slider)
 	while (slider->buf->head_seg != slider->seg) {
 		struct mm_buffer_segment *seg = slider->buf->head_seg;
 		slider->buf->head_seg = seg->next;
-		mm_buffer_segment_destroy(slider->buf, seg);
+		mm_buffer_segment_destroy(seg);
 	}
 	slider->buf->head_off = slider->ptr - slider->seg->data;
 }

@@ -22,7 +22,6 @@
 
 #include "common.h"
 #include "base/log/debug.h"
-#include "base/mem/arena.h"
 #include "base/mem/chunk.h"
 #include <stdarg.h>
 
@@ -54,9 +53,6 @@ struct mm_buffer
 	size_t tail_off;
 	/* The outgoing data offset. */
 	size_t head_off;
-
-	/* Memory allocation info. */
-	mm_arena_t arena;
 };
 
 struct mm_buffer_segment
@@ -113,8 +109,8 @@ mm_buffer_getsize_used(struct mm_buffer *buf)
 	return size - buf->head_off + buf->tail_off;
 }
 
-void __attribute__((nonnull(1, 2)))
-mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena);
+void __attribute__((nonnull(1)))
+mm_buffer_prepare(struct mm_buffer *buf);
 
 void __attribute__((nonnull(1)))
 mm_buffer_cleanup(struct mm_buffer *buf);
@@ -147,7 +143,7 @@ void __attribute__((nonnull(1, 2)))
 mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data);
 
-void __attribute__((nonnull(1, 2)))
-mm_buffer_segment_destroy(struct mm_buffer *buf, struct mm_buffer_segment *seg);
+void __attribute__((nonnull(1)))
+mm_buffer_segment_destroy(struct mm_buffer_segment *seg);
 
 #endif /* BASE_MEM_BUFFER_H */

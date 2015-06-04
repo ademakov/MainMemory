@@ -26,9 +26,8 @@
 void
 mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 {
-	struct mm_private_space *space = mm_private_space_get();
-	mm_buffer_prepare(&sock->rbuf, &space->xarena);
-	mm_buffer_prepare(&sock->tbuf, &space->xarena);
+	mm_buffer_prepare(&sock->rbuf);
+	mm_buffer_prepare(&sock->tbuf);
 }
 
 void
