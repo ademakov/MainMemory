@@ -108,7 +108,7 @@ mc_entry_alloc_chunks(struct mc_entry *entry)
 {
 	ASSERT(mm_link_empty(&entry->chunks));
 	uint32_t size = mc_entry_size(entry);
-	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
 	mm_link_insert(&entry->chunks, &chunk->base.link);
 }
 

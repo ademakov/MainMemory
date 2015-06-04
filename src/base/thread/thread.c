@@ -24,8 +24,6 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/mem/space.h"
 #include "base/thread/domain.h"
 
 #include <sched.h>
@@ -71,34 +69,40 @@ mm_thread_init()
  * Thread attribute routines.
  **********************************************************************/
 
-void
+void __attribute__((nonnull(1)))
 mm_thread_attr_init(struct mm_thread_attr *attr)
 {
 	memset(attr, 0, sizeof *attr);
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 struct mm_domain *domain,
-			 mm_thread_t domain_index)
+			 mm_thread_t number)
 {
 	attr->domain = domain;
-	attr->domain_index = domain_index;
+	attr->domain_number = number;
 }
 
-void
+void __attribute__((nonnull(1)))
+mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space)
+{
+	attr->private_space = private_space;
+}
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
+{
+	attr->reclaim_queue = size;
+}
+
+void __attribute__((nonnull(1)))
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 {
 	attr->cpu_tag = cpu_tag;
 }
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setprivatespace(struct mm_thread_attr *attr, bool private_space)
-{
-	attr->private_space = private_space;
-}
-
-void
 mm_thread_attr_setstack(struct mm_thread_attr *attr,
 			void *stack_base, uint32_t stack_size)
 {
@@ -106,7 +110,7 @@ mm_thread_attr_setstack(struct mm_thread_attr *attr,
 	attr->stack_size = stack_size;
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 {
 	size_t len = 0;
@@ -217,7 +221,7 @@ mm_thread_entry(void *arg)
 	return NULL;
 }
 
-struct mm_thread *
+struct mm_thread * __attribute__((nonnull(2)))
 mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, mm_value_t start_arg)
 {
@@ -232,6 +236,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 	// Set thread attributes.
 #if ENABLE_SMP
 	bool private_space = false;
+	uint32_t reclaim_queue = 0;
 #endif
 	if (attr == NULL) {
 		thread->domain = NULL;
@@ -240,10 +245,11 @@ mm_thread_create(struct mm_thread_attr *attr,
 		strcpy(thread->name, "unnamed");
 	} else {
 		thread->domain = attr->domain;
-		thread->domain_number = attr->domain_index;
+		thread->domain_number = attr->domain_number;
 		thread->cpu_tag = attr->cpu_tag;
 #if ENABLE_SMP
 		private_space = attr->private_space;
+		reclaim_queue = attr->reclaim_queue;
 #endif
 		if (attr->name[0])
 			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
@@ -253,12 +259,15 @@ mm_thread_create(struct mm_thread_attr *attr,
 
 	// Initialize private memory space if required.
 #if ENABLE_SMP
-	if (private_space) {
-		mm_private_space_prepare(&thread->space);
-	} else {
-		thread->space.space.opaque = NULL;
-	}
+	if (private_space)
+		mm_private_space_prepare(&thread->space, reclaim_queue);
+	else
+		mm_private_space_reset(&thread->space);
 #endif
+
+	// Initialize deferred chunks info.
+	mm_link_init(&thread->deferred_chunks);
+	thread->deferred_chunks_count = 0;
 
 	// Initialize log message queue.
 	mm_queue_init(&thread->log_queue);
@@ -282,7 +291,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 
 /* Destroy a thread object. It is only safe to call this function upon
    the thread join. */
-void
+void __attribute__((nonnull(1)))
 mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
@@ -306,7 +315,7 @@ mm_thread_destroy(struct mm_thread *thread)
  **********************************************************************/
 
 /* Cancel a running thread. */
-void
+void __attribute__((nonnull(1)))
 mm_thread_cancel(struct mm_thread *thread)
 {
 	ENTER();
@@ -319,7 +328,7 @@ mm_thread_cancel(struct mm_thread *thread)
 }
 
 /* Wait for a thread exit. */
-void
+void __attribute__((nonnull(1)))
 mm_thread_join(struct mm_thread *thread)
 {
 	ENTER();

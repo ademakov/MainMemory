@@ -23,7 +23,6 @@
 #include "common.h"
 #include "base/mem/alloc.h"
 #include "base/mem/arena.h"
-#include "base/mem/chunk.h"
 #include "base/mem/space.h"
 #include "base/thread/thread.h"
 
@@ -143,21 +142,11 @@ mm_regular_free(void *ptr)
  * Private Memory Allocation Routines for Single Thread.
  **********************************************************************/
 
-static inline bool
-mm_private_space_ready(struct mm_private_space *space)
-{
-	return space->space.opaque != NULL;
-}
-
 static inline struct mm_private_space *
 mm_private_space_get(void)
 {
 #if ENABLE_SMP
-	struct mm_thread *thread = mm_thread_self();
-	struct mm_private_space *space = mm_thread_getspace(thread);
-	if (unlikely(!mm_private_space_ready(space)))
-		return NULL;
-	return space;
+	return mm_thread_getspace(mm_thread_self());
 #else
 	return &mm_regular_space;
 #endif
@@ -286,13 +275,10 @@ mm_private_strdup(const char *ptr)
  * Memory Subsystem Initialization and Termination.
  **********************************************************************/
 
-struct mm_memory_params
-{
-	mm_chunk_free_t free;
-};
+void
+mm_memory_init(void);
 
-void mm_memory_init(struct mm_memory_params *params);
-
-void mm_memory_term(void);
+void
+mm_memory_term(void);
 
 #endif /* BASE_MEMORY_MEMORY_H */

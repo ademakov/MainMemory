@@ -30,6 +30,9 @@
 /* Maximum domain name length (including terminating zero). */
 #define MM_DOMAIN_NAME_SIZE	32
 
+/* Thread notification routine. */
+typedef void (*mm_thread_notify_t)(struct mm_thread *thread);
+
 struct mm_domain_thread
 {
 	struct mm_thread *thread;
@@ -41,6 +44,8 @@ struct mm_domain
 	/* Domain threads. */
 	mm_thread_t nthreads;
 	struct mm_domain_thread *threads;
+
+	mm_thread_notify_t notify;
 
 	/* Per-thread data. */
 	struct mm_queue per_thread_chunk_list;
@@ -64,7 +69,8 @@ mm_domain_self(void)
 
 void __attribute__((nonnull(1)))
 mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_thread_t nthreads, bool private_space);
+		  mm_thread_t nthreads, bool private_space,
+		  mm_thread_notify_t notify);
 
 void __attribute__((nonnull(1)))
 mm_domain_cleanup(struct mm_domain *domain);

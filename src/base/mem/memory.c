@@ -55,7 +55,7 @@ mm_regular_space_init(void)
 #if ENABLE_SMP
 	mm_shared_space_prepare(&mm_regular_space);
 #else
-	mm_private_space_prepare(&mm_regular_space);
+	mm_private_space_prepare(&mm_regular_space, 16);
 #endif
 }
 
@@ -74,13 +74,11 @@ mm_regular_space_term(void)
  **********************************************************************/
 
 void
-mm_memory_init(struct mm_memory_params *params)
+mm_memory_init(void)
 {
 	mm_alloc_init();
 	mm_common_space_init();
 	mm_regular_space_init();
-	if (params != NULL)
-		mm_chunk_set_private_alloc(params->free);
 }
 
 void

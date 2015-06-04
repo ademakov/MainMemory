@@ -57,7 +57,6 @@ struct mm_buffer
 
 	/* Memory allocation info. */
 	mm_arena_t arena;
-	mm_chunk_t chunk_tag;
 };
 
 struct mm_buffer_segment
@@ -115,7 +114,7 @@ mm_buffer_getsize_used(struct mm_buffer *buf)
 }
 
 void __attribute__((nonnull(1, 2)))
-mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_t chunk_tag);
+mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena);
 
 void __attribute__((nonnull(1)))
 mm_buffer_cleanup(struct mm_buffer *buf);

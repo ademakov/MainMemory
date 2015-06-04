@@ -44,11 +44,12 @@ mm_base_init(struct mm_base_params *params)
 	if (params != NULL && params->regular_name != NULL)
 		regular_name = params->regular_name;
 
-	mm_memory_init(params != NULL ? params->memory_params : NULL);
+	mm_memory_init();
 	mm_thread_init();
 	mm_clock_init();
 
-	mm_domain_prepare(&mm_regular_domain, regular_name, ncpus, true);
+	mm_domain_prepare(&mm_regular_domain, regular_name,
+			  ncpus, true, params->thread_notify);
 	for (mm_thread_t i = 0; i < ncpus; i++) {
 		mm_domain_setcputag(&mm_regular_domain, i, i);
 	}

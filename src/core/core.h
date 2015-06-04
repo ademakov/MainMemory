@@ -44,7 +44,6 @@ struct mm_work;
 
 #define MM_CORE_SCHED_RING_SIZE		(1024)
 #define MM_CORE_INBOX_RING_SIZE		(1024)
-#define MM_CORE_CHUNK_RING_SIZE		(1024)
 
 /* Virtual core state. */
 struct mm_core
@@ -102,9 +101,6 @@ struct mm_core
 
 	/* Submitted work items. */
 	MM_RING_SPSC(inbox, MM_CORE_INBOX_RING_SIZE);
-
-	/* The memory chunks freed by other threads. */
-	MM_RING_SPSC(chunks, MM_CORE_CHUNK_RING_SIZE);
 
 } __mm_align_cacheline__;
 

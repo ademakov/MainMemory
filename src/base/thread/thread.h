@@ -23,15 +23,12 @@
 #include "common.h"
 #include "base/barrier.h"
 #include "base/list.h"
+#include "base/mem/space.h"
 #include <pthread.h>
 
 /* Forward declarations. */
 struct mm_domain;
-struct mm_thread;
-struct mm_private_space;
-#if ENABLE_TRACE
 struct mm_trace_context;
-#endif
 
 /* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
@@ -41,13 +38,16 @@ struct mm_thread_attr
 {
 	/* Thread domain. */
 	struct mm_domain *domain;
-	mm_thread_t domain_index;
-
-	/* CPU affinity tag. */
-	uint32_t cpu_tag;
+	mm_thread_t domain_number;
 
 	/* Enable private memory space. */
 	bool private_space;
+
+	/* The size of queue for memory chunks released by other threads. */
+	uint32_t reclaim_queue;
+
+	/* CPU affinity tag. */
+	uint32_t cpu_tag;
 
 	/* The thread stack. */
 	uint32_t stack_size;
@@ -68,6 +68,10 @@ struct mm_thread
 	/* Private memory space. */
 	struct mm_private_space space;
 #endif
+
+	/* Memory chunks from other threads with deferred destruction. */
+	struct mm_link deferred_chunks;
+	size_t deferred_chunks_count;
 
 	/* The log message storage. */
 	struct mm_queue log_queue;
@@ -110,13 +114,16 @@ mm_thread_attr_init(struct mm_thread_attr *attr);
 void __attribute__((nonnull(1, 2)))
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 struct mm_domain *domain,
-			 mm_thread_t domain_index);
+			 mm_thread_t number);
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space);
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
-
-void __attribute__((nonnull(1)))
-mm_thread_attr_setprivatespace(struct mm_thread_attr *attr, bool private_space);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setstack(struct mm_thread_attr *attr,
@@ -128,6 +135,9 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name);
 struct mm_thread * __attribute__((nonnull(2)))
 mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, mm_value_t start_arg);
+
+void __attribute__((nonnull(1)))
+mm_thread_release_chunks(struct mm_thread *thread);
 
 void __attribute__((nonnull(1)))
 mm_thread_destroy(struct mm_thread *thread);

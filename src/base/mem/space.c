@@ -18,7 +18,8 @@
  */
 
 #include "base/mem/space.h"
-#include "base/log/error.h"
+
+#include "base/ring.h"
 
 /**********************************************************************
  * Private Memory Space.
@@ -96,17 +97,45 @@ MM_ARENA_VTABLE(mm_private_xarena_vtable,
 	mm_private_xarena_free);
 
 void __attribute__((nonnull(1)))
-mm_private_space_prepare(struct mm_private_space *space)
+mm_private_space_prepare(struct mm_private_space *space, uint32_t queue_size)
 {
 	space->space = mm_mspace_create();
 	space->uarena.vtable = &mm_private_uarena_vtable;
 	space->xarena.vtable = &mm_private_xarena_vtable;
+
+	if (queue_size == 0)
+		space->reclaim_queue = NULL;
+	else
+		space->reclaim_queue = mm_ring_spsc_create(queue_size,
+							   MM_RING_LOCKED_PUT);
 }
 
 void __attribute__((nonnull(1)))
 mm_private_space_cleanup(struct mm_private_space *space)
 {
+	if (space->reclaim_queue != NULL)
+		mm_ring_spsc_destroy(space->reclaim_queue);
 	mm_mspace_destroy(space->space);
+}
+
+bool __attribute__((nonnull(1, 2)))
+mm_private_space_enqueue(struct mm_private_space *space, void *ptr)
+{
+	return mm_ring_spsc_locked_put(space->reclaim_queue, ptr);
+}
+
+bool __attribute__((nonnull(1)))
+mm_private_space_reclaim(struct mm_private_space *space)
+{
+	bool rc = false;
+
+	void *ptr;
+	while (mm_ring_spsc_get(space->reclaim_queue, &ptr)) {
+		mm_private_space_free(space, ptr);
+		rc = true;
+	}
+
+	return rc;
 }
 
 /**********************************************************************

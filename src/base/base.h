@@ -21,14 +21,12 @@
 #define BASE_BASE_H
 
 #include "common.h"
-
-/* Forward declarations. */
-struct mm_memory_params;
+#include "base/thread/domain.h"
 
 struct mm_base_params
 {
 	const char *regular_name;
-	struct mm_memory_params *memory_params;
+	mm_thread_notify_t thread_notify;
 };
 
 extern struct mm_domain mm_regular_domain;

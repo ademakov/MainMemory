@@ -19,6 +19,7 @@
 
 #include "base/thread/domain.h"
 
+#include "base/bitops.h"
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
 #include "base/mem/memory.h"
@@ -29,7 +30,8 @@ __thread struct mm_domain *__mm_domain_self = NULL;
 
 void
 mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_thread_t nthreads, bool private_space)
+		  mm_thread_t nthreads, bool private_space,
+		  mm_thread_notify_t notify)
 {
 	ENTER();
 
@@ -46,10 +48,12 @@ mm_domain_prepare(struct mm_domain *domain, const char *name,
 	// Initialize thread data.
 	domain->nthreads = nthreads;
 	domain->threads = mm_common_calloc(nthreads, sizeof(struct mm_domain_thread));
+	uint32_t reclaim_queue = mm_upper_pow2(nthreads * 16);
 	for (mm_thread_t i = 0; i < nthreads; i++) {
 		struct mm_thread_attr *thread_attr = &domain->threads[i].thread_attr;
 		mm_thread_attr_init(thread_attr);
-		mm_thread_attr_setprivatespace(thread_attr, private_space);
+		mm_thread_attr_setspace(thread_attr, private_space);
+		mm_thread_attr_setreclaimqueue(thread_attr, reclaim_queue);
 
 		// Derive thread name from the domain name.
 		if (name_len) {
@@ -59,6 +63,9 @@ mm_domain_prepare(struct mm_domain *domain, const char *name,
 			mm_thread_attr_setname(thread_attr, thread_name);
 		}
 	}
+
+	// Initialize notification routine.
+	domain->notify = notify;
 
 	// Initialize per-thread data.
 	mm_cdata_init(domain);

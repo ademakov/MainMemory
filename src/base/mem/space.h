@@ -26,6 +26,9 @@
 #include "base/mem/alloc.h"
 #include "base/mem/arena.h"
 
+/* Forward declarations. */
+struct mm_ring_spsc;
+
 /**********************************************************************
  * Private Memory Space.
  **********************************************************************/
@@ -34,17 +37,33 @@ struct mm_private_space
 {
 	/* The underlying memory space. */
 	mm_mspace_t space;
+
 	/* Memory arena without error checking (using *_alloc family). */
 	struct mm_arena uarena;
 	/* Memory arena with error checking (using *_xalloc family). */
 	struct mm_arena xarena;
+
+	/* Memory chunks asynchronously released by outside threads. */
+	struct mm_ring_spsc *reclaim_queue;
 };
 
 void __attribute__((nonnull(1)))
-mm_private_space_prepare(struct mm_private_space *space);
+mm_private_space_prepare(struct mm_private_space *space, uint32_t queue_size);
 
 void __attribute__((nonnull(1)))
 mm_private_space_cleanup(struct mm_private_space *space);
+
+static inline bool
+mm_private_space_ready(struct mm_private_space *space)
+{
+	return space->space.opaque != NULL;
+}
+
+static inline void
+mm_private_space_reset(struct mm_private_space *space)
+{
+	space->space.opaque = NULL;
+}
 
 static inline void *
 mm_private_space_alloc(struct mm_private_space *space, size_t size)
@@ -118,6 +137,12 @@ mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t n
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
 }
 
+bool __attribute__((nonnull(1, 2)))
+mm_private_space_enqueue(struct mm_private_space *space, void *ptr);
+
+bool __attribute__((nonnull(1)))
+mm_private_space_reclaim(struct mm_private_space *space);
+
 /**********************************************************************
  * Shared Memory Space.
  **********************************************************************/
@@ -126,10 +151,12 @@ struct mm_shared_space
 {
 	/* The underlying memory space. */
 	mm_mspace_t space;
+
 	/* Memory arena without error checking (using *_alloc family). */
 	struct mm_arena uarena;
 	/* Memory arena with error checking (using *_xalloc family). */
 	struct mm_arena xarena;
+
 	/* Concurrent access lock. */
 	mm_common_lock_t lock;
 };

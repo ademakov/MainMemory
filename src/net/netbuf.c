@@ -26,10 +26,9 @@
 void
 mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 {
-	mm_core_t core = sock->sock.event.core;
 	struct mm_private_space *space = mm_private_space_get();
-	mm_buffer_prepare(&sock->rbuf, &space->xarena, core);
-	mm_buffer_prepare(&sock->tbuf, &space->xarena, core);
+	mm_buffer_prepare(&sock->rbuf, &space->xarena);
+	mm_buffer_prepare(&sock->tbuf, &space->xarena);
 }
 
 void

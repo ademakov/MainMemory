@@ -285,55 +285,6 @@ mm_core_receive_tasks(struct mm_core *core)
 #endif
 
 /**********************************************************************
- * Chunk allocation and reclamation.
- **********************************************************************/
-
-void
-mm_core_chunk_free(mm_chunk_t tag, void *chunk)
-{
-	mm_core_t core = mm_core_selfid();
-	if (core == tag) {
-		mm_private_free(chunk);
-	} else {
-		ASSERT(!MM_CHUNK_IS_ARENA_TAG(tag));
-
-		// Put the chunk to the target core chunks ring.
-		struct mm_core *core = mm_core_getptr(tag);
-		for (;;) {
-			bool ok = mm_ring_spsc_locked_put(&core->chunks, chunk);
-
-			// Actual reclamation may wait a little bit so
-			// don't wakeup the core unless the ring is full.
-			if (ok) {
-				break;
-			} else if (unlikely(mm_memory_load(core->stop))) {
-#if 0
-				mm_warning(0, "lost a chunk as core %d is stopped", tag);
-#endif
-				break;
-			}
-
-			// Wakeup the target core if it is asleep.
-			mm_listener_notify(&core->listener, &mm_core_dispatch);
-		}
-	}
-}
-
-static void
-mm_core_destroy_chunks(struct mm_core *core)
-{
-	ENTER();
-
-	void *chunk;
-	while (mm_ring_spsc_get(&core->chunks, &chunk)) {
-		ASSERT(mm_chunk_gettag((struct mm_chunk *) chunk) == mm_core_selfid());
-		mm_private_free(chunk);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Worker task.
  **********************************************************************/
 
@@ -483,8 +434,8 @@ mm_core_master(mm_value_t arg)
 
 static mm_atomic_uint32_t mm_core_deal_count;
 
-static void
-mm_core_deal(struct mm_core *core)
+static bool
+mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
 
@@ -492,7 +443,6 @@ mm_core_deal(struct mm_core *core)
 	mm_timer_tick(&core->time_manager);
 
 	// Consume the data from the communication rings.
-	mm_core_destroy_chunks(core);
 	mm_core_receive_tasks(core);
 	mm_core_receive_work(core);
 
@@ -501,28 +451,35 @@ mm_core_deal(struct mm_core *core)
 
 	// Cleanup the temporary data.
 	mm_wait_cache_truncate(&core->wait_cache);
+	mm_chunk_enqueue_deferred(thread, true);
+#if ENABLE_SMP
+	bool rc = mm_private_space_reclaim(mm_thread_getspace(thread));
+#else
+	bool rc = mm_private_space_reclaim(&mm_regular_space);
+#endif
 
 	mm_atomic_uint32_inc(&mm_core_deal_count);
 
 	LEAVE();
+	return rc;
 }
 
 static void
-mm_core_halt(struct mm_core *core)
+mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 {
 	ENTER();
 
-	// Get the closest timer expiration time.
-	mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
-
 	// Get the halt timeout.
-	mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
-	if (unlikely(next_timer < core->time_manager.time))
-		timeout = 0;
-	else if (next_timer < core->time_manager.time + MM_DEALER_HALT_TIMEOUT)
-		timeout = next_timer - core->time_manager.time;
-	else
-		timeout = MM_DEALER_HALT_TIMEOUT;
+	if (timeout) {
+		// Get the closest timer expiration time.
+		mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
+		if (next_timer < core->time_manager.time + timeout) {
+			if (next_timer > core->time_manager.time)
+				timeout = next_timer - core->time_manager.time;
+			else
+				timeout = 0;
+		}
+	}
 
 	mm_listener_listen(&core->listener, &mm_core_dispatch, timeout);
 
@@ -538,10 +495,11 @@ mm_core_dealer(mm_value_t arg)
 	ENTER();
 
 	struct mm_core *core = (struct mm_core *) arg;
+	struct mm_thread *thread = mm_thread_self();
 
 	while (!mm_memory_load(core->stop)) {
-		mm_core_deal(core);
-		mm_core_halt(core);
+		bool rc = mm_core_deal(core, thread);
+		mm_core_halt(core, rc ? 0 : MM_DEALER_HALT_TIMEOUT);
 	}
 
 	LEAVE();
@@ -740,7 +698,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_ring_spsc_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_LOCKED_PUT);
 	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_LOCKED_PUT);
-	mm_ring_spsc_prepare(&core->chunks, MM_CORE_CHUNK_RING_SIZE, MM_RING_LOCKED_PUT);
 
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
@@ -805,6 +762,13 @@ mm_core_yield(void)
 	return true;
 }
 
+static void
+mm_core_thread_notify(struct mm_thread *thread)
+{
+	mm_thread_t n = mm_thread_getnumber(thread);
+	mm_listener_notify(&mm_core_set[n].listener, &mm_core_dispatch);
+}
+
 #if ENABLE_TRACE
 
 static struct mm_trace_context *
@@ -828,12 +792,9 @@ mm_core_init(void)
 	ASSERT(mm_core_num == 0);
 
 	// Initialize the base library.
-	struct mm_memory_params memory_params = {
-		mm_core_chunk_free
-	};
 	struct mm_base_params params = {
 		.regular_name = "core",
-		.memory_params = &memory_params,
+		.thread_notify = mm_core_thread_notify,
 	};
 	mm_base_init(&params);
 

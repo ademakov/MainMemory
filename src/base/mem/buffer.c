@@ -93,7 +93,7 @@ mm_buffer_chunk_reserve(struct mm_buffer *buf, size_t desired_size)
 	      (int) size, (int) desired_size);
 
 	// Create an internal chunk.
-	struct mm_chunk *chunk = mm_chunk_create(buf->chunk_tag, size);
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
 	size = mm_chunk_getsize(chunk);
 
 	// Create a buffer segment based on the chunk.
@@ -145,14 +145,13 @@ mm_buffer_ensure_next(struct mm_buffer *buf,
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
 void __attribute__((nonnull(1, 2)))
-mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena, mm_chunk_t chunk_tag)
+mm_buffer_prepare(struct mm_buffer *buf, mm_arena_t arena)
 {
 	ENTER();
 
 	memset(buf, 0, sizeof *buf);
 
 	buf->arena = arena;
-	buf->chunk_tag = chunk_tag;
 
 	LEAVE();
 }

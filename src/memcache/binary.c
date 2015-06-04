@@ -140,7 +140,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	uint32_t value_len = body_len - key_len - sizeof extras;
 	uint32_t size = mc_entry_sum_length(key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
 	mm_slider_read(&parser->cursor, chunk->data, key_len + value_len);
 
 	struct mc_command *command = parser->command;
@@ -169,7 +169,7 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	uint32_t value_len = body_len - key_len;
 	uint32_t size = mc_entry_sum_length(key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create(mm_core_selfid(), size);
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
 	mm_slider_read(&parser->cursor, chunk->data, key_len + value_len);
 
 	struct mc_command *command = parser->command;

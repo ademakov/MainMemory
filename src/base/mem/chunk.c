@@ -20,127 +20,78 @@
 #include "base/mem/chunk.h"
 
 #include "base/base.h"
-#include "base/lock.h"
-#include "base/log/debug.h"
+#include "base/backoff.h"
 #include "base/log/error.h"
+#include "base/log/plain.h"
 #include "base/mem/memory.h"
 #include "base/thread/domain.h"
+#include "base/thread/thread.h"
+#include "base/util/exit.h"
+
+#define MM_CHUNK_FLUSH_THRESHOLD	(64)
+#define MM_CHUNK_ERROR_THRESHOLD	(512)
+#define MM_CHUNK_FATAL_THRESHOLD	(4096)
 
 /**********************************************************************
- * Chunk Tags.
+ * Chunk Allocation and Reclamation.
  **********************************************************************/
 
-static mm_arena_t mm_chunk_arena_table[MM_CHUNK_ARENA_MAX] = {
-	&mm_global_arena,
-	&mm_common_space.xarena,
-	&mm_regular_space.xarena,
-};
-
-static int mm_chunk_arena_count = 3;
-
-static mm_chunk_free_t mm_chunk_free = NULL;
-
-static mm_lock_t mm_chunk_lock = MM_LOCK_INIT;
-
-bool
-mm_chunk_is_private_alloc_ready(void)
+struct mm_chunk *
+mm_chunk_create_global(size_t size)
 {
-	return (mm_chunk_free != NULL);
-}
-
-void
-mm_chunk_set_private_alloc(mm_chunk_free_t free)
-{
-	mm_global_lock(&mm_chunk_lock);
-
-	// If chunk allocation routines are replaced when there are already
-	// some allocated chunks then it might explode on freeing them.
-	if (mm_chunk_free != NULL)
-		mm_fatal(0, "private chunk allocation might only be initialized once");
-
-	mm_chunk_free = free;
-
-	mm_global_unlock(&mm_chunk_lock);
-}
-
-mm_chunk_t
-mm_chunk_add_arena(mm_arena_t arena)
-{
-	mm_global_lock(&mm_chunk_lock);
-
-	if (mm_chunk_arena_count == MM_CHUNK_ARENA_MAX) {
-		mm_global_unlock(&mm_chunk_lock);
-		mm_fatal(0, "too many chunk allocation arenas");
-	}
-
-	int idx = mm_chunk_arena_count++;
-	mm_chunk_arena_table[idx] = arena;
-
-	mm_global_unlock(&mm_chunk_lock);
-
-	return MM_CHUNK_IDX_TO_TAG(idx);
-}
-
-/**********************************************************************
- * Chunk Creation and Destruction.
- **********************************************************************/
-
-mm_chunk_t
-mm_chunk_select(void)
-{
-#if ENABLE_SMP
-	struct mm_thread *thread = mm_thread_self();
-	struct mm_private_space *space = mm_thread_getspace(thread);
-	if (!mm_private_space_ready(space)) {
-		// Common arena could only be used after it gets
-		// initialized during bootstrap.
-		if (likely(mm_common_space_ready()))
-			return MM_CHUNK_COMMON;
-		else
-			return MM_CHUNK_GLOBAL;
-	}
-	return mm_thread_getdomainindex(thread);
-#else
-	if (mm_domain_self() != &mm_regular_domain) {
-		// Common arena could only be used after it gets
-		// initialized during bootstrap.
-		if (likely(mm_common_space_ready()))
-			return MM_CHUNK_COMMON;
-		else
-			return MM_CHUNK_GLOBAL;
-	}
-	return MM_CHUNK_REGULAR;
-#endif
+	size += sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_global_alloc(size);
+	chunk->base.tag = MM_CHUNK_GLOBAL;
+	mm_link_init(&chunk->base.link);
+	return chunk;
 }
 
 struct mm_chunk *
-mm_chunk_create(mm_chunk_t tag, size_t size)
+mm_chunk_create_common(size_t size)
 {
 	size += sizeof(struct mm_chunk);
-
-	mm_arena_t arena;
-	if (MM_CHUNK_IS_ARENA_TAG(tag)) {
-		int idx = MM_CHUNK_TAG_TO_IDX(tag);
-		arena = mm_chunk_arena_table[idx];
-		if (unlikely(arena == NULL))
-			mm_fatal(0, "chunk allocation arena is not initialized");
-	} else {
-		ASSERT(tag < mm_regular_domain.nthreads);
-#if ENABLE_SMP
-		struct mm_thread *thread = mm_regular_domain.threads[tag].thread;
-		struct mm_private_space *space = mm_thread_getspace(thread);
-		ASSERT(mm_private_space_ready(space));
-		arena = &space->xarena;
-#else
-		arena = &mm_regular_space.xarena;
-#endif
-	}
-
-	struct mm_chunk *chunk = mm_arena_alloc(arena, size);
-	chunk->base.tag = tag;
+	struct mm_chunk *chunk = mm_common_alloc(size);
+	chunk->base.tag = MM_CHUNK_COMMON;
 	mm_link_init(&chunk->base.link);
-
 	return chunk;
+}
+
+struct mm_chunk *
+mm_chunk_create_regular(size_t size)
+{
+	size += sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_regular_alloc(size);
+	chunk->base.tag = MM_CHUNK_REGULAR;
+	mm_link_init(&chunk->base.link);
+	return chunk;
+}
+
+struct mm_chunk *
+mm_chunk_create_private(size_t size)
+{
+	size += sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_private_alloc(size);
+	chunk->base.tag = mm_thread_getnumber(mm_thread_self());
+	mm_link_init(&chunk->base.link);
+	return chunk;
+}
+
+struct mm_chunk *
+mm_chunk_create(size_t size)
+{
+	// Prefer private space if available.
+	struct mm_private_space *space = mm_private_space_get();
+	if (mm_private_space_ready(space))
+		return mm_chunk_create_private(size);
+
+	// Common space could only be used after it gets
+	// initialized during bootstrap.
+	if (likely(mm_common_space_ready()))
+		return mm_chunk_create_common(size);
+
+	// Use global allocator if everything else fails
+	// (that is during bootstrap and shutdown).
+	return mm_chunk_create_global(size);
 }
 
 void
@@ -148,16 +99,39 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 {
 	mm_chunk_t tag = mm_chunk_gettag(chunk);
 
-	if (MM_CHUNK_IS_ARENA_TAG(tag)) {
-		int idx = MM_CHUNK_TAG_TO_IDX(tag);
-		mm_arena_t arena = mm_chunk_arena_table[idx];
-		if (unlikely(arena == NULL))
-			mm_fatal(0, "chunk allocation arena is not initialized");
-		mm_arena_free(arena, chunk);
+	// A chunk from a shared memory space can be freed by any thread in
+	// the same manner utilizing synchronization mechanisms built-in to
+	// the corresponding memory allocation routines.
+	if (tag == MM_CHUNK_COMMON) {
+		mm_common_free(chunk);
+		return;
+	}
+	if (tag == MM_CHUNK_GLOBAL) {
+		mm_global_free(chunk);
+		return;
+	}
+
+	// In SMP mode regular memory space is just another case of shared
+	// space with built-in synchronization. So it can be freed by any
+	// thread alike.
+#if ENABLE_SMP
+	if (tag == MM_CHUNK_REGULAR) {
+		mm_regular_free(chunk);
+		return;
+	}
+#endif
+
+	// A chunk from a private space can be immediately freed by its
+	// originating thread but it is a subject for asynchronous memory
+	// reclamation mechanism for any other thread.
+	struct mm_thread *thread = mm_thread_self();
+	struct mm_domain *domain = mm_thread_getdomain(thread);
+	if (domain == &mm_regular_domain && tag == mm_thread_getnumber(thread)) {
+		mm_private_free(chunk);
 	} else {
-		if (unlikely(mm_chunk_free == NULL))
-			mm_fatal(0, "private chunk allocation is not initialized");
-		mm_chunk_free(tag, chunk);
+		thread->deferred_chunks_count++;
+		mm_link_insert(&thread->deferred_chunks, &chunk->base.link);
+		mm_chunk_enqueue_deferred(thread, false);
 	}
 }
 
@@ -169,5 +143,59 @@ mm_chunk_destroy_chain(struct mm_link *link)
 		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
 		mm_chunk_destroy(chunk);
 		link = next;
+	}
+}
+
+void __attribute__((nonnull(1)))
+mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
+{
+	if (!flush && thread->deferred_chunks_count < MM_CHUNK_FLUSH_THRESHOLD)
+		return;
+
+	// Capture all the deferred chunks.
+	struct mm_link chunks = thread->deferred_chunks;
+	mm_link_init(&thread->deferred_chunks);
+	thread->deferred_chunks_count = 0;
+
+	// Try to submit the chunks to respective reclamation queues.
+	while (!mm_link_empty(&chunks)) {
+		struct mm_link *link = mm_link_delete_head(&chunks);
+		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+
+#if ENABLE_SMP
+		mm_chunk_t tag = mm_chunk_gettag(chunk);
+		struct mm_thread *origin = mm_regular_domain.threads[tag].thread;
+		struct mm_domain *domain = mm_thread_getdomain(origin);
+		struct mm_private_space *space = mm_thread_getspace(origin);
+#else
+		struct mm_domain *domain = &mm_regular_domain;
+		struct mm_thread *origin = mm_regular_domain.threads[0].thread;
+		struct mm_private_space *space = &mm_regular_space;
+#endif
+
+		uint32_t backoff = 0;
+		while (!mm_private_space_enqueue(space, chunk)) {
+			backoff = mm_backoff(backoff);
+
+			// If failed to submit the chunk after a number of
+			// attempts then defer it again.
+			if (backoff >= MM_BACKOFF_SMALL) {
+				mm_link_insert(&thread->deferred_chunks, link);
+				thread->deferred_chunks_count++;
+
+				// Wake up a possibly sleeping origin thread.
+				if (domain->notify != NULL)
+					(*domain->notify)(origin);
+				break;
+			}
+		}
+	}
+
+	// Let know if chunk reclamation consistently has problems.
+	if (thread->deferred_chunks_count > MM_CHUNK_ERROR_THRESHOLD) {
+		if (thread->deferred_chunks_count < MM_CHUNK_FATAL_THRESHOLD)
+			mm_error(0, "Problem with chunk reclamation");
+		else
+			mm_fatal(0, "Problem with chunk reclamation");
 	}
 }

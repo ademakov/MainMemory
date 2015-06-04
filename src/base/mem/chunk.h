@@ -25,11 +25,13 @@
 #include "base/mem/alloc.h"
 #include "base/mem/arena.h"
 
+struct mm_thread;
+
 /**********************************************************************
  * Chunk Tags.
  **********************************************************************/
 
-#define MM_CHUNK_ARENA_MAX	((int) 32)
+#define MM_CHUNK_SHARED_MAX	((int) 3)
 
 #define MM_CHUNK_IDX_TO_TAG(i)	((mm_chunk_t) ~(i))
 #define MM_CHUNK_TAG_TO_IDX(t)	(~((int)(int16_t) (t)))
@@ -38,18 +40,9 @@
 #define MM_CHUNK_COMMON		MM_CHUNK_IDX_TO_TAG(1)
 #define MM_CHUNK_REGULAR	MM_CHUNK_IDX_TO_TAG(2)
 
-#define MM_CHUNK_IS_ARENA_TAG(t) ((t) > MM_CHUNK_IDX_TO_TAG(MM_CHUNK_ARENA_MAX))
+#define MM_CHUNK_IS_SHARED(t)	((t) > MM_CHUNK_IDX_TO_TAG(MM_CHUNK_SHARED_MAX))
 
 typedef uint16_t mm_chunk_t;
-
-typedef void (*mm_chunk_free_t)(mm_chunk_t tag, void *chunk);
-
-bool mm_chunk_is_private_alloc_ready(void);
-
-void mm_chunk_set_private_alloc(mm_chunk_free_t free);
-
-mm_chunk_t mm_chunk_add_arena(mm_arena_t arena)
-	__attribute__((nonnull(1)));
 
 /**********************************************************************
  * Chunk Access.
@@ -108,16 +101,28 @@ mm_chunk_getsize(const struct mm_chunk *chunk)
  * Chunk Creation and Destruction.
  **********************************************************************/
 
-mm_chunk_t
-mm_chunk_select(void);
+struct mm_chunk *
+mm_chunk_create_global(size_t size);
 
 struct mm_chunk *
-mm_chunk_create(mm_chunk_t type, size_t size);
+mm_chunk_create_common(size_t size);
+
+struct mm_chunk *
+mm_chunk_create_regular(size_t size);
+
+struct mm_chunk *
+mm_chunk_create_private(size_t size);
+
+struct mm_chunk *
+mm_chunk_create(size_t size);
 
 void __attribute__((nonnull(1)))
 mm_chunk_destroy(struct mm_chunk *chunk);
 
 void
 mm_chunk_destroy_chain(struct mm_link *link);
+
+void __attribute__((nonnull(1)))
+mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush);
 
 #endif /* BASE_MEM_CHUNK_H */
