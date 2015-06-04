@@ -1,4 +1,4 @@
-combiner
-lock
-ring-mpmc
-ring-spsc
+combiner-bench
+lock-bench
+ring-mpmc-bench
+ring-spsc-bench
