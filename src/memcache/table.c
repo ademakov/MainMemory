@@ -346,7 +346,7 @@ mc_table_init(const struct mm_memcache_config *config)
 	// Make a very liberal estimate that for an average table entry
 	// the combined size of key and data might be as small as 20 bytes.
 	size_t nentries_max = volume / (sizeof(struct mc_entry) + 20);
-	size_t nbuckets_max = 1 << (sizeof(int) * 8 - 1 - mm_clz(nentries_max));
+	size_t nbuckets_max = mm_lower_pow2(nentries_max);
 
 	mm_brief("memcache maximum data volume per partition: %lu",
 		 (unsigned long) volume);

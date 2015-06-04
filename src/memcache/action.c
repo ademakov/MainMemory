@@ -523,14 +523,9 @@ mc_action_stride_low(struct mc_action *action)
 	mc_table_lookup_lock(action->part);
 
 	uint32_t used = action->part->nbuckets;
-
-	uint32_t half_size;
-	if (unlikely(mm_is_pow2z(used))) {
-		half_size = used;
+	uint32_t half_size = mm_lower_pow2(used);
+	if (unlikely(used == half_size))
 		mc_table_buckets_resize(action->part, used, used * 2);
-	} else {
-		half_size = 1 << (31 - mm_clz(used));
-	}
 
 	uint32_t target = used;
 	uint32_t source = used - half_size;

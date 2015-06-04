@@ -35,7 +35,7 @@ mm_task_combiner_create(const char *name,
 	ASSERT(size != 0);
 
 	// Round the ring size to a power of 2.
-	size = 1 << (8 * sizeof(size_t) - mm_clz(size - 1));
+	size = mm_upper_pow2(size);
 
 	// Find the required combiner size in bytes.
 	size_t nbytes = sizeof(struct mm_task_combiner);

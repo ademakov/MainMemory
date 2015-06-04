@@ -34,7 +34,7 @@ mm_combiner_create(mm_combiner_routine_t routine,
 	ASSERT(size != 0);
 
 	// Round the ring size to a power of 2.
-	size = 1 << (8 * sizeof(size_t) - mm_clz(size - 1));
+	size = mm_upper_pow2(size);
 
 	// Find the required combiner size in bytes.
 	size_t nbytes = sizeof(struct mm_combiner);

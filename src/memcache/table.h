@@ -131,7 +131,7 @@ mc_table_index(struct mc_tpart *part, uint32_t hash)
 	ASSERT(part == mc_table_part(hash));
 
  	uint32_t used = mm_memory_load(part->nbuckets);
-	uint32_t size = 1 << (32 - mm_clz(used - 1));
+	uint32_t size = mm_upper_pow2(used);
 	uint32_t mask = size - 1;
 
 	uint32_t index = (hash >> mc_table.part_bits) & mask;
