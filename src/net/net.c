@@ -764,12 +764,14 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(sock->event.core == mm_core_selfid());
 
+#if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
 	if (unlikely((task->flags & MM_TASK_READING) == 0))
 		goto leave;
 
 	// Unbind the current task from the socket.
 	task->flags &= ~MM_TASK_READING;
+#endif
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
@@ -801,12 +803,14 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(sock->event.core == mm_core_selfid());
 
+#if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
 	if (unlikely((task->flags & MM_TASK_WRITING) == 0))
 		goto leave;
 
 	// Unbind the current task from the socket.
 	task->flags &= ~MM_TASK_WRITING;
+#endif
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
@@ -916,9 +920,11 @@ mm_net_reader(mm_value_t arg)
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
+#if ENABLE_TASK_IO_FLAGS
 	// Register the reader task.
 	struct mm_task *task = mm_task_self();
 	task->flags |= MM_TASK_READING;
+#endif
 
 	// Run the protocol handler routine.
 	(sock->server->proto->reader)(sock);
@@ -938,9 +944,11 @@ mm_net_writer(mm_value_t arg)
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
+#if ENABLE_TASK_IO_FLAGS
 	// Register the writer task.
 	struct mm_task *task = mm_task_self();
 	task->flags |= MM_TASK_WRITING;
+#endif
 
 	// Run the protocol handler routine.
 	(sock->server->proto->writer)(sock);

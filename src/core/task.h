@@ -26,6 +26,8 @@
 #include "core/core.h"
 #include "core/value.h"
 
+#define ENABLE_TASK_IO_FLAGS	0
+
 /* Maximal task name length (including terminating zero). */
 #define MM_TASK_NAME_SIZE	40
 
@@ -69,8 +71,10 @@ typedef enum {
 #define MM_TASK_CANCEL_ASYNCHRONOUS	0x02
 #define MM_TASK_CANCEL_REQUIRED		0x04
 #define MM_TASK_CANCEL_OCCURRED		0x08
+#if ENABLE_TASK_IO_FLAGS
 #define MM_TASK_READING			0x10
 #define MM_TASK_WRITING			0x20
+#endif
 #define MM_TASK_WAITING			0x40
 #define MM_TASK_COMBINING		0x80
 
