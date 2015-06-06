@@ -20,6 +20,7 @@
 #include "base/mem/pool.h"
 
 #include "base/base.h"
+#include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"

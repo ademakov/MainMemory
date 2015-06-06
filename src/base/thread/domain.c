@@ -20,6 +20,7 @@
 #include "base/thread/domain.h"
 
 #include "base/bitops.h"
+#include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
 #include "base/mem/memory.h"

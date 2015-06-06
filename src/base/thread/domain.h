@@ -24,7 +24,6 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/barrier.h"
-#include "base/bitset.h"
 #include "base/thread/thread.h"
 
 /* Maximum domain name length (including terminating zero). */
