@@ -21,7 +21,7 @@
 #define CORE_TASK_H
 
 #include "common.h"
-#include "arch/stack.h"
+#include "arch/cstack.h"
 #include "base/list.h"
 #include "core/core.h"
 #include "core/value.h"
@@ -161,7 +161,7 @@ struct mm_task
 	/* The task stack. */
 	uint32_t stack_size;
 	void *stack_base;
-	mm_stack_ctx_t stack_ctx;
+	mm_cstack_t stack_ctx;
 
 	/* The task core. */
 	struct mm_core *core;

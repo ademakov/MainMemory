@@ -1,7 +1,7 @@
 /*
- * stack_init.c - MainMemory arch-specific stack support.
+ * base/mem/cstack.h - MainMemory call stack support.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,26 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "arch/stack.h"
+#ifndef BASE_MEM_CSTACK_H
+#define BASE_MEM_CSTACK_H
 
-#include <stdint.h>
+#include "common.h"
 
-void
-mm_stack_init(mm_stack_ctx_t *ctx,
-	      void (*func)(void),
-	      char *stack, size_t size)
-{
-	intptr_t *sp = (intptr_t *) (stack + size) - 2;
+void * mm_cstack_create(uint32_t stack_size, uint32_t guard_size);
 
-	// padding
-	1[sp] = 0;
-	// return address pointed by rsp
-	0[sp] = (intptr_t) func;
-	// callee-saved registers
-	(-1)[sp] = -1L;	// ebp
-	(-2)[sp] = 0;	// ebx
-	(-3)[sp] = 0;	// esi
-	(-4)[sp] = 0;	// edi
+void mm_cstack_destroy(void *stack, uint32_t stack_size);
 
-	*ctx = (void *) sp;
-}
+#endif /* BASE_MEM_CSTACK_H */

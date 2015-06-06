@@ -1,5 +1,5 @@
 /*
- * stack.c - MainMemory arch-specific stack support.
+ * arch/x86/cstack-switch.S - MainMemory arch-specific call stack support.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -17,26 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "arch/stack.h"
+#include "asm.h"
 
-#include "log.h"
+.text
 
-void
-mm_stack_init(mm_stack_ctx_t *ctx,
-	      void (*func)(void),
-	      char *stack, size_t size)
-{
-	if (unlikely(getcontext(ctx) < 0))
-		mm_fatal(errno, "getcontext");
-	ctx->uc_link = NULL;
-	ctx->uc_stack.ss_sp = stack;
-	ctx->uc_stack.ss_size = size;
-	makecontext(ctx, func, 0);
-}
-
-void
-mm_stack_switch(mm_stack_ctx_t *old_ctx,
-		mm_stack_ctx_t *new_ctx)
-{
-	swapcontext(old_ctx, new_ctx);
-}
+PROC_ENTRY(C_NAME(mm_cstack_switch))
+PROC_START
+	movl 4(%esp), %ecx
+	movl 8(%esp), %edx
+	movl %ebp, -4(%esp)
+	movl %ebx, -8(%esp)
+	movl %esi, -12(%esp)
+	movl %edi, -16(%esp)
+	movl %esp, (%ecx)
+	movl (%edx), %esp
+	movl -4(%esp), %ebp
+	movl -8(%esp), %ebx
+	movl -12(%esp), %esi
+	movl -16(%esp), %edi
+	ret
+PROC_END

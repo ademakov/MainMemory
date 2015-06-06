@@ -1,5 +1,5 @@
 /*
- * stack_init.c - MainMemory arch-specific stack support.
+ * arch/x86-64/cstack-switch.S - MainMemory arch-specific call stack support.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -17,28 +17,25 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "arch/stack.h"
+#include "asm.h"
 
-#include <stdint.h>
+.text
 
-void
-mm_stack_init(mm_stack_ctx_t *ctx,
-	      void (*func)(void),
-	      char *stack, size_t size)
-{
-	intptr_t *sp = (intptr_t *) (stack + size) - 2;
-
-	// padding
-	1[sp] = 0;
-	// return address pointed by rsp
-	0[sp] = (intptr_t) func;
-	// callee-saved registers
-	(-1)[sp] = -1L;	// rbp
-	(-2)[sp] = 0;	// rbx
-	(-3)[sp] = 0;	// r12
-	(-4)[sp] = 0;	// r13
-	(-5)[sp] = 0;	// r15
-	(-6)[sp] = 0;	// r16
-
-	*ctx = (void *) sp;
-}
+PROC_ENTRY(C_NAME(mm_cstack_switch))
+PROC_START
+	movq %rbp, -8(%rsp)
+	movq %rbx, -16(%rsp)
+	movq %r12, -24(%rsp)
+	movq %r13, -32(%rsp)
+	movq %r14, -40(%rsp)
+	movq %r15, -48(%rsp)
+	movq %rsp, (%rdi)
+	movq (%rsi), %rsp
+	movq -8(%rsp), %rbp
+	movq -16(%rsp), %rbx
+	movq -24(%rsp), %r12
+	movq -32(%rsp), %r13
+	movq -40(%rsp), %r14
+	movq -48(%rsp), %r15
+	ret
+PROC_END

@@ -1,5 +1,5 @@
 /*
- * stack_switch.S - MainMemory arch-specific stack support.
+ * arch/x86-64/cstack-init.c - MainMemory arch-specific call stack support.
  *
  * Copyright (C) 2012  Aleksey Demakov
  *
@@ -17,23 +17,26 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "asm.h"
+#include "arch/cstack.h"
 
-.text
+#include <stdint.h>
 
-PROC_ENTRY(C_NAME(mm_stack_switch))
-PROC_START
-	movl 4(%esp), %ecx
-	movl 8(%esp), %edx
-	movl %ebp, -4(%esp)
-	movl %ebx, -8(%esp)
-	movl %esi, -12(%esp)
-	movl %edi, -16(%esp)
-	movl %esp, (%ecx)
-	movl (%edx), %esp
-	movl -4(%esp), %ebp
-	movl -8(%esp), %ebx
-	movl -12(%esp), %esi
-	movl -16(%esp), %edi
-	ret
-PROC_END
+void
+mm_cstack_init(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
+{
+	intptr_t *sp = (intptr_t *) (stack + size) - 2;
+
+	// padding
+	1[sp] = 0;
+	// return address pointed by rsp
+	0[sp] = (intptr_t) entry;
+	// callee-saved registers
+	(-1)[sp] = -1L;	// rbp
+	(-2)[sp] = 0;	// rbx
+	(-3)[sp] = 0;	// r12
+	(-4)[sp] = 0;	// r13
+	(-5)[sp] = 0;	// r15
+	(-6)[sp] = 0;	// r16
+
+	*ctx = (void *) sp;
+}

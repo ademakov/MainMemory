@@ -1,5 +1,5 @@
 /*
- * base/mem/stack.c - MainMemory stack support for tasks.
+ * base/mem/stack.c - MainMemory call stack support.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -17,14 +17,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/stack.h"
+#include "base/mem/cstack.h"
+
 #include "base/log/debug.h"
 #include "base/log/error.h"
 
 #include <sys/mman.h>
 
 void *
-mm_stack_create(uint32_t stack_size, uint32_t guard_size)
+mm_cstack_create(uint32_t stack_size, uint32_t guard_size)
 {
 	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
 	ASSERT((guard_size % MM_PAGE_SIZE) == 0);
@@ -47,7 +48,7 @@ mm_stack_create(uint32_t stack_size, uint32_t guard_size)
 }
 
 void
-mm_stack_destroy(void *stack, uint32_t stack_size)
+mm_cstack_destroy(void *stack, uint32_t stack_size)
 {
 	ASSERT((stack_size % MM_PAGE_SIZE) == 0);
 

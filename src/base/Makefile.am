@@ -29,12 +29,12 @@ libmmbase_a_SOURCES = \
 	mem/buffer.c mem/buffer.h \
 	mem/cdata.c mem/cdata.h \
 	mem/chunk.c mem/chunk.h \
+	mem/cstack.c mem/cstack.h \
 	mem/malloc.c mem/malloc.h \
 	mem/memory.c mem/memory.h \
 	mem/pool.c mem/pool.h \
 	mem/slider.c mem/slider.h \
 	mem/space.c mem/space.h \
-	mem/stack.c mem/stack.h \
 	sys/clock.c sys/clock.h \
 	thread/domain.c thread/domain.h \
 	thread/monitor.c thread/monitor.h \

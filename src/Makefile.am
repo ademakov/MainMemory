@@ -1,13 +1,34 @@
 
 SUBDIRS = base memcache
 
-bin_PROGRAMS = mmem
-
 AM_CFLAGS = -Wall -Wextra
 
+bin_PROGRAMS = mmem
+
 arch_sources = \
-	arch/atomic.h arch/basic.h arch/lock.h \
-	arch/memory.h arch/spin.h arch/stack.h 
+	arch/atomic.h arch/basic.h arch/cstack.h \
+	arch/lock.h arch/memory.h arch/spin.h
+
+if ARCH_X86
+arch_sources += \
+	arch/x86/asm.h arch/x86/atomic.h arch/x86/basic.h \
+	arch/x86/cstack-init.c arch/x86/cstack-switch.S \
+	arch/x86/fence.h arch/x86/lock.h arch/x86/spin.h
+endif
+
+if ARCH_X86_64
+arch_sources += \
+	arch/x86-64/asm.h arch/x86-64/atomic.h arch/x86-64/basic.h \
+	arch/x86-64/cstack-init.c arch/x86-64/cstack-switch.S \
+	arch/x86-64/fence.h arch/x86-64/lock.h arch/x86-64/spin.h
+endif
+
+if ARCH_GENERIC
+arch_sources += \
+	arch/generic/atomic.h arch/generic/basic.h \
+	arch/generic/cstack.c \
+	arch/generic/lock.h arch/generic/spin.h
+endif
 
 core_sources = \
 	core/combiner.c core/combiner.h \
@@ -41,23 +62,3 @@ mmem_SOURCES = \
 	common.h main.c
 
 mmem_LDADD = memcache/libmemcache.a base/libmmbase.a
-
-if ARCH_X86
-mmem_SOURCES += \
-	arch/x86/asm.h arch/x86/atomic.h arch/x86/basic.h \
-	arch/x86/fence.h arch/x86/lock.h arch/x86/spin.h \
-	arch/x86/stack-init.c arch/x86/stack-switch.S
-endif
-
-if ARCH_X86_64
-mmem_SOURCES += \
-	arch/x86-64/asm.h arch/x86-64/atomic.h arch/x86-64/basic.h \
-	arch/x86-64/fence.h arch/x86-64/lock.h arch/x86-64/spin.h \
-	arch/x86-64/stack-init.c arch/x86-64/stack-switch.S
-endif
-
-if ARCH_GENERIC
-mmem_SOURCES += \
-	arch/generic/atomic.h arch/generic/basic.h \
-	arch/generic/lock.h arch/generic/spin.h arch/generic/stack.c
-endif

@@ -25,7 +25,7 @@
 #include "base/log/log.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
-#include "base/mem/stack.h"
+#include "base/mem/cstack.h"
 #include "base/mem/pool.h"
 #include "base/thread/thread.h"
 
@@ -257,7 +257,7 @@ mm_task_create(const struct mm_task_attr *attr,
 			task = dead;
 		} else if (dead->stack_size != MM_TASK_STACK_SIZE) {
 			// The dead task has an unusual stack, free it.
-			mm_stack_destroy(dead->stack_base, dead->stack_size);
+			mm_cstack_destroy(dead->stack_base, dead->stack_size);
 			dead->stack_base = NULL;
 			// Now use that task.
 			mm_list_delete(link);
@@ -279,14 +279,14 @@ mm_task_create(const struct mm_task_attr *attr,
 
 	// Allocate a new stack if needed.
 	if (task->stack_base == NULL)
-		task->stack_base = mm_stack_create(task->stack_size, MM_PAGE_SIZE);
+		task->stack_base = mm_cstack_create(task->stack_size, MM_PAGE_SIZE);
 
 	// Setup the task entry point on its own stack and queue it for
 	// execution unless bootstrapping in which case it will be done
 	// later in a special way.
 	if (likely(!boot)) {
-		mm_stack_init(&task->stack_ctx, mm_task_entry,
-			      task->stack_base, task->stack_size);
+		mm_cstack_init(&task->stack_ctx, mm_task_entry,
+			       task->stack_base, task->stack_size);
 		mm_task_run(task);
 	}
 
@@ -315,7 +315,7 @@ mm_task_destroy(struct mm_task *task)
 	mm_task_free_chunks(task);
 
 	// Free the stack.
-	mm_stack_destroy(task->stack_base, task->stack_size);
+	mm_cstack_destroy(task->stack_base, task->stack_size);
 
 	// At last free the task struct.
 	mm_pool_free(&mm_task_pool, task);
@@ -387,11 +387,12 @@ mm_task_switch(mm_task_state_t state)
 	// is called there is at least a boot task in the run queue.  So
 	// there should never be a NULL value returned.
 	struct mm_task *new_task = mm_runq_get(&mm_core->runq);
+
 	new_task->state = MM_TASK_RUNNING;
 	mm_core->task = new_task;
 
 	// Switch to the new task relinquishing CPU control for a while.
-	mm_stack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
+	mm_cstack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
 
 	// Resume the task unless it has been canceled and it agrees to be
 	// canceled asynchronously. In that case it quits here.

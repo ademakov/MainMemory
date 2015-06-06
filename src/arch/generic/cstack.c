@@ -1,7 +1,7 @@
 /*
- * base/mem/stack.h - MainMemory stack support for tasks.
+ * arch/generic/cstack.c - MainMemory arch-specific call stack support.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_STACK_H
-#define BASE_MEM_STACK_H
+#include "arch/cstack.h"
 
-#include "common.h"
+#include "base/log/error.h"
 
-void * mm_stack_create(uint32_t stack_size, uint32_t guard_size);
+void
+mm_cstack_init(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
+{
+	if (unlikely(getcontext(ctx) < 0))
+		mm_fatal(errno, "getcontext");
+	ctx->uc_link = NULL;
+	ctx->uc_stack.ss_sp = stack;
+	ctx->uc_stack.ss_size = size;
+	makecontext(ctx, entry, 0);
+}
 
-void mm_stack_destroy(void *stack, uint32_t stack_size);
-
-#endif /* BASE_MEM_STACK_H */
+void
+mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx)
+{
+	swapcontext(old_ctx, new_ctx);
+}

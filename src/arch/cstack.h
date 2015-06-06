@@ -1,5 +1,5 @@
 /*
- * arch/stack.h - MainMemory arch-specific stack support.
+ * arch/cstack.h - MainMemory arch-specific call stack support.
  *
  * Copyright (C) 2012-2013  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef ARCH_STACK_H
-#define ARCH_STACK_H
+#ifndef ARCH_CSTACK_H
+#define ARCH_CSTACK_H
 
 #include "config.h"
 
@@ -33,18 +33,15 @@
 #endif
 
 #if ARCH_GENERIC
-typedef ucontext_t mm_stack_ctx_t;
+typedef ucontext_t mm_cstack_t;
 #else
-typedef void * mm_stack_ctx_t;
+typedef void * mm_cstack_t;
 #endif
 
-void mm_stack_init(mm_stack_ctx_t *ctx,
-		   void (*func)(void),
-		   char *stack, size_t size)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1, 2)))
+mm_cstack_init(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size);
 
-void mm_stack_switch(mm_stack_ctx_t *old_ctx,
-		     mm_stack_ctx_t *new_ctx)
-	__attribute__((nonnull(1, 2)));
+void __attribute__((nonnull(1, 2)))
+mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx);
 
-#endif /* ARCH_STACK_H */
+#endif /* ARCH_CSTACK_H */
