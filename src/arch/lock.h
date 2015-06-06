@@ -21,6 +21,7 @@
 #define ARCH_LOCK_H
 
 #include "config.h"
+#include "arch/memory.h"
 
 /*
  * mm_lock_acquire() is a test-and-set atomic operation along with
@@ -31,10 +32,8 @@
  */
 
 #if ARCH_X86
-# include "arch/memory.h"
 # include "arch/x86/lock.h"
 #elif ARCH_X86_64
-# include "arch/memory.h"
 # include "arch/x86-64/lock.h"
 #else
 # include "arch/generic/lock.h"

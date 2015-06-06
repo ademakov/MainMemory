@@ -23,6 +23,7 @@
 #include "base/util/exit.h"
 
 #include <stdarg.h>
+#include <stdlib.h>
 
 static bool mm_warning_enabled = false;
 
