@@ -80,17 +80,18 @@ mc_action_access_entry(struct mc_entry *entry)
 }
 
 static void
-mc_action_unlink_entry(struct mc_tpart *part, struct mm_link *pred, struct mc_entry *entry)
+mc_action_unlink_entry(struct mc_tpart *part, struct mm_slink *pred, struct mc_entry *entry)
 {
 	ASSERT(entry->state >= MC_ENTRY_USED_MIN);
 	ASSERT(entry->state <= MC_ENTRY_USED_MAX);
-	mm_link_cleave(pred, entry->link.next);
+	ASSERT(pred->next == &entry->link);
+	mm_stack_remove_next(pred);
 	entry->state = MC_ENTRY_NOT_USED;
 	part->volume -= mc_entry_size(entry);
 }
 
 static void
-mc_action_remove_entry(struct mc_tpart *part, struct mm_link *pred, struct mc_entry *entry)
+mc_action_remove_entry(struct mc_tpart *part, struct mm_slink *pred, struct mc_entry *entry)
 {
 	while (likely(pred != NULL)) {
 		if (pred->next == &entry->link) {
@@ -107,15 +108,15 @@ mc_action_free_entry(struct mc_tpart *part, struct mc_entry *entry)
 {
 	ASSERT(entry->state == MC_ENTRY_NOT_USED);
 	entry->state = MC_ENTRY_FREE;
-	mm_link_insert(&part->free_list, &entry->link);
+	mm_stack_insert(&part->free_list, &entry->link);
 	part->nentries_free++;
 }
 
 static void
-mc_action_free_entries(struct mc_tpart *part, struct mm_link *victims)
+mc_action_free_entries(struct mc_tpart *part, struct mm_stack *victims)
 {
-	while (!mm_link_empty(victims)) {
-		struct mm_link *link = mm_link_delete_head(victims);
+	while (!mm_stack_empty(victims)) {
+		struct mm_slink *link = mm_stack_remove(victims);
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_unref_entry(entry)) {
 			mc_entry_free_chunks(entry);
@@ -126,19 +127,19 @@ mc_action_free_entries(struct mc_tpart *part, struct mm_link *victims)
 
 static void
 mc_action_drop_expired(struct mc_tpart *part,
-		       struct mm_link *bucket,
-		       struct mm_link *expired)
+		       struct mm_stack *bucket,
+		       struct mm_stack *expired)
 {
 	mm_timeval_t time = mm_core->time_manager.time;
-	mm_link_init(expired);
+	mm_stack_prepare(expired);
 
-	struct mm_link *pred = bucket;
-	while (!mm_link_is_last(pred)) {
-		struct mm_link *link = pred->next;
+	struct mm_slink *pred = &bucket->head;
+	while (!mm_stack_is_tail(pred)) {
+		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_is_expired_entry(part, entry, time)) {
 			mc_action_unlink_entry(part, pred, entry);
-			mm_link_insert(expired, &entry->link);
+			mm_stack_insert(expired, &entry->link);
 		} else {
 			pred = link;
 		}
@@ -147,12 +148,12 @@ mc_action_drop_expired(struct mc_tpart *part,
 
 static bool
 mc_action_find_victims(struct mc_tpart *part,
-		       struct mm_link *victims,
+		       struct mm_stack *victims,
 		       uint32_t nrequired)
 {
 	mm_timeval_t time = mm_core_self()->time_manager.time;
 	uint32_t nvictims = 0;
-	mm_link_init(victims);
+	mm_stack_prepare(victims);
 
 	bool end = false;
 	while (nvictims < nrequired) {
@@ -170,9 +171,9 @@ mc_action_find_victims(struct mc_tpart *part,
 		if (state >= MC_ENTRY_USED_MIN && state <= MC_ENTRY_USED_MAX) {
 			if (mc_action_is_eviction_victim(part, hand, time)) {
 				uint32_t index = mc_table_index(part, hand->hash);
-				struct mm_link *bucket = &part->buckets[index];
-				mc_action_remove_entry(part, bucket, hand);
-				mm_link_insert(victims, &hand->link);
+				struct mm_stack *bucket = &part->buckets[index];
+				mc_action_remove_entry(part, &bucket->head, hand);
+				mm_stack_insert(victims, &hand->link);
 				++nvictims;
 			} else {
 				hand->state--;
@@ -197,14 +198,14 @@ mc_action_match_entry(struct mc_action *action, struct mc_entry *entry)
 
 static void
 mc_action_bucket_insert(struct mc_action *action,
-			struct mm_link *bucket,
+			struct mm_stack *bucket,
 			uint8_t state)
 {
 	ASSERT(action->new_entry->state == MC_ENTRY_NOT_USED);
 	ASSERT(state != MC_ENTRY_NOT_USED || state != MC_ENTRY_FREE);
 	action->new_entry->state = state;
 	action->new_entry->stamp = action->part->stamp;
-	mm_link_insert(bucket, &action->new_entry->link);
+	mm_stack_insert(bucket, &action->new_entry->link);
 	action->part->stamp += mc_table.nparts;
 	action->part->volume += mc_entry_size(action->new_entry);
 
@@ -214,11 +215,11 @@ mc_action_bucket_insert(struct mc_action *action,
 
 static void
 mc_action_bucket_lookup(struct mc_action *action,
-			struct mm_link *bucket,
-			struct mm_link *freelist)
+			struct mm_stack *bucket,
+			struct mm_stack *freelist)
 {
 	mc_action_drop_expired(action->part, bucket, freelist);
-	struct mm_link *link = mm_link_head(bucket);
+	struct mm_slink *link = mm_stack_head(bucket);
 	while (link != NULL) {
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_match_entry(action, entry)) {
@@ -234,17 +235,17 @@ mc_action_bucket_lookup(struct mc_action *action,
 
 static void
 mc_action_bucket_delete(struct mc_action *action,
-			struct mm_link *bucket,
-			struct mm_link *freelist)
+			struct mm_stack *bucket,
+			struct mm_stack *freelist)
 {
 	mc_action_drop_expired(action->part, bucket, freelist);
-	struct mm_link *pred = bucket;
-	while (!mm_link_is_last(pred)) {
-		struct mm_link *link = pred->next;
+	struct mm_slink *pred = &bucket->head;
+	while (!mm_stack_is_tail(pred)) {
+		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_match_entry(action, entry)) {
 			mc_action_unlink_entry(action->part, pred, entry);
-			mm_link_insert(freelist, &entry->link);
+			mm_stack_insert(freelist, &entry->link);
 			action->old_entry = entry;
 			return;
 		}
@@ -255,13 +256,13 @@ mc_action_bucket_delete(struct mc_action *action,
 
 static void
 mc_action_bucket_update(struct mc_action *action,
-			struct mm_link *bucket,
-			struct mm_link *freelist)
+			struct mm_stack *bucket,
+			struct mm_stack *freelist)
 {
 	mc_action_drop_expired(action->part, bucket, freelist);
-	struct mm_link *pred = bucket;
-	while (!mm_link_is_last(pred)) {
-		struct mm_link *link = pred->next;
+	struct mm_slink *pred = &bucket->head;
+	while (!mm_stack_is_tail(pred)) {
+		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_match_entry(action, entry)) {
 			action->old_entry = entry;
@@ -269,7 +270,7 @@ mc_action_bucket_update(struct mc_action *action,
 			if (action->entry_match) {
 				uint8_t state = entry->state;
 				mc_action_unlink_entry(action->part, pred, entry);
-				mm_link_insert(freelist, &entry->link);
+				mm_stack_insert(freelist, &entry->link);
 				mc_action_bucket_insert(action, bucket, state);
 			}
 			return;
@@ -289,11 +290,11 @@ mc_action_lookup_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_link freelist;
+	struct mm_stack freelist;
 	mc_table_lookup_lock(action->part);
 
 	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = &action->part->buckets[index];
 
 	mc_action_bucket_lookup(action, bucket, &freelist);
 	if (action->old_entry != NULL) {
@@ -302,7 +303,7 @@ mc_action_lookup_low(struct mc_action *action)
 	}
 
 	mc_table_lookup_unlock(action->part);
-	if (!mm_link_empty(&freelist)) {
+	if (!mm_stack_empty(&freelist)) {
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entries(action->part, &freelist);
 		mc_table_freelist_unlock(action->part);
@@ -333,16 +334,16 @@ mc_action_delete_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_link finish_list;
+	struct mm_stack finish_list;
 	mc_table_lookup_lock(action->part);
 
 	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = &action->part->buckets[index];
 
 	mc_action_bucket_delete(action, bucket, &finish_list);
 
 	mc_table_lookup_unlock(action->part);
-	if (!mm_link_empty(&finish_list)) {
+	if (!mm_stack_empty(&finish_list)) {
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entries(action->part, &finish_list);
 		mc_table_freelist_unlock(action->part);
@@ -359,8 +360,8 @@ mc_action_create_low(struct mc_action *action)
 	mc_table_freelist_lock(action->part);
 
 	for (;;) {
-		if (!mm_link_empty(&action->part->free_list)) {
-			struct mm_link *link = mm_link_delete_head(&action->part->free_list);
+		if (!mm_stack_empty(&action->part->free_list)) {
+			struct mm_slink *link = mm_stack_remove(&action->part->free_list);
 			action->new_entry = containerof(link, struct mc_entry, link);
 			ASSERT(action->part->nentries_free);
 			action->part->nentries_free--;
@@ -381,7 +382,7 @@ mc_action_create_low(struct mc_action *action)
 
 		mc_table_freelist_unlock(action->part);
 
-		struct mm_link victims;
+		struct mm_stack victims;
 		mc_table_lookup_lock(action->part);
 		mc_action_find_victims(action->part, &victims, 1);
 		mc_table_lookup_unlock(action->part);
@@ -398,7 +399,7 @@ mc_action_create_low(struct mc_action *action)
 	mc_table_reserve_entries(action->part);
 
 	action->new_entry->hash = action->hash;
-	mm_link_init(&action->new_entry->chunks);
+	mm_stack_prepare(&action->new_entry->chunks);
 
 	LEAVE();
 }
@@ -422,11 +423,11 @@ mc_action_insert_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_link freelist;
+	struct mm_stack freelist;
 	mc_table_lookup_lock(action->part);
 
 	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = &action->part->buckets[index];
 
 	mc_action_bucket_lookup(action, bucket, &freelist);
 	if (action->old_entry == NULL) {
@@ -434,7 +435,7 @@ mc_action_insert_low(struct mc_action *action)
 	}
 
 	mc_table_lookup_unlock(action->part);
-	if (!mm_link_empty(&freelist)) {
+	if (!mm_stack_empty(&freelist)) {
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entries(action->part, &freelist);
 		mc_table_freelist_unlock(action->part);
@@ -457,11 +458,11 @@ mc_action_update_low(struct mc_action *action)
 	if (action->old_entry != NULL)
 		mc_action_finish_low(action);
 
-	struct mm_link freelist;
+	struct mm_stack freelist;
 	mc_table_lookup_lock(action->part);
 
 	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = &action->part->buckets[index];
 
 	mc_action_bucket_update(action, bucket, &freelist);
 	if (action->entry_match) {
@@ -474,7 +475,7 @@ mc_action_update_low(struct mc_action *action)
 	}
 
 	mc_table_lookup_unlock(action->part);
-	if (!mm_link_empty(&freelist)) {
+	if (!mm_stack_empty(&freelist)) {
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entries(action->part, &freelist);
 		mc_table_freelist_unlock(action->part);
@@ -494,17 +495,17 @@ mc_action_upsert_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_link freelist;
+	struct mm_stack freelist;
 	mc_table_lookup_lock(action->part);
 
 	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_link *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = &action->part->buckets[index];
 
 	mc_action_bucket_delete(action, bucket, &freelist);
 	mc_action_bucket_insert(action, bucket, MC_ENTRY_USED_MIN);
 
 	mc_table_lookup_unlock(action->part);
-	if (!mm_link_empty(&freelist)) {
+	if (!mm_stack_empty(&freelist)) {
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entries(action->part, &freelist);
 		mc_table_freelist_unlock(action->part);
@@ -532,21 +533,21 @@ mc_action_stride_low(struct mc_action *action)
 	uint32_t mask = half_size + half_size - 1;
 
 	for (uint32_t count = 0; count < MC_TABLE_STRIDE; count++) {
-		struct mm_link s_entries, t_entries;
-		mm_link_init(&s_entries);
-		mm_link_init(&t_entries);
+		struct mm_stack s_entries, t_entries;
+		mm_stack_prepare(&s_entries);
+		mm_stack_prepare(&t_entries);
 
-		struct mm_link *link = mm_link_head(&action->part->buckets[source]);
+		struct mm_slink *link = mm_stack_head(&action->part->buckets[source]);
 		while (link != NULL) {
-			struct mm_link *next = link->next;
+			struct mm_slink *next = link->next;
 
 			struct mc_entry *entry = containerof(link, struct mc_entry, link);
 			uint32_t index = (entry->hash >> mc_table.part_bits) & mask;
 			if (index == source) {
-				mm_link_insert(&s_entries, link);
+				mm_stack_insert(&s_entries, link);
 			} else {
 				ASSERT(index == target);
-				mm_link_insert(&t_entries, link);
+				mm_stack_insert(&t_entries, link);
 			}
 
 			link = next;
@@ -569,7 +570,7 @@ mc_action_evict_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_link victims;
+	struct mm_stack victims;
 	mc_table_lookup_lock(action->part);
 	bool found = mc_action_find_victims(action->part, &victims, 32);
 	mc_table_lookup_unlock(action->part);

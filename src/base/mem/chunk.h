@@ -51,7 +51,11 @@ typedef uint16_t mm_chunk_t;
 
 struct mm_chunk_base
 {
-	struct mm_link link;
+	union
+	{
+		struct mm_slink slink;
+		struct mm_qlink qlink;
+	};
 	mm_chunk_t tag;
 };
 
@@ -119,7 +123,7 @@ void __attribute__((nonnull(1)))
 mm_chunk_destroy(struct mm_chunk *chunk);
 
 void
-mm_chunk_destroy_chain(struct mm_link *link);
+mm_chunk_destroy_chain(struct mm_slink *link);
 
 void __attribute__((nonnull(1)))
 mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush);

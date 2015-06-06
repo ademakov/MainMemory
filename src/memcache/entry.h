@@ -40,8 +40,8 @@ struct mc_action;
 
 struct mc_entry
 {
-	struct mm_link link;
-	struct mm_link chunks;
+	struct mm_slink link;
+	struct mm_stack chunks;
 
 	uint32_t hash;
 	uint32_t exp_time;
@@ -83,8 +83,8 @@ mc_entry_size(struct mc_entry *entry)
 static inline char *
 mc_entry_getkey(struct mc_entry *entry)
 {
-	struct mm_link *link = mm_link_head(&entry->chunks);
-	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+	struct mm_slink *link = mm_stack_head(&entry->chunks);
+	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
 	return chunk->data;
 }
 
@@ -98,24 +98,24 @@ mc_entry_setkey(struct mc_entry *entry, const char *key)
 static inline char *
 mc_entry_getvalue(struct mc_entry *entry)
 {
-	struct mm_link *link = mm_link_head(&entry->chunks);
-	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+	struct mm_slink *link = mm_stack_head(&entry->chunks);
+	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
 	return chunk->data + entry->key_len;
 }
 
 static inline void
 mc_entry_alloc_chunks(struct mc_entry *entry)
 {
-	ASSERT(mm_link_empty(&entry->chunks));
+	ASSERT(mm_stack_empty(&entry->chunks));
 	uint32_t size = mc_entry_size(entry);
 	struct mm_chunk *chunk = mm_chunk_create_private(size);
-	mm_link_insert(&entry->chunks, &chunk->base.link);
+	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 }
 
 static inline void
 mc_entry_free_chunks(struct mc_entry *entry)
 {
-	mm_chunk_destroy_chain(mm_link_head(&entry->chunks));
+	mm_chunk_destroy_chain(mm_stack_head(&entry->chunks));
 }
 
 void __attribute__((nonnull(1, 2)))

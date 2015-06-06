@@ -23,7 +23,6 @@
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
-#include "base/log/trace.h"
 #include "base/thread/domain.h"
 
 #include <sched.h>
@@ -266,11 +265,11 @@ mm_thread_create(struct mm_thread_attr *attr,
 #endif
 
 	// Initialize deferred chunks info.
-	mm_link_init(&thread->deferred_chunks);
+	mm_stack_prepare(&thread->deferred_chunks);
 	thread->deferred_chunks_count = 0;
 
 	// Initialize log message queue.
-	mm_queue_init(&thread->log_queue);
+	mm_queue_prepare(&thread->log_queue);
 
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;

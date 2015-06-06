@@ -29,7 +29,7 @@
 // An entry for a waiting task.
 struct mm_wait
 {
-	struct mm_link link;
+	struct mm_slink link;
 	struct mm_task *task;
 };
 
@@ -106,10 +106,10 @@ mm_wait_cache_prepare(struct mm_wait_cache *cache)
 {
 	ENTER();
 
-	mm_link_init(&cache->cache);
+	mm_stack_prepare(&cache->cache);
 	cache->cache_size = 0;
 
-	mm_link_init(&cache->pending);
+	mm_stack_prepare(&cache->pending);
 
 	LEAVE();
 }
@@ -124,7 +124,7 @@ mm_wait_cache_cleanup(struct mm_wait_cache *cache __mm_unused__)
 static void
 mm_wait_cache_put(struct mm_wait_cache *cache, struct mm_wait *wait)
 {
-	mm_link_insert(&cache->cache, &wait->link);
+	mm_stack_insert(&cache->cache, &wait->link);
 	cache->cache_size++;
 }
 
@@ -132,9 +132,9 @@ static struct mm_wait *
 mm_wait_cache_get_low(struct mm_wait_cache *cache)
 {
 	ASSERT(cache->cache_size > 0);
-	ASSERT(!mm_link_empty(&cache->cache));
+	ASSERT(!mm_stack_empty(&cache->cache));
 
-	struct mm_link *link = mm_link_delete_head(&cache->cache);
+	struct mm_slink *link = mm_stack_remove(&cache->cache);
 	struct mm_wait *wait = containerof(link, struct mm_wait, link);
 	cache->cache_size--;
 
@@ -162,7 +162,7 @@ mm_wait_cache_get(struct mm_wait_cache *cache)
 static void
 mm_wait_add_pending(struct mm_wait_cache *cache, struct mm_wait *wait)
 {
-	mm_link_insert(&cache->pending, &wait->link);
+	mm_stack_insert(&cache->pending, &wait->link);
 }
 
 void
@@ -170,12 +170,12 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 {
 	ENTER();
 
-	if (!mm_link_empty(&cache->pending)) {
-		struct mm_link pending = cache->pending;
-		mm_link_init(&cache->pending);
+	if (!mm_stack_empty(&cache->pending)) {
+		struct mm_stack pending = cache->pending;
+		mm_stack_prepare(&cache->pending);
 
-		while (!mm_link_empty(&pending)) {
-			struct mm_link *link = mm_link_delete_head(&pending);
+		while (!mm_stack_empty(&pending)) {
+			struct mm_slink *link = mm_stack_remove(&pending);
 			struct mm_wait *wait = containerof(link, struct mm_wait, link);
 			struct mm_task *task = mm_memory_load(wait->task);
 			if (task != NULL) {
@@ -205,7 +205,7 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 {
 	ENTER();
 
-	mm_link_init(&waitset->set);
+	mm_stack_prepare(&waitset->set);
 	waitset->core = MM_CORE_NONE;
 
 	LEAVE();
@@ -219,7 +219,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
+	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
 	mm_regular_unlock(lock);
@@ -241,7 +241,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
+	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
 	mm_regular_unlock(lock);
@@ -261,15 +261,15 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	ENTER();
 
 	// Capture the waitset.
-	struct mm_link set = waitset->set;
-	mm_link_init(&waitset->set);
+	struct mm_stack set = waitset->set;
+	mm_stack_prepare(&waitset->set);
 
 	// Release the waitset lock.
 	mm_regular_unlock(lock);
 
-	while (!mm_link_empty(&set)) {
+	while (!mm_stack_empty(&set)) {
 		// Get the next wait entry.
-		struct mm_link *link = mm_link_delete_head(&set);
+		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_task *task = mm_memory_load(wait->task);
 
@@ -297,7 +297,7 @@ mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core)
 	ENTER();
 	ASSERT(core != MM_CORE_NONE && core != MM_CORE_SELF);
 
-	mm_link_init(&waitset->set);
+	mm_stack_prepare(&waitset->set);
 	waitset->core = core;
 
 	LEAVE();
@@ -312,7 +312,7 @@ mm_waitset_local_wait(struct mm_waitset *waitset)
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
+	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
 	mm_task_block();
@@ -331,7 +331,7 @@ mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	// Enqueue the task.
 	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
 	wait->task = mm_task_self();
-	mm_link_insert(&waitset->set, &wait->link);
+	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
 	mm_timer_block(timeout);
@@ -348,12 +348,12 @@ mm_waitset_local_broadcast(struct mm_waitset *waitset)
 	ASSERT(waitset->core == mm_core_selfid());
 
 	// Capture the waitset.
-	struct mm_link set = waitset->set;
-	mm_link_init(&waitset->set);
+	struct mm_stack set = waitset->set;
+	mm_stack_prepare(&waitset->set);
 
-	while (!mm_link_empty(&set)) {
+	while (!mm_stack_empty(&set)) {
 		// Get the next wait entry.
-		struct mm_link *link = mm_link_delete_head(&set);
+		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_task *task = wait->task;
 

@@ -31,9 +31,9 @@ struct mm_task;
 struct mm_wait_cache
 {
 	/* The cache of free wait entries. */
-	struct mm_link cache;
+	struct mm_stack cache;
 	/* The cache of busy wait entries. */
-	struct mm_link pending;
+	struct mm_stack pending;
 	/* The number of free entries in the wait cache. */
 	uint32_t cache_size;
 };
@@ -44,7 +44,7 @@ struct mm_waitset
 	union
 	{
 		/* The task queue. */
-		struct mm_link set;
+		struct mm_stack set;
 		struct mm_task *task;
 	};
 	/* The core the wait-set is pinned to. It is equal to

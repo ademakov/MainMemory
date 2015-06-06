@@ -1,7 +1,7 @@
 /*
  * core/task.c - MainMemory tasks.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -172,7 +172,7 @@ mm_task_free_chunks(struct mm_task *task)
 	ENTER();
 
 	while (!mm_list_empty(&task->chunks)) {
-		struct mm_list *link = mm_list_delete_head(&task->chunks);
+		struct mm_link *link = mm_list_remove_head(&task->chunks);
 		mm_private_free(link);
 	}
 
@@ -194,13 +194,13 @@ mm_task_new(void)
 	task->stack_base = NULL;
 
 	// Initialize the task ports list.
-	mm_list_init(&task->ports);
+	mm_list_prepare(&task->ports);
 
 	// Initialize the cleanup handler list.
 	task->cleanup = NULL;
 
 	// Initialize the dynamic memory list.
-	mm_list_init(&task->chunks);
+	mm_list_prepare(&task->chunks);
 
 	return task;
 }
@@ -244,7 +244,7 @@ mm_task_create(const struct mm_task_attr *attr,
 	// Try to reuse a dead task.
 	if (likely(!boot) && !mm_list_empty(&mm_core->dead)) {
 		// Get the last dead task.
-		struct mm_list *link = mm_list_head(&mm_core->dead);
+		struct mm_link *link = mm_list_head(&mm_core->dead);
 		struct mm_task *dead = containerof(link, struct mm_task, queue);
 
 		// Check it against the required stack size.
@@ -301,12 +301,16 @@ mm_task_destroy(struct mm_task *task)
 {
 	ENTER();
 	ASSERT(task->state == MM_TASK_INVALID || task->state == MM_TASK_BLOCKED);
+#if ENABLE_TASK_IO_FLAGS
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
+#else
+	ASSERT((task->flags & MM_TASK_WAITING) == 0);
+#endif
 
 	// Destroy the ports.
 	while (!mm_list_empty(&task->ports)) {
 		// TODO: ensure that ports are not referenced from elsewhere.
-		struct mm_list *link = mm_list_head(&task->ports);
+		struct mm_link *link = mm_list_head(&task->ports);
 		struct mm_port *port = containerof(link, struct mm_port, ports);
 		mm_port_destroy(port);
 	}
@@ -482,7 +486,11 @@ mm_task_exit(mm_value_t result)
 	mm_task_cleanup(task);
 
 	// At this point the task must not be in any queue.
+#if ENABLE_TASK_IO_FLAGS
 	ASSERT((task->flags & (MM_TASK_WAITING | MM_TASK_READING | MM_TASK_WRITING)) == 0);
+#else
+	ASSERT((task->flags & MM_TASK_WAITING) == 0);
+#endif
 
 	// Free the dynamic memory.
 	mm_task_free_chunks(task);
@@ -611,7 +619,7 @@ mm_task_alloc(size_t size)
 
 	/* Keep the allocated memory in the task's chunk list. */
 	struct mm_task *task = mm_task_self();
-	mm_list_append(&task->chunks, (struct mm_list *) ptr);
+	mm_list_append(&task->chunks, (struct mm_link *) ptr);
 
 	/* Get the address past the list link. */
 	ptr = (void *) (((char *) ptr) + sizeof(struct mm_list));
@@ -627,7 +635,7 @@ mm_task_free(void *ptr)
 
 	if (likely(ptr != NULL)) {
 		/* Get the real start address of the chunk. */
-		struct mm_list *link = (struct mm_list *) (((char *) ptr) - sizeof(struct mm_list));
+		struct mm_link *link = (struct mm_link *) (((char *) ptr) - sizeof(struct mm_list));
 
 		/* Remove it from the task's chunk list. */
 		mm_list_delete(link);

@@ -1130,7 +1130,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	size_t srv_core = mm_bitset_find(&srv->affinity, 0);
 
 	// Initialize the clients list.
-	mm_list_init(&srv->clients);
+	mm_list_prepare(&srv->clients);
 
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);

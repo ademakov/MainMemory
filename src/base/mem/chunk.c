@@ -42,7 +42,7 @@ mm_chunk_create_global(size_t size)
 	size += sizeof(struct mm_chunk);
 	struct mm_chunk *chunk = mm_global_alloc(size);
 	chunk->base.tag = MM_CHUNK_GLOBAL;
-	mm_link_init(&chunk->base.link);
+	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }
 
@@ -52,7 +52,7 @@ mm_chunk_create_common(size_t size)
 	size += sizeof(struct mm_chunk);
 	struct mm_chunk *chunk = mm_common_alloc(size);
 	chunk->base.tag = MM_CHUNK_COMMON;
-	mm_link_init(&chunk->base.link);
+	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }
 
@@ -62,7 +62,7 @@ mm_chunk_create_regular(size_t size)
 	size += sizeof(struct mm_chunk);
 	struct mm_chunk *chunk = mm_regular_alloc(size);
 	chunk->base.tag = MM_CHUNK_REGULAR;
-	mm_link_init(&chunk->base.link);
+	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }
 
@@ -72,7 +72,7 @@ mm_chunk_create_private(size_t size)
 	size += sizeof(struct mm_chunk);
 	struct mm_chunk *chunk = mm_private_alloc(size);
 	chunk->base.tag = mm_thread_getnumber(mm_thread_self());
-	mm_link_init(&chunk->base.link);
+	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }
 
@@ -130,17 +130,17 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		mm_private_free(chunk);
 	} else {
 		thread->deferred_chunks_count++;
-		mm_link_insert(&thread->deferred_chunks, &chunk->base.link);
+		mm_stack_insert(&thread->deferred_chunks, &chunk->base.slink);
 		mm_chunk_enqueue_deferred(thread, false);
 	}
 }
 
 void
-mm_chunk_destroy_chain(struct mm_link *link)
+mm_chunk_destroy_chain(struct mm_slink *link)
 {
 	while (link != NULL) {
-		struct mm_link *next = link->next;
-		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+		struct mm_slink *next = link->next;
+		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
 		mm_chunk_destroy(chunk);
 		link = next;
 	}
@@ -153,14 +153,14 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 		return;
 
 	// Capture all the deferred chunks.
-	struct mm_link chunks = thread->deferred_chunks;
-	mm_link_init(&thread->deferred_chunks);
+	struct mm_stack chunks = thread->deferred_chunks;
+	mm_stack_prepare(&thread->deferred_chunks);
 	thread->deferred_chunks_count = 0;
 
 	// Try to submit the chunks to respective reclamation queues.
-	while (!mm_link_empty(&chunks)) {
-		struct mm_link *link = mm_link_delete_head(&chunks);
-		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.link);
+	while (!mm_stack_empty(&chunks)) {
+		struct mm_slink *link = mm_stack_remove(&chunks);
+		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
 
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
@@ -180,7 +180,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 			// If failed to submit the chunk after a number of
 			// attempts then defer it again.
 			if (backoff >= MM_BACKOFF_SMALL) {
-				mm_link_insert(&thread->deferred_chunks, link);
+				mm_stack_insert(&thread->deferred_chunks, link);
 				thread->deferred_chunks_count++;
 
 				// Wake up a possibly sleeping origin thread.

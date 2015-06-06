@@ -132,7 +132,7 @@ struct mm_net_socket
 	struct mm_net_server *server;
 
 	/* A link in the server's list of all client sockets. */
-	struct mm_list clients;
+	struct mm_link clients;
 
 	/* Client address. */
 	struct mm_net_peer_addr peer;

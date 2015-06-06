@@ -115,8 +115,8 @@ mm_pool_prepare_low(struct mm_pool *pool,
 {
 	ASSERT(item_size < 0x200);
 
-	if (item_size < sizeof(struct mm_link))
-		item_size = sizeof(struct mm_link);
+	if (item_size < sizeof(struct mm_slink))
+		item_size = sizeof(struct mm_slink);
 
 	mm_verbose("make the '%s' memory pool with element size %u",
 		   pool_name, item_size);
@@ -133,7 +133,7 @@ mm_pool_prepare_low(struct mm_pool *pool,
 	pool->block_cur_ptr = NULL;
 	pool->block_end_ptr = NULL;
 
-	mm_link_init(&pool->free_list);
+	mm_stack_prepare(&pool->free_list);
 
 	pool->pool_name = mm_global_strdup(pool_name);
 }
@@ -232,8 +232,8 @@ mm_pool_local_alloc(struct mm_pool *pool)
 	ENTER();
 	void *item;
 
-	if (!mm_link_empty(&pool->free_list))
-		item = mm_link_delete_head(&pool->free_list);
+	if (!mm_stack_empty(&pool->free_list))
+		item = mm_stack_remove(&pool->free_list);
 	else
 		item = mm_pool_alloc_new(pool);
 
@@ -247,7 +247,7 @@ mm_pool_local_free(struct mm_pool *pool, void *item)
 	ENTER();
 	ASSERT(mm_pool_contains(pool, item));
 
-	mm_link_insert(&pool->free_list, (struct mm_link *) item);
+	mm_stack_insert(&pool->free_list, (struct mm_slink *) item);
 
 	LEAVE();
 }
@@ -281,11 +281,11 @@ mm_pool_prepare(struct mm_pool *pool, const char *name,
 struct mm_pool_shared_cdata
 {
 	/* Free items cache. */
-	struct mm_link cache;
+	struct mm_stack cache;
 
 	/* ABA-problem guard. */
-	struct mm_link *item_guard;
-	struct mm_link **guard_buffer;
+	struct mm_slink *item_guard;
+	struct mm_slink **guard_buffer;
 
 	/* Number of items in the cache. */
 	uint32_t cache_size;
@@ -304,14 +304,14 @@ mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 	struct mm_pool_shared_cdata *cdata =
 		MM_CDATA_DEREF(thread, pool->shared_data.cdata);
 
-	if (!mm_link_empty(&cdata->cache)) {
+	if (!mm_stack_empty(&cdata->cache)) {
 		// Get an item from the core-local cache.
-		item = mm_link_delete_head(&cdata->cache);
+		item = mm_stack_remove(&cdata->cache);
 		cdata->cache_size--;
 
 	} else {
 		// Get an item form the shared free list.
-		struct mm_link *head = mm_link_head(&pool->free_list);
+		struct mm_slink *head = mm_stack_atomic_load_head(&pool->free_list);
 		if (head != NULL) {
 			for (uint32_t b = 0; ; b = mm_backoff(b)) {
 				// Prevent ABA-problem.
@@ -322,8 +322,8 @@ mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 				mm_memory_strict_fence();
 
 				// Try to pop the item atomically.
-				struct mm_link *old_head = head;
-				head = mm_link_cas_head(&pool->free_list, head, head->next);
+				struct mm_slink *old_head = head;
+				head = mm_stack_atomic_cas_head(&pool->free_list, head, head->next);
 				if (head == old_head || head == NULL)
 					break;
   			}
@@ -370,7 +370,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 	}
 
 	// Add the item to the core-local cache.
-	mm_link_insert(&cdata->cache, (struct mm_link *) item);
+	mm_stack_insert(&cdata->cache, (struct mm_slink *) item);
 	cdata->cache_size++;
 
 	// If the core-local cache is too large move some number of items
@@ -378,23 +378,23 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 	if (cdata->cache_full) {
 		// Collect items that might be subjects to ABA-problem.
 		int nguards = 0;
-		struct mm_link **guards = cdata->guard_buffer;
+		struct mm_slink **guards = cdata->guard_buffer;
 		mm_thread_t n = mm_regular_domain.nthreads;
 		for (mm_thread_t i = 0; i < n; i++) {
 			struct mm_pool_shared_cdata *cd =
 				MM_CDATA_DEREF(i, pool->shared_data.cdata);
-			struct mm_link *guard = mm_memory_load(cd->item_guard);
+			struct mm_slink *guard = mm_memory_load(cd->item_guard);
 			if (guard != NULL)
 				guards[nguards++] = guard;
 		}
 
 		// Collect the items to move.
 		int nitems = 0;
-		struct mm_link *head = NULL;
-		struct mm_link *tail = NULL;
-		struct mm_link *prev = &cdata->cache;
+		struct mm_slink *head = NULL;
+		struct mm_slink *tail = NULL;
+		struct mm_slink *prev = &cdata->cache.head;
 		while (nitems < MM_POOL_FREE_BATCH) {
-			struct mm_link *link = prev->next;
+			struct mm_slink *link = prev->next;
 			if (link == NULL)
 				break;
 
@@ -427,11 +427,11 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 			// wrt the CAS below.
 			mm_memory_fence();
 
-			struct mm_link *old_head = mm_link_shared_head(&pool->free_list);
+			struct mm_slink *old_head = mm_stack_atomic_load_head(&pool->free_list);
 			for (uint32_t b = 0; ; b = mm_backoff(b)) {
 				tail->next = old_head;
-				struct mm_link *cur_head
-					= mm_link_cas_head(&pool->free_list, old_head, head);
+				struct mm_slink *cur_head
+					= mm_stack_atomic_cas_head(&pool->free_list, old_head, head);
 				if (cur_head == old_head)
 					break;
 				old_head = cur_head;
@@ -480,7 +480,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 		struct mm_pool_shared_cdata *cdata =
 			MM_CDATA_DEREF(i, pool->shared_data.cdata);
 
-		mm_link_init(&cdata->cache);
+		mm_stack_prepare(&cdata->cache);
 		cdata->item_guard = 0;
 		cdata->guard_buffer = mm_global_calloc(n, sizeof(struct mm_link *));
 		cdata->cache_size = 0;
@@ -510,8 +510,8 @@ mm_pool_global_alloc(struct mm_pool *pool)
 	mm_common_lock(&pool->global_data.free_lock);
 
 	void *item;
-	if (!mm_link_empty(&pool->free_list)) {
-		item = mm_link_delete_head(&pool->free_list);
+	if (!mm_stack_empty(&pool->free_list)) {
+		item = mm_stack_remove(&pool->free_list);
 
 		mm_common_unlock(&pool->global_data.free_lock);
 	} else {
@@ -533,7 +533,7 @@ mm_pool_global_free(struct mm_pool *pool, void *item)
 	ASSERT(mm_pool_contains(pool, item));
 
 	mm_common_lock(&pool->global_data.free_lock);
-	mm_link_insert(&pool->free_list, (struct mm_link *) item);
+	mm_stack_insert(&pool->free_list, (struct mm_slink *) item);
 	mm_common_unlock(&pool->global_data.free_lock);
 
 	LEAVE();

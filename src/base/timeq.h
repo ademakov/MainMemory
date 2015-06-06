@@ -1,7 +1,7 @@
 /*
  * base/timeq.h - MainMemory time queue.
  *
- * Copyright (C) 2013-2014  Ivan Demakov, Aleksey Demakov
+ * Copyright (C) 2013-2015  Ivan Demakov, Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,7 +53,7 @@ typedef int32_t mm_timeq_ident_t;
 
 struct mm_timeq_entry
 {
-	struct mm_list queue;
+	struct mm_link queue;
 	mm_timeval_t value;
 	mm_timeq_index_t index;
 	mm_timeq_ident_t ident;

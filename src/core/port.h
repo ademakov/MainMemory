@@ -40,7 +40,7 @@ struct mm_port
 	struct mm_task *task;
 
 	/* A link in the task's ports list. */
-	struct mm_list ports;
+	struct mm_link ports;
 
 	/* The tasks blocked on the port send. */
 	struct mm_waitset blocked_senders;

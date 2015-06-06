@@ -48,7 +48,7 @@ struct mc_table mc_table;
 static inline size_t
 mc_table_buckets_size(uint16_t nparts, uint32_t nbuckets)
 {
-	size_t space = nbuckets * sizeof(struct mm_link);
+	size_t space = nbuckets * sizeof(struct mm_stack);
 	return nparts * mm_round_up(space, MM_PAGE_SIZE);
 }
 
@@ -279,13 +279,13 @@ mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
 	char *entries = ((char *) mc_table.entries_base)
 			+ mc_table_entries_size(index, mc_table.nentries_max);
 
-	part->buckets = (struct mm_link *) buckets;
+	part->buckets = (struct mm_stack *) buckets;
 	part->entries = (struct mc_entry *) entries;
 	part->entries_end = part->entries;
 
 	part->clock_hand = part->entries;
 
-	mm_link_init(&part->free_list);
+	mm_stack_prepare(&part->free_list);
 
 	part->nbuckets = 0;
 	part->nbuckets = 0;
@@ -423,7 +423,7 @@ mc_table_term(void)
 	for (mm_core_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
 		for (uint32_t i = 0; i < part->nbuckets; i++) {
-			struct mm_link *link = mm_link_head(&part->buckets[i]);
+			struct mm_slink *link = mm_stack_head(&part->buckets[i]);
 			while (link != NULL) {
 				struct mc_entry *entry =
 					containerof(link, struct mc_entry, link);

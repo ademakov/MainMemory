@@ -1,7 +1,7 @@
 /*
  * base/timeq.c - MainMemory time queue.
  *
- * Copyright (C) 2013-2014  Ivan Demakov, Aleksey Demakov
+ * Copyright (C) 2013-2015  Ivan Demakov, Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -65,7 +65,7 @@ mm_timeq_create(mm_arena_t arena)
 {
 	struct mm_timeq *timeq = mm_arena_alloc(arena, sizeof(struct mm_timeq));
 
-	mm_list_init(&timeq->fe);
+	mm_list_prepare(&timeq->fe);
 
 	timeq->t1 = NULL;
 	timeq->t1_start = MM_TIMEVAL_MIN;
@@ -73,7 +73,7 @@ mm_timeq_create(mm_arena_t arena)
 	timeq->t1_count = 0;
 	timeq->t1_index = 0;
 
-	mm_list_init(&timeq->t2);
+	mm_list_prepare(&timeq->t2);
 	timeq->t2_start = MM_TIMEVAL_MIN;
 	timeq->t2_min = MM_TIMEVAL_MAX;
 	timeq->t2_max = MM_TIMEVAL_MIN;
@@ -127,9 +127,9 @@ mm_timeq_set_max_bucket_count(struct mm_timeq *timeq, int n)
 static void
 mm_timeq_insert_fe(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
-	struct mm_list *fe_queue_link = &timeq->fe;
+	struct mm_link *fe_queue_link = &timeq->fe.base;
 	while (!mm_list_is_head(&timeq->fe, fe_queue_link)) {
-		struct mm_list *prev_link = fe_queue_link->prev;
+		struct mm_link *prev_link = fe_queue_link->prev;
 		struct mm_timeq_entry *prev_entry
 			= containerof(prev_link, struct mm_timeq_entry, queue);
 		if (prev_entry->value <= entry->value)
@@ -213,7 +213,7 @@ mm_timeq_getmin(struct mm_timeq *timeq)
 restart:
 	if (!mm_list_empty(&timeq->fe)) {
 
-		struct mm_list *link = mm_list_head(&timeq->fe);
+		struct mm_link *link = mm_list_head(&timeq->fe);
 		entry = containerof(link, struct mm_timeq_entry, queue);
 		DEBUG("fe entry: %p", entry);
 
@@ -227,8 +227,8 @@ restart:
 		if (timeq->t1_index < timeq->t1_count) {
 
 			/* The bucket is not empty. */
-			struct mm_list *head = mm_list_head(&timeq->t1[timeq->t1_index]);
-			struct mm_list *tail = mm_list_tail(&timeq->t1[timeq->t1_index]);
+			struct mm_link *head = mm_list_head(&timeq->t1[timeq->t1_index]);
+			struct mm_link *tail = mm_list_tail(&timeq->t1[timeq->t1_index]);
 
 			/* If the bucket has exactly one item, return the item. */
 			/* In other case, move all items in front end structure. */
@@ -240,13 +240,13 @@ restart:
 			} else {
 
 				DEBUG("erase t1 index: %d", timeq->t1_index);
-				mm_list_init(&timeq->t1[timeq->t1_index]);
+				mm_list_prepare(&timeq->t1[timeq->t1_index]);
 
 				timeq->t1_index++;
 				timeq->t1_start += timeq->t1_width;
 
 				for (;;) {
-					struct mm_list *next = head->next;
+					struct mm_link *next = head->next;
 
 					entry = containerof(head, struct mm_timeq_entry, queue);
 					mm_timeq_insert_fe(timeq, entry);
@@ -261,7 +261,7 @@ restart:
 		} else if (timeq->t2_num == 1) {
 
 			/* All buckets are empty and only one item in T2 */
-			struct mm_list *link = mm_list_head(&timeq->t2);
+			struct mm_link *link = mm_list_head(&timeq->t2);
 			entry = containerof(link, struct mm_timeq_entry, queue);
 			DEBUG("t2 entry: %p", entry);
 
@@ -293,7 +293,7 @@ restart:
 				// for them point to the old locations. Assuming
 				// that the lists are empty.
 				for (int i = 0; i < count; ++i)
-					mm_list_init(&timeq->t1[i]);
+					mm_list_prepare(&timeq->t1[i]);
 				timeq->t1_count = count;
 			}
 
@@ -306,13 +306,13 @@ restart:
 			timeq->t2_max = MM_TIMEVAL_MIN;
 			timeq->t2_num = 0;
 
-			struct mm_list *head = mm_list_head(&timeq->t2);
-			struct mm_list *tail = mm_list_tail(&timeq->t2);
-			mm_list_init(&timeq->t2);
+			struct mm_link *head = mm_list_head(&timeq->t2);
+			struct mm_link *tail = mm_list_tail(&timeq->t2);
+			mm_list_prepare(&timeq->t2);
 			DEBUG("t2 erase");
 
 			for (;;) {
-				struct mm_list *next = head->next;
+				struct mm_link *next = head->next;
 
 				entry = containerof(head, struct mm_timeq_entry, queue);
 				if (timeq->t2_start <= entry->value) {

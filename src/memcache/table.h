@@ -36,7 +36,7 @@
 struct mc_tpart
 {
 	/* The hash table buckets. */
-	struct mm_link *buckets;
+	struct mm_stack *buckets;
 
 	/* The pool of all table entries. */
 	struct mc_entry *entries;
@@ -46,7 +46,7 @@ struct mc_tpart
 	struct mc_entry *clock_hand;
 
 	/* The list of unused entries. */
-	struct mm_link free_list;
+	struct mm_stack free_list;
 
 	/* The number of buckets. */
 	uint32_t nbuckets;

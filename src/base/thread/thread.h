@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/barrier.h"
 #include "base/list.h"
+#include "base/log/trace.h"
 #include "base/mem/space.h"
 #include <pthread.h>
 
@@ -70,7 +71,7 @@ struct mm_thread
 #endif
 
 	/* Memory chunks from other threads with deferred destruction. */
-	struct mm_link deferred_chunks;
+	struct mm_stack deferred_chunks;
 	size_t deferred_chunks_count;
 
 	/* The log message storage. */

@@ -1,7 +1,7 @@
 /*
  * core/task.h - MainMemory tasks.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -131,8 +131,8 @@ struct mm_task_cleanup_rec
 struct mm_task
 {
 	/* A link in a run/dead queue. */
-	struct mm_list queue;
-	struct mm_list wait_queue;
+	struct mm_link queue;
+	struct mm_link wait_queue;
 
 	/* The task status. */
 	mm_task_state_t state;

@@ -405,8 +405,8 @@ mc_command_append(struct mc_command *command)
 
 	char *append_value = mc_entry_getvalue(new_entry);
 	uint32_t append_value_len = new_entry->value_len;
-	struct mm_link chunks = new_entry->chunks;
-	mm_link_init(&new_entry->chunks);
+	struct mm_stack chunks = new_entry->chunks;
+	mm_stack_prepare(&new_entry->chunks);
 
 	mc_action_lookup(&command->action);
 
@@ -431,7 +431,7 @@ mc_command_append(struct mc_command *command)
 			break;
 	}
 
-	mm_chunk_destroy_chain(mm_link_head(&chunks));
+	mm_chunk_destroy_chain(mm_stack_head(&chunks));
 
 	LEAVE();
 }
@@ -445,8 +445,8 @@ mc_command_prepend(struct mc_command *command)
 
 	char *prepend_value = mc_entry_getvalue(new_entry);
 	uint32_t prepend_value_len = new_entry->value_len;
-	struct mm_link chunks = new_entry->chunks;
-	mm_link_init(&new_entry->chunks);
+	struct mm_stack chunks = new_entry->chunks;
+	mm_stack_prepare(&new_entry->chunks);
 
 	mc_action_lookup(&command->action);
 
@@ -471,7 +471,7 @@ mc_command_prepend(struct mc_command *command)
 			break;
 	}
 
-	mm_chunk_destroy_chain(mm_link_head(&chunks));
+	mm_chunk_destroy_chain(mm_stack_head(&chunks));
 
 	LEAVE();
 }

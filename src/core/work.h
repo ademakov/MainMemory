@@ -32,7 +32,7 @@ typedef void (*mm_work_complete_t)(struct mm_work *work, mm_value_t result);
 struct mm_work
 {
 	/* A link in the work queue. */
-	struct mm_link link;
+	struct mm_qlink link;
 
 	/* The work routine. */
 	mm_routine_t routine;

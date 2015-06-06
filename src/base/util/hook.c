@@ -24,14 +24,14 @@
 
 struct mm_hook_link0
 {
-	struct mm_link link;
+	struct mm_qlink link;
 	uint8_t arity;
 	mm_hook_rtn0 proc;
 };
 
 struct mm_hook_link1
 {
-	struct mm_link link;
+	struct mm_qlink link;
 	uint8_t arity;
 	mm_hook_rtn1 proc;
 	void *data;
@@ -57,7 +57,7 @@ mm_hook_create_link1(mm_hook_rtn1 proc, void *data)
 }
 
 static void
-mm_hook_call_link(struct mm_link *link)
+mm_hook_call_link(struct mm_qlink *link)
 {
 	struct mm_hook_link0 *link0 = (struct mm_hook_link0 *) link;
 	uint8_t arity = link0->arity;
@@ -73,9 +73,9 @@ mm_hook_call_link(struct mm_link *link)
 void
 mm_hook_call(struct mm_queue *hook, bool free)
 {
-	struct mm_link *link = mm_queue_head(hook);
+	struct mm_qlink *link = mm_queue_head(hook);
 	while (link != NULL) {
-		struct mm_link *next = link->next;
+		struct mm_qlink *next = link->next;
 
 		mm_hook_call_link(link);
 		if (free)
@@ -85,14 +85,14 @@ mm_hook_call(struct mm_queue *hook, bool free)
 	}
 
 	if (free)
-		mm_queue_init(hook);
+		mm_queue_prepare(hook);
 }
 
 void
 mm_hook_head_proc(struct mm_queue *hook, mm_hook_rtn0 proc)
 {
 	struct mm_hook_link0 *link = mm_hook_create_link0(proc);
-	mm_queue_insert_head(hook, &link->link);
+	mm_queue_prepend(hook, &link->link);
 }
 
 void
@@ -106,7 +106,7 @@ void
 mm_hook_head_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
 {
 	struct mm_hook_link1 *link = mm_hook_create_link1(proc, data);
-	mm_queue_insert_head(hook, &link->link);
+	mm_queue_prepend(hook, &link->link);
 }
 
 void
@@ -119,12 +119,12 @@ mm_hook_tail_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
 void
 mm_hook_free(struct mm_queue *hook)
 {
-	struct mm_link *link = mm_queue_head(hook);
+	struct mm_qlink *link = mm_queue_head(hook);
 	while (link != NULL) {
-		struct mm_link *next = link->next;
+		struct mm_qlink *next = link->next;
 		mm_global_free(link);
 		link = next;
 	}
 
-	mm_queue_init(hook);
+	mm_queue_prepare(hook);
 }

@@ -1,7 +1,7 @@
 /*
  * base/list.h - MainMemory lists.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,50 +28,55 @@
  * Double-linked circular list.
  **********************************************************************/
 
+struct mm_link
+{
+	struct mm_link *next;
+	struct mm_link *prev;
+};
+
 struct mm_list
 {
-	struct mm_list *next;
-	struct mm_list *prev;
+	struct mm_link base;
 };
 
 static inline void
-mm_list_init(struct mm_list *list)
+mm_list_prepare(struct mm_list *list)
 {
-	list->next = list->prev = list;
+	list->base.next = list->base.prev = &list->base;
 }
 
-static inline struct mm_list *
+static inline struct mm_link *
 mm_list_head(struct mm_list *list)
 {
-	return list->next;
+	return list->base.next;
 }
 
-static inline struct mm_list *
+static inline struct mm_link *
 mm_list_tail(struct mm_list *list)
 {
-	return list->prev;
+	return list->base.prev;
 }
 
 static inline bool
-mm_list_is_head(struct mm_list *list, struct mm_list *item)
+mm_list_is_head(struct mm_list *list, struct mm_link *item)
 {
-	return list->next == item;
+	return list->base.next == item;
 }
 
 static inline bool
-mm_list_is_tail(struct mm_list *list, struct mm_list *item)
+mm_list_is_tail(struct mm_list *list, struct mm_link *item)
 {
-	return list->prev == item;
+	return list->base.prev == item;
 }
 
 static inline bool
 mm_list_empty(struct mm_list *list)
 {
-	return mm_list_is_tail(list, list);
+	return mm_list_is_tail(list, &list->base);
 }
 
 static inline void
-mm_list_splice(struct mm_list *item, struct mm_list *head, struct mm_list *tail)
+mm_list_splice_next(struct mm_link *item, struct mm_link *head, struct mm_link *tail)
 {
 	head->prev = item;
 	tail->next = item->next;
@@ -80,13 +85,7 @@ mm_list_splice(struct mm_list *item, struct mm_list *head, struct mm_list *tail)
 }
 
 static inline void
-mm_list_insert(struct mm_list *item, struct mm_list *item2)
-{
-	mm_list_splice(item, item2, item2);
-}
-
-static inline void
-mm_list_splice_prev(struct mm_list *item, struct mm_list *head, struct mm_list *tail)
+mm_list_splice_prev(struct mm_link *item, struct mm_link *head, struct mm_link *tail)
 {
 	tail->next = item;
 	head->prev = item->prev;
@@ -95,158 +94,186 @@ mm_list_splice_prev(struct mm_list *item, struct mm_list *head, struct mm_list *
 }
 
 static inline void
-mm_list_insert_prev(struct mm_list *item, struct mm_list *item2)
+mm_list_insert_next(struct mm_link *item, struct mm_link *item2)
+{
+	mm_list_splice_next(item, item2, item2);
+}
+
+static inline void
+mm_list_insert_prev(struct mm_link *item, struct mm_link *item2)
 {
 	mm_list_splice_prev(item, item2, item2);
 }
 
 static inline void
-mm_list_append(struct mm_list *list, struct mm_list *item)
+mm_list_insert(struct mm_list *list, struct mm_link *item)
 {
-	mm_list_splice_prev(list, item, item);
+	mm_list_insert_next(&list->base, item);
 }
 
 static inline void
-mm_list_cleave(struct mm_list *prev, struct mm_list *next)
+mm_list_append(struct mm_list *list, struct mm_link *item)
+{
+	mm_list_insert_prev(&list->base, item);
+}
+
+static inline void
+mm_list_cleave(struct mm_link *prev, struct mm_link *next)
 {
 	prev->next = next;
 	next->prev = prev;
 }
 
 static inline void
-mm_list_delete(struct mm_list *item)
+mm_list_delete(struct mm_link *item)
 {
 	mm_list_cleave(item->prev, item->next);
 }
 
-static inline struct mm_list *
-mm_list_delete_head(struct mm_list *list)
+static inline struct mm_link *
+mm_list_remove_head(struct mm_list *list)
 {
-	struct mm_list *head = mm_list_head(list);
+	struct mm_link *head = mm_list_head(list);
 	mm_list_delete(head);
 	return head;
 }
 
-static inline struct mm_list *
-mm_list_delete_tail(struct mm_list *list)
+static inline struct mm_link *
+mm_list_remove_tail(struct mm_list *list)
 {
-	struct mm_list *tail = mm_list_tail(list);
+	struct mm_link *tail = mm_list_tail(list);
 	mm_list_delete(tail);
 	return tail;
 }
 
 /**********************************************************************
- * Single-linked list.
+ * Single-linked list with LIFO discipline (stack).
  **********************************************************************/
 
-struct mm_link
+struct mm_slink
 {
-	struct mm_link *next;
+	struct mm_slink *next;
+};
+
+struct mm_stack
+{
+	struct mm_slink head;
 };
 
 static inline void
-mm_link_init(struct mm_link *list)
+mm_stack_prepare(struct mm_stack *list)
 {
-	list->next = NULL;
+	list->head.next = NULL;
 }
 
-static inline struct mm_link *
-mm_link_head(struct mm_link *list)
+static inline void
+mm_slink_prepare(struct mm_slink *item)
 {
-	return list->next;
+	item->next = NULL;
+}
+
+static inline struct mm_slink *
+mm_stack_head(struct mm_stack *list)
+{
+	return list->head.next;
 }
 
 static inline bool
-mm_link_is_last(struct mm_link *item)
+mm_stack_is_tail(const struct mm_slink *item)
 {
 	return item->next == NULL;
 }
 
 static inline bool
-mm_link_empty(struct mm_link *list)
+mm_stack_empty(const struct mm_stack *list)
 {
-	return mm_link_is_last(list);
+	return mm_stack_is_tail(&list->head);
 }
 
 static inline void
-mm_link_splice(struct mm_link *item, struct mm_link *head, struct mm_link *tail)
+mm_stack_insert_span(struct mm_stack *list, struct mm_slink *head, struct mm_slink *tail)
 {
-	tail->next = item->next;
-	item->next = head;
+	tail->next = list->head.next;
+	list->head.next = head;
 }
 
 static inline void
-mm_link_insert(struct mm_link *item, struct mm_link *item2)
+mm_stack_insert(struct mm_stack *list, struct mm_slink *item)
 {
-	mm_link_splice(item, item2, item2);
+	mm_stack_insert_span(list, item, item);
 }
 
 static inline void
-mm_link_cleave(struct mm_link *prev, struct mm_link *next)
+mm_stack_remove_next(struct mm_slink *item)
 {
-	prev->next = next;
+	item->next = item->next->next;
 }
 
-static inline void
-mm_link_delete_next(struct mm_link *item)
+static inline struct mm_slink *
+mm_stack_remove(struct mm_stack *list)
 {
-	mm_link_cleave(item, item->next->next);
-}
-
-static inline struct mm_link *
-mm_link_delete_head(struct mm_link *list)
-{
-	struct mm_link *head = mm_link_head(list);
-	mm_link_delete_next(list);
+	struct mm_slink *head = mm_stack_head(list);
+	mm_stack_remove_next(&list->head);
 	return head;
 }
 
-static inline struct mm_link *
-mm_link_shared_head(struct mm_link *list)
+static inline struct mm_slink *
+mm_stack_atomic_load_head(struct mm_stack *list)
 {
-	return mm_memory_load(list->next);
+	return mm_memory_load(list->head.next);
 }
 
-static inline struct mm_link *
-mm_link_cas_head(struct mm_link *list, struct mm_link *head, struct mm_link *item)
+static inline struct mm_slink *
+mm_stack_atomic_cas_head(struct mm_stack *list, struct mm_slink *head, struct mm_slink *item)
 {
-	void **headp = (void **) &list->next;
+	void **headp = (void **) &list->head.next;
 	return mm_atomic_ptr_cas(headp, head, item);
 }
 
 /**********************************************************************
- * Single-linked list with FIFO support.
+ * Single-linked list with FIFO discipline support.
  **********************************************************************/
 
-#define MM_QUEUE_INIT(queue) queue = { { NULL }, &queue.head };
+#define MM_QUEUE_INIT(queue) queue = { .head = { NULL }, .tail = &queue.head };
+
+struct mm_qlink
+{
+	struct mm_qlink *next;
+};
 
 struct mm_queue
 {
-	struct mm_link head;
-	struct mm_link *tail;
+	struct mm_qlink head;
+	struct mm_qlink *tail;
 };
 
 static inline void
-mm_queue_init(struct mm_queue *list)
+mm_queue_prepare(struct mm_queue *list)
 {
 	list->head.next = NULL;
 	list->tail = &list->head;
 }
 
-static inline struct mm_link *
+static inline void
+mm_qlink_prepare(struct mm_qlink *item)
+{
+	item->next = NULL;
+}
+
+static inline struct mm_qlink *
 mm_queue_head(struct mm_queue *list)
 {
 	return list->head.next;
 }
 
-static inline struct mm_link *
+static inline struct mm_qlink *
 mm_queue_tail(struct mm_queue *list)
 {
 	return list->tail;
 }
 
 static inline bool
-mm_queue_is_last(struct mm_link *item)
+mm_queue_is_tail(struct mm_qlink *item)
 {
 	return item->next == NULL;
 }
@@ -254,11 +281,19 @@ mm_queue_is_last(struct mm_link *item)
 static inline bool
 mm_queue_empty(struct mm_queue *list)
 {
-	return mm_queue_is_last(&list->head);
+	return mm_queue_is_tail(&list->head);
 }
 
 static inline void
-mm_queue_splice_head(struct mm_queue *list, struct mm_link *head, struct mm_link *tail)
+mm_queue_append_span(struct mm_queue *list, struct mm_qlink *head, struct mm_qlink *tail)
+{
+	tail->next = NULL;
+	list->tail->next = head;
+	list->tail = tail;
+}
+
+static inline void
+mm_queue_prepend_span(struct mm_queue *list, struct mm_qlink *head, struct mm_qlink *tail)
 {
 	tail->next = list->head.next;
 	if (list->head.next == NULL)
@@ -267,29 +302,21 @@ mm_queue_splice_head(struct mm_queue *list, struct mm_link *head, struct mm_link
 }
 
 static inline void
-mm_queue_insert_head(struct mm_queue *list, struct mm_link *item)
+mm_queue_append(struct mm_queue *list, struct mm_qlink *item)
 {
-	mm_queue_splice_head(list, item, item);
+	mm_queue_append_span(list, item, item);
 }
 
 static inline void
-mm_queue_splice_tail(struct mm_queue *list, struct mm_link *head, struct mm_link *tail)
+mm_queue_prepend(struct mm_queue *list, struct mm_qlink *item)
 {
-	tail->next = NULL;
-	list->tail->next = head;
-	list->tail = tail;
+	mm_queue_prepend_span(list, item, item);
 }
 
-static inline void
-mm_queue_append(struct mm_queue *list, struct mm_link *item)
+static inline struct mm_qlink *
+mm_queue_remove(struct mm_queue *list)
 {
-	mm_queue_splice_tail(list, item, item);
-}
-
-static inline struct mm_link *
-mm_queue_delete_head(struct mm_queue *list)
-{
-	struct mm_link *head = mm_queue_head(list);
+	struct mm_qlink *head = mm_queue_head(list);
 	list->head.next = head->next;
 	if (head->next == NULL)
 		list->tail = &list->head;

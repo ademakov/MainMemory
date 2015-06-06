@@ -56,7 +56,7 @@ mm_log_create_chunk(size_t size)
 	log_chunk->used = 0;
 
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
-	mm_queue_append(queue, &log_chunk->base.link);
+	mm_queue_append(queue, &log_chunk->base.qlink);
 
 	return log_chunk;
 }
@@ -76,8 +76,8 @@ mm_log_str(const char *str)
 	struct mm_log_chunk *chunk = NULL;
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
 	if (!mm_queue_empty(queue)) {
-		struct mm_link *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_log_chunk, base.link);
+		struct mm_qlink *link = mm_queue_tail(queue);
+		chunk = containerof(link, struct mm_log_chunk, base.qlink);
 
 		size_t avail = mm_log_chunk_size(chunk) - chunk->used;
 		if (avail < len) {
@@ -103,8 +103,8 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 	struct mm_thread *thread = mm_thread_self();
 	struct mm_queue *queue = mm_thread_getlog(thread);
 	if (!mm_queue_empty(queue)) {
-		struct mm_link *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_log_chunk, base.link);
+		struct mm_qlink *link = mm_queue_tail(queue);
+		chunk = containerof(link, struct mm_log_chunk, base.qlink);
 	}
 
 	char dummy;
@@ -144,14 +144,14 @@ mm_log_relay(void)
 {
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
 	if (!mm_queue_empty(queue)) {
-		struct mm_link *head = mm_queue_head(queue);
-		struct mm_link *tail = mm_queue_tail(queue);
+		struct mm_qlink *head = mm_queue_head(queue);
+		struct mm_qlink *tail = mm_queue_tail(queue);
 
 		mm_common_lock(&mm_log_lock);
-		mm_queue_splice_tail(&mm_log_queue, head, tail);
+		mm_queue_append_span(&mm_log_queue, head, tail);
 		mm_common_unlock(&mm_log_lock);
 
-		mm_queue_init(queue);
+		mm_queue_prepare(queue);
 	}
 }
 
@@ -166,8 +166,8 @@ mm_log_flush(void)
 		return 0;
 	}
 
-	struct mm_link *link = mm_queue_head(&mm_log_queue);
-	mm_queue_init(&mm_log_queue);
+	struct mm_qlink *link = mm_queue_head(&mm_log_queue);
+	mm_queue_prepare(&mm_log_queue);
 	mm_log_busy = true;
 
 	mm_common_unlock(&mm_log_lock);
@@ -176,8 +176,8 @@ mm_log_flush(void)
 	size_t written = 0;
 
 	do {
-		struct mm_log_chunk *chunk = containerof(link, struct mm_log_chunk, base.link);
-		link = chunk->base.link.next;
+		struct mm_log_chunk *chunk = containerof(link, struct mm_log_chunk, base.qlink);
+		link = chunk->base.qlink.next;
 
 		// TODO: take care of partial writes
 		if (write(2, chunk->data, chunk->used) != chunk->used)

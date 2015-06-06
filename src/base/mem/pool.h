@@ -54,7 +54,7 @@ struct mm_pool_global
 
 struct mm_pool
 {
-	struct mm_link free_list;
+	struct mm_stack free_list;
 	char *block_cur_ptr;
 	char *block_end_ptr;
 	char **block_array;

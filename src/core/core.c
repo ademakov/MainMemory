@@ -108,7 +108,7 @@ mm_core_poke(struct mm_core *core)
 	ENTER();
 
 	if (likely(!mm_list_empty(&core->idle))) {
-		struct mm_list *link = mm_list_head(&core->idle);
+		struct mm_link *link = mm_list_head(&core->idle);
 		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
 
 		// Get a task from the wait queue.
@@ -140,7 +140,7 @@ mm_core_get_work(struct mm_core *core)
 	ASSERT(mm_core_has_work(core));
 
 	core->nwork--;
-	struct mm_link *link = mm_queue_delete_head(&core->workq);
+	struct mm_qlink *link = mm_queue_remove(&core->workq);
 	return containerof(link, struct mm_work, link);
 }
 
@@ -679,9 +679,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	ENTER();
 
 	mm_runq_prepare(&core->runq);
-	mm_list_init(&core->idle);
-	mm_list_init(&core->dead);
-	mm_queue_init(&core->workq);
+	mm_list_prepare(&core->idle);
+	mm_list_prepare(&core->dead);
+	mm_queue_prepare(&core->workq);
 
 	mm_wait_cache_prepare(&core->wait_cache);
 

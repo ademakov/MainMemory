@@ -156,7 +156,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	entry->value_len = value_len;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.flags));
-	mm_link_insert(&entry->chunks, &chunk->base.link);
+	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 
 	return true;
 }
@@ -183,7 +183,7 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	struct mc_entry *entry = command->action.new_entry;
 	entry->key_len = key_len;
 	entry->value_len = value_len;
-	mm_link_insert(&entry->chunks, &chunk->base.link);
+	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 
 	return true;
 }

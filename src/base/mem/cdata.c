@@ -33,7 +33,7 @@
 // CData chunk info.
 struct mm_cdata_chunk
 {
-	struct mm_link link;
+	struct mm_qlink link;
 
 	size_t used;
 };
@@ -41,7 +41,7 @@ struct mm_cdata_chunk
 // CData entry info.
 struct mm_cdata_entry
 {
-	struct mm_link link;
+	struct mm_qlink link;
 	const char *name;
 	size_t size;
 	mm_cdata_t base;
@@ -62,8 +62,8 @@ void
 mm_cdata_init(struct mm_domain *domain)
 {
 	// Initialize lists.
-	mm_queue_init(&domain->per_thread_chunk_list);
-	mm_queue_init(&domain->per_thread_entry_list);
+	mm_queue_prepare(&domain->per_thread_chunk_list);
+	mm_queue_prepare(&domain->per_thread_entry_list);
 
 	domain->per_thread_lock = (mm_lock_t) MM_LOCK_INIT;
 
@@ -77,14 +77,14 @@ mm_cdata_term(struct mm_domain *domain)
 {
 	// Release all data info entries.
 	while (!mm_queue_empty(&domain->per_thread_entry_list)) {
-		struct mm_link *link = mm_queue_delete_head(&domain->per_thread_entry_list);
+		struct mm_qlink *link = mm_queue_remove(&domain->per_thread_entry_list);
 		struct mm_cdata_entry *entry = containerof(link, struct mm_cdata_entry, link);
 		mm_global_free(entry);
 	}
 
 	// Release all data chunks.
 	while (!mm_queue_empty(&domain->per_thread_chunk_list)) {
-		struct mm_link *link = mm_queue_delete_head(&domain->per_thread_chunk_list);
+		struct mm_qlink *link = mm_queue_remove(&domain->per_thread_chunk_list);
 		struct mm_cdata_chunk *chunk = containerof(link, struct mm_cdata_chunk, link);
 		mm_global_free(chunk);
 	}
@@ -107,7 +107,7 @@ mm_cdata_alloc(struct mm_domain *domain, const char *name, size_t size)
 	mm_global_lock(&domain->per_thread_lock);
 
 	// Find out a chunk with sufficient free space.
-	struct mm_link *link = mm_queue_head(&domain->per_thread_chunk_list);
+	struct mm_qlink *link = mm_queue_head(&domain->per_thread_chunk_list);
 	struct mm_cdata_chunk *chunk = containerof(link, struct mm_cdata_chunk, link);
 	while ((chunk->used + size) > MM_CDATA_CHUNK_SIZE) {
 		link = link->next;
@@ -163,14 +163,14 @@ mm_cdata_summary(struct mm_domain *domain)
 	int nentries = 0;
 	size_t used = 0;
 
-	struct mm_link *chunk_link = mm_queue_head(&domain->per_thread_chunk_list);
+	struct mm_qlink *chunk_link = mm_queue_head(&domain->per_thread_chunk_list);
 	for (; chunk_link != NULL; chunk_link = chunk_link->next) {
 		struct mm_cdata_chunk *chunk = containerof(chunk_link, struct mm_cdata_chunk, link);
 		used += chunk->used;
 		nchunks++;
 	}
 
-	struct mm_link *entry_link = mm_queue_head(&domain->per_thread_entry_list);
+	struct mm_qlink *entry_link = mm_queue_head(&domain->per_thread_entry_list);
 	for (; entry_link != NULL; entry_link = entry_link->next) {
 		struct mm_cdata_entry *entry = containerof(entry_link, struct mm_cdata_entry, link);
 		mm_verbose("core local data entry (%s): %lu bytes",

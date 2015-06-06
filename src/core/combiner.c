@@ -72,7 +72,7 @@ mm_task_combiner_prepare(struct mm_task_combiner *combiner,
 	MM_CDATA_ALLOC(mm_domain_self(), name, combiner->wait_queue);
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
 		struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
-		mm_list_init(wait_queue);
+		mm_list_prepare(wait_queue);
 	}
 
 	LEAVE();
@@ -111,7 +111,7 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 	// If the per-core queue is not empty then let its new head take
 	// the next turn.  Otherwise
 	if (!mm_list_empty(wait_queue)) {
-		struct mm_list *link = mm_list_head(wait_queue);
+		struct mm_link *link = mm_list_head(wait_queue);
 		task = containerof(link, struct mm_task, wait_queue);
 		mm_task_run(task);
 	}
