@@ -18,6 +18,7 @@
  */
 
 #include "base/combiner.h"
+
 #include "base/bitops.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
@@ -97,7 +98,7 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 
 	// Put the request to the slot.
 	mm_memory_fence(); /* TODO: load_store fence */
-	mm_memory_store(node->data, data);
+	mm_memory_store(node->data[0], data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
 
@@ -114,7 +115,7 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 					break;
 
 				mm_memory_load_fence();
-				uintptr_t data = mm_memory_load(node->data);
+				uintptr_t data = mm_memory_load(node->data[0]);
 				mm_memory_fence(); /* TODO: load_store fence */
 				mm_memory_store(node->lock, head + 1 + ring->base.mask);
 
