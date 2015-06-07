@@ -66,6 +66,7 @@ mm_regular_space_term(void)
 	mm_shared_space_cleanup(&mm_regular_space);
 #else
 	mm_private_space_cleanup(&mm_regular_space);
+	mm_private_space_reset(&mm_regular_space);
 #endif
 }
 
