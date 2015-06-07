@@ -65,6 +65,7 @@ typedef enum {
 } mm_task_state_t;
 
 /* Task flags. */
+#define MM_TASK_BOOT			0x8000
 #define MM_TASK_CANCEL_ENABLE		0x00
 #define MM_TASK_CANCEL_DISABLE		0x01
 #define MM_TASK_CANCEL_DEFERRED		0x00
@@ -79,7 +80,7 @@ typedef enum {
 #define MM_TASK_COMBINING		0x80
 
 /* Task flags type. */
-typedef uint8_t			mm_task_flags_t;
+typedef uint16_t mm_task_flags_t;
 
 /* Task creation attributes. */
 struct mm_task_attr

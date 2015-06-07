@@ -65,11 +65,11 @@ mm_thread_init()
 }
 
 /**********************************************************************
- * Thread attribute routines.
+ * Thread creation attributes.
  **********************************************************************/
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_init(struct mm_thread_attr *attr)
+mm_thread_attr_prepare(struct mm_thread_attr *attr)
 {
 	memset(attr, 0, sizeof *attr);
 }
@@ -84,13 +84,19 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 }
 
 void __attribute__((nonnull(1)))
+mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify)
+{
+	attr->notify = notify;
+}
+
+void __attribute__((nonnull(1)))
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space)
 {
 	attr->private_space = private_space;
 }
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
+mm_thread_attr_setreclaim(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->reclaim_queue = size;
 }
@@ -102,11 +108,22 @@ mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 }
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setstack(struct mm_thread_attr *attr,
-			void *stack_base, uint32_t stack_size)
+mm_thread_attr_setstacksize(struct mm_thread_attr *attr, uint32_t size)
 {
-	attr->stack_base = stack_base;
-	attr->stack_size = stack_size;
+	attr->stack_size = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setguardsize(struct mm_thread_attr *attr, uint32_t size)
+{
+	attr->guard_size = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setstack(struct mm_thread_attr *attr, void *base, uint32_t size)
+{
+	attr->stack_base = base;
+	attr->stack_size = size;
 }
 
 void __attribute__((nonnull(1)))
@@ -129,18 +146,29 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 static void
 mm_thread_setstack_attr(pthread_attr_t *pthr_attr, struct mm_thread_attr *attr)
 {
-	if (attr->stack_size == 0) {
+	if (attr == NULL) {
 		// no-op
-	} else if (attr->stack_base == NULL) {
-		int rc = pthread_attr_setstacksize(pthr_attr, attr->stack_size);
-		if (rc)
-			mm_fatal(rc, "pthread_attr_setstacksize");
-	} else {
+	} else if (attr->stack_base != NULL) {
+		if (attr->stack_size == 0)
+			mm_fatal(0, "invalid thread attributes");
 		int rc = pthread_attr_setstack(pthr_attr,
 					       attr->stack_base,
 					       attr->stack_size);
 		if (rc)
 			mm_fatal(rc, "pthread_attr_setstack");
+	} else {
+		if (attr->stack_size != 0) {
+			int rc = pthread_attr_setstacksize(pthr_attr,
+							   attr->stack_size);
+			if (rc)
+				mm_fatal(rc, "pthread_attr_setstacksize");
+		}
+		if (attr->guard_size != 0) {
+			int rc = pthread_attr_setguardsize(pthr_attr,
+							   attr->guard_size);
+			if (rc)
+				mm_fatal(rc, "pthread_attr_setguardsize");
+		}
 	}
 }
 
@@ -168,7 +196,7 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 	kern_return_t kr = thread_policy_set(tid,
 					     THREAD_AFFINITY_POLICY,
 					     (thread_policy_t) &policy,
-			THREAD_AFFINITY_POLICY_COUNT);
+					     THREAD_AFFINITY_POLICY_COUNT);
 	if (kr != KERN_SUCCESS)
 		mm_error(0, "failed to set thread affinity");
 }
@@ -191,7 +219,8 @@ mm_thread_entry(void *arg)
 	ENTER();
 
 	// Set CPU affinity.
-	mm_thread_setaffinity(thread->cpu_tag);
+	if (thread->cpu_tag != MM_THREAD_CPU_ANY)
+		mm_thread_setaffinity(thread->cpu_tag);
 
 #if HAVE_PTHREAD_SETNAME_NP
 	// Let the system know the thread name.
@@ -220,6 +249,11 @@ mm_thread_entry(void *arg)
 	return NULL;
 }
 
+static void
+mm_thread_notify_dummy(struct mm_thread *thread __mm_unused__)
+{
+}
+
 struct mm_thread * __attribute__((nonnull(2)))
 mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, mm_value_t start_arg)
@@ -228,41 +262,48 @@ mm_thread_create(struct mm_thread_attr *attr,
 	int rc;
 
 	// Create a thread object.
-	struct mm_thread *thread = mm_global_alloc(sizeof (struct mm_thread));
+	struct mm_thread *thread = mm_global_alloc(sizeof(struct mm_thread));
 	thread->start = start;
 	thread->start_arg = start_arg;
 
 	// Set thread attributes.
-#if ENABLE_SMP
-	bool private_space = false;
-	uint32_t reclaim_queue = 0;
-#endif
 	if (attr == NULL) {
 		thread->domain = NULL;
 		thread->domain_number = 0;
 		thread->cpu_tag = 0;
+		thread->notify = mm_thread_notify_dummy;
+#if ENABLE_SMP
+		mm_private_space_reset(&thread->space);
+#endif
 		strcpy(thread->name, "unnamed");
 	} else {
 		thread->domain = attr->domain;
 		thread->domain_number = attr->domain_number;
 		thread->cpu_tag = attr->cpu_tag;
+
+		// Set the notification routine.
+		if (attr->notify == NULL)
+			thread->notify = mm_thread_notify_dummy;
+		else
+			thread->notify = attr->notify;
+
 #if ENABLE_SMP
-		private_space = attr->private_space;
-		reclaim_queue = attr->reclaim_queue;
+		// Initialize private memory space if required.
+		if (attr->private_space)
+			mm_private_space_prepare(&thread->space,
+						 attr->reclaim_queue);
+		else
+			mm_private_space_reset(&thread->space);
+#else
+		if (attr->private_space || attr->reclaim_queue)
+			mm_warning(0, "ignore private space thread attributes");
 #endif
+
 		if (attr->name[0])
 			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 		else
 			strcpy(thread->name, "unnamed");
 	}
-
-	// Initialize private memory space if required.
-#if ENABLE_SMP
-	if (private_space)
-		mm_private_space_prepare(&thread->space, reclaim_queue);
-	else
-		mm_private_space_reset(&thread->space);
-#endif
 
 	// Initialize deferred chunks info.
 	mm_stack_prepare(&thread->deferred_chunks);
@@ -274,8 +315,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 	// Set thread system attributes.
 	pthread_attr_t pthr_attr;
 	pthread_attr_init(&pthr_attr);
-	if (attr != NULL)
-		mm_thread_setstack_attr(&pthr_attr, attr);
+	mm_thread_setstack_attr(&pthr_attr, attr);
 
 	// Start the thread.
 	rc = pthread_create(&thread->system_thread, &pthr_attr,

@@ -29,10 +29,23 @@
 
 /* Forward declarations. */
 struct mm_domain;
+struct mm_thread;
 struct mm_trace_context;
+
+#define MM_THREAD_CPU_ANY	((uint32_t) -1)
+
+/* Minimal thread stack size. */
+#if defined(PTHREAD_STACK_MIN)
+# define MM_THREAD_STACK_MIN	(PTHREAD_STACK_MIN)
+#else
+# define MM_THREAD_STACK_MIN	(2 * MM_PAGE_SIZE)
+#endif
 
 /* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
+
+/* Thread wake-up notification routine. */
+typedef void (*mm_thread_notify_t)(struct mm_thread *thread);
 
 /* Thread creation attributes. */
 struct mm_thread_attr
@@ -47,23 +60,30 @@ struct mm_thread_attr
 	/* The size of queue for memory chunks released by other threads. */
 	uint32_t reclaim_queue;
 
+	/* Wake-up notification routine. */
+	mm_thread_notify_t notify;
+
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
 	/* The thread stack. */
 	uint32_t stack_size;
+	uint32_t guard_size;
 	void *stack_base;
 
 	/* The thread name. */
 	char name[MM_THREAD_NAME_SIZE];
 };
 
-/* Thread data. */
+/* Thread run-time data. */
 struct mm_thread
 {
 	/* Thread domain. */
 	struct mm_domain *domain;
 	mm_thread_t domain_number;
+
+	/* Wake-up notification routine. */
+	mm_thread_notify_t notify;
 
 #if ENABLE_SMP
 	/* Private memory space. */
@@ -110,7 +130,7 @@ void mm_thread_init();
  **********************************************************************/
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_init(struct mm_thread_attr *attr);
+mm_thread_attr_prepare(struct mm_thread_attr *attr);
 
 void __attribute__((nonnull(1, 2)))
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
@@ -118,17 +138,25 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 mm_thread_t number);
 
 void __attribute__((nonnull(1)))
+mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify);
+
+void __attribute__((nonnull(1)))
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space);
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size);
+mm_thread_attr_setreclaim(struct mm_thread_attr *attr, uint32_t size);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setstack(struct mm_thread_attr *attr,
-			void *stack_base, uint32_t stack_size);
+mm_thread_attr_setstacksize(struct mm_thread_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setguardsize(struct mm_thread_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setstack(struct mm_thread_attr *attr, void *base, uint32_t size);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name);
@@ -136,9 +164,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name);
 struct mm_thread * __attribute__((nonnull(2)))
 mm_thread_create(struct mm_thread_attr *attr,
 		 mm_routine_t start, mm_value_t start_arg);
-
-void __attribute__((nonnull(1)))
-mm_thread_release_chunks(struct mm_thread *thread);
 
 void __attribute__((nonnull(1)))
 mm_thread_destroy(struct mm_thread *thread);
@@ -198,6 +223,12 @@ mm_thread_gettracecontext(struct mm_thread *thread)
 /**********************************************************************
  * Thread control routines.
  **********************************************************************/
+
+static inline void __attribute__((nonnull(1)))
+mm_thread_notify(struct mm_thread *thread)
+{
+	(thread->notify)(thread);
+}
 
 void __attribute__((nonnull(1)))
 mm_thread_cancel(struct mm_thread *thread);

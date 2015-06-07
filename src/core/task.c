@@ -22,6 +22,7 @@
 #include "core/port.h"
 #include "core/timer.h"
 
+#include "base/bitops.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 #include "base/mem/alloc.h"
@@ -30,14 +31,10 @@
 #include "base/thread/thread.h"
 
 /* Regular task stack size. */
-#define MM_TASK_STACK_SIZE		(32 * 1024)
+#define MM_TASK_STACK_DEFAULT		(7 * MM_PAGE_SIZE)
 
-/* Minimal task stack size. */
-#if defined(PTHREAD_STACK_MIN)
-# define MM_TASK_STACK_SIZE_MIN		(PTHREAD_STACK_MIN + MM_PAGE_SIZE)
-#else
-# define MM_TASK_STACK_SIZE_MIN		(12 * 1024)
-#endif
+/* Minimum task stack size. */
+#define MM_TASK_STACK_MIN		(1 * MM_PAGE_SIZE)
 
 // The memory pool for tasks.
 static struct mm_pool mm_task_pool;
@@ -75,10 +72,8 @@ mm_task_term(void)
 void
 mm_task_attr_init(struct mm_task_attr *attr)
 {
-	attr->flags = 0;
+	memset(attr, 0, sizeof(*attr));
 	attr->priority = MM_PRIO_WORK;
-	attr->stack_size = MM_TASK_STACK_SIZE;
-	attr->name[0] = 0;
 }
 
 void
@@ -98,9 +93,6 @@ mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
 void
 mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size)
 {
-	if (stack_size < MM_TASK_STACK_SIZE_MIN)
-		stack_size = MM_TASK_STACK_SIZE_MIN;
-
 	attr->stack_size = stack_size;
 }
 
@@ -205,6 +197,24 @@ mm_task_new(void)
 	return task;
 }
 
+static uint32_t
+mm_task_attr_getstacksize(const struct mm_task_attr *attr)
+{
+	/* Handle default stack size cases. */
+	if (attr == NULL)
+		return MM_TASK_STACK_DEFAULT;
+	if (!attr->stack_size) {
+		if (!(attr->flags & MM_TASK_BOOT))
+			return MM_TASK_STACK_DEFAULT;
+		return 0;
+	}
+
+	/* Sanitize specified stack size value. */
+	if (attr->stack_size < MM_TASK_STACK_MIN)
+		return MM_TASK_STACK_MIN;
+	return mm_round_up(attr->stack_size, MM_PAGE_SIZE);
+}
+
 /* Initialize a task. */
 static void
 mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
@@ -215,12 +225,10 @@ mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 	if (unlikely(attr == NULL)) {	
 		task->flags = 0;
 		task->original_priority = MM_PRIO_WORK;
-		task->stack_size = MM_TASK_STACK_SIZE;
 		strcpy(task->name, "unnamed");
 	} else {
 		task->flags = attr->flags;
 		task->original_priority = attr->priority;
-		task->stack_size = attr->stack_size;
 		if (attr->name[0])
 			memcpy(task->name, attr->name, MM_TASK_NAME_SIZE);
 		else
@@ -236,28 +244,27 @@ mm_task_create(const struct mm_task_attr *attr,
 	       mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
-
-	// Check to see if called from the bootstrap context.
-	bool boot = (mm_core == NULL);
-
 	struct mm_task *task = NULL;
+
+	// Determine the required stack size.
+	uint32_t stack_size = mm_task_attr_getstacksize(attr);
+
 	// Try to reuse a dead task.
-	if (likely(!boot) && !mm_list_empty(&mm_core->dead)) {
+	struct mm_core *core = mm_core_self();
+	if (core != NULL && !mm_list_empty(&core->dead)) {
 		// Get the last dead task.
-		struct mm_link *link = mm_list_head(&mm_core->dead);
+		struct mm_link *link = mm_list_head(&core->dead);
 		struct mm_task *dead = containerof(link, struct mm_task, queue);
 
 		// Check it against the required stack size.
-		uint32_t stack_size = (attr != NULL
-				       ? attr->stack_size
-				       : MM_TASK_STACK_SIZE);
 		if (dead->stack_size == stack_size) {
 			// The dead task is just good.
 			mm_list_delete(link);
 			task = dead;
-		} else if (dead->stack_size != MM_TASK_STACK_SIZE) {
+		} else if (dead->stack_size != MM_TASK_STACK_DEFAULT) {
 			// The dead task has an unusual stack, free it.
 			mm_cstack_destroy(dead->stack_base, dead->stack_size);
+			dead->stack_size = 0;
 			dead->stack_base = NULL;
 			// Now use that task.
 			mm_list_delete(link);
@@ -268,6 +275,7 @@ mm_task_create(const struct mm_task_attr *attr,
 			// next time.
 		}
 	}
+
 	// Allocate a new task if needed.
 	if (task == NULL)
 		task = mm_task_new();
@@ -277,16 +285,20 @@ mm_task_create(const struct mm_task_attr *attr,
 	task->start = start;
 	task->start_arg = start_arg;
 
-	// Allocate a new stack if needed.
-	if (task->stack_base == NULL)
-		task->stack_base = mm_cstack_create(task->stack_size, MM_PAGE_SIZE);
+	if (stack_size) {
+		// Determine combined stack and guard page size.
+		uint32_t total_size = stack_size + MM_PAGE_SIZE;
 
-	// Setup the task entry point on its own stack and queue it for
-	// execution unless bootstrapping in which case it will be done
-	// later in a special way.
-	if (likely(!boot)) {
+		// Allocate a new stack if needed.
+		if (task->stack_base == NULL)
+			task->stack_base = mm_cstack_create(total_size,
+							    MM_PAGE_SIZE);
+		task->stack_size = stack_size;
+
+		// Setup the task entry point on the stack and queue
+		// it for execution.
 		mm_cstack_init(&task->stack_ctx, mm_task_entry,
-			       task->stack_base, task->stack_size);
+			       task->stack_base, total_size);
 		mm_task_run(task);
 	}
 
@@ -319,7 +331,8 @@ mm_task_destroy(struct mm_task *task)
 	mm_task_free_chunks(task);
 
 	// Free the stack.
-	mm_cstack_destroy(task->stack_base, task->stack_size);
+	if (task->stack_base != NULL)
+		mm_cstack_destroy(task->stack_base, task->stack_size);
 
 	// At last free the task struct.
 	mm_pool_free(&mm_task_pool, task);

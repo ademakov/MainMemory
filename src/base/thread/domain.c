@@ -23,117 +23,224 @@
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
+#include "base/mem/cstack.h"
 #include "base/mem/memory.h"
 
 #include <stdio.h>
 
 __thread struct mm_domain *__mm_domain_self = NULL;
 
-void
-mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_thread_t nthreads, bool private_space,
-		  mm_thread_notify_t notify)
+/**********************************************************************
+ * Domain creation attributes.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_prepare(struct mm_domain_attr *attr)
 {
-	ENTER();
+	memset(attr, 0, sizeof *attr);
+}
 
-	// Set domain name.
-	size_t name_len = 0;
-	if (likely(name != NULL)) {
-		name_len = strlen(name);
-		if (name_len >= sizeof domain->name)
-			name_len = sizeof domain->name - 1;
-		memcpy(domain->name, name, name_len);
+void __attribute__((nonnull(1)))
+mm_domain_attr_cleanup(struct mm_domain_attr *attr)
+{
+	if (attr->threads_attr != NULL)
+		mm_global_free(attr->threads_attr);
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number)
+{
+	if (attr->nthreads != number) {
+		attr->nthreads = number;
+		if (attr->threads_attr != NULL) {
+			mm_global_free(attr->threads_attr);
+			attr->threads_attr = NULL;
+		}
 	}
-	domain->name[name_len] = 0;
+}
 
-	// Initialize thread data.
-	domain->nthreads = nthreads;
-	domain->threads = mm_common_calloc(nthreads, sizeof(struct mm_domain_thread));
-	uint32_t reclaim_queue = mm_upper_pow2(nthreads * 16);
-	for (mm_thread_t i = 0; i < nthreads; i++) {
-		struct mm_thread_attr *thread_attr = &domain->threads[i].thread_attr;
-		mm_thread_attr_init(thread_attr);
-		mm_thread_attr_setspace(thread_attr, private_space);
-		mm_thread_attr_setreclaimqueue(thread_attr, reclaim_queue);
+void __attribute__((nonnull(1)))
+mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify)
+{
+	attr->notify = notify;
+}
 
-		// Derive thread name from the domain name.
-		if (name_len) {
-			char thread_name[MM_THREAD_NAME_SIZE];
-			snprintf(thread_name, sizeof thread_name,
-				 "%s %u", name, i);
-			mm_thread_attr_setname(thread_attr, thread_name);
+void __attribute__((nonnull(1)))
+mm_domain_attr_setspace(struct mm_domain_attr *attr, bool private_space)
+{
+	attr->private_space = private_space;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool work_queue)
+{
+	attr->work_queue = work_queue;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size)
+{
+	attr->stack_size = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setguardsize(struct mm_domain_attr *attr, uint32_t size)
+{
+	attr->guard_size = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name)
+{
+	size_t len = 0;
+	if (likely(name != NULL)) {
+		len = strlen(name);
+		if (len >= sizeof attr->name)
+			len = sizeof attr->name - 1;
+		memcpy(attr->name, name, len);
+	}
+	attr->name[len] = 0;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
+			 uint32_t cpu_tag)
+{
+	if (unlikely(n >= attr->nthreads))
+		mm_fatal(0, "invalid thread number");
+
+	if (attr->threads_attr == NULL) {
+		attr->threads_attr
+			= mm_global_calloc(attr->nthreads,
+					   sizeof(struct mm_domain_thread_attr));
+		for (mm_thread_t i = 0; i < attr->nthreads; i++) {
+			attr->threads_attr[i].cpu_tag = MM_THREAD_CPU_ANY;
 		}
 	}
 
-	// Initialize notification routine.
-	domain->notify = notify;
+	attr->threads_attr[n].cpu_tag = cpu_tag;
+}
+
+/**********************************************************************
+ * Domain creation routines.
+ **********************************************************************/
+
+struct mm_domain * __attribute__((nonnull(2)))
+mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
+{
+	ENTER();
+
+	// Create a domain object.
+	struct mm_domain *domain = mm_global_alloc(sizeof(struct mm_domain));
+
+	// Set domain attributes.
+	if (attr == NULL) {
+		domain->nthreads = 1;
+		domain->work_queue = NULL;
+		strcpy(domain->name, "unnamed");
+	} else {
+		domain->nthreads = attr->nthreads;
+		if (domain->nthreads == 0)
+			mm_fatal(0, "invalid domain attributes.");
+
+		// Create domain work queue if required.
+		if (attr->work_queue)
+			domain->work_queue = mm_ring_mpmc_create(domain->nthreads * 16);
+		else
+			domain->work_queue = NULL;
+
+		if (attr->name[0])
+			memcpy(domain->name, attr->name, MM_DOMAIN_NAME_SIZE);
+		else
+			strcpy(domain->name, "unnamed");
+	}
+
+	// Set thread start/stop barrier.
+	mm_barrier_init(&domain->barrier, domain->nthreads);
 
 	// Initialize per-thread data.
 	mm_cdata_init(domain);
 
+	// Set thread attributes.
+	struct mm_thread_attr thread_attr;
+	mm_thread_attr_prepare(&thread_attr);
+	uint32_t stack_size = 0;
+	uint32_t guard_size = 0;
+	if (attr != NULL) {
+		mm_thread_attr_setnotify(&thread_attr, attr->notify);
+		mm_thread_attr_setspace(&thread_attr, attr->private_space);
+		stack_size = mm_round_up(attr->stack_size, MM_PAGE_SIZE);
+		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
+			stack_size = MM_THREAD_STACK_MIN;
+		guard_size = mm_round_up(attr->guard_size, MM_PAGE_SIZE);
+
+		// Request chunk reclaim queue for private space.
+		if (attr->private_space) {
+			uint32_t reclaim = mm_upper_pow2(domain->nthreads * 16);
+			mm_thread_attr_setreclaim(&thread_attr, reclaim);
+		}
+	}
+
+	// Create and start threads.
+	domain->threads = mm_global_calloc(domain->nthreads,
+					   sizeof(struct mm_thread *));
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
+		mm_thread_attr_setdomain(&thread_attr, domain, i);
+		if (attr == NULL || attr->threads_attr == NULL)
+			mm_thread_attr_setcputag(&thread_attr,
+						 MM_THREAD_CPU_ANY);
+		else
+			mm_thread_attr_setcputag(&thread_attr,
+						 attr->threads_attr[i].cpu_tag);
+
+		if (stack_size) {
+			void *stack = mm_cstack_create(stack_size + guard_size,
+						       guard_size);
+			void *stack_base = ((char *) stack) + guard_size;
+			mm_thread_attr_setstack(&thread_attr, stack_base, stack_size);
+		} else if (guard_size) {
+			mm_thread_attr_setguardsize(&thread_attr, guard_size);
+		}
+
+		char thread_name[MM_THREAD_NAME_SIZE];
+		snprintf(thread_name, sizeof thread_name, "%s %u", domain->name, i);
+		mm_thread_attr_setname(&thread_attr, thread_name);
+
+		domain->threads[i] = mm_thread_create(&thread_attr, start, i);
+	}
+
 	LEAVE();
+	return domain;
 }
 
-void
-mm_domain_cleanup(struct mm_domain *domain)
+void __attribute__((nonnull(1)))
+mm_domain_destroy(struct mm_domain *domain)
 {
 	ENTER();
+
+	// Destroy domain work queue if present.
+	if (domain->work_queue != NULL)
+		mm_ring_mpmc_destroy(domain->work_queue);
 
 	// Release per-thread data.
 	mm_cdata_term(domain);
 
 	// Release thread data.
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
-		struct mm_domain_thread *thread = &domain->threads[i];
-		mm_thread_destroy(thread->thread);
+		struct mm_thread *thread = domain->threads[i];
+		mm_thread_destroy(thread);
 	}
-	mm_common_free(domain->threads);
+	mm_global_free(domain->threads);
+
+	// Release the domain;
+	mm_global_free(domain);
 
 	LEAVE();
 }
 
-void
-mm_domain_setcputag(struct mm_domain *domain, mm_thread_t n, uint32_t cpu_tag)
-{
-	ENTER();
-	ASSERT(n < domain->nthreads);
-
-	struct mm_domain_thread *thread = &domain->threads[n];
-	mm_thread_attr_setcputag(&thread->thread_attr, cpu_tag);
-
-	LEAVE();
-}
-
-void
-mm_domain_setstack(struct mm_domain *domain, mm_thread_t n,
-		void *stack_base, uint32_t stack_size)
-{
-	ENTER();
-	ASSERT(n < domain->nthreads);
-
-	struct mm_domain_thread *thread = &domain->threads[n];
-	mm_thread_attr_setstack(&thread->thread_attr, stack_base, stack_size);
-
-	LEAVE();
-}
-
-void
-mm_domain_start(struct mm_domain *domain, mm_routine_t start)
-{
-	ENTER();
-
-	// Set thread start barrier.
-	mm_barrier_init(&domain->barrier, domain->nthreads);
-
-	// Create and start thread.
-	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
-		struct mm_domain_thread *thread = &domain->threads[i];
-		mm_thread_attr_setdomain(&thread->thread_attr, domain, i);
-		thread->thread = mm_thread_create(&thread->thread_attr, start, i);
-	}
-
-	LEAVE();
-}
+/**********************************************************************
+ * Domain control routines.
+ **********************************************************************/
 
 void
 mm_domain_join(struct mm_domain *domain)
@@ -141,8 +248,8 @@ mm_domain_join(struct mm_domain *domain)
 	ENTER();
 
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
-		struct mm_domain_thread *thread = &domain->threads[i];
-		mm_thread_join(thread->thread);
+		struct mm_thread *thread = domain->threads[i];
+		mm_thread_join(thread);
 	}
 
 	LEAVE();

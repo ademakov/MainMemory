@@ -23,35 +23,63 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
+#include "base/ring.h"
 #include "base/barrier.h"
+#include "base/log/debug.h"
 #include "base/thread/thread.h"
 
 /* Maximum domain name length (including terminating zero). */
 #define MM_DOMAIN_NAME_SIZE	32
 
-/* Thread notification routine. */
-typedef void (*mm_thread_notify_t)(struct mm_thread *thread);
-
-struct mm_domain_thread
+/* Individual thread creation attributes for domain. */
+struct mm_domain_thread_attr
 {
-	struct mm_thread *thread;
-	struct mm_thread_attr thread_attr;
+	/* CPU affinity tag. */
+	uint32_t cpu_tag;
 };
 
+/* Domain creation attributes. */
+struct mm_domain_attr
+{
+	/* The number of threads. */
+	mm_thread_t nthreads;
+
+	/* Enable shared domain work queue. */
+	bool work_queue;
+
+	/* Enable private memory space for domain's threads. */
+	bool private_space;
+
+	/* Common notification routine for domain's threads. */
+	mm_thread_notify_t notify;
+
+	/* Common stack parameters for domain's threads. */
+	uint32_t stack_size;
+	uint32_t guard_size;
+
+	/* Individual thread creation attributes. */
+	struct mm_domain_thread_attr *threads_attr;
+
+	/* The domain name. */
+	char name[MM_DOMAIN_NAME_SIZE];
+};
+
+/* Domain run-time data. */
 struct mm_domain
 {
+	/* Work sharing queue. */
+	struct mm_ring_mpmc *work_queue;
+
 	/* Domain threads. */
 	mm_thread_t nthreads;
-	struct mm_domain_thread *threads;
-
-	mm_thread_notify_t notify;
+	struct mm_thread **threads;
 
 	/* Per-thread data. */
 	struct mm_queue per_thread_chunk_list;
 	struct mm_queue per_thread_entry_list;
 	mm_lock_t per_thread_lock;
 
-	/* Thread start barrier. */
+	/* Thread start/stop barrier. */
 	struct mm_barrier barrier;
 
 	/* Domain name. */
@@ -60,29 +88,73 @@ struct mm_domain
 
 extern __thread struct mm_domain *__mm_domain_self;
 
+/**********************************************************************
+ * Domain creation routines.
+ **********************************************************************/
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_prepare(struct mm_domain_attr *attr);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_cleanup(struct mm_domain_attr *attr);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setspace(struct mm_domain_attr *attr, bool private_space);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool work_queue);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setguardsize(struct mm_domain_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
+			 uint32_t cpu_tag);
+
+struct mm_domain * __attribute__((nonnull(2)))
+mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start);
+
+void __attribute__((nonnull(1)))
+mm_domain_destroy(struct mm_domain *domain);
+
+/**********************************************************************
+ * Domain information.
+ **********************************************************************/
+
 static inline struct mm_domain *
 mm_domain_self(void)
 {
 	return __mm_domain_self;
 }
 
-void __attribute__((nonnull(1)))
-mm_domain_prepare(struct mm_domain *domain, const char *name,
-		  mm_thread_t nthreads, bool private_space,
-		  mm_thread_notify_t notify);
+static inline mm_thread_t
+mm_domain_getnumber(const struct mm_domain *domain)
+{
+	return domain->nthreads;
+}
 
-void __attribute__((nonnull(1)))
-mm_domain_cleanup(struct mm_domain *domain);
+static inline struct mm_thread *
+mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
+{
+	ASSERT(n < domain->nthreads);
+	return domain->threads[n];
+}
 
-void __attribute__((nonnull(1)))
-mm_domain_setcputag(struct mm_domain *domain, mm_thread_t n, uint32_t cpu_tag);
-
-void __attribute__((nonnull(1)))
-mm_domain_setstack(struct mm_domain *domain, mm_thread_t n,
-		   void *stack_base, uint32_t stack_size);
-
-void __attribute__((nonnull(1, 2)))
-mm_domain_start(struct mm_domain *domain, mm_routine_t start);
+/**********************************************************************
+ * Domain control routines.
+ **********************************************************************/
 
 void __attribute__((nonnull(1)))
 mm_domain_join(struct mm_domain *domain);

@@ -126,7 +126,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	// reclamation mechanism for any other thread.
 	struct mm_thread *thread = mm_thread_self();
 	struct mm_domain *domain = mm_thread_getdomain(thread);
-	if (domain == &mm_regular_domain && tag == mm_thread_getnumber(thread)) {
+	if (domain == mm_regular_domain && tag == mm_thread_getnumber(thread)) {
 		mm_private_free(chunk);
 	} else {
 		thread->deferred_chunks_count++;
@@ -162,14 +162,13 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 		struct mm_slink *link = mm_stack_remove(&chunks);
 		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
 
+		struct mm_domain *domain = mm_regular_domain;
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
-		struct mm_thread *origin = mm_regular_domain.threads[tag].thread;
-		struct mm_domain *domain = mm_thread_getdomain(origin);
+		struct mm_thread *origin = mm_domain_getthread(domain, tag);
 		struct mm_private_space *space = mm_thread_getspace(origin);
 #else
-		struct mm_domain *domain = &mm_regular_domain;
-		struct mm_thread *origin = mm_regular_domain.threads[0].thread;
+		struct mm_thread *origin = mm_domain_getthread(domain, 0);
 		struct mm_private_space *space = &mm_regular_space;
 #endif
 
@@ -184,8 +183,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 				thread->deferred_chunks_count++;
 
 				// Wake up a possibly sleeping origin thread.
-				if (domain->notify != NULL)
-					(*domain->notify)(origin);
+				mm_thread_notify(origin);
 				break;
 			}
 		}

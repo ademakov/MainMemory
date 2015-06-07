@@ -30,29 +30,22 @@
 
 #include <unistd.h>
 
-struct mm_domain mm_regular_domain = { .nthreads = 0 };
+int mm_ncpus = 0;
+struct mm_domain *mm_regular_domain = NULL;
 
 void
-mm_base_init(struct mm_base_params *params)
+mm_base_init(void)
 {
 	ENTER();
 
-	int ncpus = mm_topology_getncpus();
-	ASSERT(ncpus > 0);
+	// Determine machine topology.
+	mm_ncpus = mm_topology_getncpus();
+	ASSERT(mm_ncpus > 0);
 
-	const char *regular_name = "regular thread";
-	if (params != NULL && params->regular_name != NULL)
-		regular_name = params->regular_name;
-
+	// Initialize basic subsystems.
 	mm_memory_init();
 	mm_thread_init();
 	mm_clock_init();
-
-	mm_domain_prepare(&mm_regular_domain, regular_name,
-			  ncpus, true, params->thread_notify);
-	for (mm_thread_t i = 0; i < ncpus; i++) {
-		mm_domain_setcputag(&mm_regular_domain, i, i);
-	}
 
 	LEAVE();
 }
@@ -62,28 +55,51 @@ mm_base_term(void)
 {
 	ENTER();
 
-	mm_domain_cleanup(&mm_regular_domain);
+	mm_domain_destroy(mm_regular_domain);
 	mm_memory_term();
 
 	LEAVE();
 }
 
 void
-mm_base_loop(mm_routine_t thread_routine)
+mm_base_loop(struct mm_base_params *params)
 {
 	ENTER();
 
+	// Determine the domain name.
+	const char *name = "regular";
+	if (params != NULL && params->regular_name != NULL)
+		name = params->regular_name;
+
+	// Set regular domain attributes.
+	struct mm_domain_attr attr;
+	mm_domain_attr_prepare(&attr);
+	mm_domain_attr_setname(&attr, name);
+	mm_domain_attr_setnumber(&attr, mm_ncpus);
+	mm_domain_attr_setnotify(&attr, params->thread_notify);
+	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
+	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
+	mm_domain_attr_setspace(&attr, true);
+	mm_domain_attr_setqueue(&attr, true);
+	for (mm_thread_t i = 0; i < mm_ncpus; i++) {
+		mm_domain_attr_setcputag(&attr, i, i);
+	}
+
 	// Start regular threads.
-	mm_domain_start(&mm_regular_domain, thread_routine);
+	mm_regular_domain = mm_domain_create(&attr, params->thread_routine);
+
+	// Release domain creation attributes.
+	mm_domain_attr_cleanup(&attr);
 
 	// Loop until stopped.
+	mm_log_relay();
 	while (!mm_exit_test()) {
 		size_t logged = mm_log_flush();
 		usleep(logged ? 30000 : 3000000);
 	}
 
 	// Wait for regular threads completion.
-	mm_domain_join(&mm_regular_domain);
+	mm_domain_join(mm_regular_domain);
 
 	LEAVE();
 }

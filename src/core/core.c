@@ -585,7 +585,7 @@ mm_core_boot_init(struct mm_core *core)
 		// Call the start hooks on the primary core.
 		mm_timer_init(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
-		mm_cdata_summary(&mm_regular_domain);
+		mm_cdata_summary(mm_regular_domain);
 
 		mm_thread_domain_barrier();
 	} else {
@@ -702,9 +702,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
 	mm_task_attr_init(&attr);
-	mm_task_attr_setflags(&attr, MM_TASK_CANCEL_DISABLE);
+	mm_task_attr_setflags(&attr, MM_TASK_BOOT | MM_TASK_CANCEL_DISABLE);
 	mm_task_attr_setpriority(&attr, MM_PRIO_BOOT);
-	mm_task_attr_setstacksize(&attr, 0);
 	mm_task_attr_setname(&attr, "boot");
 	core->boot = mm_task_create(&attr, mm_core_boot, (mm_value_t) core);
 
@@ -791,15 +790,10 @@ mm_core_init(void)
 	ENTER();
 	ASSERT(mm_core_num == 0);
 
-	// Initialize the base library.
-	struct mm_base_params params = {
-		.regular_name = "core",
-		.thread_notify = mm_core_thread_notify,
-	};
-	mm_base_init(&params);
+	mm_base_init();
 
 	// Find the number of CPU cores.
-	mm_core_num = mm_regular_domain.nthreads;
+	mm_core_num = mm_ncpus;
 	if (mm_core_num == 1)
 		mm_brief("Running on 1 core.");
 	else
@@ -891,16 +885,17 @@ mm_core_start(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	// Set core thread attributes.
-	for (mm_core_t i = 0; i < mm_core_num; i++) {
-		struct mm_core *core = &mm_core_set[i];
-		mm_domain_setstack(&mm_regular_domain, i,
-				   (char *) core->boot->stack_base + MM_PAGE_SIZE,
-				   core->boot->stack_size - MM_PAGE_SIZE);
-	}
+	// Set the base library params.
+	struct mm_base_params params = {
+		.regular_name = "core",
+		.thread_stack_size = MM_PAGE_SIZE,
+		.thread_guard_size = MM_PAGE_SIZE,
+		.thread_notify = mm_core_thread_notify,
+		.thread_routine = mm_core_boot,
+	};
 
 	// Run core threads.
-	mm_base_loop(mm_core_boot);
+	mm_base_loop(&params);
 
  	LEAVE();
 }

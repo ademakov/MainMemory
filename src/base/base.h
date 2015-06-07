@@ -26,18 +26,24 @@
 struct mm_base_params
 {
 	const char *regular_name;
+
 	mm_thread_notify_t thread_notify;
+	uint32_t thread_stack_size;
+	uint32_t thread_guard_size;
+
+	mm_routine_t thread_routine;
 };
 
-extern struct mm_domain mm_regular_domain;
+extern int mm_ncpus;
+extern struct mm_domain *mm_regular_domain;
 
 void
-mm_base_init(struct mm_base_params *params);
+mm_base_init(void);
 
 void
 mm_base_term(void);
 
 void
-mm_base_loop(mm_routine_t thread_routine);
+mm_base_loop(struct mm_base_params *params);
 
 #endif /* BASE_BASE_H */
