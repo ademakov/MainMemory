@@ -23,10 +23,12 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/ring.h"
 #include "base/barrier.h"
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
+
+/* Forward declarations. */
+struct mm_ring_mpmc;
 
 /* Maximum domain name length (including terminating zero). */
 #define MM_DOMAIN_NAME_SIZE	32
@@ -44,8 +46,8 @@ struct mm_domain_attr
 	/* The number of threads. */
 	mm_thread_t nthreads;
 
-	/* Enable shared domain work queue. */
-	bool work_queue;
+	/* Enable shared request queue for domain. */
+	bool request_queue;
 
 	/* Enable private memory space for domain's threads. */
 	bool private_space;
@@ -67,12 +69,12 @@ struct mm_domain_attr
 /* Domain run-time data. */
 struct mm_domain
 {
-	/* Work sharing queue. */
-	struct mm_ring_mpmc *work_queue;
-
 	/* Domain threads. */
 	mm_thread_t nthreads;
 	struct mm_thread **threads;
+
+	/* Domain request queue. */
+	struct mm_ring_mpmc *request_queue;
 
 	/* Per-thread data. */
 	struct mm_queue per_thread_chunk_list;

@@ -20,6 +20,7 @@
 #include "base/thread/domain.h"
 
 #include "base/bitops.h"
+#include "base/ring.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/mem/cdata.h"
@@ -66,15 +67,15 @@ mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify)
 }
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setspace(struct mm_domain_attr *attr, bool private_space)
+mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 {
-	attr->private_space = private_space;
+	attr->private_space = enable;
 }
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool work_queue)
+mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool enable)
 {
-	attr->work_queue = work_queue;
+	attr->request_queue = enable;
 }
 
 void __attribute__((nonnull(1)))
@@ -136,7 +137,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	// Set domain attributes.
 	if (attr == NULL) {
 		domain->nthreads = 1;
-		domain->work_queue = NULL;
+		domain->request_queue = NULL;
 		strcpy(domain->name, "unnamed");
 	} else {
 		domain->nthreads = attr->nthreads;
@@ -144,10 +145,11 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 			mm_fatal(0, "invalid domain attributes.");
 
 		// Create domain work queue if required.
-		if (attr->work_queue)
-			domain->work_queue = mm_ring_mpmc_create(domain->nthreads * 16);
+		if (attr->request_queue)
+			domain->request_queue
+				= mm_ring_mpmc_create(domain->nthreads * 16);
 		else
-			domain->work_queue = NULL;
+			domain->request_queue = NULL;
 
 		if (attr->name[0])
 			memcpy(domain->name, attr->name, MM_DOMAIN_NAME_SIZE);
@@ -218,9 +220,9 @@ mm_domain_destroy(struct mm_domain *domain)
 {
 	ENTER();
 
-	// Destroy domain work queue if present.
-	if (domain->work_queue != NULL)
-		mm_ring_mpmc_destroy(domain->work_queue);
+	// Destroy domain request queue if present.
+	if (domain->request_queue != NULL)
+		mm_ring_mpmc_destroy(domain->request_queue);
 
 	// Release per-thread data.
 	mm_cdata_term(domain);
