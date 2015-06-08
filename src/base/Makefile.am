@@ -38,7 +38,7 @@ libmmbase_a_SOURCES = \
 	sys/clock.c sys/clock.h \
 	thread/domain.c thread/domain.h \
 	thread/monitor.c thread/monitor.h \
-	thread/request.h \
+	thread/request.c thread/request.h \
 	thread/thread.c thread/thread.h \
 	util/exit.c util/exit.h \
 	util/format.c util/format.h \

@@ -25,6 +25,7 @@
 #include "base/lock.h"
 #include "base/barrier.h"
 #include "base/log/debug.h"
+#include "base/thread/request.h"
 #include "base/thread/thread.h"
 
 /* Forward declarations. */
@@ -160,5 +161,15 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
 
 void __attribute__((nonnull(1)))
 mm_domain_join(struct mm_domain *domain);
+
+/**********************************************************************
+ * Domain requests.
+ **********************************************************************/
+
+MM_REQUEST_RECEIVE_WRAPPER(mm_domain, struct mm_domain, request_queue)
+
+MM_REQUEST_SUBMIT_WRAPPERS(mm_domain, struct mm_domain, request_queue)
+
+MM_REQUEST_SYSCALL_WRAPPERS(mm_domain, struct mm_domain, request_queue)
 
 #endif /* BASE_THREAD_DOMAIN_H */

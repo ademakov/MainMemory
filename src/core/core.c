@@ -35,7 +35,6 @@
 #include "base/mem/chunk.h"
 #include "base/mem/memory.h"
 #include "base/thread/domain.h"
-#include "base/thread/request.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
@@ -163,7 +162,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_core_handle_work_request(struct mm_core *core, uintptr_t *arguments)
+mm_core_work_request_handle(struct mm_core *core, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -180,8 +179,9 @@ mm_core_receive_requests(struct mm_core *core)
 	bool rc = false;
 
 	struct mm_request_data request;
-	while (mm_request_receive(&request)) {
-		mm_request_execute((uintptr_t) core, &request);
+	struct mm_domain *domain = mm_domain_self();
+	while (mm_domain_receive(domain, &request)) {
+		mm_request_execute_oneway((uintptr_t) core, &request);
 		rc = true;
 	}
 
@@ -197,8 +197,10 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	// If the work item has no target core then submit it
 	// to the domain request queue.
 	if (core_id == MM_CORE_NONE) {
-		mm_request_submit_1((mm_request_t) mm_core_handle_work_request,
-				    (uintptr_t) work);
+		struct mm_domain *domain = mm_domain_self();
+		mm_domain_submit_oneway_1(domain,
+					  (mm_request_t) mm_core_work_request_handle,
+					  (uintptr_t) work);
 		goto leave;
 	}
 

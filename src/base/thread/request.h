@@ -22,10 +22,22 @@
 
 #include "common.h"
 #include "base/ring.h"
-#include "base/thread/domain.h"
 
-/* Request routine. */
-typedef void (*mm_request_t)(uintptr_t context, uintptr_t arguments[6]);
+/* Forward declarations. */
+struct mm_requestor;
+
+/* Request routines. */
+typedef void (*mm_request_oneway_t)(uintptr_t context, uintptr_t *arguments);
+typedef uintptr_t (*mm_request_t)(uintptr_t context, uintptr_t *arguments);
+
+/* Response routine. */
+typedef void (*mm_response_t)(uintptr_t context, struct mm_requestor *rtor,
+			      uintptr_t result);
+
+/* The request maker id. To be used with containerof() macro. */
+struct mm_requestor {
+	mm_response_t response;
+};
 
 /* Request representation for dequeueing. */
 struct mm_request_data
@@ -35,106 +47,371 @@ struct mm_request_data
 		uintptr_t data[7];
 		struct
 		{
+			mm_request_t oneway_request;
+			uintptr_t oneway_arguments[6];
+		};
+		struct
+		{
 			mm_request_t request;
-			uintptr_t arguments[6];
+			struct mm_requestor *requestor;
+			uintptr_t requested_arguments[5];
 		};
 	};
 };
 
+/**********************************************************************
+ * Request fetching.
+ **********************************************************************/
+
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_receive(struct mm_ring_mpmc *ring, struct mm_request_data *rdata)
+{
+	return mm_ring_mpmc_get_n(ring, rdata->data, 7);
+}
+
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_relaxed_receive(struct mm_ring_mpmc *ring, struct mm_request_data *rdata)
+{
+	return mm_ring_relaxed_get_n(ring, rdata->data, 7);
+}
+
+/**********************************************************************
+ * One-way requests.
+ **********************************************************************/
+
 static inline void
-mm_request_execute(uintptr_t context, struct mm_request_data *request)
+mm_request_execute_oneway(uintptr_t context, struct mm_request_data *rdata)
 {
-	(*request->request)(context, request->arguments);
+	(*rdata->request)(context, rdata->oneway_arguments);
 }
 
-static inline bool __attribute__((nonnull(1)))
-mm_request_receive(struct mm_request_data *request)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_0(struct mm_ring_mpmc *ring, mm_request_t req)
 {
-	struct mm_domain *domain = mm_domain_self();
-	return mm_ring_mpmc_get_n(domain->request_queue, request->data, 7);
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_0(mm_request_t request)
-{
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request
+		(uintptr_t) req
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 1);
+	mm_ring_mpmc_enqueue_n(ring, data, 1);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_1(mm_request_t request, uintptr_t argument_1)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_1(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1
+		(uintptr_t) req, arg1
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 2);
+	mm_ring_mpmc_enqueue_n(ring, data, 2);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_2(mm_request_t request, uintptr_t argument_1,
-		    uintptr_t argument_2)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_2(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1, argument_2
+		(uintptr_t) req, arg1, arg2
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 3);
+	mm_ring_mpmc_enqueue_n(ring, data, 3);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_3(mm_request_t request, uintptr_t argument_1,
-		    uintptr_t argument_2, uintptr_t argument_3)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_3(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1, argument_2,
-		argument_3
+		(uintptr_t) req, arg1, arg2, arg3
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 4);
+	mm_ring_mpmc_enqueue_n(ring, data, 4);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_4(mm_request_t request, uintptr_t argument_1,
-		    uintptr_t argument_2, uintptr_t argument_3,
-		    uintptr_t argument_4)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_4(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			   uintptr_t arg4)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1, argument_2,
-		argument_3, argument_4
+		(uintptr_t) req, arg1, arg2, arg3, arg4
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 5);
+	mm_ring_mpmc_enqueue_n(ring, data, 5);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_5(mm_request_t request, uintptr_t argument_1,
-		    uintptr_t argument_2, uintptr_t argument_3,
-		    uintptr_t argument_4, uintptr_t argument_5)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_5(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			   uintptr_t arg4, uintptr_t arg5)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1, argument_2,
-		argument_3, argument_4, argument_5
+		(uintptr_t) req, arg1, arg2, arg3, arg4, arg5
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 6);
+	mm_ring_mpmc_enqueue_n(ring, data, 6);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_request_submit_6(mm_request_t request, uintptr_t argument_1,
-		    uintptr_t argument_2, uintptr_t argument_3,
-		    uintptr_t argument_4, uintptr_t argument_5,
-		    uintptr_t argument_6)
+static inline void __attribute__((nonnull(1, 2)))
+mm_request_submit_oneway_6(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			   uintptr_t arg4, uintptr_t arg5, uintptr_t arg6)
 {
-	struct mm_domain *domain = mm_domain_self();
 	uintptr_t data[] = {
-		(uintptr_t) request, argument_1, argument_2,
-		argument_3, argument_4, argument_5, argument_6
+		(uintptr_t) req, arg1, arg2, arg3, arg4, arg5, arg6
 	};
-	mm_ring_mpmc_enqueue_n(domain->request_queue, data, 7);
+	mm_ring_mpmc_enqueue_n(ring, data, 7);
+}
+
+/**********************************************************************
+ * Requests with responses.
+ **********************************************************************/
+
+static inline void
+mm_request_execute(uintptr_t context, struct mm_request_data *rdata)
+{
+	uintptr_t result = (*rdata->request)(context, rdata->requested_arguments);
+	(*rdata->requestor->response)(context, rdata->requestor, result);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_0(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req)
+{
+	mm_request_submit_oneway_1(ring, req, (intptr_t) rtor);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req, uintptr_t arg1)
+{
+	mm_request_submit_oneway_2(ring, req, (intptr_t) rtor,
+				   arg1);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req, uintptr_t arg1, uintptr_t arg2)
+{
+	mm_request_submit_oneway_3(ring, req, (intptr_t) rtor,
+				   arg1, arg2);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_3(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		    uintptr_t arg3)
+{
+	mm_request_submit_oneway_4(ring, req, (intptr_t) rtor,
+				   arg1, arg2, arg3);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		    uintptr_t arg3, uintptr_t arg4)
+{
+	mm_request_submit_oneway_5(ring, req, (intptr_t) rtor,
+				   arg1, arg2, arg3, arg4);
+}
+
+static inline void __attribute__((nonnull(1, 2, 3)))
+mm_request_submit_5(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		    mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		    uintptr_t arg3, uintptr_t arg4, uintptr_t arg5)
+{
+	mm_request_submit_oneway_6(ring, req, (intptr_t) rtor,
+				   arg1, arg2, arg3, arg4, arg5);
+}
+
+/**********************************************************************
+ * System call requests.
+ **********************************************************************/
+
+uintptr_t mm_request_syscall_handler(uintptr_t context, uintptr_t *arguments);
+
+static inline void
+mm_request_syscall_0(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		     int number)
+{
+	mm_request_submit_1(ring, rtor, mm_request_syscall_handler, number);
+}
+
+static inline void
+mm_request_syscall_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		     int number, uintptr_t arg1)
+{
+	mm_request_submit_2(ring, rtor, mm_request_syscall_handler, number,
+			    arg1);
+}
+
+static inline void
+mm_request_syscall_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		     int number, uintptr_t arg1, uintptr_t arg2)
+{
+	mm_request_submit_3(ring, rtor, mm_request_syscall_handler, number,
+			    arg1, arg2);
+}
+
+static inline void
+mm_request_syscall_3(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		     int number, uintptr_t arg1, uintptr_t arg2,
+		     uintptr_t arg3)
+{
+	mm_request_submit_4(ring, rtor, mm_request_syscall_handler, number,
+			    arg1, arg2, arg3);
+}
+
+static inline void
+mm_request_syscall_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		     int number, uintptr_t arg1, uintptr_t arg2,
+		     uintptr_t arg3, uintptr_t arg4)
+{
+	mm_request_submit_5(ring, rtor, mm_request_syscall_handler, number,
+			    arg1, arg2, arg3, arg4);
+}
+
+/**********************************************************************
+ * Request wrapper generator.
+ **********************************************************************/
+
+/**
+ * Define wrapprer for request receive routine.
+ */
+#define MM_REQUEST_RECEIVE_WRAPPER(prefix, container, name)		\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_receive(container *p, struct mm_request_data *r)		\
+{									\
+	return mm_request_receive(p->name, r);				\
+}									\
+									\
+/**
+ * Define wrapprer for single-threaded request receive routine.
+ */
+#define MM_REQUEST_RELAXED_RECEIVE_WRAPPER(prefix, container, name)	\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_receive(container *p, struct mm_request_data *r)		\
+{									\
+	return mm_request_relaxed_receive(p->name, r);		       	\
+}
+
+/**
+ * Define wrapprers for submit and oneway submit routines.
+ */
+#define MM_REQUEST_SUBMIT_WRAPPERS(prefix, container, name)		\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_0(container *p, mm_request_t r)			\
+{									\
+	mm_request_submit_oneway_0(p->name, r);				\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_1(container *p, mm_request_t r,			\
+			 uintptr_t a1)					\
+{									\
+	mm_request_submit_oneway_1(p->name, r, a1);			\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_2(container *p, mm_request_t r,			\
+			  uintptr_t a1, uintptr_t a2)			\
+{									\
+	mm_request_submit_oneway_2(p->name, r, a1, a2);			\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_3(container *p, mm_request_t r,			\
+			  uintptr_t a1, uintptr_t a2, uintptr_t a3)	\
+{									\
+	mm_request_submit_oneway_3(p->name, r, a1, a2, a3);		\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_4(container *p, mm_request_t r,			\
+			 uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			 uintptr_t a4)					\
+{									\
+	mm_request_submit_oneway_4(p->name, r, a1, a2, a3, a4);		\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_5(container *p, mm_request_t r,			\
+			 uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			 uintptr_t a4, uintptr_t a5)			\
+{									\
+	mm_request_submit_oneway_5(p->name, r, a1, a2, a3, a4, a5);	\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_submit_oneway_6(container *p, mm_request_t r,			\
+			 uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			 uintptr_t a4, uintptr_t a5, uintptr_t a6)	\
+{									\
+	mm_request_submit_oneway_6(p->name, r, a1, a2, a3, a4, a5, a6);	\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_0(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r)					\
+{									\
+	mm_request_submit_0(p->name, rtor, r);				\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_1(container *p, struct mm_requestor *rtor, 		\
+		  mm_request_t r, uintptr_t a1)				\
+{									\
+	mm_request_submit_1(p->name, rtor, r, a1);			\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_2(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r, uintptr_t a1, uintptr_t a2)		\
+{									\
+	mm_request_submit_2(p->name, rtor, r, a1, a2);			\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_3(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r, uintptr_t a1, uintptr_t a2,		\
+		  uintptr_t a3)						\
+{									\
+	mm_request_submit_3(p->name, rtor, r, a1, a2, a3);		\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_4(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r, uintptr_t a1, uintptr_t a2, 		\
+		  uintptr_t a3,	uintptr_t a4)				\
+{									\
+	mm_request_submit_4(p->name, rtor, r, a1, a2, a3, a4);		\
+}									\
+static inline void __attribute__((nonnull(1, 2, 3)))			\
+prefix##_submit_5(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r, uintptr_t a1, uintptr_t a2,		\
+		  uintptr_t a3, uintptr_t a4, uintptr_t a5)		\
+{									\
+	mm_request_submit_5(p->name, rtor, r, a1, a2, a3, a4, a5);	\
+}
+
+/**
+ * Define wrapprers for all syscall request routines.
+ */
+#define MM_REQUEST_SYSCALL_WRAPPERS(prefix, container, name)		\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_syscall_0(container *p, struct mm_requestor *rtor,		\
+		   int n)						\
+{									\
+	mm_request_syscall_0(p->name, rtor, n);				\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_syscall_1(container *p, struct mm_requestor *rtor, 		\
+		   int n, uintptr_t a1)					\
+{									\
+	mm_request_syscall_1(p->name, rtor, n, a1);			\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_syscall_2(container *p, struct mm_requestor *rtor,		\
+		   int n, uintptr_t a1, uintptr_t a2)			\
+{									\
+	mm_request_syscall_2(p->name, rtor, n, a1, a2);			\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_syscall_3(container *p, struct mm_requestor *rtor,		\
+		   int n, uintptr_t a1, uintptr_t a2,			\
+		   uintptr_t a3)					\
+{									\
+	mm_request_syscall_3(p->name, rtor, n, a1, a2, a3);		\
+}									\
+static inline void __attribute__((nonnull(1, 2)))			\
+prefix##_syscall_4(container *p, struct mm_requestor *rtor,		\
+		   int n, uintptr_t a1, uintptr_t a2,			\
+		   uintptr_t a3,	uintptr_t a4)			\
+{									\
+	mm_request_syscall_4(p->name, rtor, n, a1, a2, a3, a4);		\
 }
 
 #endif /* BASE_THREAD_REQUEST_H */
