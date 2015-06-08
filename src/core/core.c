@@ -35,6 +35,7 @@
 #include "base/mem/chunk.h"
 #include "base/mem/memory.h"
 #include "base/thread/domain.h"
+#include "base/thread/request.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
@@ -159,22 +160,53 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 	LEAVE();
 }
 
+#if ENABLE_SMP
+
+static void
+mm_core_handle_work_request(struct mm_core *core, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_work *work = (struct mm_work *) arguments[0];
+	mm_core_add_work(core, work);
+
+	LEAVE();
+}
+
+static bool
+mm_core_receive_requests(struct mm_core *core)
+{
+	ENTER();
+	bool rc = false;
+
+	struct mm_request_data request;
+	while (mm_request_receive(&request)) {
+		mm_request_execute((uintptr_t) core, &request);
+		rc = true;
+	}
+
+	LEAVE();
+	return rc;
+}
+
 void
 mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
 
-#if ENABLE_SMP
-	// Get the target core.
-	struct mm_core *core;
-	if (core_id != MM_CORE_NONE) {
-		core = mm_core_getptr(core_id);
-	} else {
-		core = mm_core;
+	// If the work item has no target core then submit it
+	// to the domain request queue.
+	if (core_id == MM_CORE_NONE) {
+		mm_request_submit_1((mm_request_t) mm_core_handle_work_request,
+				    (uintptr_t) work);
+		goto leave;
 	}
 
+	// Get the target core.
+	struct mm_core *core = mm_core_getptr(core_id);
+
 	// Dispatch the work item.
-	if (core == mm_core) {
+	if (core == mm_core_self()) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
 	} else {
@@ -193,13 +225,40 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 			}
 		}
 	}
-#else
-	(void) core_id;
-	mm_core_add_work(mm_core, work);
-#endif
+
+leave:
+	LEAVE();
+}
+
+static void
+mm_core_receive_work(struct mm_core *core)
+{
+	ENTER();
+
+	struct mm_work *work;
+	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
+		mm_core_add_work(core, work);
 
 	LEAVE();
 }
+
+#else
+
+void
+mm_core_post_work(mm_core_t core_id, struct mm_work *work)
+{
+	ENTER();
+
+	(void) core_id;
+	mm_core_add_work(mm_core_self(), work);
+
+	LEAVE();
+}
+
+# define mm_core_receive_work(core)		((void) core)
+# define mm_core_receive_requests(core)		((void) core, false)
+
+#endif
 
 void
 mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
@@ -215,22 +274,6 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 	LEAVE();
 }
-
-#if ENABLE_SMP
-static void
-mm_core_receive_work(struct mm_core *core)
-{
-	ENTER();
-
-	struct mm_work *work;
-	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
-		mm_core_add_work(core, work);
-
-	LEAVE();
-}
-#else
-# define mm_core_receive_work(core) ((void) core)
-#endif
 
 /**********************************************************************
  * Task queue.
@@ -432,12 +475,15 @@ mm_core_master(mm_value_t arg)
 #define MM_DEALER_POLL_TIMEOUT	((mm_timeout_t) 10)
 #define MM_DEALER_HOLD_TIMEOUT	((mm_timeout_t) 25)
 
+#if ENABLE_DEALER_STATS
 static mm_atomic_uint32_t mm_core_deal_count;
+#endif
 
 static bool
 mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
+	bool rc = false;
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
@@ -453,12 +499,17 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_wait_cache_truncate(&core->wait_cache);
 	mm_chunk_enqueue_deferred(thread, true);
 #if ENABLE_SMP
-	bool rc = mm_private_space_reclaim(mm_thread_getspace(thread));
+	rc |= mm_private_space_reclaim(mm_thread_getspace(thread));
 #else
-	bool rc = mm_private_space_reclaim(&mm_regular_space);
+	rc |= mm_private_space_reclaim(&mm_regular_space);
 #endif
 
+	// Try to execute a share of domain requests.
+	rc |= mm_core_receive_requests(core);
+
+#if ENABLE_DEALER_STATS
 	mm_atomic_uint32_inc(&mm_core_deal_count);
+#endif
 
 	LEAVE();
 	return rc;
@@ -509,8 +560,10 @@ mm_core_dealer(mm_value_t arg)
 void
 mm_core_stats(void)
 {
-	//uint32_t deal = mm_memory_load(mm_core_deal_count);
-	//mm_verbose("core stats: deal = %u", deal);
+#if ENABLE_DEALER_STATS
+	uint32_t deal = mm_memory_load(mm_core_deal_count);
+	mm_verbose("core stats: deal = %u", deal);
+#endif
 	mm_event_stats();
 	mm_lock_stats();
 }
