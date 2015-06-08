@@ -30,6 +30,9 @@
 /* Enable table access with locking. */
 #define ENABLE_MEMCACHE_LOCKING		0
 
+/* Enable entry chunk allocation in private space. */
+#define ENABLE_MEMCACHE_PRIVATE_CHUNKS	0
+
 #ifndef mc_hash
 # define mc_hash			mm_hash_murmur3_32
 #endif

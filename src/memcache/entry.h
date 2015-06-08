@@ -108,7 +108,11 @@ mc_entry_alloc_chunks(struct mc_entry *entry)
 {
 	ASSERT(mm_stack_empty(&entry->chunks));
 	uint32_t size = mc_entry_size(entry);
+#if ENABLE_MEMCACHE_PRIVATE_CHUNKS
 	struct mm_chunk *chunk = mm_chunk_create_private(size);
+#else
+	struct mm_chunk *chunk = mm_chunk_create_regular(size);
+#endif
 	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 }
 
