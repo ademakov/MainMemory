@@ -80,7 +80,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 			containerof(entry, struct mm_timer, entry);
 
 		if (likely(timer->start)) {
-			mm_core_post(true, timer->start, timer->start_arg);
+			mm_core_post(MM_CORE_SELF, timer->start, timer->start_arg);
 		}
 
 		if (timer->interval) {
