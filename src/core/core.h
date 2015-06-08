@@ -57,8 +57,11 @@ struct mm_core
 	/* Queue of tasks waiting for work items. */
 	struct mm_list idle;
 
-	/* The list of tasks that have finished. */
+	/* List of tasks that have finished. */
 	struct mm_list dead;
+
+	/* List of asynchronous operations. */
+	struct mm_list async;
 
 	/* Queue of pending work items. */
 	struct mm_queue workq;

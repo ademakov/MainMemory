@@ -181,7 +181,7 @@ mm_core_receive_requests(struct mm_core *core)
 	struct mm_request_data request;
 	struct mm_domain *domain = mm_domain_self();
 	while (mm_domain_receive(domain, &request)) {
-		mm_request_execute_oneway((uintptr_t) core, &request);
+		mm_request_execute((uintptr_t) core, &request);
 		rc = true;
 	}
 
@@ -736,6 +736,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_runq_prepare(&core->runq);
 	mm_list_prepare(&core->idle);
 	mm_list_prepare(&core->dead);
+	mm_list_prepare(&core->async);
 	mm_queue_prepare(&core->workq);
 
 	mm_wait_cache_prepare(&core->wait_cache);
