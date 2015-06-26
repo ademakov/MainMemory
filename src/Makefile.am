@@ -31,6 +31,7 @@ arch_sources += \
 endif
 
 core_sources = \
+	core/async.c core/async.h \
 	core/combiner.c core/combiner.h \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
