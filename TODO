@@ -2,15 +2,18 @@
 ASAP:
 * improve smp performance
 ** avoid long memcache locks or non-blocking memcache table
-** socket work stealing
 * polish & optimize
+** cleanup cross-thread communication
+** optimize event dispatch
+** try to beautify netbuf interface
+* region allocator
+* configuration file parsing
+* command line argument parsing
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
 ;;; against stock memcache.
 
 Essentials:
-* configuration file parsing
-* command line argument parsing
 * support signals
 * system call threads
 * resolve socket close issues: time wait
@@ -49,7 +52,6 @@ Enhancements:
 * exit idle workers pending for too long
 * reap dead tasks pending for too long
 * adopt C11-compatible fences and atomics
-** try to beautify netbuf interface
 * try to separate net I/O proper and reader/writer task layers?
 * non-blocking log
 * non-blocking ring (for producers)
@@ -72,7 +74,6 @@ Enhancements:
 ** use separate mspace for task local dynamic memory ?
 ** slab allocator (to base object pools on)
 ** buddy allocator (for I/O buffers and slabs)
-** region allocator
 ** garbage collection
 * failure trace records
 * arm port
