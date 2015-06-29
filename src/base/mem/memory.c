@@ -55,7 +55,7 @@ mm_regular_space_init(void)
 #if ENABLE_SMP
 	mm_shared_space_prepare(&mm_regular_space);
 #else
-	mm_private_space_prepare(&mm_regular_space, 16);
+	mm_private_space_prepare(&mm_regular_space, 64);
 #endif
 }
 
