@@ -111,15 +111,21 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		return;
 	}
 
-	// In SMP mode regular memory space is just another case of shared
-	// space with built-in synchronization. So it can be freed by any
-	// thread alike.
-#if ENABLE_SMP
 	if (tag == MM_CHUNK_REGULAR) {
+#if ENABLE_SMP
+		// In SMP mode regular memory space is just another case of shared
+		// space with built-in synchronization. So it can be freed by any
+		// thread alike.
 		mm_regular_free(chunk);
 		return;
-	}
+#else
+		struct mm_domain *domain = mm_domain_self();
+		if (domain == mm_regular_domain) {
+			mm_regular_free(chunk);
+			return;
+		}
 #endif
+	}
 
 	// A chunk from a private space can be immediately freed by its
 	// originating thread but it is a subject for asynchronous memory
@@ -128,11 +134,12 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	struct mm_domain *domain = mm_thread_getdomain(thread);
 	if (domain == mm_regular_domain && tag == mm_thread_getnumber(thread)) {
 		mm_private_free(chunk);
-	} else {
-		thread->deferred_chunks_count++;
-		mm_stack_insert(&thread->deferred_chunks, &chunk->base.slink);
-		mm_chunk_enqueue_deferred(thread, false);
+		return;
 	}
+
+	thread->deferred_chunks_count++;
+	mm_stack_insert(&thread->deferred_chunks, &chunk->base.slink);
+	mm_chunk_enqueue_deferred(thread, false);
 }
 
 void
