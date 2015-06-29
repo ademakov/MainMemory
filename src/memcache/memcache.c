@@ -90,7 +90,8 @@ retry:
 
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create(sock->event.core);
+			mm_core_t core = mm_event_target(&sock->event);
+			struct mc_command *command = mc_command_create(core);
 			command->type = &mc_command_ascii_quit;
 			mc_process_command(state, command);
 		}
@@ -111,7 +112,8 @@ parse:
 
 	if (!rc) {
 		if (parser.command != NULL) {
-			mc_command_destroy(sock->event.core, parser.command);
+			mm_core_t core = mm_event_target(&sock->event);
+			mc_command_destroy(core, parser.command);
 			parser.command = NULL;
 		}
 		if (state->trash) {

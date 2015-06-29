@@ -98,36 +98,55 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 }
 
 static void
+mm_dispatch_check_events(struct mm_dispatch *dispatch,
+			 struct mm_listener *listener,
+			 mm_core_t core)
+{
+	// Prepare to detach finished event sinks.
+	struct mm_event_batch *finish_events = &listener->finish;
+	for (unsigned int i = 0; i < finish_events->nevents; i++) {
+		struct mm_event *event = &finish_events->events[i];
+		struct mm_event_fd *ev_fd = event->ev_fd;
+		ev_fd->target = MM_THREAD_NONE;
+		ev_fd->detach = core;
+	}
+
+	struct mm_event_batch *pending_events = &dispatch->pending_events[core];
+	if (mm_event_batch_empty(pending_events))
+		return;
+
+	// Check if pending events affect any of the finished events.
+	// Undo detach preparation in this case.
+	for (unsigned int i = 0; i < pending_events->nevents; i++) {
+		struct mm_event *event = &pending_events->events[i];
+		struct mm_event_fd *ev_fd = event->ev_fd;
+		if (ev_fd->detach != MM_THREAD_NONE) {
+			ev_fd->detach = MM_THREAD_NONE;
+			ev_fd->target = core;
+		}
+	}
+
+	// Grab pending incoming events.
+	mm_event_batch_append(&listener->events, pending_events);
+	mm_event_batch_clear(pending_events);
+}
+
+static void
 mm_dispatch_get_pending_events(struct mm_dispatch *dispatch,
 			       struct mm_listener *listener,
 			       mm_core_t core)
 {
-	ENTER();
-
 	struct mm_event_batch *pending_events = &dispatch->pending_events[core];
 	if (mm_event_batch_empty(pending_events))
-		goto leave;
+		return;
 
-	// Flag event sinks that have incoming events.
-	for (unsigned int i = 0; i < pending_events->nevents; i++) {
-		struct mm_event *event = &pending_events->events[i];
-		struct mm_event_fd *ev_fd = event->ev_fd;
-		if (ev_fd->has_pending_events) {
-			ev_fd->has_dispatched_events = true;
-			ev_fd->has_pending_events = false;
-		}
-	}
-
-	// Grab pending incoming events if any.
+	// Grab pending incoming events.
 	mm_event_batch_append(&listener->events, pending_events);
 	mm_event_batch_clear(pending_events);
-
-leave:
-	LEAVE();
 }
 
 static void
-mm_dispatch_finish_events(struct mm_listener *listener)
+mm_dispatch_detach(struct mm_listener *listener)
 {
 	ENTER();
 
@@ -135,10 +154,11 @@ mm_dispatch_finish_events(struct mm_listener *listener)
 	for (unsigned int i = 0; i < finish_events->nevents; i++) {
 		struct mm_event *event = &finish_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
-		if (!ev_fd->has_dispatched_events) {
+		if (ev_fd->detach != MM_THREAD_NONE) {
+			ASSERT(ev_fd->target == MM_THREAD_NONE);
 			mm_event_dispatch(ev_fd, MM_EVENT_DETACH);
 			mm_memory_store_fence();
-			mm_event_dispatch_finish(ev_fd);
+			mm_memory_store(ev_fd->detach, MM_THREAD_NONE);
 		}
 	}
 
@@ -167,11 +187,8 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 		mm_regular_unlock(&dispatch->lock);
 
-		// Get pending incoming events.
-		mm_dispatch_get_pending_events(dispatch, listener, core);
-
-		// Handle finished events.
-		mm_dispatch_finish_events(listener);
+		// Get pending incoming events and prepare detach events.
+		mm_dispatch_check_events(dispatch, listener, core);
 
 	} else {
 		// Register as a waiting listener.
@@ -184,15 +201,15 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 			notify_listener = dispatch->polling_listener;
 		}
 
-		// Get pending incoming events.
-		mm_dispatch_get_pending_events(dispatch, listener, core);
+		// Get pending incoming events and prepare detach events.
+		mm_dispatch_check_events(dispatch, listener, core);
 
 		mm_regular_unlock(&dispatch->lock);
 
-		// Handle finished events.
-		mm_dispatch_finish_events(listener);
+		// Finalize detach events.
+		mm_dispatch_detach(listener);
 
-		// Wake up a listener that is possibly sleeping in a poll system call.
+		// Wake up a listener that is possibly sleeping on a poll system call.
 		if (notify_listener != NULL)
 			mm_listener_notify(notify_listener, dispatch);
 	}
@@ -220,34 +237,30 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 			struct mm_event *event = &listener->events.events[i];
 			struct mm_event_fd *ev_fd = event->ev_fd;
 
-			// If the event handler is clean of any previous events
-			// we are free to pin it to the current core.
-			if (ev_fd->core != core
-			    && !ev_fd->has_dispatched_events
-			    && !ev_fd->has_pending_events) {
-				// TODO: load_store fence
-				mm_memory_fence();
-				ev_fd->core = core;
-				mm_event_dispatch(ev_fd, MM_EVENT_ATTACH);
-			}
+			// Check to see if the event sink is attached to this
+			// thread.
+			mm_thread_t target = ev_fd->target;
+			if (target == core)
+				continue;
 
-			mm_core_t target_core = ev_fd->core;
-			ASSERT(target_core < mm_core_getnum());
-			if (target_core == core) {
-				ev_fd->has_dispatched_events = true;
+			// Check to see if the event sink is detached. In this
+			// case attach it to itself.
+			if (target == MM_THREAD_NONE) {
+				ev_fd->target = core;
 				continue;
 			}
 
-			ev_fd->has_pending_events = true;
-			mm_event_batch_add(&dispatch->pending_events[target_core],
+			// The event sink is attached to another thread.
+			mm_event_batch_add(&dispatch->pending_events[target],
 					   event->event, ev_fd);
 			event->event = MM_EVENT_DISPATCH_STUB;
 
-			struct mm_listener *target_listener = dispatch->waiting_listeners[target_core];
+			struct mm_listener *target_listener
+				= dispatch->waiting_listeners[target];
 			if (target_listener != NULL) {
 				ASSERT(nlisteners < mm_core_getnum());
 				listener->dispatch_targets[nlisteners++] = target_listener;
-				dispatch->waiting_listeners[target_core] = NULL;
+				dispatch->waiting_listeners[target] = NULL;
 			}
 		}
 
@@ -261,6 +274,33 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 			struct mm_listener *target = listener->dispatch_targets[i];
 			mm_listener_notify(target, dispatch);
 		}
+
+		// Attach each detached event sink for received events.
+		for (unsigned int i = 0; i < listener->events.nevents; i++) {
+			struct mm_event *event = &listener->events.events[i];
+			struct mm_event_fd *ev_fd = event->ev_fd;
+			if (ev_fd->target != core)
+				continue;
+
+			// For incomplete detach initiated by this thread
+			// simply revert detach preparation.
+			if (ev_fd->detach == core) {
+				ev_fd->detach = MM_THREAD_NONE;
+				continue;
+			}
+
+			// Wait for completion of detach initiated by another
+			// thread.
+			while (mm_memory_load(ev_fd->detach) != MM_THREAD_NONE)
+				mm_spin_pause();
+			mm_memory_fence();
+
+			// Really attach at last.
+			mm_event_dispatch(ev_fd, MM_EVENT_ATTACH);
+		}
+
+		// Finalize remaining detach events.
+		mm_dispatch_detach(listener);
 
 	} else {
 		mm_regular_lock(&dispatch->lock);

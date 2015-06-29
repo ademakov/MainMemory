@@ -21,7 +21,6 @@
 #define EVENT_EVENT_H
 
 #include "common.h"
-#include "arch/memory.h"
 
 #if defined(HAVE_SYS_EPOLL_H)
 # undef MM_ONESHOT_HANDLERS
@@ -96,10 +95,10 @@ struct mm_event_fd
 	/* The file descriptor to watch. */
 	int fd;
 
-	/* The core the handlers are pinned to. */
-	mm_core_t core;
-	bool has_pending_events;
-	bool has_dispatched_events;
+	/* The thread the handler is pinned to along with possible
+	   pending events flag. */
+	mm_thread_t target;
+	mm_thread_t detach;
 
 	/* Event handers. */
 	mm_event_hid_t handler;
@@ -128,9 +127,16 @@ mm_event_dispatch(struct mm_event_fd *ev_fd, mm_event_t event)
 	(hd->handler)(event, ev_fd);
 }
 
-static inline void __attribute__((nonnull(1)))
-mm_event_dispatch_finish(struct mm_event_fd *ev_fd)
+static inline mm_thread_t __attribute__((nonnull(1)))
+mm_event_target(const struct mm_event_fd *ev_fd)
 {
-	mm_memory_store(ev_fd->has_dispatched_events, false);
+	return ev_fd->target;
 }
+
+static inline bool __attribute__((nonnull(1)))
+mm_event_attached(const struct mm_event_fd *ev_fd)
+{
+	return (mm_event_target(ev_fd) != MM_CORE_NONE);
+}
+
 #endif /* EVENT_EVENT_H */

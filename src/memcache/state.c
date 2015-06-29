@@ -19,6 +19,8 @@
 
 #include "memcache/state.h"
 
+#include "event/event.h"
+
 struct mm_net_socket *
 mc_state_alloc(void)
 {
@@ -48,15 +50,14 @@ mc_state_prepare(struct mm_net_socket *sock)
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
 	state->command_head = NULL;
 	state->command_tail = NULL;
-
 	state->protocol = MC_PROTOCOL_INIT;
-
 	state->error = false;
 	state->trash = false;
-	state->dirty = false;
+
+	//mm_net_set_async_read(sock, true);
+	//mm_net_set_async_write(sock, true);
 
 	LEAVE();
 }
@@ -68,13 +69,14 @@ mc_state_cleanup(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
+	mm_core_t core = mm_event_target(&sock->event);
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(sock->event.core, command);
+		mc_command_destroy(core, command);
 	}
 
-	if (state->dirty) {
+	if (mm_event_attached(&state->sock.sock.event)) {
 		mm_netbuf_cleanup(&state->sock);
 	}
 
@@ -94,10 +96,7 @@ mc_state_attach(struct mm_net_socket *sock)
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	ASSERT(!state->dirty);
 	mm_netbuf_prepare(&state->sock);
-	state->dirty = true;
 
 	LEAVE();
 }
@@ -108,11 +107,7 @@ mc_state_detach(struct mm_net_socket *sock)
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	if (state->dirty) {
-		mm_netbuf_cleanup(&state->sock);
-		state->dirty = false;
-	}
+	mm_netbuf_cleanup(&state->sock);
 
 	LEAVE();
 }

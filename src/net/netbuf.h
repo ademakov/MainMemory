@@ -56,7 +56,7 @@ mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size);
 static inline mm_core_t
 mm_netbuf_core(struct mm_netbuf_socket *sock)
 {
-	return sock->sock.event.core;
+	return mm_event_target(&sock->sock.event);
 }
 
 static inline void

@@ -270,7 +270,8 @@ mm_net_alloc_server(void)
 
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
 	srv->event.fd = -1;
-	srv->event.core = MM_CORE_NONE;
+	srv->event.target = MM_CORE_NONE;
+	srv->event.detach = MM_CORE_NONE;
 	srv->client_count = 0;
 
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
@@ -316,6 +317,8 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 	sock->close_flags = 0;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
+	sock->async_read = false;
+	sock->async_write = false;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->server = srv;
@@ -457,7 +460,8 @@ retry:
 		sock->flags |= MM_NET_WRITER_PENDING;
 
 	// Request protocol handler routine.
-	mm_core_post(sock->event.core, mm_net_prepare, (mm_value_t) sock);
+	mm_core_t core = mm_event_target(&sock->event);
+	mm_core_post(core, mm_net_prepare, (mm_value_t) sock);
 
 leave:
 	LEAVE();
@@ -488,7 +492,8 @@ mm_net_accept_handler(mm_event_t event, void *data)
 
 	if (event == MM_EVENT_INPUT) {
 		struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
-		mm_core_post(srv->event.core, mm_net_acceptor, (mm_value_t) srv);
+		mm_core_t core = mm_event_target(&srv->event);
+		mm_core_post(core, mm_net_acceptor, (mm_value_t) srv);
 	}
 
 	LEAVE();
@@ -513,7 +518,7 @@ static void
 mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	// Update the read readiness flags.
 	sock->flags |= flags;
@@ -530,7 +535,8 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 			// Remember a reader has been started.
 			sock->flags |= MM_NET_READER_SPAWNED;
 			// Submit a reader work.
-			mm_core_post_work(sock->event.core, &sock->read_work);
+			mm_core_t core = mm_event_target(&sock->event);
+			mm_core_post_work(core, &sock->read_work);
 		}
 	}
 
@@ -541,7 +547,7 @@ static void
 mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	// Update the write readiness flags.
 	sock->flags |= flags;
@@ -558,7 +564,8 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 			// Remember a writer has been started.
 			sock->flags |= MM_NET_WRITER_SPAWNED;
 			// Submit a writer work.
-			mm_core_post_work(sock->event.core, &sock->write_work);
+			mm_core_t core = mm_event_target(&sock->event);
+			mm_core_post_work(core, &sock->write_work);
 		}
 	}
 
@@ -569,14 +576,15 @@ static void
 mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	sock->flags &= ~MM_NET_READ_READY;
 #if MM_ONESHOT_HANDLERS
 	bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 	if (oneshot) {
-		struct mm_core *core = &mm_core_set[sock->event.core];
-		mm_listener_trigger_input(&core->listener, &sock->event);
+		mm_core_t core = mm_event_target(&sock->event);
+		struct mm_core *cp = &mm_core_set[core];
+		mm_listener_trigger_input(&cp->listener, &sock->event);
 	}
 #endif
 
@@ -587,14 +595,15 @@ static void
 mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	sock->flags &= ~MM_NET_WRITE_READY;
 #if MM_ONESHOT_HANDLERS
 	bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 	if (oneshot) {
-		struct mm_core *core = &mm_core_set[sock->event.core];
-		mm_listener_trigger_output(&core->listener, &sock->event);
+		mm_core_t core = mm_event_target(&sock->event);
+		struct mm_core *cp = &mm_core_set[core];
+		mm_listener_trigger_output(&cp->listener, &sock->event);
 	}
 #endif
 
@@ -609,14 +618,17 @@ mm_net_dispatch_finish(struct mm_net_socket *sock)
 	if ((sock->flags & (MM_NET_READER_SPAWNED | MM_NET_WRITER_SPAWNED)) != 0)
 		goto leave;
 
-	if (sock->server->proto->finish != NULL
-	    && (sock->server->proto->finish)(sock)) {
-		struct mm_core *core = mm_core_self();
-		mm_listener_dispatch_finish(&core->listener, &sock->event);
+	if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0) {
+		mm_net_close(sock);
+		goto leave;
 	}
 
-	if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0)
-		mm_net_close(sock);
+	if (sock->server->proto->finish != NULL
+	    && (sock->server->proto->finish)(sock)) {
+		mm_core_t core = mm_event_target(&sock->event);
+		struct mm_core *cp = &mm_core_set[core];
+		mm_listener_dispatch_finish(&cp->listener, &sock->event);
+	}
 
 leave:
 	LEAVE();
@@ -665,7 +677,8 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		mm_core_post_work(sock->event.core, &sock->cleanup_work);
+		mm_core_post_work(mm_event_target(&sock->event),
+				  &sock->cleanup_work);
 		break;
 
 	case MM_EVENT_INPUT_ERROR:
@@ -704,7 +717,7 @@ void
 mm_net_spawn_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -719,7 +732,8 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		// Remember a reader has been started.
 		sock->flags |= MM_NET_READER_SPAWNED;
 		// Submit a reader work.
-		mm_core_post_work(sock->event.core, &sock->read_work);
+		mm_core_t core = mm_event_target(&sock->event);
+		mm_core_post_work(core, &sock->read_work);
 
 		// Let it start immediately.
 		mm_task_yield();
@@ -733,7 +747,7 @@ void
 mm_net_spawn_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
@@ -748,7 +762,8 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		// Remember a writer has been started.
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		// Submit a writer work.
-		mm_core_post_work(sock->event.core, &sock->write_work);
+		mm_core_t core = mm_event_target(&sock->event);
+		mm_core_post_work(core, &sock->write_work);
 
 		// Let it start immediately.
 		mm_task_yield();
@@ -762,7 +777,7 @@ void
 mm_net_yield_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 #if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
@@ -787,7 +802,8 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
-		mm_core_post_work(sock->event.core, &sock->read_work);
+		mm_core_t core = mm_event_target(&sock->event);
+		mm_core_post_work(core, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_dispatch_finish(sock);
@@ -801,7 +817,7 @@ void
 mm_net_yield_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 #if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
@@ -826,7 +842,8 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
-		mm_core_post_work(sock->event.core, &sock->write_work);
+		mm_core_t core = mm_event_target(&sock->event);
+		mm_core_post_work(core, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_dispatch_finish(sock);
@@ -886,7 +903,7 @@ mm_net_cleanup(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed socks
@@ -904,7 +921,8 @@ mm_net_cleanup(mm_value_t arg)
 	if (sock->server->proto->cleanup != NULL)
 		(sock->server->proto->cleanup)(sock);
 
-	mm_core_post(sock->server->event.core, mm_net_destroy, (mm_value_t) sock);
+	mm_core_t core = mm_event_target(&sock->server->event);
+	mm_core_post(core, mm_net_destroy, (mm_value_t) sock);
 
 	LEAVE();
 	return 0;
@@ -916,7 +934,7 @@ mm_net_reader(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
@@ -940,7 +958,7 @@ mm_net_writer(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
@@ -1117,7 +1135,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	mm_brief("start server '%s'", srv->name);
 	ASSERT(srv->event.fd == -1);
-	ASSERT(srv->event.core == MM_CORE_NONE); 
+	ASSERT(mm_event_target(&srv->event) == MM_CORE_NONE);
 
 	// Find the cores to run the server on.
 	if (mm_bitset_any(&srv->affinity))
@@ -1139,9 +1157,9 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
 			    true, false, false, false);
-	srv->event.core = srv_core;
-	srv->event.has_dispatched_events = true;
-	mm_core_post(srv->event.core, mm_net_register_server, (mm_value_t) srv);
+	srv->event.target = srv_core;
+	srv->event.detach = MM_THREAD_NONE;
+	mm_core_post(srv->event.target, mm_net_register_server, (mm_value_t) srv);
 
 	LEAVE();
 }
@@ -1151,13 +1169,14 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
-	ASSERT(srv->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&srv->event) == mm_core_selfid());
 
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	struct mm_core *core = &mm_core_set[srv->event.core];
-	mm_listener_unregister_fd(&core->listener, &srv->event);
+	mm_core_t core = mm_event_target(&srv->event);
+	struct mm_core *cp = &mm_core_set[core];
+	mm_listener_unregister_fd(&cp->listener, &srv->event);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->event.fd);
@@ -1270,7 +1289,7 @@ ssize_t
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	ssize_t n;
 
 	// Remember the wait time.
@@ -1323,7 +1342,7 @@ ssize_t
 mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	ssize_t n;
 
 	// Remember the wait time.
@@ -1378,7 +1397,7 @@ mm_net_readv(struct mm_net_socket *sock,
 	     ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	ssize_t n;
 
 	// Remember the start time.
@@ -1433,7 +1452,7 @@ mm_net_writev(struct mm_net_socket *sock,
 	      ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 	ssize_t n;
 
 	// Remember the start time.
@@ -1486,7 +1505,7 @@ void
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1495,8 +1514,9 @@ mm_net_close(struct mm_net_socket *sock)
 	sock->close_flags = MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
-	struct mm_core *core = &mm_core_set[sock->event.core];
-	mm_listener_unregister_fd(&core->listener, &sock->event);
+	mm_core_t core = mm_event_target(&sock->event);
+	struct mm_core *cp = &mm_core_set[core];
+	mm_listener_unregister_fd(&cp->listener, &sock->event);
 
 leave:
 	LEAVE();
@@ -1506,7 +1526,7 @@ void
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -1526,7 +1546,7 @@ void
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(sock->event.core == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;

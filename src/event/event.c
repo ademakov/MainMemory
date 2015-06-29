@@ -102,9 +102,8 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd,
 
 	ev_fd->fd = fd;
 
-	ev_fd->core = MM_CORE_NONE;
-	ev_fd->has_pending_events = false;
-	ev_fd->has_dispatched_events = false;
+	ev_fd->target = MM_THREAD_NONE;
+	ev_fd->detach = MM_THREAD_NONE;
 
 	ev_fd->handler = handler;
 

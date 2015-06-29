@@ -44,7 +44,6 @@ struct mc_state
 	// Flags.
 	bool error;
 	bool trash;
-	bool dirty;
 };
 
 /* Net-proto routines. */
