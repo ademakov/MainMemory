@@ -50,14 +50,14 @@ struct mm_request_data
 		uintptr_t data[7];
 		struct
 		{
-			mm_request_t oneway_request;
+			mm_request_oneway_t oneway_request;
 			uintptr_t oneway_arguments[6];
 		};
 		struct
 		{
 			mm_request_t request;
 			struct mm_requestor *requestor;
-			uintptr_t requested_arguments[5];
+			uintptr_t arguments[5];
 		};
 	};
 };
@@ -91,10 +91,9 @@ mm_request_execute(uintptr_t context, struct mm_request_data *rdata)
 {
 	if ((rdata->data[0] & MM_REQUEST_ONEWAY) != 0) {
 		rdata->data[0] &= ~MM_REQUEST_ONEWAY;
-		(*rdata->request)(context, rdata->oneway_arguments);
+		(*rdata->oneway_request)(context, rdata->oneway_arguments);
 	} else {
-		uintptr_t result
-			= (*rdata->request)(context,rdata->requested_arguments);
+		uintptr_t result = (*rdata->request)(context, rdata->arguments);
 		(*rdata->requestor->response)(context, rdata->requestor, result);
 	}
 }
@@ -177,7 +176,7 @@ mm_request_submit_oneway_6(struct mm_ring_mpmc *ring, mm_request_t req,
 {
 	mm_request_verify_address(req);
 	uintptr_t data[] = {
-		(uintptr_t) req, arg1, arg2, arg3, arg4, arg5, arg6
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3, arg4, arg5, arg6
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 7);
 }
@@ -307,7 +306,7 @@ mm_request_syscall_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
  **********************************************************************/
 
 /**
- * Define wrapprer for request receive routine.
+ * Define a wrapper for request receive routine.
  */
 #define MM_REQUEST_RECEIVE_WRAPPER(prefix, container, name)		\
 static inline bool __attribute__((nonnull(1, 2)))			\
@@ -317,7 +316,7 @@ prefix##_receive(container *p, struct mm_request_data *r)		\
 }									\
 									\
 /**
- * Define wrapprer for single-threaded request receive routine.
+ * Define a wrapper for single-threaded request receive routine.
  */
 #define MM_REQUEST_RELAXED_RECEIVE_WRAPPER(prefix, container, name)	\
 static inline bool __attribute__((nonnull(1, 2)))			\
@@ -327,7 +326,7 @@ prefix##_receive(container *p, struct mm_request_data *r)		\
 }
 
 /**
- * Define wrapprers for submit and oneway submit routines.
+ * Define wrappers for submit and oneway submit routines.
  */
 #define MM_REQUEST_SUBMIT_WRAPPERS(prefix, container, name)		\
 static inline void __attribute__((nonnull(1, 2)))			\
@@ -415,7 +414,7 @@ prefix##_submit_5(container *p, struct mm_requestor *rtor,		\
 }
 
 /**
- * Define wrapprers for all syscall request routines.
+ * Define wrappers for syscall request routines.
  */
 #define MM_REQUEST_SYSCALL_WRAPPERS(prefix, container, name)		\
 static inline void __attribute__((nonnull(1, 2)))			\
