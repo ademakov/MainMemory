@@ -25,6 +25,8 @@
 #include "base/list.h"
 #include "base/log/trace.h"
 #include "base/mem/space.h"
+#include "base/thread/request.h"
+
 #include <pthread.h>
 
 /* Forward declarations. */
@@ -57,6 +59,9 @@ struct mm_thread_attr
 	/* Enable private memory space. */
 	bool private_space;
 
+	/* The size of thread request queue. */
+	uint32_t request_queue;
+
 	/* The size of queue for memory chunks released by other threads. */
 	uint32_t reclaim_queue;
 
@@ -84,6 +89,9 @@ struct mm_thread
 
 	/* Wake-up notification routine. */
 	mm_thread_notify_t notify;
+
+	/* Thread request queue. */
+	struct mm_ring_mpmc *request_queue;
 
 #if ENABLE_SMP
 	/* Private memory space. */
@@ -141,10 +149,13 @@ void __attribute__((nonnull(1)))
 mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify);
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space);
+mm_thread_attr_setspace(struct mm_thread_attr *attr, bool eneble);
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setreclaim(struct mm_thread_attr *attr, uint32_t size);
+mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size);
 
 void __attribute__((nonnull(1)))
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
@@ -239,5 +250,13 @@ mm_thread_join(struct mm_thread *thread);
 void mm_thread_yield(void);
 
 void mm_thread_domain_barrier(void);
+
+/**********************************************************************
+ * Domain requests.
+ **********************************************************************/
+
+MM_REQUEST_RELAXED_RECEIVE_WRAPPER(mm_thread, struct mm_thread, request_queue)
+
+MM_REQUEST_SUBMIT_WRAPPERS(mm_thread, struct mm_thread, request_queue)
 
 #endif /* BASE_THREAD_THREAD_H */

@@ -178,8 +178,8 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 
 		// Request chunk reclaim queue for private space.
 		if (attr->private_space) {
-			uint32_t reclaim = mm_upper_pow2(domain->nthreads * 16);
-			mm_thread_attr_setreclaim(&thread_attr, reclaim);
+			uint32_t sz = mm_upper_pow2(domain->nthreads * 16);
+			mm_thread_attr_setreclaimqueue(&thread_attr, sz);
 		}
 	}
 

@@ -19,6 +19,7 @@
 
 #include "base/thread/thread.h"
 
+#include "base/bitops.h"
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -32,6 +33,8 @@
 # include <mach/thread_act.h>
 # include <mach/thread_policy.h>
 #endif
+
+#define MM_THREAD_QUEUE_MIN_SIZE	16
 
 static struct mm_thread mm_thread_main = {
 	.log_queue = {
@@ -90,13 +93,19 @@ mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify)
 }
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setspace(struct mm_thread_attr *attr, bool private_space)
+mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable)
 {
-	attr->private_space = private_space;
+	attr->private_space = enable;
 }
 
 void __attribute__((nonnull(1)))
-mm_thread_attr_setreclaim(struct mm_thread_attr *attr, uint32_t size)
+mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size)
+{
+	attr->request_queue = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->reclaim_queue = size;
 }
@@ -266,44 +275,50 @@ mm_thread_create(struct mm_thread_attr *attr,
 	thread->start = start;
 	thread->start_arg = start_arg;
 
-	// Set thread attributes.
+	// Set basic thread attributes.
 	if (attr == NULL) {
 		thread->domain = NULL;
 		thread->domain_number = 0;
 		thread->cpu_tag = 0;
-		thread->notify = mm_thread_notify_dummy;
-#if ENABLE_SMP
-		mm_private_space_reset(&thread->space);
-#endif
-		strcpy(thread->name, "unnamed");
 	} else {
 		thread->domain = attr->domain;
 		thread->domain_number = attr->domain_number;
 		thread->cpu_tag = attr->cpu_tag;
+	}
 
-		// Set the notification routine.
-		if (attr->notify == NULL)
-			thread->notify = mm_thread_notify_dummy;
-		else
-			thread->notify = attr->notify;
+	// Set thread notification routine.
+	if (attr != NULL && attr->notify != NULL)
+		thread->notify = attr->notify;
+	else
+		thread->notify = mm_thread_notify_dummy;
 
+	// Create a thread request queue if required.
+	if (attr != NULL && attr->request_queue) {
+		uint32_t sz = mm_upper_pow2(attr->request_queue);
+		if (sz < MM_THREAD_QUEUE_MIN_SIZE)
+			sz = MM_THREAD_QUEUE_MIN_SIZE;
+		thread->request_queue = mm_ring_mpmc_create(sz);
+	} else {
+		thread->request_queue = NULL;
+	}
+
+	// Initialize private memory space if required.
 #if ENABLE_SMP
-		// Initialize private memory space if required.
-		if (attr->private_space)
-			mm_private_space_prepare(&thread->space,
-						 attr->reclaim_queue);
-		else
-			mm_private_space_reset(&thread->space);
+	if (attr != NULL && attr->private_space)
+		mm_private_space_prepare(&thread->space, attr->reclaim_queue);
+	else
+		mm_private_space_reset(&thread->space);
 #else
-		if (attr->private_space || attr->reclaim_queue)
-			mm_warning(0, "ignore private space thread attributes");
+	mm_private_space_reset(&thread->space);
+	if (attr->private_space || attr->reclaim_queue)
+		mm_warning(0, "ignore private space thread attributes");
 #endif
 
-		if (attr->name[0])
-			memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
-		else
-			strcpy(thread->name, "unnamed");
-	}
+	// Set the thread name.
+	if (attr != NULL && attr->name[0])
+		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
+	else
+		strcpy(thread->name, "unnamed");
 
 	// Initialize deferred chunks info.
 	mm_stack_prepare(&thread->deferred_chunks);
