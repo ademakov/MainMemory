@@ -29,6 +29,9 @@
 
 struct mm_dispatch
 {
+	/* The number of event listeners. */
+	mm_thread_t nlisteners;
+
 	mm_regular_lock_t lock;
 
 	/* The listener elected to do event poll. */
@@ -55,7 +58,7 @@ struct mm_dispatch
 };
 
 void __attribute__((nonnull(1)))
-mm_dispatch_prepare(struct mm_dispatch *dispatch);
+mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners);
 
 void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);

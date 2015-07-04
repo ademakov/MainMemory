@@ -26,21 +26,21 @@
 #include "base/mem/space.h"
 
 void __attribute__((nonnull(1)))
-mm_dispatch_prepare(struct mm_dispatch *dispatch)
+mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 {
 	ENTER();
+	ASSERT(nlistsners > 0);
 
-	mm_core_t ncores = mm_core_getnum();
-	ASSERT(ncores > 0);
+	dispatch->nlisteners = nlisteners;
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	dispatch->polling_listener = NULL;
-	dispatch->waiting_listeners = mm_common_calloc(ncores, sizeof (struct mm_listener *));
+	dispatch->waiting_listeners = mm_common_calloc(nlisteners, sizeof (struct mm_listener *));
 
 	// Allocate pending event batches.
-	dispatch->pending_events = mm_common_alloc(ncores * sizeof(struct mm_event_batch));
-	for (mm_core_t i = 0; i < ncores; i++)
+	dispatch->pending_events = mm_common_alloc(nlisteners * sizeof(struct mm_event_batch));
+	for (mm_thread_t i = 0; i < nlisteners; i++)
 		mm_event_batch_prepare(&dispatch->pending_events[i]);
 	mm_event_batch_prepare(&dispatch->pending_changes);
 
@@ -74,12 +74,10 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 {
 	ENTER();
 
-	mm_core_t ncores = mm_core_getnum();
-
 	mm_common_free(dispatch->waiting_listeners);
 
 	// Release pending event batches.
-	for (mm_core_t i = 0; i < ncores; i++)
+	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_batch_cleanup(&dispatch->pending_events[i]);
 	mm_event_batch_cleanup(&dispatch->pending_changes);
 
@@ -155,7 +153,9 @@ mm_dispatch_detach(struct mm_listener *listener)
 		struct mm_event *event = &finish_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
 		if (ev_fd->detach != MM_THREAD_NONE) {
-			ASSERT(ev_fd->target == MM_THREAD_NONE);
+			ASSERT(ev_fd->target == MM_THREAD_NONE
+			       || ev_fd->target == mm_core_selfid());
+			TRACE("detach from: %d", ev_fd->detach);
 			mm_event_dispatch(ev_fd, MM_EVENT_DETACH);
 			mm_memory_store_fence();
 			mm_memory_store(ev_fd->detach, MM_THREAD_NONE);
@@ -258,7 +258,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 			struct mm_listener *target_listener
 				= dispatch->waiting_listeners[target];
 			if (target_listener != NULL) {
-				ASSERT(nlisteners < mm_core_getnum());
+				ASSERT(nlisteners < dispatch->nlisteners);
 				listener->dispatch_targets[nlisteners++] = target_listener;
 				dispatch->waiting_listeners[target] = NULL;
 			}
@@ -296,6 +296,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 			mm_memory_fence();
 
 			// Really attach at last.
+			TRACE("attach to: %d", ev_fd->target);
 			mm_event_dispatch(ev_fd, MM_EVENT_ATTACH);
 		}
 

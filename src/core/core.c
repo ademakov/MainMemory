@@ -197,6 +197,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 		mm_thread_submit_oneway_1(thread,
 					  (mm_request_t) mm_core_post_work_request,
 					  (uintptr_t) work);
+		mm_thread_notify(thread);
 	}
 
 	LEAVE();
@@ -267,6 +268,7 @@ mm_core_run_task(struct mm_task *task)
 		mm_thread_submit_oneway_1(thread,
 					  (mm_request_t) mm_core_run_task_request,
 					  (uintptr_t) task);
+		mm_thread_notify(thread);
 	}
 #else
 	mm_task_run(task);
@@ -819,7 +821,7 @@ mm_core_init(void)
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
-	mm_dispatch_prepare(&mm_core_dispatch);
+	mm_dispatch_prepare(&mm_core_dispatch, mm_core_num);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
