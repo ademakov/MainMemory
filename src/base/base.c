@@ -80,7 +80,8 @@ mm_base_loop(struct mm_base_params *params)
 	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
 	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
 	mm_domain_attr_setspace(&attr, true);
-	mm_domain_attr_setqueue(&attr, true);
+	mm_domain_attr_setdomainqueue(&attr, mm_ncpus * 32);
+	mm_domain_attr_setthreadqueue(&attr, mm_ncpus * 32);
 	for (mm_thread_t i = 0; i < mm_ncpus; i++) {
 		mm_domain_attr_setcputag(&attr, i, i);
 	}

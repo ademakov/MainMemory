@@ -29,6 +29,8 @@
 
 #include <stdio.h>
 
+#define MM_DOMAIN_QUEUE_MIN_SIZE	16
+
 __thread struct mm_domain *__mm_domain_self = NULL;
 
 /**********************************************************************
@@ -73,9 +75,15 @@ mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 }
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool enable)
+mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size)
 {
-	attr->request_queue = enable;
+	attr->domain_request_queue = size;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size)
+{
+	attr->thread_request_queue = size;
 }
 
 void __attribute__((nonnull(1)))
@@ -134,28 +142,30 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	// Create a domain object.
 	struct mm_domain *domain = mm_global_alloc(sizeof(struct mm_domain));
 
-	// Set domain attributes.
+	// Set basic domain attributes.
 	if (attr == NULL) {
 		domain->nthreads = 1;
-		domain->request_queue = NULL;
-		strcpy(domain->name, "unnamed");
 	} else {
 		domain->nthreads = attr->nthreads;
 		if (domain->nthreads == 0)
 			mm_fatal(0, "invalid domain attributes.");
-
-		// Create domain work queue if required.
-		if (attr->request_queue)
-			domain->request_queue
-				= mm_ring_mpmc_create(domain->nthreads * 16);
-		else
-			domain->request_queue = NULL;
-
-		if (attr->name[0])
-			memcpy(domain->name, attr->name, MM_DOMAIN_NAME_SIZE);
-		else
-			strcpy(domain->name, "unnamed");
 	}
+
+	// Create domain request queue if required.
+	if (attr != NULL && attr->domain_request_queue) {
+		uint32_t sz = mm_upper_pow2(attr->domain_request_queue);
+		if (sz < MM_DOMAIN_QUEUE_MIN_SIZE)
+			sz = MM_DOMAIN_QUEUE_MIN_SIZE;
+		domain->request_queue = mm_ring_mpmc_create(sz);
+	} else {
+		domain->request_queue = NULL;
+	}
+
+	// Set the domain name.
+	if (attr != NULL && attr->name[0])
+		memcpy(domain->name, attr->name, MM_DOMAIN_NAME_SIZE);
+	else
+		strcpy(domain->name, "unnamed");
 
 	// Set thread start/stop barrier.
 	mm_barrier_init(&domain->barrier, domain->nthreads);
@@ -171,6 +181,9 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	if (attr != NULL) {
 		mm_thread_attr_setnotify(&thread_attr, attr->notify);
 		mm_thread_attr_setspace(&thread_attr, attr->private_space);
+		mm_thread_attr_setrequestqueue(&thread_attr,
+					       attr->thread_request_queue);
+
 		stack_size = mm_round_up(attr->stack_size, MM_PAGE_SIZE);
 		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
 			stack_size = MM_THREAD_STACK_MIN;

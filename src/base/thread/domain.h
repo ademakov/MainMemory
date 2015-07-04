@@ -47,11 +47,12 @@ struct mm_domain_attr
 	/* The number of threads. */
 	mm_thread_t nthreads;
 
-	/* Enable shared request queue for domain. */
-	bool request_queue;
-
 	/* Enable private memory space for domain's threads. */
 	bool private_space;
+
+	/* Sizes of request queue for domain and domain's threads. */
+	uint32_t domain_request_queue;
+	uint32_t thread_request_queue;
 
 	/* Common notification routine for domain's threads. */
 	mm_thread_notify_t notify;
@@ -108,10 +109,13 @@ void __attribute__((nonnull(1)))
 mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify);
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setspace(struct mm_domain_attr *attr, bool private_space);
+mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setqueue(struct mm_domain_attr *attr, bool work_queue);
+mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size);
 
 void __attribute__((nonnull(1)))
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size);
