@@ -136,7 +136,7 @@ mm_event_target(const struct mm_event_fd *ev_fd)
 static inline bool __attribute__((nonnull(1)))
 mm_event_attached(const struct mm_event_fd *ev_fd)
 {
-	return (mm_event_target(ev_fd) != MM_CORE_NONE);
+	return (mm_event_target(ev_fd) != MM_THREAD_NONE);
 }
 
 #endif /* EVENT_EVENT_H */
