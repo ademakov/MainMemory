@@ -172,23 +172,6 @@ mm_core_work_request_handle(struct mm_core *core, uintptr_t *arguments)
 	LEAVE();
 }
 
-static bool
-mm_core_receive_requests(struct mm_core *core)
-{
-	ENTER();
-	bool rc = false;
-
-	struct mm_request_data request;
-	struct mm_domain *domain = mm_domain_self();
-	while (mm_domain_receive(domain, &request)) {
-		mm_request_execute((uintptr_t) core, &request);
-		rc = true;
-	}
-
-	LEAVE();
-	return rc;
-}
-
 void
 mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
@@ -258,7 +241,6 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 }
 
 # define mm_core_receive_work(core)		((void) core)
-# define mm_core_receive_requests(core)		((void) core, false)
 
 #endif
 
@@ -482,6 +464,31 @@ static mm_atomic_uint32_t mm_core_deal_count;
 #endif
 
 static bool
+mm_core_receive_requests(struct mm_core *core, struct mm_thread *thread)
+{
+	ENTER();
+	bool rc = false;
+
+	struct mm_request_data request;
+
+	while (mm_thread_receive(thread, &request)) {
+		mm_request_execute((uintptr_t) core, &request);
+		rc = true;
+	}
+
+#if ENABLE_SMP
+	struct mm_domain *domain = mm_thread_getdomain(thread);
+	while (mm_domain_receive(domain, &request)) {
+		mm_request_execute((uintptr_t) core, &request);
+		rc = true;
+	}
+#endif
+
+	LEAVE();
+	return rc;
+}
+
+static bool
 mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
@@ -506,8 +513,8 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	rc |= mm_private_space_reclaim(&mm_regular_space);
 #endif
 
-	// Try to execute a share of domain requests.
-	rc |= mm_core_receive_requests(core);
+	// Execute thread requests.
+	rc |= mm_core_receive_requests(core, thread);
 
 #if ENABLE_DEALER_STATS
 	mm_atomic_uint32_inc(&mm_core_deal_count);
