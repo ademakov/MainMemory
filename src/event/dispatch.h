@@ -27,15 +27,6 @@
 #include "event/kqueue.h"
 #include "event/selfpipe.h"
 
-struct mm_dispatch_per_listener
-{
-	/* The waiting listener. */
-	struct mm_listener *listener;
-
-	/* Auxiliary memory to store target listeners on dispatch. */
-	struct mm_listener **dispatch_targets;
-};
-
 struct mm_dispatch
 {
 	mm_regular_lock_t lock;
