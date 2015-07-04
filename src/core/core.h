@@ -99,9 +99,6 @@ struct mm_core
 	/* Event dispatch listener. */
 	struct mm_listener listener;
 
-	/* Submitted work items. */
-	MM_RING_SPSC(inbox, MM_CORE_INBOX_RING_SIZE);
-
 } __mm_align_cacheline__;
 
 void mm_core_init(void);

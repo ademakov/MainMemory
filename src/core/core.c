@@ -177,16 +177,6 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
 
-	// If the work item has no target core then submit it to the domain
-	// request queue.
-	if (core_id == MM_CORE_NONE) {
-		struct mm_domain *domain = mm_domain_self();
-		mm_domain_submit_oneway_1(domain,
-					  (mm_request_t) mm_core_post_work_request,
-					  (uintptr_t) work);
-		goto leave;
-	}
-
 	// Get the target core.
 	struct mm_core *core = mm_core_getptr(core_id);
 
@@ -194,35 +184,20 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	if (core == mm_core_self()) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
+	} else if (core == NULL) {
+		// Submit it to the domain request queue.
+		struct mm_domain *domain = mm_domain_self();
+		mm_domain_submit_oneway_1(domain,
+					  (mm_request_t) mm_core_post_work_request,
+					  (uintptr_t) work);
 	} else {
-		// Put the item to the target core inbox.
-		for (;;) {
-			bool ok = mm_ring_spsc_locked_put(&core->inbox, work);
-
-			// Wakeup the target core if it is asleep.
-			mm_listener_notify(&core->listener, &mm_core_dispatch);
-
-			if (ok) {
-				break;
-			} else {
-				// TODO: backoff
-				mm_task_yield();
-			}
-		}
+		// Submit it to the thread request queue.
+		struct mm_domain *domain = mm_domain_self();
+		struct mm_thread *thread = mm_domain_getthread(domain, core_id);
+		mm_thread_submit_oneway_1(thread,
+					  (mm_request_t) mm_core_post_work_request,
+					  (uintptr_t) work);
 	}
-
-leave:
-	LEAVE();
-}
-
-static void
-mm_core_receive_work(struct mm_core *core)
-{
-	ENTER();
-
-	struct mm_work *work;
-	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
-		mm_core_add_work(core, work);
 
 	LEAVE();
 }
@@ -239,8 +214,6 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 
 	LEAVE();
 }
-
-# define mm_core_receive_work(core)		((void) core)
 
 #endif
 
@@ -459,7 +432,6 @@ mm_core_receive_requests(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
 	bool rc = false;
-
 	struct mm_request_data request;
 
 	while (mm_thread_receive(thread, &request)) {
@@ -487,9 +459,6 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
-
-	// Consume the data from the communication rings.
-	mm_core_receive_work(core);
 
 	// Run the pending tasks.
 	mm_task_yield();
@@ -749,8 +718,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_listener_prepare(&core->listener);
 
-	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_LOCKED_PUT);
-
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
 	mm_task_attr_init(&attr);
@@ -773,26 +740,14 @@ mm_core_term_work(struct mm_core *core)
 }
 
 static void
-mm_core_term_inbox(struct mm_core *core)
-{
-	mm_core_t core_id = mm_core_getid(core);
-
-	struct mm_work *work;
-	while (mm_ring_spsc_get(&core->inbox, (void **) &work))
-		mm_work_destroy_low(core_id, work);
-}
-
-static void
 mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
 	mm_core_term_work(core);
-	mm_core_term_inbox(core);
+	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_listener_cleanup(&core->listener);
-
-	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_task_destroy(core->boot);
 
