@@ -162,7 +162,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_core_work_request_handle(struct mm_core *core, uintptr_t *arguments)
+mm_core_post_work_request(struct mm_core *core, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -177,12 +177,12 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
 
-	// If the work item has no target core then submit it
-	// to the domain request queue.
+	// If the work item has no target core then submit it to the domain
+	// request queue.
 	if (core_id == MM_CORE_NONE) {
 		struct mm_domain *domain = mm_domain_self();
 		mm_domain_submit_oneway_1(domain,
-					  (mm_request_t) mm_core_work_request_handle,
+					  (mm_request_t) mm_core_post_work_request,
 					  (uintptr_t) work);
 		goto leave;
 	}
@@ -263,6 +263,20 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
  * Task queue.
  **********************************************************************/
 
+#if ENABLE_SMP
+static void
+mm_core_run_task_request(struct mm_core *core __mm_unused__,
+			 uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_task *task = (struct mm_task *) arguments[0];
+	mm_task_run(task);
+
+	LEAVE();
+}
+#endif
+
 void
 mm_core_run_task(struct mm_task *task)
 {
@@ -273,20 +287,13 @@ mm_core_run_task(struct mm_task *task)
 		// Put the task to the core run queue directly.
 		mm_task_run(task);
 	} else {
-		// Put the task to the target core sched ring.
-		for (;;) {
-			bool ok = mm_ring_spsc_locked_put(&task->core->sched, task);
-
-			// Wakeup the target core if it is asleep.
-			mm_listener_notify(&task->core->listener, &mm_core_dispatch);
-
-			if (ok) {
-				break;
-			} else {
-				// TODO: backoff
-				mm_task_yield();
-			}
-		}
+		// Submit the task to the thread request queue.
+		struct mm_domain *domain = mm_domain_self();
+		struct mm_thread *thread = mm_domain_getthread(domain,
+							       mm_core_getid(task->core));
+		mm_thread_submit_oneway_1(thread,
+					  (mm_request_t) mm_core_run_task_request,
+					  (uintptr_t) task);
 	}
 #else
 	mm_task_run(task);
@@ -294,22 +301,6 @@ mm_core_run_task(struct mm_task *task)
 
 	LEAVE();
 }
-
-#if ENABLE_SMP
-static void
-mm_core_receive_tasks(struct mm_core *core)
-{
-	ENTER();
-
-	struct mm_task *task;
-	while (mm_ring_spsc_get(&core->sched, (void **) &task))
-		mm_task_run(task);
-
-	LEAVE();
-}
-#else
-# define mm_core_receive_tasks(core) ((void) core)
-#endif
 
 /**********************************************************************
  * Worker task.
@@ -498,7 +489,6 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_timer_tick(&core->time_manager);
 
 	// Consume the data from the communication rings.
-	mm_core_receive_tasks(core);
 	mm_core_receive_work(core);
 
 	// Run the pending tasks.
@@ -759,7 +749,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_listener_prepare(&core->listener);
 
-	mm_ring_spsc_prepare(&core->sched, MM_CORE_SCHED_RING_SIZE, MM_RING_LOCKED_PUT);
 	mm_ring_spsc_prepare(&core->inbox, MM_CORE_INBOX_RING_SIZE, MM_RING_LOCKED_PUT);
 
 	// Create the core bootstrap task.

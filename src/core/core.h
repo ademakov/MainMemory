@@ -99,9 +99,6 @@ struct mm_core
 	/* Event dispatch listener. */
 	struct mm_listener listener;
 
-	/* Tasks to be scheduled. */
-	MM_RING_SPSC(sched, MM_CORE_SCHED_RING_SIZE);
-
 	/* Submitted work items. */
 	MM_RING_SPSC(inbox, MM_CORE_INBOX_RING_SIZE);
 
