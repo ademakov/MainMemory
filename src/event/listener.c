@@ -199,7 +199,7 @@ mm_listener_notify(struct mm_listener *listener, struct mm_dispatch *dispatch)
 		if (state == MM_LISTENER_WAITING)
 			mm_listener_signal(listener, listen_stamp);
 		else if (state == MM_LISTENER_POLLING)
-			mm_dispatch_notify(dispatch);
+			mm_event_backend_notify(&dispatch->backend);
 	}
 
 	LEAVE();
@@ -225,7 +225,7 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 	if (is_polling_listener) {
 
 		// Cleanup stale event notifications.
-		mm_dispatch_dampen(dispatch);
+		mm_event_backend_dampen(&dispatch->backend);
 
 		// Check to see if there are any changes that need to be
 		// immediately acknowledged.
@@ -235,8 +235,9 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 		}
 
 		if (timeout == 0) {
-			mm_dispatch_listen(dispatch, &listener->changes,
-					   &listener->events, 0);
+			mm_event_backend_listen(&dispatch->backend,
+						&listener->changes,
+						&listener->events, 0);
 		} else {
 			// TODO: spin holding CPU a little checking for notifications
 
@@ -251,8 +252,9 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 			if (listen_stamp == notify_stamp)
 				timeout = 0;
 
-			mm_dispatch_listen(dispatch, &listener->changes,
-					   &listener->events, timeout);
+			mm_event_backend_listen(&dispatch->backend,
+						&listener->changes,
+						&listener->events, timeout);
 
 			// Advertise that the thread has woken up.
 			mm_memory_store(listener->state, MM_LISTENER_RUNNING);

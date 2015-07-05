@@ -44,6 +44,7 @@ core_sources = \
 	core/work.c core/work.h
 
 event_sources = \
+	event/backend.c event/backend.h \
 	event/batch.c event/batch.h \
 	event/dispatch.c event/dispatch.h \
 	event/epoll.c event/epoll.h \

@@ -36,7 +36,8 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	dispatch->polling_listener = NULL;
-	dispatch->waiting_listeners = mm_common_calloc(nlisteners, sizeof (struct mm_listener *));
+	dispatch->waiting_listeners = mm_common_calloc(nlisteners,
+						       sizeof(struct mm_listener *));
 
 	// Allocate pending event batches.
 	dispatch->pending_events = mm_common_alloc(nlisteners * sizeof(struct mm_event_batch));
@@ -45,24 +46,16 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	mm_event_batch_prepare(&dispatch->pending_changes);
 
 	// Initialize system-specific resources.
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_prepare(&dispatch->events);
-#endif
-#if HAVE_SYS_EVENT_H
-	mm_event_kqueue_prepare(&dispatch->events);
-#endif
-
-	// Open a self-pipe.
-	mm_selfpipe_prepare(&dispatch->selfpipe);
+	mm_event_backend_prepare(&dispatch->backend);
 
 	// Register the self-pipe.
 	mm_event_batch_add(&dispatch->pending_changes,
 			   MM_EVENT_REGISTER,
-			   &dispatch->selfpipe.event_fd);
-	mm_dispatch_listen(dispatch,
-			   &dispatch->pending_changes,
-			   &dispatch->pending_events[0],
-			   0);
+			   &dispatch->backend.selfpipe.event_fd);
+	mm_event_backend_listen(&dispatch->backend,
+				&dispatch->pending_changes,
+				&dispatch->pending_events[0],
+				0);
 	mm_event_batch_clear(&dispatch->pending_changes);
 	mm_event_batch_clear(&dispatch->pending_events[0]);
 
@@ -81,16 +74,8 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 		mm_event_batch_cleanup(&dispatch->pending_events[i]);
 	mm_event_batch_cleanup(&dispatch->pending_changes);
 
-	// Close the event self-pipe.
-	mm_selfpipe_cleanup(&dispatch->selfpipe);
-
-	// Close the epoll/kqueue file descriptor.
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_cleanup(&dispatch->events);
-#endif
-#if HAVE_SYS_EVENT_H
-	mm_event_kqueue_cleanup(&dispatch->events);
-#endif
+	// Release system-specific resources.
+	mm_event_backend_cleanup(&dispatch->backend);
 
 	LEAVE();
 }

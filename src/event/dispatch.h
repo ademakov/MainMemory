@@ -1,7 +1,7 @@
 /*
  * event/dispatch.h - MainMemory event dispatch.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,10 +22,8 @@
 
 #include "common.h"
 #include "base/lock.h"
+#include "event/backend.h"
 #include "event/batch.h"
-#include "event/epoll.h"
-#include "event/kqueue.h"
-#include "event/selfpipe.h"
 
 struct mm_dispatch
 {
@@ -46,15 +44,8 @@ struct mm_dispatch
 	/* The events to be delivered to listeners. */
 	struct mm_event_batch *pending_events;
 
-	/* Event-loop self-pipe. */
-	struct mm_selfpipe selfpipe;
-
-#if HAVE_SYS_EPOLL_H
-	struct mm_event_epoll events;
-#endif
-#if HAVE_SYS_EVENT_H
-	struct mm_event_kqueue events;
-#endif
+	/* The system backend. */
+	struct mm_event_backend backend;
 };
 
 void __attribute__((nonnull(1)))
@@ -68,31 +59,5 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener);
 
 void __attribute__((nonnull(1, 2)))
 mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener);
-
-static inline void __attribute__((nonnull(1, 2, 3)))
-mm_dispatch_listen(struct mm_dispatch *dispatch,
-		   struct mm_event_batch *changes,
-		   struct mm_event_batch *events,
-		   mm_timeout_t timeout)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&dispatch->events, changes, events, timeout);
-#endif
-#if HAVE_SYS_EVENT_H
-	mm_event_kqueue_listen(&dispatch->events, changes, events, timeout);
-#endif
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_dispatch_notify(struct mm_dispatch *dispatch)
-{
-	mm_selfpipe_write(&dispatch->selfpipe);
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_dispatch_dampen(struct mm_dispatch *dispatch)
-{
-	mm_selfpipe_drain(&dispatch->selfpipe);
-}
 
 #endif /* EVENT_DISPATCH_H */
