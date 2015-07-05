@@ -309,7 +309,6 @@ mm_thread_create(struct mm_thread_attr *attr,
 	else
 		mm_private_space_reset(&thread->space);
 #else
-	mm_private_space_reset(&thread->space);
 	if (attr->private_space || attr->reclaim_queue)
 		mm_warning(0, "ignore private space thread attributes");
 #endif
