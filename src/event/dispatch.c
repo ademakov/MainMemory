@@ -31,13 +31,19 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	ENTER();
 	ASSERT(nlisteners > 0);
 
-	dispatch->nlisteners = nlisteners;
-
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
-	dispatch->polling_listener = NULL;
-	dispatch->waiting_listeners = mm_common_calloc(nlisteners,
-						       sizeof(struct mm_listener *));
+	// Allocate listeners.
+	dispatch->listeners = mm_common_calloc(nlisteners,
+					       sizeof(struct mm_listener));
+	for (mm_thread_t i = 0; i < nlisteners; i++)
+		mm_listener_prepare(&dispatch->listeners[i], dispatch);
+	dispatch->nlisteners = nlisteners;
+
+	dispatch->polling_listener = MM_THREAD_NONE;
+	mm_bitset_prepare(&dispatch->waiting_listeners,
+			  &mm_common_space.xarena,
+			  nlisteners);
 
 	// Allocate pending event batches.
 	dispatch->pending_events = mm_common_alloc(nlisteners * sizeof(struct mm_event_batch));
@@ -67,12 +73,16 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 {
 	ENTER();
 
-	mm_common_free(dispatch->waiting_listeners);
-
 	// Release pending event batches.
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_batch_cleanup(&dispatch->pending_events[i]);
 	mm_event_batch_cleanup(&dispatch->pending_changes);
+
+	// Release listeners.
+	mm_bitset_cleanup(&dispatch->waiting_listeners, &mm_common_space.xarena);
+	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
+		mm_listener_cleanup(&dispatch->listeners[i]);
+	mm_common_free(dispatch->listeners);
 
 	// Release system-specific resources.
 	mm_event_backend_cleanup(&dispatch->backend);
@@ -83,7 +93,7 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 static void
 mm_dispatch_check_events(struct mm_dispatch *dispatch,
 			 struct mm_listener *listener,
-			 mm_core_t core)
+			 mm_thread_t tid)
 {
 	// Prepare to detach finished event sinks.
 	struct mm_event_batch *finish_events = &listener->finish;
@@ -91,10 +101,10 @@ mm_dispatch_check_events(struct mm_dispatch *dispatch,
 		struct mm_event *event = &finish_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
 		ev_fd->target = MM_THREAD_NONE;
-		ev_fd->detach = core;
+		ev_fd->detach = tid;
 	}
 
-	struct mm_event_batch *pending_events = &dispatch->pending_events[core];
+	struct mm_event_batch *pending_events = &dispatch->pending_events[tid];
 	if (mm_event_batch_empty(pending_events))
 		return;
 
@@ -105,7 +115,7 @@ mm_dispatch_check_events(struct mm_dispatch *dispatch,
 		struct mm_event_fd *ev_fd = event->ev_fd;
 		if (ev_fd->detach != MM_THREAD_NONE) {
 			ev_fd->detach = MM_THREAD_NONE;
-			ev_fd->target = core;
+			ev_fd->target = tid;
 		}
 	}
 
@@ -117,9 +127,9 @@ mm_dispatch_check_events(struct mm_dispatch *dispatch,
 static void
 mm_dispatch_get_pending_events(struct mm_dispatch *dispatch,
 			       struct mm_listener *listener,
-			       mm_core_t core)
+			       mm_thread_t tid)
 {
-	struct mm_event_batch *pending_events = &dispatch->pending_events[core];
+	struct mm_event_batch *pending_events = &dispatch->pending_events[tid];
 	if (mm_event_batch_empty(pending_events))
 		return;
 
@@ -129,7 +139,7 @@ mm_dispatch_get_pending_events(struct mm_dispatch *dispatch,
 }
 
 static void
-mm_dispatch_detach(struct mm_listener *listener)
+mm_dispatch_detach_handle(struct mm_listener *listener)
 {
 	ENTER();
 
@@ -139,7 +149,7 @@ mm_dispatch_detach(struct mm_listener *listener)
 		struct mm_event_fd *ev_fd = event->ev_fd;
 		if (ev_fd->detach != MM_THREAD_NONE) {
 			ASSERT(ev_fd->target == MM_THREAD_NONE
-			       || ev_fd->target == mm_core_selfid());
+			       || ev_fd->target == mm_thread_getnumber(mm_thread_self()));
 			TRACE("detach from: %d", ev_fd->detach);
 			mm_event_dispatch(ev_fd, MM_EVENT_DETACH);
 			mm_memory_store_fence();
@@ -155,16 +165,16 @@ mm_dispatch_detach(struct mm_listener *listener)
 static void __attribute__((nonnull(1, 2)))
 mm_dispatch_checkin(struct mm_dispatch *dispatch,
 		    struct mm_listener *listener,
-		    mm_core_t core)
+		    mm_thread_t tid)
 {
 	ENTER();
 
 	mm_regular_lock(&dispatch->lock);
 
 	// The first arrived listener is elected to do event poll.
-	if (dispatch->polling_listener == NULL) {
+	if (dispatch->polling_listener == MM_THREAD_NONE) {
 		// Register as a polling listener.
-		dispatch->polling_listener = listener;
+		dispatch->polling_listener = tid;
 
 		// Seize all pending changes and make them private.
 		mm_event_batch_append(&listener->changes, &dispatch->pending_changes);
@@ -173,29 +183,29 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch,
 		mm_regular_unlock(&dispatch->lock);
 
 		// Get pending incoming events and prepare detach events.
-		mm_dispatch_check_events(dispatch, listener, core);
+		mm_dispatch_check_events(dispatch, listener, tid);
 
 	} else {
 		// Register as a waiting listener.
-		dispatch->waiting_listeners[core] = listener;
+		mm_bitset_set(&dispatch->waiting_listeners, tid);
 
 		// Make private changes public adding them to pending changes.
-		struct mm_listener *notify_listener = NULL;
+		mm_thread_t notify_listener = MM_THREAD_NONE;
 		if (mm_listener_has_changes(listener)) {
 			mm_event_batch_append(&dispatch->pending_changes, &listener->changes);
 			notify_listener = dispatch->polling_listener;
 		}
 
 		// Get pending incoming events and prepare detach events.
-		mm_dispatch_check_events(dispatch, listener, core);
+		mm_dispatch_check_events(dispatch, listener, tid);
 
 		mm_regular_unlock(&dispatch->lock);
 
 		// Finalize detach events.
-		mm_dispatch_detach(listener);
+		mm_dispatch_detach_handle(listener);
 
 		// Wake up a listener that is possibly sleeping on a poll system call.
-		if (notify_listener != NULL)
+		if (notify_listener != MM_THREAD_NONE)
 			mm_dispatch_notify(dispatch, notify_listener);
 	}
 
@@ -205,17 +215,17 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch,
 static void __attribute__((nonnull(1, 2)))
 mm_dispatch_checkout(struct mm_dispatch *dispatch,
 		     struct mm_listener *listener,
-		     mm_core_t core)
+		     mm_thread_t tid)
 {
 	ENTER();
 
-	if (dispatch->polling_listener == listener) {
+	if (dispatch->polling_listener == tid) {
 		unsigned int nlisteners = 0;
 
 		mm_regular_lock(&dispatch->lock);
 
 		// Unregister as polling listener.
-		dispatch->polling_listener = NULL;
+		dispatch->polling_listener = MM_THREAD_NONE;
 
 		// Dispatch received events.
 		for (unsigned int i = 0; i < listener->events.nevents; i++) {
@@ -225,13 +235,13 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 			// Check to see if the event sink is attached to this
 			// thread.
 			mm_thread_t target = ev_fd->target;
-			if (target == core)
+			if (target == tid)
 				continue;
 
 			// Check to see if the event sink is detached. In this
 			// case attach it to itself.
 			if (target == MM_THREAD_NONE) {
-				ev_fd->target = core;
+				ev_fd->target = tid;
 				continue;
 			}
 
@@ -240,12 +250,10 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 					   event->event, ev_fd);
 			event->event = MM_EVENT_DISPATCH_STUB;
 
-			struct mm_listener *target_listener
-				= dispatch->waiting_listeners[target];
-			if (target_listener != NULL) {
+			if (mm_bitset_test(&dispatch->waiting_listeners, target)) {
 				ASSERT(nlisteners < dispatch->nlisteners);
-				listener->dispatch_targets[nlisteners++] = target_listener;
-				dispatch->waiting_listeners[target] = NULL;
+				listener->dispatch_targets[nlisteners++] = target;
+				mm_bitset_clear(&dispatch->waiting_listeners, target);
 			}
 		}
 
@@ -256,7 +264,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 		mm_regular_unlock(&dispatch->lock);
 
 		for (unsigned int i = 0; i < nlisteners; i++) {
-			struct mm_listener *target = listener->dispatch_targets[i];
+			mm_thread_t target = listener->dispatch_targets[i];
 			mm_dispatch_notify(dispatch, target);
 		}
 
@@ -264,12 +272,12 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 		for (unsigned int i = 0; i < listener->events.nevents; i++) {
 			struct mm_event *event = &listener->events.events[i];
 			struct mm_event_fd *ev_fd = event->ev_fd;
-			if (ev_fd->target != core)
+			if (ev_fd->target != tid)
 				continue;
 
 			// For incomplete detach initiated by this thread
 			// simply revert detach preparation.
-			if (ev_fd->detach == core) {
+			if (ev_fd->detach == tid) {
 				ev_fd->detach = MM_THREAD_NONE;
 				continue;
 			}
@@ -286,14 +294,14 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 		}
 
 		// Finalize remaining detach events.
-		mm_dispatch_detach(listener);
+		mm_dispatch_detach_handle(listener);
 
 	} else {
 		mm_regular_lock(&dispatch->lock);
 
 		// Unregister as waiting listener.
-		dispatch->waiting_listeners[core] = NULL;
-		mm_dispatch_get_pending_events(dispatch, listener, core);
+		mm_bitset_clear(&dispatch->waiting_listeners, tid);
+		mm_dispatch_get_pending_events(dispatch, listener, tid);
 
 		mm_regular_unlock(&dispatch->lock);
 	}
@@ -311,18 +319,19 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
-mm_dispatch_listen(struct mm_dispatch *dispatch, struct mm_listener *listener, mm_timeout_t timeout)
+void __attribute__((nonnull(1)))
+mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
+		   mm_timeout_t timeout)
 {
 	ENTER();
-
-	mm_core_t core = mm_core_selfid();
+	ASSERT(tid < dispatch->nlisteners);
+	struct mm_listener *listener = &dispatch->listeners[tid];
 
 	// Register the listener for event dispatch.
-	mm_dispatch_checkin(dispatch, listener, core);
+	mm_dispatch_checkin(dispatch, listener, tid);
 
 	// Check to see if the listener has been elected to do event poll.
-	bool polling = (listener == dispatch->polling_listener);
+	bool polling = (tid == dispatch->polling_listener);
 
 	// Wait for events.
 	if (polling)
@@ -331,7 +340,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, struct mm_listener *listener, m
 		mm_listener_listen(listener, NULL, timeout);
 
 	// Unregister the listener from event dispatch.
-	mm_dispatch_checkout(dispatch, listener, core);
+	mm_dispatch_checkout(dispatch, listener, tid);
 
 	LEAVE();
 }

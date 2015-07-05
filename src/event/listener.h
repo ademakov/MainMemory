@@ -38,7 +38,7 @@
 # include "base/thr/monitor.h"
 #endif
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mm_dispatch;
 struct mm_event_backend;
 
@@ -67,7 +67,7 @@ struct mm_listener
 #endif
 
 	/* Auxiliary memory to store target listeners on dispatch. */
-	struct mm_listener **dispatch_targets;
+	mm_thread_t *dispatch_targets;
 
 	/* Listener's private event change list. */
 	struct mm_event_batch changes;
@@ -99,43 +99,20 @@ mm_listener_listen(struct mm_listener *listener,
  **********************************************************************/
 
 static inline void __attribute__((nonnull(1, 2)))
-mm_listener_register_fd(struct mm_listener *listener, struct mm_event_fd *ev_fd)
+mm_listener_add(struct mm_listener *listener, struct mm_event_fd *ev_fd,
+		mm_event_t event)
 {
-	mm_event_batch_add(&listener->changes, MM_EVENT_REGISTER, ev_fd);
-	mm_event_batch_addflags(&listener->changes, MM_EVENT_BATCH_REGISTER);
+	mm_event_batch_add(&listener->changes, event, ev_fd);
+}
+
+static inline void __attribute__((nonnull(1)))
+mm_listener_addflags(struct mm_listener *listener, unsigned int flags)
+{
+	mm_event_batch_addflags(&listener->changes, flags);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
-mm_listener_unregister_fd(struct mm_listener *listener, struct mm_event_fd *ev_fd)
-{
-	mm_event_batch_add(&listener->changes, MM_EVENT_UNREGISTER, ev_fd);
-	mm_event_batch_addflags(&listener->changes, MM_EVENT_BATCH_UNREGISTER);
-}
-
-static inline void __attribute__((nonnull(1, 2)))
-mm_listener_trigger_input(struct mm_listener *listener, struct mm_event_fd *ev_fd)
-{
-#if MM_ONESHOT_HANDLERS
-	mm_event_batch_add(&listener->changes, MM_EVENT_INPUT, ev_fd);
-#else
-	(void) listener;
-	(void) ev_fd;
-#endif
-}
-
-static inline void __attribute__((nonnull(1, 2)))
-mm_listener_trigger_output(struct mm_listener *listener, struct mm_event_fd *ev_fd)
-{
-#if MM_ONESHOT_HANDLERS
-	mm_event_batch_add(&listener->changes, MM_EVENT_OUTPUT, ev_fd);
-#else
-	(void) listener;
-	(void) ev_fd;
-#endif
-}
-
-static inline void __attribute__((nonnull(1, 2)))
-mm_listener_dispatch_finish(struct mm_listener *listener, struct mm_event_fd *ev_fd)
+mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 {
 	mm_event_batch_add(&listener->finish, MM_EVENT_DETACH, ev_fd);
 }

@@ -96,9 +96,6 @@ struct mm_core
 	/* Stop flag. */
 	bool stop;
 
-	/* Event dispatch listener. */
-	struct mm_listener listener;
-
 } __mm_align_cacheline__;
 
 void mm_core_init(void);
@@ -136,6 +133,9 @@ extern mm_core_t mm_core_num;
 extern struct mm_core *mm_core_set;
 
 extern __thread struct mm_core *mm_core;
+
+/* Common event dispatch. */
+extern struct mm_dispatch mm_core_dispatch;
 
 static inline mm_core_t
 mm_core_getnum(void)

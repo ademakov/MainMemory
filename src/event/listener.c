@@ -59,7 +59,7 @@ mm_listener_prepare(struct mm_listener *listener,
 #endif
 
 	listener->dispatch_targets = mm_common_calloc(dispatch->nlisteners,
-						      sizeof(struct mm_listener *));
+						      sizeof(mm_thread_t));
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);

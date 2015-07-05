@@ -62,7 +62,7 @@ __thread struct mm_core *mm_core;
 static struct mm_bitset mm_core_event_affinity;
 
 // Common event dispatch.
-static struct mm_dispatch mm_core_dispatch;
+struct mm_dispatch mm_core_dispatch;
 
 /**********************************************************************
  * Idle queue.
@@ -502,7 +502,7 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		}
 	}
 
-	mm_dispatch_listen(&mm_core_dispatch, &core->listener, timeout);
+	mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
 
 	mm_timer_update_time(&core->time_manager);
 	mm_timer_update_real_time(&core->time_manager);
@@ -718,8 +718,6 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->stop = false;
 
-	mm_listener_prepare(&core->listener, &mm_core_dispatch);
-
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
 	mm_task_attr_init(&attr);
@@ -749,8 +747,6 @@ mm_core_term_single(struct mm_core *core)
 	mm_core_term_work(core);
 	mm_wait_cache_cleanup(&core->wait_cache);
 
-	mm_listener_cleanup(&core->listener);
-
 	mm_task_destroy(core->boot);
 
 	// Flush logs before memory space with possible log chunks is unmapped.
@@ -774,7 +770,7 @@ static void
 mm_core_thread_notify(struct mm_thread *thread)
 {
 	mm_thread_t n = mm_thread_getnumber(thread);
-	mm_dispatch_notify(&mm_core_dispatch, &mm_core_set[n].listener);
+	mm_dispatch_notify(&mm_core_dispatch, n);
 }
 
 #if ENABLE_TRACE
@@ -919,7 +915,7 @@ mm_core_stop(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
-		mm_dispatch_notify(&mm_core_dispatch, &core->listener);
+		mm_dispatch_notify(&mm_core_dispatch, i);
 	}
 
 	LEAVE();
