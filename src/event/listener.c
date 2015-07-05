@@ -20,13 +20,11 @@
 #include "event/listener.h"
 #include "event/dispatch.h"
 
-#include "core/core.h"
-
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/mem/memory.h"
 
 #if ENABLE_LINUX_FUTEX
 # include <unistd.h>
@@ -40,12 +38,9 @@
 #endif
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener)
+mm_listener_prepare(struct mm_listener *listener, struct mm_dispatch *dispatch)
 {
 	ENTER();
-
-	mm_core_t ncores = mm_core_getnum();
-	ASSERT(ncores > 0);
 
 	listener->listen_stamp = 1;
 	listener->notify_stamp = 0;
@@ -62,7 +57,8 @@ mm_listener_prepare(struct mm_listener *listener)
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
-	listener->dispatch_targets = mm_common_calloc(ncores, sizeof (struct mm_listener *));
+	listener->dispatch_targets = mm_common_calloc(dispatch->nlisteners,
+						      sizeof (struct mm_listener *));
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);

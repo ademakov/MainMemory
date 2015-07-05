@@ -77,7 +77,7 @@ struct mm_listener
 };
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener);
+mm_listener_prepare(struct mm_listener *listener, struct mm_dispatch *dispatch);
 
 void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);

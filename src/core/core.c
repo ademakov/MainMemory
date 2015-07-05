@@ -718,7 +718,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	core->stop = false;
 
-	mm_listener_prepare(&core->listener);
+	mm_listener_prepare(&core->listener, &mm_core_dispatch);
 
 	// Create the core bootstrap task.
 	struct mm_task_attr attr;
