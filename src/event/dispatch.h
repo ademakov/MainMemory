@@ -24,6 +24,7 @@
 #include "base/lock.h"
 #include "event/backend.h"
 #include "event/batch.h"
+#include "event/listener.h"
 
 struct mm_dispatch
 {
@@ -54,10 +55,13 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners);
 void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);
 
-void __attribute__((nonnull(1, 2)))
-mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener);
+static inline void __attribute__((nonnull(1, 2)))
+mm_dispatch_notify(struct mm_dispatch *dispatch, struct mm_listener *listener)
+{
+	mm_listener_notify(listener, &dispatch->backend);
+}
 
 void __attribute__((nonnull(1, 2)))
-mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener);
+mm_dispatch_listen(struct mm_dispatch *dispatch, struct mm_listener *listener, mm_timeout_t timeout);
 
 #endif /* EVENT_DISPATCH_H */

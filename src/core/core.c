@@ -502,7 +502,7 @@ mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
 		}
 	}
 
-	mm_listener_listen(&core->listener, &mm_core_dispatch, timeout);
+	mm_dispatch_listen(&mm_core_dispatch, &core->listener, timeout);
 
 	mm_timer_update_time(&core->time_manager);
 	mm_timer_update_real_time(&core->time_manager);
@@ -774,7 +774,7 @@ static void
 mm_core_thread_notify(struct mm_thread *thread)
 {
 	mm_thread_t n = mm_thread_getnumber(thread);
-	mm_listener_notify(&mm_core_set[n].listener, &mm_core_dispatch);
+	mm_dispatch_notify(&mm_core_dispatch, &mm_core_set[n].listener);
 }
 
 #if ENABLE_TRACE
@@ -919,7 +919,7 @@ mm_core_stop(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
-		mm_listener_notify(&core->listener, &mm_core_dispatch);
+		mm_dispatch_notify(&mm_core_dispatch, &core->listener);
 	}
 
 	LEAVE();

@@ -38,7 +38,8 @@
 #endif
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener, struct mm_dispatch *dispatch)
+mm_listener_prepare(struct mm_listener *listener,
+		    struct mm_dispatch *dispatch)
 {
 	ENTER();
 
@@ -58,7 +59,7 @@ mm_listener_prepare(struct mm_listener *listener, struct mm_dispatch *dispatch)
 #endif
 
 	listener->dispatch_targets = mm_common_calloc(dispatch->nlisteners,
-						      sizeof (struct mm_listener *));
+						      sizeof(struct mm_listener *));
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
@@ -111,7 +112,9 @@ mm_listener_signal(struct mm_listener *listener, uint32_t listen_stamp)
 }
 
 static void __attribute__((nonnull(1)))
-mm_listener_timedwait(struct mm_listener *listener, uint32_t notify_stamp, mm_timeout_t timeout)
+mm_listener_timedwait(struct mm_listener *listener,
+		      uint32_t notify_stamp,
+		      mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -151,21 +154,9 @@ mm_listener_timedwait(struct mm_listener *listener, uint32_t notify_stamp, mm_ti
 	LEAVE();
 }
 
-static void __attribute__((nonnull(1)))
-mm_listener_handle(struct mm_listener *listener)
-{
-	ENTER();
-
-	for (unsigned int i = 0; i < listener->events.nevents; i++) {
-		struct mm_event *event = &listener->events.events[i];
-		mm_event_dispatch(event->ev_fd, event->event);
-	}
-
-	LEAVE();
-}
-
 void __attribute__((nonnull(1, 2)))
-mm_listener_notify(struct mm_listener *listener, struct mm_dispatch *dispatch)
+mm_listener_notify(struct mm_listener *listener,
+		   struct mm_event_backend *backend)
 {
 	ENTER();
 
@@ -199,22 +190,18 @@ mm_listener_notify(struct mm_listener *listener, struct mm_dispatch *dispatch)
 		if (state == MM_LISTENER_WAITING)
 			mm_listener_signal(listener, listen_stamp);
 		else if (state == MM_LISTENER_POLLING)
-			mm_event_backend_notify(&dispatch->backend);
+			mm_event_backend_notify(backend);
 	}
 
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
-mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, mm_timeout_t timeout)
+void __attribute__((nonnull(1)))
+mm_listener_listen(struct mm_listener *listener,
+		   struct mm_event_backend *backend,
+		   mm_timeout_t timeout)
 {
 	ENTER();
-
-	// Register the listener for event dispatch.
-	mm_dispatch_checkin(dispatch, listener);
-
-	// Check to see if the listener has been elected to do event poll.
-	bool is_polling_listener = (listener == dispatch->polling_listener);
 
 	// Check to see if there are already some pending events.
 	if (mm_listener_has_events(listener)) {
@@ -222,10 +209,10 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 		timeout = 0;
 	}
 
-	if (is_polling_listener) {
+	if (backend != NULL) {
 
 		// Cleanup stale event notifications.
-		mm_event_backend_dampen(&dispatch->backend);
+		mm_event_backend_dampen(backend);
 
 		// Check to see if there are any changes that need to be
 		// immediately acknowledged.
@@ -235,7 +222,7 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 		}
 
 		if (timeout == 0) {
-			mm_event_backend_listen(&dispatch->backend,
+			mm_event_backend_listen(backend,
 						&listener->changes,
 						&listener->events, 0);
 		} else {
@@ -252,7 +239,7 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 			if (listen_stamp == notify_stamp)
 				timeout = 0;
 
-			mm_event_backend_listen(&dispatch->backend,
+			mm_event_backend_listen(backend,
 						&listener->changes,
 						&listener->events, timeout);
 
@@ -289,16 +276,6 @@ mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, m
 	// become visible. But the following mm_dispatch_checkout() call
 	// acquires a lock internally so it should serve as a fence too.
 	//mm_memory_strict_fence();
-
-	// Unregister the listener from event dispatch.
-	mm_dispatch_checkout(dispatch, listener);
-
-	// Handle received events.
-	mm_listener_handle(listener);
-
-	// Forget just handled events.
-	mm_event_batch_clear(&listener->changes);
-	mm_event_batch_clear(&listener->events);
 
 	LEAVE();
 }

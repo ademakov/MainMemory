@@ -40,6 +40,7 @@
 
 /* Forward declaration. */
 struct mm_dispatch;
+struct mm_event_backend;
 
 typedef enum
 {
@@ -74,19 +75,24 @@ struct mm_listener
 	struct mm_event_batch events;
 	/* Listener's finished events. */
 	struct mm_event_batch finish;
-};
+
+} __mm_align_cacheline__;
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener, struct mm_dispatch *dispatch);
+mm_listener_prepare(struct mm_listener *listener,
+		    struct mm_dispatch *dispatch);
 
 void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_notify(struct mm_listener *listener, struct mm_dispatch *dispatch);
+mm_listener_notify(struct mm_listener *listener,
+		   struct mm_event_backend *backend);
 
-void __attribute__((nonnull(1, 2)))
-mm_listener_listen(struct mm_listener *listener, struct mm_dispatch *dispatch, mm_timeout_t timeout);
+void __attribute__((nonnull(1)))
+mm_listener_listen(struct mm_listener *listener,
+		   struct mm_event_backend *backend,
+		   mm_timeout_t timeout);
 
 /**********************************************************************
  * I/O events support.

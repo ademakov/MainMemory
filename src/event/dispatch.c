@@ -29,7 +29,7 @@ void __attribute__((nonnull(1)))
 mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 {
 	ENTER();
-	ASSERT(nlistsners > 0);
+	ASSERT(nlisteners > 0);
 
 	dispatch->nlisteners = nlisteners;
 
@@ -152,12 +152,12 @@ mm_dispatch_detach(struct mm_listener *listener)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
-mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
+static void __attribute__((nonnull(1, 2)))
+mm_dispatch_checkin(struct mm_dispatch *dispatch,
+		    struct mm_listener *listener,
+		    mm_core_t core)
 {
 	ENTER();
-
-	mm_core_t core = mm_core_selfid();
 
 	mm_regular_lock(&dispatch->lock);
 
@@ -196,18 +196,18 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 		// Wake up a listener that is possibly sleeping on a poll system call.
 		if (notify_listener != NULL)
-			mm_listener_notify(notify_listener, dispatch);
+			mm_dispatch_notify(dispatch, notify_listener);
 	}
 
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
-mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
+static void __attribute__((nonnull(1, 2)))
+mm_dispatch_checkout(struct mm_dispatch *dispatch,
+		     struct mm_listener *listener,
+		     mm_core_t core)
 {
 	ENTER();
-
-	mm_core_t core = mm_core_selfid();
 
 	if (dispatch->polling_listener == listener) {
 		unsigned int nlisteners = 0;
@@ -257,7 +257,7 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 		for (unsigned int i = 0; i < nlisteners; i++) {
 			struct mm_listener *target = listener->dispatch_targets[i];
-			mm_listener_notify(target, dispatch);
+			mm_dispatch_notify(dispatch, target);
 		}
 
 		// Attach each detached event sink for received events.
@@ -297,6 +297,41 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch, struct mm_listener *listener)
 
 		mm_regular_unlock(&dispatch->lock);
 	}
+
+	// Handle received events.
+	for (unsigned int i = 0; i < listener->events.nevents; i++) {
+		struct mm_event *event = &listener->events.events[i];
+		mm_event_dispatch(event->ev_fd, event->event);
+	}
+
+	// Forget just handled events.
+	mm_event_batch_clear(&listener->changes);
+	mm_event_batch_clear(&listener->events);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1, 2)))
+mm_dispatch_listen(struct mm_dispatch *dispatch, struct mm_listener *listener, mm_timeout_t timeout)
+{
+	ENTER();
+
+	mm_core_t core = mm_core_selfid();
+
+	// Register the listener for event dispatch.
+	mm_dispatch_checkin(dispatch, listener, core);
+
+	// Check to see if the listener has been elected to do event poll.
+	bool polling = (listener == dispatch->polling_listener);
+
+	// Wait for events.
+	if (polling)
+		mm_listener_listen(listener, &dispatch->backend, timeout);
+	else
+		mm_listener_listen(listener, NULL, timeout);
+
+	// Unregister the listener from event dispatch.
+	mm_dispatch_checkout(dispatch, listener, core);
 
 	LEAVE();
 }
