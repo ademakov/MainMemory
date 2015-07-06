@@ -1,5 +1,5 @@
 /*
- * event/event.c - MainMemory event loop.
+ * base/event/event.c - MainMemory event loop.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/event.h"
-#include "event/selfpipe.h"
+#include "base/event/event.h"
 
+#include "base/event/selfpipe.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 

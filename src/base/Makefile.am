@@ -19,6 +19,15 @@ libmmbase_a_SOURCES = \
 	ring.c ring.h \
 	timeq.c timeq.h \
 	topology.c topology.h \
+	event/backend.c event/backend.h \
+	event/batch.c event/batch.h \
+	event/dispatch.c event/dispatch.h \
+	event/epoll.c event/epoll.h \
+	event/event.c event/event.h \
+	event/kqueue.c event/kqueue.h \
+	event/listener.c event/listener.h \
+	event/nonblock.c event/nonblock.h \
+	event/selfpipe.c event/selfpipe.h \
 	log/debug.c log/debug.h \
 	log/error.c log/error.h \
 	log/log.c log/log.h \

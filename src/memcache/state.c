@@ -19,7 +19,7 @@
 
 #include "memcache/state.h"
 
-#include "event/event.h"
+#include "base/event/event.h"
 
 struct mm_net_socket *
 mc_state_alloc(void)
@@ -56,8 +56,10 @@ mc_state_prepare(struct mm_net_socket *sock)
 	state->error = false;
 	state->trash = false;
 
-	//mm_net_set_async_read(sock, true);
-	//mm_net_set_async_write(sock, true);
+#if 0 && ENABLE_SMP
+	mm_net_set_async_read(sock, true);
+	mm_net_set_async_write(sock, true);
+#endif
 
 	LEAVE();
 }

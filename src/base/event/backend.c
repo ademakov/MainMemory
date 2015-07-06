@@ -1,5 +1,5 @@
 /*
- * event/backend.c - MainMemory event system backend.
+ * base/event/backend.c - MainMemory event system backend.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/backend.h"
+#include "base/event/backend.h"
 
 void __attribute__((nonnull(1)))
 mm_event_backend_prepare(struct mm_event_backend *backend)

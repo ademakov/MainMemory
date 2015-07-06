@@ -1,5 +1,5 @@
 /*
- * event/event.h - MainMemory event loop.
+ * base/event/event.h - MainMemory event loop.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_EVENT_H
-#define EVENT_EVENT_H
+#ifndef BASE_EVENT_EVENT_H
+#define BASE_EVENT_EVENT_H
 
 #include "common.h"
 
@@ -139,4 +139,4 @@ mm_event_attached(const struct mm_event_fd *ev_fd)
 	return (mm_event_target(ev_fd) != MM_THREAD_NONE);
 }
 
-#endif /* EVENT_EVENT_H */
+#endif /* BASE_EVENT_EVENT_H */

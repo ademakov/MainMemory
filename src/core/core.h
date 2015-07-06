@@ -33,8 +33,6 @@
 #include "base/log/debug.h"
 #include "base/ring.h"
 
-#include "event/listener.h"
-
 /* Forward declarations. */
 struct mm_bitset;
 struct mm_chunk;

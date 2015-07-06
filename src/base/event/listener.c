@@ -1,5 +1,5 @@
 /*
- * event/listener.c - MainMemory event listener.
+ * base/event/listener.c - MainMemory event listener.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,9 +17,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/listener.h"
-#include "event/dispatch.h"
+#include "base/event/listener.h"
 
+#include "base/event/dispatch.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"

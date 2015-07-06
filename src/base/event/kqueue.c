@@ -1,5 +1,5 @@
 /*
- * event/kqueue.c - MainMemory kqueue support.
+ * base/event/kqueue.c - MainMemory kqueue support.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,10 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/kqueue.h"
-#include "event/batch.h"
-#include "event/event.h"
+#include "base/event/kqueue.h"
 
+#include "base/event/batch.h"
+#include "base/event/event.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"

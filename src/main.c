@@ -22,6 +22,7 @@
 #include "core/core.h"
 
 #include "base/bitset.h"
+#include "base/event/event.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
@@ -29,7 +30,6 @@
 #include "base/mem/alloc.h"
 #include "base/util/exit.h"
 
-#include "event/event.h"
 #include "net/net.h"
 
 #include "memcache/memcache.h"

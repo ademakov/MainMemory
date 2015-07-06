@@ -1,5 +1,5 @@
 /*
- * event/batch.h - MainMemory event batch.
+ * base/event/batch.h - MainMemory event batch.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_BATCH_H
-#define EVENT_BATCH_H
+#ifndef BASE_EVENT_BATCH_H
+#define BASE_EVENT_BATCH_H
 
 #include "common.h"
-#include "event/event.h"
+#include "base/event/event.h"
 
 #define MM_EVENT_BATCH_REGISTER		((unsigned int) 1)
 #define MM_EVENT_BATCH_UNREGISTER	((unsigned int) 2)
@@ -82,4 +82,4 @@ mm_event_batch_empty(struct mm_event_batch *batch)
 	return (batch->nevents == 0);
 }
 
-#endif /* EVENT_BATCH_H */
+#endif /* BASE_EVENT_BATCH_H */

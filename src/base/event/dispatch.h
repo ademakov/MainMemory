@@ -1,5 +1,5 @@
 /*
- * event/dispatch.h - MainMemory event dispatch.
+ * base/event/dispatch.h - MainMemory event dispatch.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,18 +17,18 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_DISPATCH_H
-#define EVENT_DISPATCH_H
+#ifndef BASE_EVENT_DISPATCH_H
+#define BASE_EVENT_DISPATCH_H
 
 #include "common.h"
 #include "base/bitset.h"
 #include "base/lock.h"
+#include "base/event/backend.h"
+#include "base/event/batch.h"
+#include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
-#include "event/backend.h"
-#include "event/batch.h"
-#include "event/event.h"
-#include "event/listener.h"
 
 struct mm_dispatch
 {
@@ -138,4 +138,4 @@ mm_dispatch_detach(struct mm_dispatch *dispatch,
 	mm_listener_detach(listener, ev_fd);
 }
 
-#endif /* EVENT_DISPATCH_H */
+#endif /* BASE_EVENT_DISPATCH_H */

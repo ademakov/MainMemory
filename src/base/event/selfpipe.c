@@ -1,5 +1,5 @@
 /*
- * event/selfpipe.c - MainMemory self-pipe trick.
+ * base/event/selfpipe.c - MainMemory self-pipe trick.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/selfpipe.h"
-#include "event/nonblock.h"
+#include "base/event/selfpipe.h"
 
 #include "arch/atomic.h"
 #include "arch/memory.h"
 
+#include "base/event/nonblock.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"

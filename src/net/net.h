@@ -23,9 +23,8 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/list.h"
-#include "core/wait.h"
+#include "base/event/event.h"
 #include "core/work.h"
-#include "event/event.h"
 
 #include <netinet/in.h>
 #include <sys/socket.h>

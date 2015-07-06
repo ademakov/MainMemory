@@ -1,5 +1,5 @@
 /*
- * event/backend.h - MainMemory events system backend.
+ * base/event/backend.h - MainMemory events system backend.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,13 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_BACKEND_H
-#define EVENT_BACKEND_H
+#ifndef BASE_EVENT_BACKEND_H
+#define BASE_EVENT_BACKEND_H
 
 #include "common.h"
-#include "event/epoll.h"
-#include "event/kqueue.h"
-#include "event/selfpipe.h"
+#include "base/event/epoll.h"
+#include "base/event/kqueue.h"
+#include "base/event/selfpipe.h"
 
 struct mm_event_backend
 {
@@ -71,4 +71,4 @@ mm_event_backend_dampen(struct mm_event_backend *backend)
 	mm_selfpipe_drain(&backend->selfpipe);
 }
 
-#endif /* EVENT_BACKEND_H */
+#endif /* BASE_EVENT_BACKEND_H */

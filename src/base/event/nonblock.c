@@ -1,5 +1,5 @@
 /*
- * event/nonblock.h - MainMemory non-blocking file descriptor utility.
+ * base/event/nonblock.h - MainMemory non-blocking file descriptor utility.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/nonblock.h"
+#include "base/event/nonblock.h"
 
 #include "base/log/error.h"
 

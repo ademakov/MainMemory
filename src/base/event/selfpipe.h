@@ -1,5 +1,5 @@
 /*
- * event/selfpipe.h - MainMemory self-pipe trick.
+ * base/event/selfpipe.h - MainMemory self-pipe trick.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_SELFPIPE_H
-#define EVENT_SELFPIPE_H
+#ifndef BASE_EVENT_SELFPIPE_H
+#define BASE_EVENT_SELFPIPE_H
 
 #include "common.h"
-#include "event/event.h"
+#include "base/event/event.h"
 
 struct mm_selfpipe
 {
@@ -60,4 +60,4 @@ mm_selfpipe_write(struct mm_selfpipe *selfpipe);
 void __attribute__((nonnull(1)))
 mm_selfpipe_drain(struct mm_selfpipe *selfpipe);
 
-#endif /* EVENT_SELFPIPE_H */
+#endif /* BASE_EVENT_SELFPIPE_H */

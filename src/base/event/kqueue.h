@@ -1,5 +1,5 @@
 /*
- * event/epoll.h - MainMemory epoll support.
+ * base/event/kqueue.h - MainMemory kqueue support.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,44 +17,44 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef EVENT_EPOLL_H
-#define EVENT_EPOLL_H
+#ifndef BASE_EVENT_KQUEUE_H
+#define BASE_EVENT_KQUEUE_H
 
 #include "common.h"
 
-#if HAVE_SYS_EPOLL_H
+#if HAVE_SYS_EVENT_H
 
-#include <sys/epoll.h>
+#include <sys/event.h>
 
-#define MM_EVENT_EPOLL_NEVENTS	(512)
+#define MM_EVENT_KQUEUE_NEVENTS	(512)
 
 /* Forward declaration. */
 struct mm_event_batch;
 
-/* Data for epoll support. */
-struct mm_event_epoll
+/* Data for kqueue support. */
+struct mm_event_kqueue
 {
-	/* The epoll file descriptor. */
+	/* The kqueue file descriptor. */
 	int event_fd;
 
-	/* The epoll list size. */
+	/* The kevent list size. */
 	int nevents;
 
-	/* The epoll list. */
-	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
+	/* The kevent list. */
+	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
 };
 
 void __attribute__((nonnull(1)))
-mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
+mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend);
 
 void __attribute__((nonnull(1)))
-mm_event_epoll_cleanup(struct mm_event_epoll *event_backend);
+mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend);
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_event_epoll_listen(struct mm_event_epoll *event_backend,
-		      struct mm_event_batch *change_events,
-		      struct mm_event_batch *return_events,
-		      mm_timeout_t timeout);
+mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
+		       struct mm_event_batch *change_events,
+		       struct mm_event_batch *return_events,
+		       mm_timeout_t timeout);
 
-#endif /* HAVE_SYS_EPOLL_H */
-#endif /* EVENT_EPOLL_H */
+#endif /* HAVE_SYS_EVENT_H */
+#endif /* BASE_EVENT_KQUEUE_H */

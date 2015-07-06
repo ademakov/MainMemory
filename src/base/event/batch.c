@@ -1,5 +1,5 @@
 /*
- * event/batch.c - MainMemory event batch.
+ * base/event/batch.c - MainMemory event batch.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/batch.h"
+#include "base/event/batch.h"
 
 #include "base/log/error.h"
 #include "base/log/trace.h"

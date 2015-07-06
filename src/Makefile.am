@@ -43,24 +43,12 @@ core_sources = \
 	core/wait.c core/wait.h \
 	core/work.c core/work.h
 
-event_sources = \
-	event/backend.c event/backend.h \
-	event/batch.c event/batch.h \
-	event/dispatch.c event/dispatch.h \
-	event/epoll.c event/epoll.h \
-	event/event.c event/event.h \
-	event/kqueue.c event/kqueue.h \
-	event/listener.c event/listener.h \
-	event/nonblock.c event/nonblock.h \
-	event/selfpipe.c event/selfpipe.h
-
 net_sources = \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h
 
 mmem_SOURCES = \
-	$(arch_sources) $(core_sources) \
-	$(event_sources) $(net_sources) \
+	$(arch_sources) $(core_sources) $(net_sources) \
 	common.h main.c
 
 mmem_LDADD = memcache/libmemcache.a base/libmmbase.a

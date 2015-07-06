@@ -1,5 +1,5 @@
 /*
- * event/dispatch.c - MainMemory event dispatch.
+ * base/event/dispatch.c - MainMemory event dispatch.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,13 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "event/dispatch.h"
-
-#include "core/core.h"
+#include "base/event/dispatch.h"
 
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/mem/memory.h"
 
 void __attribute__((nonnull(1)))
 mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
