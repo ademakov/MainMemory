@@ -31,7 +31,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
-	// Allocate listeners.
+	// Allocate listener info.
 	dispatch->listeners = mm_common_calloc(nlisteners,
 					       sizeof(struct mm_listener));
 	for (mm_thread_t i = 0; i < nlisteners; i++)
@@ -39,7 +39,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	dispatch->nlisteners = nlisteners;
 
 	dispatch->polling_listener = MM_THREAD_NONE;
-	mm_bitset_prepare(&dispatch->waiting_listeners,
+	mm_bitset_prepare(&dispatch->pending_listeners,
 			  &mm_common_space.xarena,
 			  nlisteners);
 
@@ -76,8 +76,8 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 		mm_event_batch_cleanup(&dispatch->pending_events[i]);
 	mm_event_batch_cleanup(&dispatch->pending_changes);
 
-	// Release listeners.
-	mm_bitset_cleanup(&dispatch->waiting_listeners, &mm_common_space.xarena);
+	// Release listener info.
+	mm_bitset_cleanup(&dispatch->pending_listeners, &mm_common_space.xarena);
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
@@ -184,9 +184,6 @@ mm_dispatch_checkin(struct mm_dispatch *dispatch,
 		mm_dispatch_check_events(dispatch, listener, tid);
 
 	} else {
-		// Register as a waiting listener.
-		mm_bitset_set(&dispatch->waiting_listeners, tid);
-
 		// Make private changes public adding them to pending changes.
 		mm_thread_t notify_listener = MM_THREAD_NONE;
 		if (mm_listener_has_changes(listener)) {
@@ -218,7 +215,9 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 	ENTER();
 
 	if (dispatch->polling_listener == tid) {
+		// Initialize info about listeners with pending events.
 		unsigned int nlisteners = 0;
+		mm_bitset_clear_all(&dispatch->pending_listeners);
 
 		mm_regular_lock(&dispatch->lock);
 
@@ -248,10 +247,10 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 					   event->event, ev_fd);
 			event->event = MM_EVENT_DISPATCH_STUB;
 
-			if (mm_bitset_test(&dispatch->waiting_listeners, target)) {
+			if (!mm_bitset_test(&dispatch->pending_listeners, target)) {
 				ASSERT(nlisteners < dispatch->nlisteners);
 				listener->dispatch_targets[nlisteners++] = target;
-				mm_bitset_clear(&dispatch->waiting_listeners, target);
+				mm_bitset_set(&dispatch->pending_listeners, target);
 			}
 		}
 
@@ -297,8 +296,6 @@ mm_dispatch_checkout(struct mm_dispatch *dispatch,
 	} else {
 		mm_regular_lock(&dispatch->lock);
 
-		// Unregister as waiting listener.
-		mm_bitset_clear(&dispatch->waiting_listeners, tid);
 		mm_dispatch_get_pending_events(dispatch, listener, tid);
 
 		mm_regular_unlock(&dispatch->lock);
@@ -328,14 +325,27 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 	// Register the listener for event dispatch.
 	mm_dispatch_checkin(dispatch, listener, tid);
 
+	// Check to see if there are already some pending events.
+	if (mm_listener_has_events(listener)) {
+		DEBUG("pending events");
+		timeout = 0;
+	}
+
 	// Check to see if the listener has been elected to do event poll.
 	bool polling = (tid == dispatch->polling_listener);
 
 	// Wait for events.
-	if (polling)
+	if (polling) {
+		// Check to see if there are any changes that need to be
+		// immediately acknowledged.
+		if (mm_listener_has_urgent_changes(listener)) {
+			DEBUG("urgent changes");
+			timeout = 0;
+		}
 		mm_listener_listen(listener, &dispatch->backend, timeout);
-	else
+	} else {
 		mm_listener_listen(listener, NULL, timeout);
+	}
 
 	// Unregister the listener from event dispatch.
 	mm_dispatch_checkout(dispatch, listener, tid);

@@ -41,14 +41,14 @@ struct mm_dispatch
 	/* The listener elected to do event poll. */
 	mm_thread_t polling_listener;
 
-	/* The listeners that have nothing to do. */
-	struct mm_bitset waiting_listeners;
-
 	/* The event changes from waiting listeners. */
 	struct mm_event_batch pending_changes;
 
 	/* The events to be delivered to listeners. */
 	struct mm_event_batch *pending_events;
+
+	/* The listeners that have pending events. */
+	struct mm_bitset pending_listeners;
 
 	/* The system backend. */
 	struct mm_event_backend backend;
