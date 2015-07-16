@@ -21,6 +21,7 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
+#include "base/lock.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 
@@ -39,7 +40,6 @@
 #endif
 
 /* Forward declarations. */
-struct mm_dispatch;
 struct mm_event_backend;
 
 typedef enum
@@ -52,6 +52,11 @@ typedef enum
 
 struct mm_listener
 {
+	mm_regular_lock_t lock;
+
+	/* A counter to detect detach feasibility. */
+	uint32_t arrival_stamp;
+
 	/* Counters to pair listen/notify calls. */
 	uint32_t listen_stamp;
 	uint32_t notify_stamp;
@@ -66,6 +71,9 @@ struct mm_listener
 	struct mm_monitor monitor;
 #endif
 
+	/* Listener's event sinks waiting to be detached. */
+	struct mm_list detach_list;
+
 	/* Auxiliary memory to store target listeners on dispatch. */
 	mm_thread_t *dispatch_targets;
 
@@ -73,14 +81,11 @@ struct mm_listener
 	struct mm_event_batch changes;
 	/* Listener's private event list. */
 	struct mm_event_batch events;
-	/* Listener's finished events. */
-	struct mm_event_batch finish;
 
 } __mm_align_cacheline__;
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener,
-		    struct mm_dispatch *dispatch);
+mm_listener_prepare(struct mm_listener *listener, mm_thread_t nlisteners);
 
 void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);
@@ -114,7 +119,12 @@ mm_listener_addflags(struct mm_listener *listener, unsigned int flags)
 static inline void __attribute__((nonnull(1, 2)))
 mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 {
-	mm_event_batch_add(&listener->finish, MM_EVENT_DETACH, ev_fd);
+	ev_fd->detach_stamp = listener->arrival_stamp;
+	if (!ev_fd->pending_detach) {
+		ev_fd->pending_detach = 1;
+		mm_list_insert(&listener->detach_list,
+				&ev_fd->detach_link);
+	}
 }
 
 static inline bool __attribute__((nonnull(1)))

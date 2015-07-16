@@ -270,7 +270,6 @@ mm_net_alloc_server(void)
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
 	srv->event.fd = -1;
 	srv->event.target = MM_CORE_NONE;
-	srv->event.detach = MM_CORE_NONE;
 	srv->client_count = 0;
 
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
@@ -1145,9 +1144,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
 			    true, false, false, false);
-	srv->event.target = srv_core;
-	srv->event.detach = MM_THREAD_NONE;
-	mm_core_post(srv->event.target, mm_net_register_server, (mm_value_t) srv);
+	mm_core_post(srv_core, mm_net_register_server, (mm_value_t) srv);
 
 	LEAVE();
 }

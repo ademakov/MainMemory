@@ -28,6 +28,7 @@
 
 struct mm_event_batch
 {
+	uint32_t stamp;
 	unsigned int flags;
 	unsigned int nevents;
 	unsigned int nevents_max;
@@ -45,6 +46,18 @@ mm_event_batch_expand(struct mm_event_batch *batch);
 
 void __attribute__((nonnull(1, 2)))
 mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch2);
+
+static inline void __attribute__((nonnull(1)))
+mm_event_batch_setstamp(struct mm_event_batch *batch, uint32_t stamp)
+{
+	batch->stamp = stamp;
+}
+
+static inline uint32_t __attribute__((nonnull(1)))
+mm_event_batch_getstamp(struct mm_event_batch *batch)
+{
+	return batch->stamp;
+}
 
 static inline void __attribute__((nonnull(1)))
 mm_event_batch_addflags(struct mm_event_batch *batch, unsigned int flags)

@@ -38,10 +38,13 @@
 #endif
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener,
-		    struct mm_dispatch *dispatch)
+mm_listener_prepare(struct mm_listener *listener, mm_thread_t nlisteners)
 {
 	ENTER();
+
+	listener->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+
+	listener->arrival_stamp = 0;
 
 	listener->listen_stamp = 1;
 	listener->notify_stamp = 0;
@@ -58,12 +61,13 @@ mm_listener_prepare(struct mm_listener *listener,
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
-	listener->dispatch_targets = mm_common_calloc(dispatch->nlisteners,
+	listener->dispatch_targets = mm_common_calloc(nlisteners,
 						      sizeof(mm_thread_t));
 
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
-	mm_event_batch_prepare(&listener->finish);
+
+	mm_list_prepare(&listener->detach_list);
 
 	LEAVE();
 }
@@ -85,7 +89,6 @@ mm_listener_cleanup(struct mm_listener *listener)
 
 	mm_event_batch_cleanup(&listener->changes);
 	mm_event_batch_cleanup(&listener->events);
-	mm_event_batch_cleanup(&listener->finish);
 
 	LEAVE();
 }

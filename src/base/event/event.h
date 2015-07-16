@@ -21,6 +21,7 @@
 #define BASE_EVENT_EVENT_H
 
 #include "common.h"
+#include "base/list.h"
 
 #if defined(HAVE_SYS_EPOLL_H)
 # undef MM_ONESHOT_HANDLERS
@@ -89,21 +90,28 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
  * I/O events support.
  **********************************************************************/
 
-/* File descriptor event entry. */
+/* Event sink. */
 struct mm_event_fd
 {
+	/* Pending detach list link. */
+	struct mm_link detach_link;
+
 	/* The file descriptor to watch. */
 	int fd;
 
-	/* The thread the handler is pinned to along with possible
-	   pending events flag. */
+	/* Counters to detect detach feasibility. */
+	uint32_t arrival_stamp;
+	uint32_t detach_stamp;
+
+	/* The thread the handler is pinned to. */
 	mm_thread_t target;
-	mm_thread_t detach;
 
 	/* Event handers. */
 	mm_event_hid_t handler;
 
 	/* Event flags */
+	unsigned attached : 1;
+	unsigned pending_detach : 1;
 	unsigned changed : 1;
 	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;
@@ -114,29 +122,29 @@ struct mm_event_fd
 };
 
 bool __attribute__((nonnull(1)))
-mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+mm_event_prepare_fd(struct mm_event_fd *sink,
 		    int fd, mm_event_hid_t handler,
 		    bool regular_input, bool oneshot_input,
 		    bool regular_output, bool oneshot_output);
 
 static inline void __attribute__((nonnull(1)))
-mm_event_dispatch(struct mm_event_fd *ev_fd, mm_event_t event)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 {
-	mm_event_hid_t id = ev_fd->handler;
+	mm_event_hid_t id = sink->handler;
 	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-	(hd->handler)(event, ev_fd);
+	(hd->handler)(event, sink);
 }
 
 static inline mm_thread_t __attribute__((nonnull(1)))
-mm_event_target(const struct mm_event_fd *ev_fd)
+mm_event_target(const struct mm_event_fd *sink)
 {
-	return ev_fd->target;
+	return sink->target;
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_event_attached(const struct mm_event_fd *ev_fd)
+mm_event_attached(const struct mm_event_fd *sink)
 {
-	return (mm_event_target(ev_fd) != MM_THREAD_NONE);
+	return sink->attached;
 }
 
 #endif /* BASE_EVENT_EVENT_H */

@@ -102,11 +102,15 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd,
 
 	ev_fd->fd = fd;
 
+	ev_fd->arrival_stamp = 0;
+	ev_fd->detach_stamp = 0;
+
 	ev_fd->target = MM_THREAD_NONE;
-	ev_fd->detach = MM_THREAD_NONE;
 
 	ev_fd->handler = handler;
 
+	ev_fd->attached = 0;
+	ev_fd->pending_detach = 0;
 	ev_fd->changed = false;
 	ev_fd->regular_input = regular_input;
 	ev_fd->oneshot_input = oneshot_input;
