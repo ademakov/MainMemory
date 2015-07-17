@@ -2,8 +2,11 @@
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra
 
-TESTS = bitops-test
+LDADD = $(top_builddir)/src/base/libmmbase.a
 
-check_PROGRAMS = bitops-test
+TESTS = bitops-test bitset-test
+
+check_PROGRAMS = bitops-test bitset-test
 
 bitops_test_SOURCES = bitops-test.c
+bitset_test_SOURCES = bitset-test.c
