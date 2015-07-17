@@ -21,12 +21,12 @@
 #define BASE_EVENT_DISPATCH_H
 
 #include "common.h"
-#include "base/bitset.h"
 #include "base/lock.h"
 #include "base/event/backend.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/listener.h"
+#include "base/event/receiver.h"
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
 
@@ -47,13 +47,10 @@ struct mm_dispatch
 	/* The event changes from waiting listeners. */
 	struct mm_event_batch pending_changes;
 
-	/* The events to be delivered to listeners. */
-	struct mm_event_batch *pending_events;
+	/* Handler for incoming events. */
+	struct mm_event_receiver receiver;
 
-	/* The listeners that have pending events. */
-	struct mm_bitset pending_listeners;
-
-	/* The system backend. */
+	/* System-specific event backend. */
 	struct mm_event_backend backend;
 };
 

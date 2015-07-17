@@ -38,7 +38,7 @@
 #endif
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener, mm_thread_t nlisteners)
+mm_listener_prepare(struct mm_listener *listener)
 {
 	ENTER();
 
@@ -61,9 +61,6 @@ mm_listener_prepare(struct mm_listener *listener, mm_thread_t nlisteners)
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
-	listener->dispatch_targets = mm_common_calloc(nlisteners,
-						      sizeof(mm_thread_t));
-
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
 
@@ -84,8 +81,6 @@ mm_listener_cleanup(struct mm_listener *listener)
 #else
 	mm_monitor_cleanup(&listener->monitor);
 #endif
-
-	mm_common_free(listener->dispatch_targets);
 
 	mm_event_batch_cleanup(&listener->changes);
 	mm_event_batch_cleanup(&listener->events);

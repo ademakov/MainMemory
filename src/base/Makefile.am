@@ -27,6 +27,7 @@ libmmbase_a_SOURCES = \
 	event/kqueue.c event/kqueue.h \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \
+	event/receiver.c event/receiver.h \
 	event/selfpipe.c event/selfpipe.h \
 	log/debug.c log/debug.h \
 	log/error.c log/error.h \

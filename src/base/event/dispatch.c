@@ -38,18 +38,14 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	dispatch->listeners = mm_common_calloc(nlisteners,
 					       sizeof(struct mm_listener));
 	for (mm_thread_t i = 0; i < nlisteners; i++)
-		mm_listener_prepare(&dispatch->listeners[i], nlisteners);
+		mm_listener_prepare(&dispatch->listeners[i]);
 	dispatch->nlisteners = nlisteners;
 
-	// Allocate pending event batches.
-	dispatch->pending_events = mm_common_calloc(nlisteners,
-						   sizeof(struct mm_event_batch));
-	for (mm_thread_t i = 0; i < nlisteners; i++)
-		mm_event_batch_prepare(&dispatch->pending_events[i]);
+	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->pending_changes);
-	mm_bitset_prepare(&dispatch->pending_listeners,
-			  &mm_common_space.xarena,
-			  nlisteners);
+
+	// Allocate pending event batches.
+	mm_event_receiver_prepare(&dispatch->receiver, nlisteners);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
@@ -60,10 +56,10 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 			   &dispatch->backend.selfpipe.event_fd);
 	mm_event_backend_listen(&dispatch->backend,
 				&dispatch->pending_changes,
-				&dispatch->pending_events[0],
+				&dispatch->receiver.events[0],
 				0);
 	mm_event_batch_clear(&dispatch->pending_changes);
-	mm_event_batch_clear(&dispatch->pending_events[0]);
+	mm_event_batch_clear(&dispatch->receiver.events[0]);
 
 	LEAVE();
 }
@@ -74,12 +70,12 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 	ENTER();
 
 	// Release pending event batches.
-	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
-		mm_event_batch_cleanup(&dispatch->pending_events[i]);
+	mm_event_receiver_cleanup(&dispatch->receiver);
+
+	// Release space for change events.
 	mm_event_batch_cleanup(&dispatch->pending_changes);
 
 	// Release listener info.
-	mm_bitset_cleanup(&dispatch->pending_listeners, &mm_common_space.xarena);
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
@@ -91,7 +87,7 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 }
 
 static void
-mm_dispatch_handle_event(struct mm_event_fd *sink, mm_event_t event, mm_thread_t tid)
+mm_dispatch_handle_event(struct mm_event_fd *sink, mm_event_t event)
 {
 	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
 
@@ -111,13 +107,13 @@ mm_dispatch_handle_event(struct mm_event_fd *sink, mm_event_t event, mm_thread_t
 }
 
 static void
-mm_dispatch_handle_arrived_events(struct mm_listener *listener, mm_thread_t tid)
+mm_dispatch_handle_arrived_events(struct mm_listener *listener)
 {
 	// Handle arrived events.
 	for (unsigned i = 0; i < listener->events.nevents; i++) {
 		struct mm_event *event = &listener->events.events[i];
 		if (event->event != MM_EVENT_DISPATCH_STUB)
-			mm_dispatch_handle_event(event->ev_fd, event->event, tid);
+			mm_dispatch_handle_event(event->ev_fd, event->event);
 	}
 
 	// Update event arrival stamp.
@@ -149,6 +145,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 {
 	ENTER();
 	ASSERT(tid < dispatch->nlisteners);
+	struct mm_event_receiver *receiver = &dispatch->receiver;
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_thread_t notify_listener = MM_THREAD_NONE;
 	bool polling = false;
@@ -188,18 +185,16 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 		if (mm_listener_has_urgent_changes(listener))
 			timeout = 0;
 
-		// Wait for incoming events, or a notification, or timeout
-		// expiration.
-		mm_listener_listen(listener, &dispatch->backend, timeout);
+		// Initialize info about other listeners with pending events.
+		mm_event_receiver_clear(receiver);
 
 		// Start a round of event sink updates.
 		dispatch->arrival_stamp++;
-		mm_event_batch_setstamp(&dispatch->pending_events[tid],
-					dispatch->arrival_stamp);
+		listener->arrival_stamp = dispatch->arrival_stamp;
+		mm_event_batch_setstamp(&listener->events, dispatch->arrival_stamp);
 
-		// Initialize info about other listeners with pending events.
-		unsigned int nlisteners = 0;
-		mm_bitset_clear_all(&dispatch->pending_listeners);
+		// Wait for incoming events or timeout expiration.
+		mm_listener_listen(listener, &dispatch->backend, timeout);
 
 		// Dispatch received events.
 		for (unsigned int i = 0; i < listener->events.nevents; i++) {
@@ -223,36 +218,33 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 				continue;
 
 			// The event sink is attached to another thread.
-			mm_event_batch_add(&dispatch->pending_events[target],
+			mm_event_batch_add(&receiver->events[target],
 					   event->event, sink);
 			event->event = MM_EVENT_DISPATCH_STUB;
 
-			if (!mm_bitset_test(&dispatch->pending_listeners, target)) {
-				ASSERT(nlisteners < dispatch->nlisteners);
-				listener->dispatch_targets[nlisteners++] = target;
-				mm_bitset_set(&dispatch->pending_listeners, target);
-			}
+			mm_event_receiver_add_target(receiver, target);
 		}
 
 		// Forward incoming events to other threads.
-		for (unsigned int i = 0; i < nlisteners; i++) {
-			mm_thread_t target = listener->dispatch_targets[i];
-			struct mm_listener *tlistener = &dispatch->listeners[tid];
+		mm_thread_t target = mm_event_receiver_first_target(receiver);
+		while (target != MM_THREAD_NONE) {
+			struct mm_listener *tlistener = &dispatch->listeners[target];
 
 			mm_regular_lock(&tlistener->lock);
-
 			mm_event_batch_setstamp(&tlistener->events,
 						dispatch->arrival_stamp);
 			mm_event_batch_append(&tlistener->events,
-					      &dispatch->pending_events[target]);
-			mm_event_batch_clear(&dispatch->pending_events[target]);
-
+					      &receiver->events[target]);
+			mm_event_batch_clear(&receiver->events[target]);
 			mm_regular_unlock(&tlistener->lock);
+
 			mm_dispatch_notify(dispatch, target);
+
+			target = mm_event_receiver_next_target(receiver, target);
 		}
 
 		// Handle incoming events.
-		mm_dispatch_handle_arrived_events(listener, tid);
+		mm_dispatch_handle_arrived_events(listener);
 
 		// Forget just handled changes.
 		mm_event_batch_clear(&listener->changes);
@@ -272,7 +264,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 
 		// Handle received events.
 		mm_regular_lock(&listener->lock);
-		mm_dispatch_handle_arrived_events(listener, tid);
+		mm_dispatch_handle_arrived_events(listener);
 		mm_regular_unlock(&listener->lock);
 	}
 

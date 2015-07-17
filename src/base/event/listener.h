@@ -74,9 +74,6 @@ struct mm_listener
 	/* Listener's event sinks waiting to be detached. */
 	struct mm_list detach_list;
 
-	/* Auxiliary memory to store target listeners on dispatch. */
-	mm_thread_t *dispatch_targets;
-
 	/* Listener's private event change list. */
 	struct mm_event_batch changes;
 	/* Listener's private event list. */
@@ -85,7 +82,7 @@ struct mm_listener
 } __mm_align_cacheline__;
 
 void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener, mm_thread_t nlisteners);
+mm_listener_prepare(struct mm_listener *listener);
 
 void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);
