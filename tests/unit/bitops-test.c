@@ -17,10 +17,10 @@
 		}						\
 	} while(0)
 
-int fail = 0;
+static int fail = 0;
 
-int
-main()
+void
+test_pow2(void)
 {
 	test(mm_lower_pow2(0), 0);
 	test(mm_upper_pow2(0), 0);
@@ -54,6 +54,11 @@ main()
 	test(mm_upper_pow2(0x70000000000001ull), 0x80000000000000ull);
 	test(mm_lower_pow2(0x7fffffffffffffull), 0x40000000000000ull);
 	test(mm_upper_pow2(0x7fffffffffffffull), 0x80000000000000ull);
+}
 
+int
+main()
+{
+	test_pow2();
 	return fail ? EXIT_FAILURE : EXIT_SUCCESS;
 }
