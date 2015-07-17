@@ -20,6 +20,12 @@
 #include "base/bitset.h"
 #include "base/bitops.h"
 
+static inline size_t
+mm_bitset_words(size_t size)
+{
+	return (size + MM_BITSET_UNIT - 1) / MM_BITSET_UNIT;
+}
+
 void
 mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size)
 {
@@ -27,7 +33,7 @@ mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size)
 	if (mm_bitset_is_small(set)) {
 		set->small_set = 0;
 	} else {
-		size_t words = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t words = mm_bitset_words(set->size);
 		set->large_set = mm_arena_calloc(arena, words, sizeof(uintptr_t));
 	}
 }
@@ -48,7 +54,7 @@ mm_bitset_any(const struct mm_bitset *set)
 	if (mm_bitset_is_small(set)) {
 		return set->small_set != 0;
 	} else {
-		size_t words = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t words = mm_bitset_words(set->size);
 		for (size_t i = 0; i < words; i++) {
 			if (set->large_set[i])
 				return true;
@@ -94,7 +100,7 @@ mm_bitset_find(const struct mm_bitset *set, size_t bit)
 		uintptr_t mask = set->large_set[word] >> (bit % MM_BITSET_UNIT);
 		if (mask)
 			return bit + mm_ctz(mask);
-		size_t words = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t words = mm_bitset_words(set->size);
 		for (size_t i = word + 1; i < words; i++) {
 			mask = set->large_set[i];
 			if (mask)
@@ -111,7 +117,7 @@ mm_bitset_count(const struct mm_bitset *set)
 		return mm_popcount(set->small_set);
 	} else {
 		size_t count = 0;
-		size_t words = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t words = mm_bitset_words(set->size);
 		for (size_t i = 0; i < words; i++) {
 			count += mm_popcount(set->large_set[i]);
 		}
@@ -169,7 +175,7 @@ mm_bitset_clear_all(struct mm_bitset *set)
 	if (mm_bitset_is_small(set)) {
 		set->small_set = 0;
 	} else {
-		size_t words = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t words = mm_bitset_words(set->size);
 		for (size_t i = 0; i < words; i++) {
 			set->large_set[i] = 0;
 		}
@@ -237,7 +243,7 @@ mm_bitset_and(struct mm_bitset *set, const struct mm_bitset *set2)
 			}
 		}
 
-		size_t erase_end = mm_round_up(set->size, MM_BITSET_UNIT);
+		size_t erase_end = mm_bitset_words(set->size);
 		for (; erase < erase_end; erase++) {
 			set->large_set[erase] = 0;
 		}
