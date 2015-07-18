@@ -37,15 +37,12 @@ struct mm_dispatch
 	/* The listener elected to do event poll. */
 	mm_thread_t polling_listener;
 
-	/* A counter to detect detach feasibility. */
-	uint32_t arrival_stamp;
-
 	/* Event listeners. */
 	struct mm_listener *listeners;
 	mm_thread_t nlisteners;
 
 	/* The event changes from waiting listeners. */
-	struct mm_event_batch pending_changes;
+	struct mm_event_batch changes;
 
 	/* Handler for incoming events. */
 	struct mm_event_receiver receiver;

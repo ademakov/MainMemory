@@ -25,6 +25,9 @@
 
 struct mm_event_receiver
 {
+	/* A counter to detect event sink detach feasibility. */
+	uint32_t arrival_stamp;
+
 	/* The received events for target threads. */
 	struct mm_event_batch *events;
 	/* Target threads that have received events. */
@@ -39,8 +42,9 @@ void __attribute__((nonnull(1)))
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
 static inline void __attribute__((nonnull(1)))
-mm_event_receiver_clear(struct mm_event_receiver *receiver)
+mm_event_receiver_start(struct mm_event_receiver *receiver)
 {
+	receiver->arrival_stamp++;
 	mm_bitset_clear_all(&receiver->targets);
 }
 

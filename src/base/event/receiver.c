@@ -30,6 +30,8 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver,
 {
 	ENTER();
 
+	receiver->arrival_stamp = 0;
+
 	receiver->events = mm_common_calloc(ntargets,
 					    sizeof(struct mm_event_batch));
 	for (mm_thread_t i = 0; i < ntargets; i++)
