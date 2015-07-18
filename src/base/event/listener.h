@@ -116,7 +116,6 @@ mm_listener_addflags(struct mm_listener *listener, unsigned int flags)
 static inline void __attribute__((nonnull(1, 2)))
 mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 {
-	ev_fd->detach_stamp = listener->arrival_stamp;
 	if (!ev_fd->pending_detach) {
 		ev_fd->pending_detach = 1;
 		mm_list_insert(&listener->detach_list,
