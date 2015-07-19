@@ -41,6 +41,7 @@
 
 /* Forward declarations. */
 struct mm_event_backend;
+struct mm_event_receiver;
 
 typedef enum
 {
@@ -94,6 +95,7 @@ mm_listener_notify(struct mm_listener *listener,
 void __attribute__((nonnull(1)))
 mm_listener_listen(struct mm_listener *listener,
 		   struct mm_event_backend *backend,
+		   struct mm_event_receiver *receiver,
 		   mm_timeout_t timeout);
 
 /**********************************************************************

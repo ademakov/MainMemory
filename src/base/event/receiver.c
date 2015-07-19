@@ -55,3 +55,41 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 
 	LEAVE();
 }
+
+void __attribute__((nonnull(1, 3)))
+mm_event_receiver_add(struct mm_event_receiver *receiver,
+		      mm_event_t event, struct mm_event_fd *sink)
+{
+	ENTER();
+	ASSERT(receiver->control_thread == mm_thread_getnumber(mm_thread_self()));
+
+	mm_thread_t target = mm_memory_load(sink->target);
+	mm_memory_load_fence();
+
+	// If the event sink is detached attach it to the control thread.
+	if (target != receiver->control_thread) {
+		uint32_t detach_stamp = mm_memory_load(sink->detach_stamp);
+		if (detach_stamp == sink->arrival_stamp) {
+			sink->target = receiver->control_thread;
+			target = receiver->control_thread;
+		}
+	}
+
+	// Update the arrival stamp. This disables detachment of the event
+	// sink until the received event jumps through all the hoops and
+	// the detach stamp is updated accordingly.
+	sink->arrival_stamp = receiver->arrival_stamp;
+
+	// If the event sink belongs to the control thread then handle it
+	// immediately, otherwise store it for later delivery to the target
+	// thread.
+	if (target == receiver->control_thread) {
+		mm_event_handle(sink, event);
+	} else {
+		mm_event_batch_add(&receiver->events[target],
+				   event, sink);
+		mm_bitset_set(&receiver->targets, target);
+	}
+
+	LEAVE();
+}

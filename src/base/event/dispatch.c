@@ -53,9 +53,10 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	mm_event_batch_add(&dispatch->changes,
 			   MM_EVENT_REGISTER,
 			   &dispatch->backend.selfpipe.event_fd);
+	mm_event_receiver_start(&dispatch->receiver, 0);
 	mm_event_backend_listen(&dispatch->backend,
 				&dispatch->changes,
-				&dispatch->receiver.events[0],
+				&dispatch->receiver,
 				0);
 	mm_event_batch_clear(&dispatch->changes);
 	mm_event_batch_clear(&dispatch->receiver.events[0]);
@@ -86,36 +87,12 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 }
 
 static void
-mm_dispatch_handle_event(struct mm_event_fd *sink, mm_event_t event)
-{
-	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
-
-	// If the event sink is detached then attach it to the executing
-	// thread. If it is scheduled for detachment then quit this state.
-	if (!sink->attached) {
-		DEBUG("attach %d to %d, stamp %u", sink->fd,
-		      mm_thread_getnumber(mm_thread_self()),
-		      sink->detach_stamp);
-
-		sink->attached = 1;
-		mm_event_handle(sink, MM_EVENT_ATTACH);
-	} else if (sink->pending_detach) {
-		sink->pending_detach = 0;
-		mm_list_delete(&sink->detach_link);
-	}
-
-	// Handle the event.
-	mm_event_handle(sink, event);
-}
-
-static void
-mm_dispatch_handle_arrived_events(struct mm_listener *listener)
+mm_dispatch_handle_events(struct mm_listener *listener)
 {
 	// Handle arrived events.
 	for (unsigned i = 0; i < listener->events.nevents; i++) {
 		struct mm_event *event = &listener->events.events[i];
-		if (event->event != MM_EVENT_DISPATCH_STUB)
-			mm_dispatch_handle_event(event->ev_fd, event->event);
+		mm_event_handle(event->ev_fd, event->event);
 	}
 
 	// Update event arrival stamp.
@@ -123,22 +100,6 @@ mm_dispatch_handle_arrived_events(struct mm_listener *listener)
 
 	// Forget just handled events.
 	mm_event_batch_clear(&listener->events);
-}
-
-static void
-mm_dispatch_handle_detach(struct mm_event_fd *sink, uint32_t stamp)
-{
-	ASSERT(sink->attached && sink->pending_detach);
-	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
-	DEBUG("detach %d from %d, stamp %u\n", sink->fd, sink->target, stamp);
-
-	sink->pending_detach = 0;
-	mm_list_delete(&sink->detach_link);
-
-	sink->attached = 0;
-	mm_event_handle(sink, MM_EVENT_DETACH);
-	mm_memory_store_fence();
-	mm_memory_store(sink->detach_stamp, stamp);
 }
 
 void __attribute__((nonnull(1)))
@@ -183,46 +144,26 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 		if (mm_listener_has_urgent_changes(listener))
 			timeout = 0;
 
-		// Initialize receiver for incoming events.
-		mm_event_receiver_start(receiver);
-
-		// Wait for incoming events or timeout expiration.
-		mm_listener_listen(listener, &dispatch->backend, timeout);
-
-		// Dispatch received events.
-		for (unsigned int i = 0; i < listener->events.nevents; i++) {
-			struct mm_event *event = &listener->events.events[i];
-			struct mm_event_fd *sink = event->ev_fd;
-
-			mm_thread_t target = mm_memory_load(sink->target);
-			mm_memory_load_fence();
-			if (target != tid) {
-				// If the event sink is detached attach it to
-				// the current thread.
-				uint32_t detach = mm_memory_load(sink->detach_stamp);
-				if (detach == sink->arrival_stamp) {
-					sink->target = tid;
-					target = tid;
-				}
-			}
-
-			sink->arrival_stamp = receiver->arrival_stamp;
-			if (target == tid)
-				continue;
-
-			// The event sink is attached to another thread.
-			mm_event_batch_add(&receiver->events[target],
-					   event->event, sink);
-			event->event = MM_EVENT_DISPATCH_STUB;
-
-			mm_event_receiver_add_target(receiver, target);
+		// Handle received events.
+		if (mm_listener_has_events(listener)) {
+			mm_dispatch_handle_events(listener);
+			timeout = 0;
 		}
 
-		// Forward incoming events to other threads.
+		// Initialize receiver for incoming events.
+		mm_event_receiver_start(receiver, tid);
+
+		// Wait for incoming events or timeout expiration.
+		mm_listener_listen(listener,
+				   &dispatch->backend, &dispatch->receiver,
+				   timeout);
+
+		// Forward incoming events that belong to other threads.
 		mm_thread_t target = mm_event_receiver_first_target(receiver);
 		while (target != MM_THREAD_NONE) {
 			struct mm_listener *tlistener = &dispatch->listeners[target];
 
+			// Forward incoming events.
 			mm_regular_lock(&tlistener->lock);
 			mm_event_batch_setstamp(&tlistener->events,
 						receiver->arrival_stamp);
@@ -230,15 +171,14 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 					      &receiver->events[target]);
 			mm_regular_unlock(&tlistener->lock);
 
+			// Wake the target thread if it is sleeping.
 			mm_dispatch_notify(dispatch, target);
+
+			// Forget just forwarded events.
 			mm_event_batch_clear(&receiver->events[target]);
+
 			target = mm_event_receiver_next_target(receiver, target);
 		}
-
-		// Handle incoming events.
-		mm_event_batch_setstamp(&listener->events,
-					receiver->arrival_stamp);
-		mm_dispatch_handle_arrived_events(listener);
 
 		// Unregister the listener from poll.
 		mm_regular_lock(&dispatch->lock);
@@ -250,15 +190,15 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 
 		// TODO: possibly wake any waiting listener if there are
 		// pending changes.
-		// if (!mm_event_batch_empty(&dispatch->pending_changes)) ...
+		// if (!mm_event_batch_empty(&dispatch->changes)) ...
 
 	} else {
 		// Wait for a notification or timeout expiration.
-		mm_listener_listen(listener, NULL, timeout);
+		mm_listener_listen(listener, NULL, NULL, timeout);
 
 		// Handle received events.
 		mm_regular_lock(&listener->lock);
-		mm_dispatch_handle_arrived_events(listener);
+		mm_dispatch_handle_events(listener);
 		mm_regular_unlock(&listener->lock);
 	}
 
@@ -266,7 +206,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 	while (!mm_list_empty(&listener->detach_list)) {
 		struct mm_link *link = mm_list_head(&listener->detach_list);
 		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, detach_link);
-		mm_dispatch_handle_detach(sink, listener->arrival_stamp);
+		mm_event_detach(sink, listener->arrival_stamp);
 	}
 
 	LEAVE();

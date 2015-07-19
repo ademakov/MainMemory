@@ -21,6 +21,7 @@
 
 #include "base/event/batch.h"
 #include "base/event/event.h"
+#include "base/event/receiver.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -33,7 +34,7 @@
 static void
 mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 			 struct mm_event *change_event,
-			 struct mm_event_batch *return_events)
+			 struct mm_event_receiver *return_events)
 {
 	struct mm_event_fd *ev_fd = change_event->ev_fd;
 
@@ -53,7 +54,7 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
-		mm_event_batch_add(return_events, MM_EVENT_REGISTER, ev_fd);
+		mm_event_receiver_add(return_events, MM_EVENT_REGISTER, ev_fd);
 		break;
 
 	case MM_EVENT_UNREGISTER:
@@ -61,7 +62,7 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
-		mm_event_batch_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
+		mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
 		break;
 
 	default:
@@ -70,7 +71,7 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 }
 
 static void
-mm_event_epoll_get_events(struct mm_event_batch *return_events,
+mm_event_epoll_get_events(struct mm_event_receiver *return_events,
 			  struct mm_event_epoll *event_backend)
 {
 	for (int i = 0; i < event_backend->nevents; i++) {
@@ -78,11 +79,11 @@ mm_event_epoll_get_events(struct mm_event_batch *return_events,
 		struct mm_event_fd *ev_fd = event->data.ptr;
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0)
-			mm_event_batch_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
+			mm_event_receiver_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
 		else if ((event->events & EPOLLIN) != 0)
-			mm_event_batch_add(return_events, MM_EVENT_INPUT, ev_fd);
+			mm_event_receiver_add(return_events, MM_EVENT_INPUT, ev_fd);
 		if ((event->events & EPOLLOUT) != 0)
-			mm_event_batch_add(return_events, MM_EVENT_OUTPUT, ev_fd);
+			mm_event_receiver_add(return_events, MM_EVENT_OUTPUT, ev_fd);
 	}
 }
 
@@ -142,7 +143,7 @@ mm_event_epoll_cleanup(struct mm_event_epoll *event_backend)
 void __attribute__((nonnull(1, 2, 3)))
 mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		      struct mm_event_batch *change_events,
-		      struct mm_event_batch *return_events,
+		      struct mm_event_receiver *return_events,
 		      mm_timeout_t timeout)
 {
 	ENTER();

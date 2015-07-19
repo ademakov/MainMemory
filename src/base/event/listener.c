@@ -202,6 +202,7 @@ mm_listener_notify(struct mm_listener *listener,
 void __attribute__((nonnull(1)))
 mm_listener_listen(struct mm_listener *listener,
 		   struct mm_event_backend *backend,
+		   struct mm_event_receiver *receiver,
 		   mm_timeout_t timeout)
 {
 	ENTER();
@@ -213,9 +214,8 @@ mm_listener_listen(struct mm_listener *listener,
 			mm_event_backend_dampen(backend);
 
 			// Check for incoming events.
-			mm_event_backend_listen(backend,
-						&listener->changes,
-						&listener->events, 0);
+			mm_event_backend_listen(backend, &listener->changes,
+						receiver, 0);
 		}
 
 	} else if (backend != NULL) {
@@ -233,9 +233,8 @@ mm_listener_listen(struct mm_listener *listener,
 		if (listen_stamp == notify_stamp)
 			timeout = 0;
 
-		mm_event_backend_listen(backend,
-					&listener->changes,
-					&listener->events, timeout);
+		mm_event_backend_listen(backend, &listener->changes,
+					receiver, timeout);
 
 		// Advertise that the thread has woken up.
 		mm_memory_store(listener->state, MM_LISTENER_RUNNING);

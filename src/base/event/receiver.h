@@ -22,9 +22,13 @@
 
 #include "common.h"
 #include "base/bitset.h"
+#include "base/event/event.h"
 
 struct mm_event_receiver
 {
+	/* The thread that currently owns the receiver. */
+	mm_thread_t control_thread;
+
 	/* A counter to detect event sink detach feasibility. */
 	uint32_t arrival_stamp;
 
@@ -42,17 +46,12 @@ void __attribute__((nonnull(1)))
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
 static inline void __attribute__((nonnull(1)))
-mm_event_receiver_start(struct mm_event_receiver *receiver)
+mm_event_receiver_start(struct mm_event_receiver *receiver,
+			mm_thread_t thread)
 {
 	receiver->arrival_stamp++;
+	receiver->control_thread = thread;
 	mm_bitset_clear_all(&receiver->targets);
-}
-
-static inline void __attribute__((nonnull(1)))
-mm_event_receiver_add_target(struct mm_event_receiver *receiver,
-			     mm_thread_t target)
-{
-	mm_bitset_set(&receiver->targets, target);
 }
 
 static inline mm_thread_t __attribute__((nonnull(1)))
@@ -70,5 +69,9 @@ mm_event_receiver_next_target(struct mm_event_receiver *receiver,
 	else
 		return MM_THREAD_NONE;
 }
+
+void __attribute__((nonnull(1, 3)))
+mm_event_receiver_add(struct mm_event_receiver *receiver,
+		      mm_event_t event, struct mm_event_fd *sink);
 
 #endif /* BASE_EVENT_RECEIVER_H */

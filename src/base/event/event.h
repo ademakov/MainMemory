@@ -39,7 +39,6 @@ typedef enum {
 	MM_EVENT_UNREGISTER,
 	MM_EVENT_INPUT_ERROR,
 	MM_EVENT_OUTPUT_ERROR,
-	MM_EVENT_DISPATCH_STUB,
 
 } mm_event_t;
 
@@ -78,12 +77,6 @@ struct mm_event_hdesc
 	mm_event_handler_t handler;
 };
 
-/* Event handler table. */
-extern struct mm_event_hdesc mm_event_hdesc_table[];
-
-/* The number of registered event handlers. */
-extern int mm_event_hdesc_table_size;
-
 mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 
 /**********************************************************************
@@ -116,7 +109,7 @@ struct mm_event_fd
 	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;
 	unsigned oneshot_input_trigger : 1;
-	unsigned regular_output;
+	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
 	unsigned oneshot_output_trigger : 1;
 };
@@ -127,13 +120,11 @@ mm_event_prepare_fd(struct mm_event_fd *sink,
 		    bool regular_input, bool oneshot_input,
 		    bool regular_output, bool oneshot_output);
 
-static inline void __attribute__((nonnull(1)))
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-	mm_event_hid_t id = sink->handler;
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-	(hd->handler)(event, sink);
-}
+void __attribute__((nonnull(1)))
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
+
+void __attribute__((nonnull(1)))
+mm_event_detach(struct mm_event_fd *sink, uint32_t stamp);
 
 static inline mm_thread_t __attribute__((nonnull(1)))
 mm_event_target(const struct mm_event_fd *sink)

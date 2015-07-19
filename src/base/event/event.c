@@ -22,6 +22,7 @@
 #include "base/event/selfpipe.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
+#include "base/thread/thread.h"
 
 /**********************************************************************
  * Event handlers.
@@ -31,10 +32,10 @@
 #define MM_EVENT_HANDLER_MAX	(255)
 
 /* Event handler table. */
-struct mm_event_hdesc mm_event_hdesc_table[MM_EVENT_HANDLER_MAX];
+static struct mm_event_hdesc mm_event_hdesc_table[MM_EVENT_HANDLER_MAX];
 
 /* The number of registered event handlers. */
-int mm_event_hdesc_table_size;
+static int mm_event_hdesc_table_size;
 
 // A dummy event handler.
 static void
@@ -82,7 +83,7 @@ mm_event_register_handler(mm_event_handler_t handler)
  **********************************************************************/
 
 bool
-mm_event_prepare_fd(struct mm_event_fd *ev_fd,
+mm_event_prepare_fd(struct mm_event_fd *sink,
 		    int fd, mm_event_hid_t handler,
 		    bool regular_input, bool oneshot_input,
 		    bool regular_output, bool oneshot_output)
@@ -100,26 +101,84 @@ mm_event_prepare_fd(struct mm_event_fd *ev_fd,
 		regular_output = true;
 #endif
 
-	ev_fd->fd = fd;
+	sink->fd = fd;
 
-	ev_fd->arrival_stamp = 0;
-	ev_fd->detach_stamp = 0;
+	sink->arrival_stamp = 0;
+	sink->detach_stamp = 0;
 
-	ev_fd->target = MM_THREAD_NONE;
+	sink->target = MM_THREAD_NONE;
 
-	ev_fd->handler = handler;
+	sink->handler = handler;
 
-	ev_fd->attached = 0;
-	ev_fd->pending_detach = 0;
-	ev_fd->changed = false;
-	ev_fd->regular_input = regular_input;
-	ev_fd->oneshot_input = oneshot_input;
-	ev_fd->oneshot_input_trigger = 0;
-	ev_fd->regular_output = regular_output;
-	ev_fd->oneshot_output = oneshot_output;
-	ev_fd->oneshot_output_trigger = 0;
+	sink->attached = 0;
+	sink->pending_detach = 0;
+	sink->changed = 0;
+	sink->regular_input = regular_input;
+	sink->oneshot_input = oneshot_input;
+	sink->oneshot_input_trigger = 0;
+	sink->regular_output = regular_output;
+	sink->oneshot_output = oneshot_output;
+	sink->oneshot_output_trigger = 0;
 
 	return true;
+}
+
+void __attribute__((nonnull(1)))
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+	ENTER();
+	DEBUG("handle sink %p, fd %d, target %u, event %d",
+	      sink, sink->fd, mm_event_target(sink), event);
+	ASSERT(event != MM_EVENT_ATTACH && event != MM_EVENT_DETACH);
+	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
+
+	mm_event_hid_t id = sink->handler;
+	ASSERT(id < mm_event_hdesc_table_size);
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+
+	// If the event sink is detached then attach it before handling
+	// the received event. If it is in the state of pending detach
+	// then quit this state.
+	if (!sink->attached) {
+		DEBUG("attach %d to %d, stamp %u", sink->fd,
+		      mm_thread_getnumber(mm_thread_self()),
+		      sink->detach_stamp);
+		(hd->handler)(MM_EVENT_ATTACH, sink);
+		sink->attached = 1;
+	} else if (sink->pending_detach) {
+		mm_list_delete(&sink->detach_link);
+		sink->pending_detach = 0;
+	}
+
+	(hd->handler)(event, sink);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_event_detach(struct mm_event_fd *sink, uint32_t stamp)
+{
+	ENTER();
+	DEBUG("detach sink %p, fd %d, target %u, stamp %u\n",
+	      sink, sink->fd, mm_event_target(sink), stamp);
+	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
+
+	mm_event_hid_t id = sink->handler;
+	ASSERT(id < mm_event_hdesc_table_size);
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+
+	ASSERT(sink->pending_detach);
+	mm_list_delete(&sink->detach_link);
+	sink->pending_detach = 0;
+
+	ASSERT(sink->attached);
+	(hd->handler)(MM_EVENT_DETACH, sink);
+	sink->attached = 0;
+
+	mm_memory_store_fence();
+	mm_memory_store(sink->detach_stamp, stamp);
+
+	LEAVE();
 }
 
 /**********************************************************************

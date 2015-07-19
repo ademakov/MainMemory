@@ -21,6 +21,7 @@
 
 #include "base/event/batch.h"
 #include "base/event/event.h"
+#include "base/event/receiver.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -136,7 +137,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 
 static void
 mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
-				    struct mm_event_batch *return_events)
+				    struct mm_event_receiver *return_events)
 {
 	int nevents = event_backend->nevents;
 	for (int i = 0; i < nevents; i++) {
@@ -149,9 +150,9 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 			ev_fd->oneshot_input_trigger = 0;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_batch_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
+				mm_event_receiver_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
 			else
-				mm_event_batch_add(return_events, MM_EVENT_INPUT, ev_fd);
+				mm_event_receiver_add(return_events, MM_EVENT_INPUT, ev_fd);
 
 		} else if (event->filter == EVFILT_WRITE) {
 			DEBUG("write event");
@@ -161,15 +162,15 @@ mm_log_relay(); mm_log_flush();
 			ev_fd->oneshot_output_trigger = 0;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_batch_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);
+				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);
 			else
-				mm_event_batch_add(return_events, MM_EVENT_OUTPUT, ev_fd);
+				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT, ev_fd);
 		}
 	}
 }
 
 static void
-mm_event_kqueue_get_register_events(struct mm_event_batch *return_events,
+mm_event_kqueue_get_register_events(struct mm_event_receiver *return_events,
 				    struct mm_event_batch *change_events,
 				    unsigned int first, unsigned int last)
 {
@@ -182,12 +183,12 @@ mm_event_kqueue_get_register_events(struct mm_event_batch *return_events,
 
 		// Store the pertinent event.
 		if (event->event == MM_EVENT_REGISTER)
-			mm_event_batch_add(return_events, MM_EVENT_REGISTER, ev_fd);
+			mm_event_receiver_add(return_events, MM_EVENT_REGISTER, ev_fd);
 	}
 }
 
 static void
-mm_event_kqueue_get_unregister_events(struct mm_event_batch *return_events,
+mm_event_kqueue_get_unregister_events(struct mm_event_receiver *return_events,
 				      struct mm_event_batch *change_events,
 				      unsigned int first, unsigned int last)
 {
@@ -197,12 +198,12 @@ mm_event_kqueue_get_unregister_events(struct mm_event_batch *return_events,
 
 		// Store the pertinent event.
 		if (event->event == MM_EVENT_UNREGISTER)
-			mm_event_batch_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
+			mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
 	}
 }
 
 static void
-mm_event_kqueue_get_events(struct mm_event_batch *return_events,
+mm_event_kqueue_get_events(struct mm_event_receiver *return_events,
 			   struct mm_event_kqueue *event_backend,
 			   struct mm_event_batch *change_events,
 			   unsigned int first, unsigned int last)
@@ -279,7 +280,7 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend)
 void __attribute__((nonnull(1, 2, 3)))
 mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		       struct mm_event_batch *change_events,
-		       struct mm_event_batch *return_events,
+		       struct mm_event_receiver *return_events,
 		       mm_timeout_t timeout)
 {
 	ENTER();

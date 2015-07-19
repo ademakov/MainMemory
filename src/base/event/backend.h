@@ -48,14 +48,14 @@ mm_event_backend_cleanup(struct mm_event_backend *backend);
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_batch *changes,
-			struct mm_event_batch *events,
+			struct mm_event_receiver *receiver,
 			mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&backend->backend, changes, events, timeout);
+	mm_event_epoll_listen(&backend->backend, changes, receiver, timeout);
 #endif
 #if HAVE_SYS_EVENT_H
-	mm_event_kqueue_listen(&backend->backend, changes, events, timeout);
+	mm_event_kqueue_listen(&backend->backend, changes, receiver, timeout);
 #endif
 }
 

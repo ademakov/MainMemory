@@ -28,8 +28,9 @@
 
 #define MM_EVENT_KQUEUE_NEVENTS	(512)
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mm_event_batch;
+struct mm_event_receiver;
 
 /* Data for kqueue support. */
 struct mm_event_kqueue
@@ -53,7 +54,7 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend);
 void __attribute__((nonnull(1, 2, 3)))
 mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		       struct mm_event_batch *change_events,
-		       struct mm_event_batch *return_events,
+		       struct mm_event_receiver *return_events,
 		       mm_timeout_t timeout);
 
 #endif /* HAVE_SYS_EVENT_H */
