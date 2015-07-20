@@ -42,13 +42,16 @@ mm_listener_prepare(struct mm_listener *listener)
 {
 	ENTER();
 
-	listener->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	listener->state = MM_LISTENER_RUNNING;
+	listener->listen_stamp = 1;
+	listener->notify_stamp = 0;
+
+	listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+	listener->changes_stamp = 0;
 
 	listener->arrival_stamp = 0;
 
-	listener->listen_stamp = 1;
-	listener->notify_stamp = 0;
-	listener->state = MM_LISTENER_RUNNING;
+	mm_list_prepare(&listener->detach_list);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
@@ -61,10 +64,10 @@ mm_listener_prepare(struct mm_listener *listener)
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
+	listener->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
-
-	mm_list_prepare(&listener->detach_list);
 
 	LEAVE();
 }

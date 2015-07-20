@@ -51,18 +51,33 @@ typedef enum
 
 } mm_listener_state_t;
 
+typedef enum
+{
+	MM_LISTENER_CHANGES_PRIVATE,
+	MM_LISTENER_CHANGES_PUBLISHED,
+
+} mm_listener_changes_state_t;
+
 struct mm_listener
 {
-	mm_regular_lock_t lock;
-
-	/* A counter to detect detach feasibility. */
-	uint32_t arrival_stamp;
+	/* The state of listening. */
+	mm_listener_state_t state;
 
 	/* Counters to pair listen/notify calls. */
 	uint32_t listen_stamp;
 	uint32_t notify_stamp;
 
-	mm_listener_state_t state;
+	/* The state of pending changes. */
+	mm_listener_changes_state_t changes_state;
+
+	/* A counter to ensure visibility of change events. */
+	uint32_t changes_stamp;
+
+	/* A counter to detect detach feasibility. */
+	uint32_t arrival_stamp;
+
+	/* Listener's event sinks waiting to be detached. */
+	struct mm_list detach_list;
 
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
@@ -72,13 +87,13 @@ struct mm_listener
 	struct mm_monitor monitor;
 #endif
 
-	/* Listener's event sinks waiting to be detached. */
-	struct mm_list detach_list;
-
-	/* Listener's private event change list. */
+	/* Listener's private change events store. */
 	struct mm_event_batch changes;
-	/* Listener's private event list. */
+	/* Listener's incoming events store. */
 	struct mm_event_batch events;
+
+	/* A lock to protect the events store. */
+	mm_regular_lock_t lock;
 
 } __mm_align_cacheline__;
 

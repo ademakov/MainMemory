@@ -32,22 +32,23 @@
 
 struct mm_dispatch
 {
+	/* A lock that protects the change events. */
 	mm_regular_lock_t lock;
 
-	/* The listener elected to do event poll. */
-	mm_thread_t polling_listener;
+	/* A thread elected to conduct the next event poll. */
+	mm_thread_t control_thread;
 
 	/* Event listeners. */
 	struct mm_listener *listeners;
 	mm_thread_t nlisteners;
 
-	/* The event changes from waiting listeners. */
+	/* A common store for published change events. */
 	struct mm_event_batch changes;
 
-	/* Handler for incoming events. */
+	/* A common store for incoming events filled by the control thread. */
 	struct mm_event_receiver receiver;
 
-	/* System-specific event backend. */
+	/* A system-specific event backend. */
 	struct mm_event_backend backend;
 };
 
@@ -58,15 +59,15 @@ void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);
 
 static inline void __attribute__((nonnull(1)))
-mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t tid)
+mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
-	ASSERT(tid < dispatch->nlisteners);
-	struct mm_listener *listener = &dispatch->listeners[tid];
+	ASSERT(thread < dispatch->nlisteners);
+	struct mm_listener *listener = &dispatch->listeners[thread];
 	mm_listener_notify(listener, &dispatch->backend);
 }
 
 void __attribute__((nonnull(1)))
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
+mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout);
 
 /**********************************************************************

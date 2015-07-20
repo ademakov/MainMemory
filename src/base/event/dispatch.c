@@ -31,7 +31,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
-	dispatch->polling_listener = MM_THREAD_NONE;
+	dispatch->control_thread = MM_THREAD_NONE;
 
 	// Allocate listener info.
 	dispatch->listeners = mm_common_calloc(nlisteners,
@@ -102,58 +102,111 @@ mm_dispatch_handle_events(struct mm_listener *listener)
 	mm_event_batch_clear(&listener->events);
 }
 
+static void
+mm_dispatch_handle_detach(struct mm_listener *listener)
+{
+	while (!mm_list_empty(&listener->detach_list)) {
+		struct mm_link *link = mm_list_head(&listener->detach_list);
+		struct mm_event_fd *sink
+			= containerof(link, struct mm_event_fd, detach_link);
+		mm_event_detach(sink, listener->arrival_stamp);
+	}
+}
+
 void __attribute__((nonnull(1)))
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
+mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(tid < dispatch->nlisteners);
+	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_receiver *receiver = &dispatch->receiver;
-	struct mm_listener *listener = &dispatch->listeners[tid];
-	mm_thread_t notify_listener = MM_THREAD_NONE;
+	struct mm_listener *listener = &dispatch->listeners[thread];
 
+	// Handle the change events.
 	mm_regular_lock(&dispatch->lock);
+	mm_thread_t control_thread = dispatch->control_thread;
+	if (control_thread == MM_THREAD_NONE) {
 
-	// The first arrived listener is elected to do event poll.
-	if (dispatch->polling_listener == MM_THREAD_NONE) {
-		// Register as a polling listener.
-		dispatch->polling_listener = tid;
+		// The first arrived thread is elected to conduct the next
+		// event poll.
+		dispatch->control_thread = thread;
 
-		// Seize all pending changes and make them private.
+		// Capture all the published change events.
 		mm_event_batch_append(&listener->changes, &dispatch->changes);
+		// Forget just captured events.
 		mm_event_batch_clear(&dispatch->changes);
 
-	} else if (mm_listener_has_changes(listener)) {
-		notify_listener = dispatch->polling_listener;
+		// Setup the event receiver for the next poll cycle.
+		mm_event_receiver_start(receiver, thread);
 
-		// Share private changes adding them to common batch.
+		mm_regular_unlock(&dispatch->lock);
+
+		// If this thread previously published any change events
+		// then upon this dispatch cycle the events will certainly
+		// be handled (perhaps by the very same thread).
+		listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+
+	} else if (mm_listener_has_changes(listener)) {
+
+		// Publish the private change events.
 		mm_event_batch_append(&dispatch->changes, &listener->changes);
+
+		// The published events might be missed by the current
+		// control thread. So the publisher must force another
+		// dispatch cycle.
+		listener->changes_state = MM_LISTENER_CHANGES_PUBLISHED;
+		listener->changes_stamp = receiver->arrival_stamp;
+
+		mm_regular_unlock(&dispatch->lock);
+
+		// Wake up the control thread if it is still sleeping.
+		// But by this time the known control thread might have
+		// given up its role and be busy with something else.
+		// So it might be needed to wake up a new control thread.
+		mm_dispatch_notify(dispatch, control_thread);
+		// Avoid sleeping until another dispatch cycle begins.
+		timeout = 0;
+
+		// Forget just published events.
 		mm_event_batch_clear(&listener->changes);
+
+	} else {
+		mm_regular_unlock(&dispatch->lock);
+
+		if (listener->changes_state != MM_LISTENER_CHANGES_PRIVATE) {
+			uint32_t stamp = mm_memory_load(receiver->arrival_stamp);
+			if (listener->changes_stamp != stamp) {
+				// At this point the change events published by this
+				// thread must have been captured by a control thread.
+				listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+			} else {
+				// Wake up the control thread if it is still sleeping.
+				mm_dispatch_notify(dispatch, control_thread);
+				// Avoid sleeping until another dispatch cycle begins.
+				timeout = 0;
+			}
+		}
 	}
 
-	mm_regular_unlock(&dispatch->lock);
-
-	// Wake up a listener possibly sleeping on a poll system call.
-	if (notify_listener != MM_THREAD_NONE)
-		mm_dispatch_notify(dispatch, notify_listener);
-
-	// Wait for events.
-	if (dispatch->polling_listener == tid) {
+	// Wait for incoming events.
+	if (control_thread == MM_THREAD_NONE) {
 		// Check to see if there are any changes that need to be
 		// immediately acknowledged.
 		if (mm_listener_has_urgent_changes(listener))
 			timeout = 0;
 
-		// Handle received events.
+		// Handle events that might have been forwarded to this
+		// listener by a previous control thread. There is no need
+		// to lock the listener here as only the control thread and
+		// the listener owner thread could ever access the events
+		// concurrently. And both of these threads are the same one
+		// at this point.
 		if (mm_listener_has_events(listener)) {
 			mm_dispatch_handle_events(listener);
 			timeout = 0;
 		}
 
-		// Initialize receiver for incoming events.
-		mm_event_receiver_start(receiver, tid);
-
-		// Wait for incoming events or timeout expiration.
+		// Poll for incoming events or wait for timeout expiration.
 		mm_listener_listen(listener,
 				   &dispatch->backend, &dispatch->receiver,
 				   timeout);
@@ -161,17 +214,18 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 		// Forward incoming events that belong to other threads.
 		mm_thread_t target = mm_event_receiver_first_target(receiver);
 		while (target != MM_THREAD_NONE) {
-			struct mm_listener *tlistener = &dispatch->listeners[target];
+			struct mm_listener *target_listener
+				= &dispatch->listeners[target];
 
 			// Forward incoming events.
-			mm_regular_lock(&tlistener->lock);
-			mm_event_batch_setstamp(&tlistener->events,
+			mm_regular_lock(&target_listener->lock);
+			mm_event_batch_setstamp(&target_listener->events,
 						receiver->arrival_stamp);
-			mm_event_batch_append(&tlistener->events,
+			mm_event_batch_append(&target_listener->events,
 					      &receiver->events[target]);
-			mm_regular_unlock(&tlistener->lock);
+			mm_regular_unlock(&target_listener->lock);
 
-			// Wake the target thread if it is sleeping.
+			// Wake up the target thread if it is sleeping.
 			mm_dispatch_notify(dispatch, target);
 
 			// Forget just forwarded events.
@@ -180,34 +234,25 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t tid,
 			target = mm_event_receiver_next_target(receiver, target);
 		}
 
-		// Unregister the listener from poll.
-		mm_regular_lock(&dispatch->lock);
-		dispatch->polling_listener = MM_THREAD_NONE;
-		mm_regular_unlock(&dispatch->lock);
+		// Give up the control thread role.
+		mm_memory_store_fence();
+		mm_memory_store(dispatch->control_thread, MM_THREAD_NONE);
 
-		// Forget just handled changes.
+		// Forget just handled change events.
 		mm_event_batch_clear(&listener->changes);
 
-		// TODO: possibly wake any waiting listener if there are
-		// pending changes.
-		// if (!mm_event_batch_empty(&dispatch->changes)) ...
-
 	} else {
-		// Wait for a notification or timeout expiration.
+		// Wait for forwarded events or timeout expiration.
 		mm_listener_listen(listener, NULL, NULL, timeout);
 
-		// Handle received events.
+		// Handle the forwarded events.
 		mm_regular_lock(&listener->lock);
 		mm_dispatch_handle_events(listener);
 		mm_regular_unlock(&listener->lock);
 	}
 
 	// Finalize remaining detach requests.
-	while (!mm_list_empty(&listener->detach_list)) {
-		struct mm_link *link = mm_list_head(&listener->detach_list);
-		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, detach_link);
-		mm_event_detach(sink, listener->arrival_stamp);
-	}
+	mm_dispatch_handle_detach(listener);
 
 	LEAVE();
 }
