@@ -45,7 +45,8 @@ void __attribute__((nonnull(1)))
 mm_event_batch_expand(struct mm_event_batch *batch);
 
 void __attribute__((nonnull(1, 2)))
-mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch2);
+mm_event_batch_append(struct mm_event_batch *restrict batch,
+		      const struct mm_event_batch *restrict batch2);
 
 static inline void __attribute__((nonnull(1)))
 mm_event_batch_setstamp(struct mm_event_batch *batch, uint32_t stamp)
@@ -72,7 +73,8 @@ mm_event_batch_hasflags(struct mm_event_batch *batch, unsigned int flags)
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_event_batch_add(struct mm_event_batch *batch, mm_event_t event, struct mm_event_fd *ev_fd)
+mm_event_batch_add(struct mm_event_batch *batch, mm_event_t event,
+		   struct mm_event_fd *ev_fd)
 {
 	if (unlikely(batch->nevents == batch->nevents_max))
 		mm_event_batch_expand(batch);

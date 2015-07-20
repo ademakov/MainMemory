@@ -58,13 +58,15 @@ mm_event_batch_expand(struct mm_event_batch *batch)
 		mm_fatal(0, "too many events");
 
 	batch->nevents_max *= 2;
-	batch->events = mm_common_realloc(batch->events, batch->nevents_max * sizeof(struct mm_event));
+	batch->events = mm_common_realloc(batch->events,
+					  batch->nevents_max * sizeof(struct mm_event));
 
 	LEAVE();
 }
 
 void __attribute__((nonnull(1, 2)))
-mm_event_batch_append(struct mm_event_batch *batch, struct mm_event_batch *batch2)
+mm_event_batch_append(struct mm_event_batch *restrict batch,
+		      const struct mm_event_batch *restrict batch2)
 {
 	ENTER();
 
