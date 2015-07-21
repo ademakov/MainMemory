@@ -12,6 +12,7 @@ libmmbase_a_SOURCES = \
 	bitset.c bitset.h \
 	bytes.h \
 	cksum.c cksum.h \
+	clock.c clock.h \
 	combiner.c combiner.h \
 	hash.c hash.h \
 	list.h \
@@ -45,7 +46,6 @@ libmmbase_a_SOURCES = \
 	mem/pool.c mem/pool.h \
 	mem/slider.c mem/slider.h \
 	mem/space.c mem/space.h \
-	sys/clock.c sys/clock.h \
 	thread/domain.c thread/domain.h \
 	thread/monitor.c thread/monitor.h \
 	thread/request.c thread/request.h \

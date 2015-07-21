@@ -1,5 +1,5 @@
 /*
- * base/sys/clock.h - MainMemory time routines.
+ * base/clock.h - MainMemory time routines.
  *
  * Copyright (C) 2013  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_SYS_CLOCK_H
-#define BASE_SYS_CLOCK_H
+#ifndef BASE_CLOCK_H
+#define BASE_CLOCK_H
 
 #include "common.h"
 
@@ -33,4 +33,4 @@ mm_timeval_t mm_clock_gettime(mm_clock_t clock);
 mm_timeval_t mm_clock_gettime_realtime(void);
 mm_timeval_t mm_clock_gettime_monotonic(void);
 
-#endif /* BASE_SYS_CLOCK_H */
+#endif /* BASE_CLOCK_H */

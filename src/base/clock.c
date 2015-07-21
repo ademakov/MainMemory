@@ -1,5 +1,5 @@
 /*
- * base/sys/clock.c - MainMemory time routines.
+ * base/clock.c - MainMemory time routines.
  *
  * Copyright (C) 2013  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/sys/clock.h"
+#include "base/clock.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
