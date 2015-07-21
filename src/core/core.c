@@ -650,6 +650,13 @@ mm_core_start_basic_tasks(struct mm_core *core)
 	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 }
 
+static bool
+mm_core_yield(void)
+{
+	mm_task_yield();
+	return true;
+}
+
 /* A per-core thread entry point. */
 static mm_value_t
 mm_core_boot(mm_value_t arg)
@@ -678,8 +685,14 @@ mm_core_boot(mm_value_t arg)
 	// Start master & dealer tasks.
 	mm_core_start_basic_tasks(core);
 
+	// Enable yielding to another task on busy waiting.
+	mm_backoff_set_yield(mm_core_yield);
+
 	// Run the other tasks while there are any.
 	mm_task_yield();
+
+	// Disable yielding to another task.
+	mm_backoff_set_yield(NULL);
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);
@@ -755,16 +768,6 @@ mm_core_term_single(struct mm_core *core)
 	LEAVE();
 }
 
-static bool
-mm_core_yield(void)
-{
-	if (mm_core_self() == NULL)
-		return false;
-
-	mm_task_yield();
-	return true;
-}
-
 static void
 mm_core_thread_notify(struct mm_thread *thread)
 {
@@ -812,7 +815,6 @@ mm_core_init(void)
 	mm_future_init();
 	mm_work_init();
 
-	mm_backoff_set_yield(mm_core_yield);
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
