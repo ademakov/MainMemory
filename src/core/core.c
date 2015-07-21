@@ -541,7 +541,10 @@ mm_core_dealer(mm_value_t arg)
 
 	while (!mm_memory_load(core->stop)) {
 		bool rc = mm_core_deal(core, thread);
+
+		mm_core_disable_yield();
 		mm_core_halt(core, rc ? 0 : MM_DEALER_HALT_TIMEOUT);
+		mm_core_enable_yield();
 	}
 
 	LEAVE();
