@@ -252,10 +252,10 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_regular_lock(&listener->lock);
 		mm_dispatch_handle_events(listener);
 		mm_regular_unlock(&listener->lock);
-	}
 
-	// Finalize remaining detach requests.
-	mm_dispatch_handle_detach(listener);
+		// Finalize the detach requests.
+		mm_dispatch_handle_detach(listener);
+	}
 
 	LEAVE();
 }
