@@ -298,11 +298,14 @@ static void
 mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
 {
 	// Prepare the event data.
-	bool input_oneshot = !(srv->proto->flags & MM_NET_INBOUND);
-	bool output_oneshot = !(srv->proto->flags & MM_NET_OUTBOUND);
+	mm_event_mode_t input = MM_EVENT_REGULAR;
+	mm_event_mode_t output = MM_EVENT_REGULAR;
+	if (!(srv->proto->flags & MM_NET_INBOUND))
+		input = MM_EVENT_ONESHOT;
+	if (!(srv->proto->flags & MM_NET_OUTBOUND))
+		output = MM_EVENT_ONESHOT;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
-			     !input_oneshot, input_oneshot,
-			     !output_oneshot, output_oneshot);
+			    input, output);
 
 	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock,
 			mm_net_reader_complete);
@@ -1145,7 +1148,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
-			    true, false, false, false);
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED);
 	mm_core_post(srv_core, mm_net_register_server, (mm_value_t) srv);
 
 	LEAVE();

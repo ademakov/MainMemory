@@ -85,40 +85,51 @@ mm_event_register_handler(mm_event_handler_t handler)
 bool
 mm_event_prepare_fd(struct mm_event_fd *sink,
 		    int fd, mm_event_hid_t handler,
-		    bool regular_input, bool oneshot_input,
-		    bool regular_output, bool oneshot_output)
+		    mm_event_mode_t input_mode,
+		    mm_event_mode_t output_mode)
 {
 	ASSERT(fd >= 0);
 	ASSERT(handler > 0);
 	ASSERT(handler < mm_event_hdesc_table_size);
-	ASSERT(!(regular_input && oneshot_input));
-	ASSERT(!(regular_output && oneshot_output));
-
-#if !MM_ONESHOT_HANDLERS
-	if (oneshot_input)
-		regular_input = true;
-	if (oneshot_output)
-		regular_output = true;
-#endif
 
 	sink->fd = fd;
-
-	sink->arrival_stamp = 0;
-	sink->detach_stamp = 0;
-
 	sink->target = MM_THREAD_NONE;
-
 	sink->handler = handler;
 
+	if (input_mode == MM_EVENT_IGNORED) {
+		sink->regular_input = false;
+		sink->oneshot_input = false;
+#if MM_ONESHOT_HANDLERS
+	} else if (input_mode == MM_EVENT_ONESHOT) {
+		sink->regular_input = false;
+		sink->oneshot_input = true;
+#endif
+	} else {
+		sink->regular_input = true;
+		sink->oneshot_input = false;
+	}
+
+	if (output_mode == MM_EVENT_IGNORED) {
+		sink->regular_output = false;
+		sink->oneshot_output = false;
+#if MM_ONESHOT_HANDLERS
+	} else if (output_mode == MM_EVENT_ONESHOT) {
+		sink->regular_output = false;
+		sink->oneshot_output = true;
+#endif
+	} else {
+		sink->regular_output = true;
+		sink->oneshot_output = false;
+	}
+
+	sink->arrival_stamp = 0;
+	sink->changed = 0;
+	sink->oneshot_input_trigger = 0;
+	sink->oneshot_output_trigger = 0;
+
+	sink->detach_stamp = 0;
 	sink->attached = 0;
 	sink->pending_detach = 0;
-	sink->changed = 0;
-	sink->regular_input = regular_input;
-	sink->oneshot_input = oneshot_input;
-	sink->oneshot_input_trigger = 0;
-	sink->regular_output = regular_output;
-	sink->oneshot_output = oneshot_output;
-	sink->oneshot_output_trigger = 0;
 
 	return true;
 }

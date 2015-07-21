@@ -39,8 +39,13 @@ typedef enum {
 	MM_EVENT_UNREGISTER,
 	MM_EVENT_INPUT_ERROR,
 	MM_EVENT_OUTPUT_ERROR,
-
 } mm_event_t;
+
+typedef enum {
+	MM_EVENT_IGNORED,
+	MM_EVENT_REGULAR,
+	MM_EVENT_ONESHOT,
+} mm_event_mode_t;
 
 /* Event details. */
 struct mm_event
@@ -124,8 +129,8 @@ struct mm_event_fd
 bool __attribute__((nonnull(1)))
 mm_event_prepare_fd(struct mm_event_fd *sink,
 		    int fd, mm_event_hid_t handler,
-		    bool regular_input, bool oneshot_input,
-		    bool regular_output, bool oneshot_output);
+		    mm_event_mode_t input_mode,
+		    mm_event_mode_t output_mode);
 
 void __attribute__((nonnull(1)))
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
