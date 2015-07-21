@@ -92,26 +92,33 @@ struct mm_event_fd
 	/* The file descriptor to watch. */
 	int fd;
 
-	/* Counters to detect detach feasibility. */
-	uint32_t arrival_stamp;
-	uint32_t detach_stamp;
-
-	/* The thread the handler is pinned to. */
+	/* The thread the owns the sink. */
 	mm_thread_t target;
 
 	/* Event handers. */
 	mm_event_hid_t handler;
 
-	/* Event flags */
-	unsigned attached : 1;
-	unsigned pending_detach : 1;
-	unsigned changed : 1;
+	/* Immutable flags. */
 	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;
-	unsigned oneshot_input_trigger : 1;
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
+
+	/* The stamp set the poller thread. */
+	uint32_t arrival_stamp;
+
+	/* Flags used by the poller thread. */
+	unsigned changed : 1;
+	unsigned oneshot_input_trigger : 1;
 	unsigned oneshot_output_trigger : 1;
+
+	/* The stamp set by the owner thread to tell if it is eligible
+	   to transfer the sink ownership to another thread. */
+	uint32_t detach_stamp;
+
+	/* Flags used by the owner thread. */
+	unsigned attached : 1;
+	unsigned pending_detach : 1;
 };
 
 bool __attribute__((nonnull(1)))
