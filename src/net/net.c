@@ -615,9 +615,11 @@ mm_net_dispatch_finish(struct mm_net_socket *sock)
 		goto leave;
 	}
 
+#if ENABLE_SMP
 	if (sock->server->proto->finish != NULL
 	    && (sock->server->proto->finish)(sock))
 		mm_dispatch_detach(&mm_core_dispatch, &sock->event);
+#endif
 
 leave:
 	LEAVE();
