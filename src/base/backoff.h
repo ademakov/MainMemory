@@ -25,7 +25,7 @@
 
 #define MM_BACKOFF_SMALL	(0xff)
 
-typedef bool (*mm_backoff_yield_t)(void);
+typedef void (*mm_backoff_yield_t)(void);
 
 void mm_backoff_set_yield(mm_backoff_yield_t yield);
 

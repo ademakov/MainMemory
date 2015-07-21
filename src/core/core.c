@@ -64,6 +64,28 @@ static struct mm_bitset mm_core_event_affinity;
 struct mm_dispatch mm_core_dispatch;
 
 /**********************************************************************
+ * Yield routine for backoff on busy waiting.
+ **********************************************************************/
+
+static void
+mm_core_yield(void)
+{
+	mm_task_yield();
+}
+
+static void
+mm_core_enable_yield(void)
+{
+	mm_backoff_set_yield(mm_core_yield);
+}
+
+static void
+mm_core_disable_yield(void)
+{
+	mm_backoff_set_yield(NULL);
+}
+
+/**********************************************************************
  * Idle queue.
  **********************************************************************/
 
@@ -650,13 +672,6 @@ mm_core_start_basic_tasks(struct mm_core *core)
 	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
 }
 
-static bool
-mm_core_yield(void)
-{
-	mm_task_yield();
-	return true;
-}
-
 /* A per-core thread entry point. */
 static mm_value_t
 mm_core_boot(mm_value_t arg)
@@ -685,14 +700,14 @@ mm_core_boot(mm_value_t arg)
 	// Start master & dealer tasks.
 	mm_core_start_basic_tasks(core);
 
-	// Enable yielding to another task on busy waiting.
-	mm_backoff_set_yield(mm_core_yield);
+	// Enable yielding to other tasks on busy waiting.
+	mm_core_enable_yield();
 
 	// Run the other tasks while there are any.
 	mm_task_yield();
 
-	// Disable yielding to another task.
-	mm_backoff_set_yield(NULL);
+	// Disable yielding to other tasks.
+	mm_core_disable_yield();
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);

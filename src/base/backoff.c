@@ -35,8 +35,10 @@ mm_backoff_slow(uint32_t count)
 		mm_thread_yield();
 		return 0;
 	} else {
-		if (mm_backoff_yield == NULL || !mm_backoff_yield())
+		if (mm_backoff_yield == NULL)
 			mm_backoff_fixed(count & 0xfff);
+		else
+			mm_backoff_yield();
 		return count + count + 1;
 	}
 }
