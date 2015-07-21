@@ -162,9 +162,11 @@ mm_listener_notify(struct mm_listener *listener,
 {
 	ENTER();
 
+#if 0
 	// Make sure that any data that might have been sent to the target
 	// listener thread becomes visible.
 	mm_memory_strict_fence();
+#endif
 
 	// Compare notify and listen stamps. If the notify stamp lags behind
 	// the listen stamp then synchronize them. Do it atomically so that
@@ -264,7 +266,9 @@ mm_listener_listen(struct mm_listener *listener,
 	mm_memory_store_fence();
 	mm_memory_store(listener->listen_stamp, listener->listen_stamp + 1);
 
+#if 0
 	mm_memory_strict_fence();
+#endif
 
 	LEAVE();
 }
