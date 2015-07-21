@@ -95,7 +95,7 @@ mm_dispatch_handle_events(struct mm_listener *listener)
 		mm_event_handle(event->ev_fd, event->event);
 	}
 
-	// Update event arrival stamp.
+	// Update private event arrival stamp.
 	listener->arrival_stamp = mm_event_batch_getstamp(&listener->events);
 
 	// Forget just handled events.
@@ -159,6 +159,9 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 
 		mm_regular_unlock(&dispatch->lock);
 
+		// Forget just published events.
+		mm_event_batch_clear(&listener->changes);
+
 		// Wake up the control thread if it is still sleeping.
 		// But by this time the known control thread might have
 		// given up its role and be busy with something else.
@@ -166,9 +169,6 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_dispatch_notify(dispatch, control_thread);
 		// Avoid sleeping until another dispatch cycle begins.
 		timeout = 0;
-
-		// Forget just published events.
-		mm_event_batch_clear(&listener->changes);
 
 	} else {
 		mm_regular_unlock(&dispatch->lock);
@@ -210,6 +210,9 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_listener_listen(listener,
 				   &dispatch->backend, &dispatch->receiver,
 				   timeout);
+
+		// Update private event arrival stamp.
+		listener->arrival_stamp = receiver->arrival_stamp;
 
 		// Forward incoming events that belong to other threads.
 		mm_thread_t target = mm_event_receiver_first_target(receiver);
