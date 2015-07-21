@@ -20,7 +20,7 @@
 #include "base/backoff.h"
 #include "base/thread/thread.h"
 
-static mm_backoff_yield_t mm_backoff_yield;
+static __thread mm_backoff_yield_t mm_backoff_yield;
 
 void
 mm_backoff_set_yield(mm_backoff_yield_t yield)
