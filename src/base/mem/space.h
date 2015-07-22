@@ -131,10 +131,16 @@ mm_private_space_free(struct mm_private_space *space, void *ptr)
 	mm_mspace_free(space->space, ptr);
 }
 
-static inline void
+static inline void __attribute__((nonnull(1, 2)))
 mm_private_space_bulk_free(struct mm_private_space *space, void **ptrs, size_t nptrs)
 {
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
+}
+
+static inline void __attribute__((nonnull(1)))
+mm_private_space_trim(struct mm_private_space *space)
+{
+	mm_mspace_trim(space->space);
 }
 
 bool __attribute__((nonnull(1, 2)))
@@ -247,12 +253,19 @@ mm_shared_space_free(struct mm_shared_space *space, void *ptr)
 	mm_common_unlock(&space->lock);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void __attribute__((nonnull(1, 2)))
 mm_shared_space_bulk_free(struct mm_shared_space *space, void **ptrs, size_t nptrs)
 {
 	mm_common_lock(&space->lock);
 	mm_mspace_bulk_free(space->space, ptrs, nptrs);
+	mm_common_unlock(&space->lock);
+}
+static inline void __attribute__((nonnull(1)))
+mm_shared_space_trim(struct mm_shared_space *space)
+{
 	mm_common_lock(&space->lock);
+	mm_mspace_trim(space->space);
+	mm_common_unlock(&space->lock);
 }
 
 #endif /* BASE_MEM_SPACE_H */
