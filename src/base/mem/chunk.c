@@ -106,16 +106,16 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		mm_common_free(chunk);
 		return;
 	}
-	if (tag == MM_CHUNK_GLOBAL) {
+	if (unlikely(tag == MM_CHUNK_GLOBAL)) {
 		mm_global_free(chunk);
 		return;
 	}
 
 	if (tag == MM_CHUNK_REGULAR) {
 #if ENABLE_SMP
-		// In SMP mode regular memory space is just another case of shared
-		// space with built-in synchronization. So it can be freed by any
-		// thread alike.
+		// In SMP mode regular memory space is just another case of
+		// shared space with built-in synchronization. So it can be
+		// freed by any thread alike.
 		mm_regular_free(chunk);
 		return;
 #else
@@ -147,10 +147,18 @@ mm_chunk_destroy_chain(struct mm_slink *link)
 {
 	while (link != NULL) {
 		struct mm_slink *next = link->next;
-		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
+		struct mm_chunk *chunk
+			= containerof(link, struct mm_chunk, base.slink);
 		mm_chunk_destroy(chunk);
 		link = next;
 	}
+}
+
+static void
+mm_chunk_free_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+{
+	struct mm_chunk *chunk = (struct mm_chunk *) arguments[0];
+	mm_private_free(chunk);
 }
 
 void __attribute__((nonnull(1)))
@@ -173,26 +181,23 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
 		struct mm_thread *origin = mm_domain_getthread(domain, tag);
-		struct mm_private_space *space = mm_thread_getspace(origin);
 #else
 		struct mm_thread *origin = mm_domain_getthread(domain, 0);
-		struct mm_private_space *space = &mm_regular_space;
 #endif
-
 		uint32_t backoff = 0;
-		while (!mm_private_space_enqueue(space, chunk)) {
-			backoff = mm_backoff(backoff);
-
-			// If failed to submit the chunk after a number of
-			// attempts then defer it again.
-			if (backoff >= MM_BACKOFF_SMALL) {
-				mm_stack_insert(&thread->deferred_chunks, link);
-				thread->deferred_chunks_count++;
-
+		while (!mm_thread_trysubmit_oneway_1(origin, mm_chunk_free_req,
+						     (uintptr_t) chunk)) {
+			if (backoff == 0) {
 				// Wake up a possibly sleeping origin thread.
 				mm_thread_notify(origin);
+			} else if (backoff >= MM_BACKOFF_SMALL) {
+				// If failed to submit the chunk after a number
+				// of attempts then defer it again.
+				mm_stack_insert(&thread->deferred_chunks, link);
+				thread->deferred_chunks_count++;
 				break;
 			}
+			backoff = mm_backoff(backoff);
 		}
 	}
 
