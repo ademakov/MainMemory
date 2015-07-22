@@ -183,12 +183,12 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_core_post_work_request(struct mm_core *core, uintptr_t *arguments)
+mm_core_post_work_request(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
 	struct mm_work *work = (struct mm_work *) arguments[0];
-	mm_core_add_work(core, work);
+	mm_core_add_work(mm_core_getptr(context), work);
 
 	LEAVE();
 }
@@ -260,7 +260,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 #if ENABLE_SMP
 static void
-mm_core_run_task_request(struct mm_core *core __mm_unused__,
+mm_core_run_task_request(uintptr_t context __mm_unused__,
 			 uintptr_t *arguments)
 {
 	ENTER();
@@ -451,21 +451,21 @@ static mm_atomic_uint32_t mm_core_deal_count;
 #endif
 
 static bool
-mm_core_receive_requests(struct mm_core *core, struct mm_thread *thread)
+mm_core_receive_requests(struct mm_thread *thread)
 {
 	ENTER();
 	bool rc = false;
 	struct mm_request_data request;
 
 	while (mm_thread_receive(thread, &request)) {
-		mm_request_execute((uintptr_t) core, &request);
+		mm_request_execute(mm_thread_getnumber(thread), &request);
 		rc = true;
 	}
 
 #if ENABLE_SMP
 	struct mm_domain *domain = mm_thread_getdomain(thread);
 	while (mm_domain_receive(domain, &request)) {
-		mm_request_execute((uintptr_t) core, &request);
+		mm_request_execute(mm_thread_getnumber(thread), &request);
 		rc = true;
 	}
 #endif
@@ -496,7 +496,7 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 #endif
 
 	// Execute thread requests.
-	rc |= mm_core_receive_requests(core, thread);
+	rc |= mm_core_receive_requests(thread);
 
 #if ENABLE_DEALER_STATS
 	mm_atomic_uint32_inc(&mm_core_deal_count);
