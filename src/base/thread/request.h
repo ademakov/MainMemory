@@ -112,6 +112,16 @@ mm_request_submit_oneway_0(struct mm_ring_mpmc *ring, mm_request_t req)
 	mm_ring_mpmc_enqueue_n(ring, data, 1);
 }
 
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_0(struct mm_ring_mpmc *ring, mm_request_t req)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req
+	};
+	return mm_ring_mpmc_put_n(ring, data, 1);
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_request_submit_oneway_1(struct mm_ring_mpmc *ring, mm_request_t req,
 			   uintptr_t arg1)
@@ -121,6 +131,17 @@ mm_request_submit_oneway_1(struct mm_ring_mpmc *ring, mm_request_t req,
 		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 2);
+}
+
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_1(struct mm_ring_mpmc *ring, mm_request_t req,
+			      uintptr_t arg1)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1
+	};
+	return mm_ring_mpmc_put_n(ring, data, 2);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
@@ -134,6 +155,17 @@ mm_request_submit_oneway_2(struct mm_ring_mpmc *ring, mm_request_t req,
 	mm_ring_mpmc_enqueue_n(ring, data, 3);
 }
 
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_2(struct mm_ring_mpmc *ring, mm_request_t req,
+			      uintptr_t arg1, uintptr_t arg2)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2
+	};
+	return mm_ring_mpmc_put_n(ring, data, 3);
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_request_submit_oneway_3(struct mm_ring_mpmc *ring, mm_request_t req,
 			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
@@ -143,6 +175,17 @@ mm_request_submit_oneway_3(struct mm_ring_mpmc *ring, mm_request_t req,
 		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 4);
+}
+
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_3(struct mm_ring_mpmc *ring, mm_request_t req,
+			      uintptr_t arg1, uintptr_t arg2, uintptr_t arg3)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3
+	};
+	return mm_ring_mpmc_put_n(ring, data, 4);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
@@ -157,6 +200,18 @@ mm_request_submit_oneway_4(struct mm_ring_mpmc *ring, mm_request_t req,
 	mm_ring_mpmc_enqueue_n(ring, data, 5);
 }
 
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_4(struct mm_ring_mpmc *ring, mm_request_t req,
+			      uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			      uintptr_t arg4)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3, arg4
+	};
+	return mm_ring_mpmc_get_n(ring, data, 5);
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_request_submit_oneway_5(struct mm_ring_mpmc *ring, mm_request_t req,
 			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
@@ -169,6 +224,18 @@ mm_request_submit_oneway_5(struct mm_ring_mpmc *ring, mm_request_t req,
 	mm_ring_mpmc_enqueue_n(ring, data, 6);
 }
 
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_5(struct mm_ring_mpmc *ring, mm_request_t req,
+			      uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			      uintptr_t arg4, uintptr_t arg5)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3, arg4, arg5
+	};
+	return mm_ring_mpmc_put_n(ring, data, 6);
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_request_submit_oneway_6(struct mm_ring_mpmc *ring, mm_request_t req,
 			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
@@ -179,6 +246,18 @@ mm_request_submit_oneway_6(struct mm_ring_mpmc *ring, mm_request_t req,
 		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3, arg4, arg5, arg6
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 7);
+}
+
+static inline bool __attribute__((nonnull(1, 2)))
+mm_request_trysubmit_oneway_6(struct mm_ring_mpmc *ring, mm_request_t req,
+			   uintptr_t arg1, uintptr_t arg2, uintptr_t arg3,
+			   uintptr_t arg4, uintptr_t arg5, uintptr_t arg6)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		MM_REQUEST_ONEWAY | (uintptr_t) req, arg1, arg2, arg3, arg4, arg5, arg6
+	};
+	return mm_ring_mpmc_put_n(ring, data, 7);
 }
 
 /**********************************************************************
@@ -196,6 +275,17 @@ mm_request_submit_0(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 	mm_ring_mpmc_enqueue_n(ring, data, 2);
 }
 
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_0(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor
+	};
+	return mm_ring_mpmc_put_n(ring, data, 2);
+}
+
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_request_submit_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		    mm_request_t req, uintptr_t arg1)
@@ -207,6 +297,17 @@ mm_request_submit_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 	mm_ring_mpmc_enqueue_n(ring, data, 3);
 }
 
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req, uintptr_t arg1)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor, arg1
+	};
+	return mm_ring_mpmc_put_n(ring, data, 3);
+}
+
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_request_submit_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		    mm_request_t req, uintptr_t arg1, uintptr_t arg2)
@@ -216,6 +317,17 @@ mm_request_submit_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		(uintptr_t) req, (intptr_t) rtor, arg1, arg2
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 4);
+}
+
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req, uintptr_t arg1, uintptr_t arg2)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor, arg1, arg2
+	};
+	return mm_ring_mpmc_put_n(ring, data, 4);
 }
 
 static inline void __attribute__((nonnull(1, 2, 3)))
@@ -230,6 +342,18 @@ mm_request_submit_3(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 	mm_ring_mpmc_enqueue_n(ring, data, 5);
 }
 
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_3(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		       uintptr_t arg3)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor, arg1, arg2, arg3
+	};
+	return mm_ring_mpmc_put_n(ring, data, 5);
+}
+
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_request_submit_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		    mm_request_t req, uintptr_t arg1, uintptr_t arg2,
@@ -242,6 +366,18 @@ mm_request_submit_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 	mm_ring_mpmc_enqueue_n(ring, data, 6);
 }
 
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		       uintptr_t arg3, uintptr_t arg4)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor, arg1, arg2, arg3, arg4
+	};
+	return mm_ring_mpmc_put_n(ring, data, 6);
+}
+
 static inline void __attribute__((nonnull(1, 2, 3)))
 mm_request_submit_5(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		    mm_request_t req, uintptr_t arg1, uintptr_t arg2,
@@ -252,6 +388,18 @@ mm_request_submit_5(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 		(uintptr_t) req, (intptr_t) rtor, arg1, arg2, arg3, arg4, arg5
 	};
 	mm_ring_mpmc_enqueue_n(ring, data, 7);
+}
+
+static inline bool __attribute__((nonnull(1, 2, 3)))
+mm_request_trysubmit_5(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
+		       mm_request_t req, uintptr_t arg1, uintptr_t arg2,
+		       uintptr_t arg3, uintptr_t arg4, uintptr_t arg5)
+{
+	mm_request_verify_address(req);
+	uintptr_t data[] = {
+		(uintptr_t) req, (intptr_t) rtor, arg1, arg2, arg3, arg4, arg5
+	};
+	return mm_ring_mpmc_put_n(ring, data, 7);
 }
 
 /**********************************************************************
@@ -334,11 +482,22 @@ prefix##_submit_oneway_0(container *p, mm_request_t r)			\
 {									\
 	mm_request_submit_oneway_0(p->name, r);				\
 }									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_0(container *p, mm_request_t r)		\
+{									\
+	return mm_request_trysubmit_oneway_0(p->name, r);		\
+}									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_1(container *p, mm_request_t r,			\
 			 uintptr_t a1)					\
 {									\
 	mm_request_submit_oneway_1(p->name, r, a1);			\
+}									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_1(container *p, mm_request_t r,		\
+			    uintptr_t a1)				\
+{									\
+	return mm_request_trysubmit_oneway_1(p->name, r, a1);		\
 }									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_2(container *p, mm_request_t r,			\
@@ -346,11 +505,23 @@ prefix##_submit_oneway_2(container *p, mm_request_t r,			\
 {									\
 	mm_request_submit_oneway_2(p->name, r, a1, a2);			\
 }									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_2(container *p, mm_request_t r,		\
+			    uintptr_t a1, uintptr_t a2)			\
+{									\
+	return mm_request_trysubmit_oneway_2(p->name, r, a1, a2);	\
+}									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_3(container *p, mm_request_t r,			\
 			  uintptr_t a1, uintptr_t a2, uintptr_t a3)	\
 {									\
 	mm_request_submit_oneway_3(p->name, r, a1, a2, a3);		\
+}									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_3(container *p, mm_request_t r,		\
+			  uintptr_t a1, uintptr_t a2, uintptr_t a3)	\
+{									\
+	return mm_request_trysubmit_oneway_3(p->name, r, a1, a2, a3);	\
 }									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_4(container *p, mm_request_t r,			\
@@ -359,12 +530,26 @@ prefix##_submit_oneway_4(container *p, mm_request_t r,			\
 {									\
 	mm_request_submit_oneway_4(p->name, r, a1, a2, a3, a4);		\
 }									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_4(container *p, mm_request_t r,		\
+			    uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			    uintptr_t a4)				\
+{									\
+	return mm_request_trysubmit_oneway_4(p->name, r, a1, a2, a3, a4);	\
+}									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_5(container *p, mm_request_t r,			\
 			 uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
 			 uintptr_t a4, uintptr_t a5)			\
 {									\
 	mm_request_submit_oneway_5(p->name, r, a1, a2, a3, a4, a5);	\
+}									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_5(container *p, mm_request_t r,		\
+			    uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			    uintptr_t a4, uintptr_t a5)			\
+{									\
+	return mm_request_trysubmit_oneway_5(p->name, r, a1, a2, a3, a4, a5);	\
 }									\
 static inline void __attribute__((nonnull(1, 2)))			\
 prefix##_submit_oneway_6(container *p, mm_request_t r,			\
@@ -373,11 +558,24 @@ prefix##_submit_oneway_6(container *p, mm_request_t r,			\
 {									\
 	mm_request_submit_oneway_6(p->name, r, a1, a2, a3, a4, a5, a6);	\
 }									\
+static inline bool __attribute__((nonnull(1, 2)))			\
+prefix##_trysubmit_oneway_6(container *p, mm_request_t r,		\
+			    uintptr_t a1, uintptr_t a2, uintptr_t a3,	\
+			    uintptr_t a4, uintptr_t a5, uintptr_t a6)	\
+{									\
+	return mm_request_trysubmit_oneway_6(p->name, r, a1, a2, a3, a4, a5, a6);	\
+}									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_0(container *p, struct mm_requestor *rtor,		\
 		  mm_request_t r)					\
 {									\
 	mm_request_submit_0(p->name, rtor, r);				\
+}									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_0(container *p, struct mm_requestor *rtor,		\
+		     mm_request_t r)					\
+{									\
+	return mm_request_trysubmit_0(p->name, rtor, r);		\
 }									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_1(container *p, struct mm_requestor *rtor, 		\
@@ -385,11 +583,23 @@ prefix##_submit_1(container *p, struct mm_requestor *rtor, 		\
 {									\
 	mm_request_submit_1(p->name, rtor, r, a1);			\
 }									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_1(container *p, struct mm_requestor *rtor, 		\
+		     mm_request_t r, uintptr_t a1)			\
+{									\
+	return mm_request_trysubmit_1(p->name, rtor, r, a1);		\
+}									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_2(container *p, struct mm_requestor *rtor,		\
 		  mm_request_t r, uintptr_t a1, uintptr_t a2)		\
 {									\
 	mm_request_submit_2(p->name, rtor, r, a1, a2);			\
+}									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_2(container *p, struct mm_requestor *rtor,		\
+		  mm_request_t r, uintptr_t a1, uintptr_t a2)		\
+{									\
+	return mm_request_trysubmit_2(p->name, rtor, r, a1, a2);	\
 }									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_3(container *p, struct mm_requestor *rtor,		\
@@ -398,6 +608,13 @@ prefix##_submit_3(container *p, struct mm_requestor *rtor,		\
 {									\
 	mm_request_submit_3(p->name, rtor, r, a1, a2, a3);		\
 }									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_3(container *p, struct mm_requestor *rtor,		\
+		     mm_request_t r, uintptr_t a1, uintptr_t a2,	\
+		     uintptr_t a3)					\
+{									\
+	return mm_request_trysubmit_3(p->name, rtor, r, a1, a2, a3);	\
+}									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_4(container *p, struct mm_requestor *rtor,		\
 		  mm_request_t r, uintptr_t a1, uintptr_t a2, 		\
@@ -405,12 +622,26 @@ prefix##_submit_4(container *p, struct mm_requestor *rtor,		\
 {									\
 	mm_request_submit_4(p->name, rtor, r, a1, a2, a3, a4);		\
 }									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_4(container *p, struct mm_requestor *rtor,		\
+		     mm_request_t r, uintptr_t a1, uintptr_t a2, 	\
+		     uintptr_t a3,	uintptr_t a4)			\
+{									\
+	return mm_request_trysubmit_4(p->name, rtor, r, a1, a2, a3, a4);	\
+}									\
 static inline void __attribute__((nonnull(1, 2, 3)))			\
 prefix##_submit_5(container *p, struct mm_requestor *rtor,		\
 		  mm_request_t r, uintptr_t a1, uintptr_t a2,		\
 		  uintptr_t a3, uintptr_t a4, uintptr_t a5)		\
 {									\
 	mm_request_submit_5(p->name, rtor, r, a1, a2, a3, a4, a5);	\
+}									\
+static inline bool __attribute__((nonnull(1, 2, 3)))			\
+prefix##_trysubmit_5(container *p, struct mm_requestor *rtor,		\
+		     mm_request_t r, uintptr_t a1, uintptr_t a2,	\
+		     uintptr_t a3, uintptr_t a4, uintptr_t a5)		\
+{									\
+	return mm_request_trysubmit_5(p->name, rtor, r, a1, a2, a3, a4, a5);	\
 }
 
 /**
