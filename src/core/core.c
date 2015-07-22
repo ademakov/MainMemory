@@ -183,7 +183,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_core_post_work_request(uintptr_t context, uintptr_t *arguments)
+mm_core_post_work_req(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -208,15 +208,13 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	} else if (core == NULL) {
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_self();
-		mm_domain_submit_oneway_1(domain,
-					  (mm_request_t) mm_core_post_work_request,
+		mm_domain_submit_oneway_1(domain, mm_core_post_work_req,
 					  (uintptr_t) work);
 	} else {
 		// Submit it to the thread request queue.
 		struct mm_domain *domain = mm_domain_self();
 		struct mm_thread *thread = mm_domain_getthread(domain, core_id);
-		mm_thread_submit_oneway_1(thread,
-					  (mm_request_t) mm_core_post_work_request,
+		mm_thread_submit_oneway_1(thread, mm_core_post_work_req,
 					  (uintptr_t) work);
 		mm_thread_notify(thread);
 	}
@@ -260,8 +258,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 #if ENABLE_SMP
 static void
-mm_core_run_task_request(uintptr_t context __mm_unused__,
-			 uintptr_t *arguments)
+mm_core_run_task_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -284,10 +281,9 @@ mm_core_run_task(struct mm_task *task)
 	} else {
 		// Submit the task to the thread request queue.
 		struct mm_domain *domain = mm_domain_self();
-		struct mm_thread *thread = mm_domain_getthread(domain,
-							       mm_core_getid(task->core));
-		mm_thread_submit_oneway_1(thread,
-					  (mm_request_t) mm_core_run_task_request,
+		struct mm_thread *thread
+			= mm_domain_getthread(domain, mm_core_getid(task->core));
+		mm_thread_submit_oneway_1(thread, mm_core_run_task_req,
 					  (uintptr_t) task);
 		mm_thread_notify(thread);
 	}
