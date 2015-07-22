@@ -488,6 +488,11 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	// Execute thread requests.
 	bool rc = mm_core_receive_requests(thread);
 
+#if ENABLE_SMP
+	// Trim private memory space.
+	mm_private_space_trim(mm_thread_getspace(thread));
+#endif
+
 #if ENABLE_DEALER_STATS
 	mm_atomic_uint32_inc(&mm_core_deal_count);
 #endif

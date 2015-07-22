@@ -135,8 +135,6 @@ mm_private_space_reclaim(struct mm_private_space *space)
 		rc = true;
 	}
 
-	mm_private_space_trim(space);
-
 	return rc;
 }
 
