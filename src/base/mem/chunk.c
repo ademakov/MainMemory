@@ -185,8 +185,8 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 		struct mm_thread *origin = mm_domain_getthread(domain, 0);
 #endif
 		uint32_t backoff = 0;
-		while (!mm_thread_trysubmit_oneway_1(origin, mm_chunk_free_req,
-						     (uintptr_t) chunk)) {
+		while (!mm_thread_trysend_1(origin, mm_chunk_free_req,
+					    (uintptr_t) chunk)) {
 			if (backoff == 0) {
 				// Wake up a possibly sleeping origin thread.
 				mm_thread_notify(origin);
