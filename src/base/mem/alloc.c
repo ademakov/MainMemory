@@ -117,10 +117,22 @@ mm_mspace_free(mm_mspace_t space, void *ptr)
 	mspace_free(space.opaque, ptr);
 }
 
+size_t
+mm_mspace_getallocsize(const void *ptr)
+{
+	return mspace_usable_size(ptr);
+}
+
 void
 mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs)
 {
 	mspace_bulk_free(space.opaque, ptrs, nptrs);
+}
+
+void
+mm_mspace_trim(mm_mspace_t space)
+{
+	mspace_trim(space.opaque, 16 * MM_PAGE_SIZE);
 }
 
 size_t
@@ -139,12 +151,6 @@ size_t
 mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size)
 {
 	return mspace_set_footprint_limit(space.opaque, size);
-}
-
-size_t
-mm_mspace_getallocsize(const void *ptr)
-{
-	return mspace_usable_size(ptr);
 }
 
 /**********************************************************************

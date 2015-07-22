@@ -72,14 +72,16 @@ void * mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
 
 void mm_mspace_free(mm_mspace_t space, void *ptr);
 
+size_t mm_mspace_getallocsize(const void *ptr);
+
 void mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs);
+
+void mm_mspace_trim(mm_mspace_t space);
 
 size_t mm_mspace_getfootprint(mm_mspace_t space);
 
 size_t mm_mspace_getfootprint_limit(mm_mspace_t space);
 size_t mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
-
-size_t mm_mspace_getallocsize(const void *ptr);
 
 /**********************************************************************
  * Global Memory Allocation Routines.
