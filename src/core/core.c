@@ -474,7 +474,6 @@ static bool
 mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
-	bool rc = false;
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
@@ -485,14 +484,9 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	// Cleanup the temporary data.
 	mm_wait_cache_truncate(&core->wait_cache);
 	mm_chunk_enqueue_deferred(thread, true);
-#if ENABLE_SMP
-	rc |= mm_private_space_reclaim(mm_thread_getspace(thread));
-#else
-	rc |= mm_private_space_reclaim(&mm_regular_space);
-#endif
 
 	// Execute thread requests.
-	rc |= mm_core_receive_requests(thread);
+	bool rc = mm_core_receive_requests(thread);
 
 #if ENABLE_DEALER_STATS
 	mm_atomic_uint32_inc(&mm_core_deal_count);

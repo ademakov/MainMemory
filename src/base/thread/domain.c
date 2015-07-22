@@ -188,12 +188,6 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
 			stack_size = MM_THREAD_STACK_MIN;
 		guard_size = mm_round_up(attr->guard_size, MM_PAGE_SIZE);
-
-		// Request chunk reclaim queue for private space.
-		if (attr->private_space) {
-			uint32_t sz = mm_upper_pow2(domain->nthreads * 16);
-			mm_thread_attr_setreclaimqueue(&thread_attr, sz);
-		}
 	}
 
 	// Create and start threads.
