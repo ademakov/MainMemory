@@ -3,7 +3,6 @@ ASAP:
 * improve smp performance
 ** avoid long memcache locks or non-blocking memcache table
 * polish & optimize
-** cleanup cross-thread communication
 ** optimize event dispatch
 ** try to beautify netbuf interface
 * region allocator
