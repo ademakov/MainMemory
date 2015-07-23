@@ -419,6 +419,11 @@ mc_table_term(void)
 {
 	ENTER();
 
+	// FIXME: currently this does not work on shutdown if entries are
+	// created on per-thread private memory spaces. The threads are
+	// finished already at this point and cannot serve chunk reclaim
+	// queues.
+#if !ENABLE_MEMCACHE_PRIVATE_CHUNKS
 	// Free the table entries.
 	for (mm_core_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
@@ -433,6 +438,7 @@ mc_table_term(void)
 			}
 		}
 	}
+#endif
 
 	// Free the table partitions.
 	mm_regular_free(mc_table.parts);
