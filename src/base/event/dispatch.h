@@ -37,6 +37,9 @@ struct mm_dispatch
 
 	/* A thread elected to conduct the next event poll. */
 	mm_thread_t control_thread;
+#if ENABLE_DEBUG
+	mm_thread_t last_control_thread;
+#endif
 
 	/* Event listeners. */
 	struct mm_listener *listeners;

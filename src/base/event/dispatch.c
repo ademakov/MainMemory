@@ -32,6 +32,9 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	dispatch->control_thread = MM_THREAD_NONE;
+#if ENABLE_DEBUG
+	dispatch->last_control_thread = MM_THREAD_NONE;
+#endif
 
 	// Allocate listener info.
 	dispatch->listeners = mm_common_calloc(nlisteners,
@@ -126,6 +129,14 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 	mm_regular_lock(&dispatch->lock);
 	mm_thread_t control_thread = dispatch->control_thread;
 	if (control_thread == MM_THREAD_NONE) {
+
+#if ENABLE_DEBUG
+		if (dispatch->last_control_thread != thread) {
+			DEBUG("switch control thread %d -> %d",
+			      dispatch->last_control_thread, thread);
+			dispatch->last_control_thread = thread;
+		}
+#endif
 
 		// The first arrived thread is elected to conduct the next
 		// event poll.
