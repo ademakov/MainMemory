@@ -53,7 +53,6 @@ Enhancements:
 * adopt C11-compatible fences and atomics
 * try to separate net I/O proper and reader/writer task layers?
 * non-blocking log
-* non-blocking ring (for producers)
 * backoff and/or wait queue on ring full
 * non-blocking pool growth
 * Brodnik-style pool growth
@@ -70,9 +69,8 @@ Enhancements:
 ** function call marshal/dispatch mechanism on top of that
 * try to detect clock adjustments and reset realtime timers accordingly
 * memory management:
-** use separate mspace for task local dynamic memory ?
 ** slab allocator (to base object pools on)
-** buddy allocator (for I/O buffers and slabs)
+** buddy allocator (for chunks and slabs)
 ** garbage collection
 * failure trace records
 * arm port
