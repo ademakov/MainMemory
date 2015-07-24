@@ -444,34 +444,38 @@ mm_core_master(mm_value_t arg)
 static mm_atomic_uint32_t mm_core_deal_count;
 #endif
 
-static bool
-mm_core_receive_requests(struct mm_thread *thread)
+void
+mm_core_execute_requests(struct mm_core *core)
 {
 	ENTER();
-	bool rc = false;
 	struct mm_request_data request;
+	struct mm_thread *thread = mm_domain_getthread(mm_regular_domain,
+						       mm_core_getid(core));
 
 	while (mm_thread_receive(thread, &request)) {
 		mm_request_execute(mm_thread_getnumber(thread), &request);
-		rc = true;
+		core->request_count++;
 	}
 
 #if ENABLE_SMP
-	struct mm_domain *domain = mm_thread_getdomain(thread);
-	while (mm_domain_receive(domain, &request)) {
+	int count = 0;
+	while (count < 4 && mm_domain_receive(mm_regular_domain, &request)) {
 		mm_request_execute(mm_thread_getnumber(thread), &request);
-		rc = true;
+		core->request_count++;
+		count++;
 	}
 #endif
 
 	LEAVE();
-	return rc;
 }
 
 static bool
 mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
+
+	uint64_t cswitch_count = core->cswitch_count;
+	uint64_t request_count = core->request_count;
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
@@ -483,9 +487,6 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_wait_cache_truncate(&core->wait_cache);
 	mm_chunk_enqueue_deferred(thread, true);
 
-	// Execute thread requests.
-	bool rc = mm_core_receive_requests(thread);
-
 #if ENABLE_SMP
 	// Trim private memory space.
 	mm_private_space_trim(mm_thread_getspace(thread));
@@ -495,8 +496,11 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_atomic_uint32_inc(&mm_core_deal_count);
 #endif
 
+	cswitch_count = core->cswitch_count - cswitch_count;
+	request_count = core->request_count - request_count;
+
 	LEAVE();
-	return rc;
+	return ((cswitch_count > 1) | (request_count > 0));
 }
 
 static void
@@ -736,6 +740,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_queue_prepare(&core->workq);
 
 	mm_wait_cache_prepare(&core->wait_cache);
+
+	core->cswitch_count = 0;
+	core->request_count = 0;
 
 	core->nwork = 0;
 	core->nidle = 0;

@@ -383,8 +383,9 @@ mm_task_setname(struct mm_task *task, const char *name)
 static void
 mm_task_switch(mm_task_state_t state)
 {
-	// Move the currently running task to a new state.
 	struct mm_core *core = mm_core_selfptr();
+
+	// Move the currently running task to a new state.
 	struct mm_task *old_task = core->task;
 	ASSERT(old_task->state == MM_TASK_RUNNING);
 	old_task->state = state;
@@ -401,6 +402,9 @@ mm_task_switch(mm_task_state_t state)
 		}
 	}
 
+	// Execute requests associated with the core.
+	mm_core_execute_requests(core);
+
 	// Get the next task from the run queue.  As long as this function
 	// is called there is at least a boot task in the run queue.  So
 	// there should never be a NULL value returned.
@@ -411,6 +415,7 @@ mm_task_switch(mm_task_state_t state)
 
 	// Switch to the new task relinquishing CPU control for a while.
 	mm_cstack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
+	core->cswitch_count++;
 
 	// Resume the task unless it has been canceled and it agrees to be
 	// canceled asynchronously. In that case it quits here.

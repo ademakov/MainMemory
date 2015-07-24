@@ -64,6 +64,11 @@ struct mm_core
 	/* Queue of pending work items. */
 	struct mm_queue workq;
 
+	/* The counter of task context switches. */
+	uint64_t cswitch_count;
+	/* The counter of thread requests. */
+	uint64_t request_count;
+
 	/* The number of items in the work queue. */
 	uint32_t nwork;
 
@@ -104,24 +109,29 @@ void mm_core_hook_param_start(void (*proc)(void *), void *data);
 void mm_core_hook_stop(void (*proc)(void));
 void mm_core_hook_param_stop(void (*proc)(void *), void *data);
 
-void mm_core_register_server(struct mm_net_server *srv)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_core_register_server(struct mm_net_server *srv);
 
-void mm_core_set_event_affinity(const struct mm_bitset *mask)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_core_set_event_affinity(const struct mm_bitset *mask);
 
-const struct mm_bitset * mm_core_get_event_affinity(void);
+const struct mm_bitset *
+mm_core_get_event_affinity(void);
 
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg)
-	__attribute__((nonnull(2)));
-void mm_core_post_work(mm_core_t core_id, struct mm_work *work)
-	__attribute__((nonnull(2)));
+void __attribute__((nonnull(2)))
+mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg);
 
-void mm_core_run_task(struct mm_task *task)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(2)))
+mm_core_post_work(mm_core_t core_id, struct mm_work *work);
+
+void __attribute__((nonnull(1)))
+mm_core_run_task(struct mm_task *task);
+
+void __attribute__((nonnull(1)))
+mm_core_execute_requests(struct mm_core *core);
 
 /**********************************************************************
  * Core Information.
