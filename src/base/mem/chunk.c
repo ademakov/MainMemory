@@ -80,9 +80,15 @@ struct mm_chunk *
 mm_chunk_create(size_t size)
 {
 	// Prefer private space if available.
+#if ENABLE_SMP
 	struct mm_private_space *space = mm_private_space_get();
 	if (mm_private_space_ready(space))
 		return mm_chunk_create_private(size);
+#else
+	struct mm_domain *domain = mm_domain_selfptr();
+	if (domain == mm_regular_domain)
+		return mm_chunk_create_regular(size);
+#endif
 
 	// Common space could only be used after it gets
 	// initialized during bootstrap.
