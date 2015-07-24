@@ -55,7 +55,7 @@ mm_core_t mm_core_num;
 struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
-__thread struct mm_core *mm_core;
+__thread struct mm_core *__mm_core_self;
 
 // The set of cores with event loops.
 static struct mm_bitset mm_core_event_affinity;
@@ -202,16 +202,16 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	struct mm_core *core = mm_core_getptr(core_id);
 
 	// Dispatch the work item.
-	if (core == mm_core_self()) {
+	if (core == mm_core_selfptr()) {
 		// Enqueue it directly if on the same core.
 		mm_core_add_work(core, work);
 	} else if (core == NULL) {
 		// Submit it to the domain request queue.
-		struct mm_domain *domain = mm_domain_self();
+		struct mm_domain *domain = mm_domain_selfptr();
 		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
 	} else {
 		// Submit it to the thread request queue.
-		struct mm_domain *domain = mm_domain_self();
+		struct mm_domain *domain = mm_domain_selfptr();
 		struct mm_thread *thread = mm_domain_getthread(domain, core_id);
 		mm_thread_send_1(thread, mm_core_post_work_req, (uintptr_t) work);
 		mm_thread_notify(thread);
@@ -228,7 +228,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	ENTER();
 
 	(void) core_id;
-	mm_core_add_work(mm_core_self(), work);
+	mm_core_add_work(mm_core_selfptr(), work);
 
 	LEAVE();
 }
@@ -273,12 +273,12 @@ mm_core_run_task(struct mm_task *task)
 	ENTER();
 
 #if ENABLE_SMP
-	if (task->core == mm_core) {
+	if (task->core == mm_core_selfptr()) {
 		// Put the task to the core run queue directly.
 		mm_task_run(task);
 	} else {
 		// Submit the task to the thread request queue.
-		struct mm_domain *domain = mm_domain_self();
+		struct mm_domain *domain = mm_domain_selfptr();
 		struct mm_thread *thread
 			= mm_domain_getthread(domain, mm_core_getid(task->core));
 		mm_thread_send_1(thread, mm_core_run_task_req, (uintptr_t) task);
@@ -343,11 +343,12 @@ static void
 mm_core_worker_cleanup(uintptr_t arg __mm_unused__)
 {
 	// Wake up the master possibly waiting for worker availability.
-	if (mm_core->nworkers == mm_core->nworkers_max)
-		mm_task_run(mm_core->master);
+	struct mm_core *core = mm_core_selfptr();
+	if (core->nworkers == core->nworkers_max)
+		mm_task_run(core->master);
 
 	// Account for the exiting worker.
-	mm_core->nworkers--;
+	core->nworkers--;
 }
 
 static mm_value_t
@@ -362,7 +363,7 @@ mm_core_worker(mm_value_t arg)
 	// Cache thread-specific data. This gives a smallish speedup for
 	// the code emitted for the loop below on platforms with emulated
 	// thread specific data (that is on Darwin).
-	struct mm_core *core = mm_core;
+	struct mm_core *core = mm_core_selfptr();;
 
 	// Take the work item supplied by the master.
 	struct mm_work *work = (struct mm_work *) arg;
@@ -529,7 +530,7 @@ mm_core_dealer(mm_value_t arg)
 	ENTER();
 
 	struct mm_core *core = (struct mm_core *) arg;
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 
 	while (!mm_memory_load(core->stop)) {
 		bool rc = mm_core_deal(core, thread);
@@ -626,6 +627,8 @@ mm_core_boot_init(struct mm_core *core)
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(mm_regular_domain);
 
+		mm_dispatch_prepare(&mm_core_dispatch, mm_core_num);
+
 		mm_thread_domain_barrier();
 	} else {
 		// Secondary cores have to wait until the primary core runs
@@ -640,8 +643,11 @@ static void
 mm_core_boot_term(struct mm_core *core)
 {
 	// Call the stop hooks on the primary core.
-	if (MM_CORE_IS_PRIMARY(core))
+	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_stop_hook, false);
+
+		mm_dispatch_cleanup(&mm_core_dispatch);
+	}
 
 	mm_timer_term(&core->time_manager);
 
@@ -676,15 +682,15 @@ mm_core_boot(mm_value_t arg)
 	struct mm_core *core = &mm_core_set[arg];
 
 	// Set the thread-specific data.
-	mm_core = core;
+	__mm_core_self = core;
 
 	// Set pointer to the running task.
-	mm_core->task = mm_core->boot;
-	mm_core->task->state = MM_TASK_RUNNING;
+	core->task = core->boot;
+	core->task->state = MM_TASK_RUNNING;
 
 #if ENABLE_TRACE
 	mm_trace_context_prepare(&core->task->trace, "[%s][%d %s]",
-				 mm_thread_getname(mm_thread_self()),
+				 mm_thread_getname(mm_thread_selfptr()),
 				 mm_task_getid(core->task),
 				 mm_task_getname(core->task));
 #endif
@@ -708,11 +714,11 @@ mm_core_boot(mm_value_t arg)
 	mm_core_boot_term(core);
 
 	// Invalidate the boot task.
-	mm_core->task->state = MM_TASK_INVALID;
-	mm_core->task = NULL;
+	core->task->state = MM_TASK_INVALID;
+	core->task = NULL;
 
 	// Abandon the core.
-	mm_core = NULL;
+	__mm_core_self = NULL;
 
 	LEAVE();
 	return 0;
@@ -790,10 +796,10 @@ mm_core_thread_notify(struct mm_thread *thread)
 static struct mm_trace_context *
 mm_core_gettracecontext(void)
 {
-	struct mm_core *core = mm_core_self();
+	struct mm_core *core = mm_core_selfptr();
 	if (core != NULL)
 		return &core->task->trace;
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	if (unlikely(thread == NULL))
 		ABORT();
 	return mm_thread_gettracecontext(thread);
@@ -828,7 +834,6 @@ mm_core_init(void)
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
-	mm_dispatch_prepare(&mm_core_dispatch, mm_core_num);
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)

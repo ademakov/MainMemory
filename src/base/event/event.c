@@ -141,7 +141,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	DEBUG("handle sink %p, fd %d, target %u, event %d",
 	      sink, sink->fd, mm_event_target(sink), event);
 	ASSERT(event != MM_EVENT_ATTACH && event != MM_EVENT_DETACH);
-	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(mm_event_target(sink) == mm_thread_self());
 
 	mm_event_hid_t id = sink->handler;
 	ASSERT(id < mm_event_hdesc_table_size);
@@ -152,8 +152,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	// then quit this state.
 	if (!sink->attached) {
 		DEBUG("attach %d to %d, stamp %u", sink->fd,
-		      mm_thread_getnumber(mm_thread_self()),
-		      sink->detach_stamp);
+		      mm_thread_self(), sink->detach_stamp);
 		(hd->handler)(MM_EVENT_ATTACH, sink);
 		sink->attached = 1;
 	} else if (sink->pending_detach) {
@@ -172,7 +171,7 @@ mm_event_detach(struct mm_event_fd *sink, uint32_t stamp)
 	ENTER();
 	DEBUG("detach sink %p, fd %d, target %u, stamp %u\n",
 	      sink, sink->fd, mm_event_target(sink), stamp);
-	ASSERT(mm_event_target(sink) == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(mm_event_target(sink) == mm_thread_self());
 
 	mm_event_hid_t id = sink->handler;
 	ASSERT(id < mm_event_hdesc_table_size);

@@ -109,7 +109,7 @@ struct mm_task_cleanup_rec
 /* Register a cleanup handler. */
 #define mm_task_cleanup_push(rtn, arg)					\
 	do {								\
-		struct mm_task *__task = mm_task_self();		\
+		struct mm_task *__task = mm_task_selfptr();		\
 		struct mm_task_cleanup_rec __cleanup = {		\
 				.next = __task->cleanup,		\
 				.routine = (void (*)(uintptr_t)) (rtn),	\
@@ -207,9 +207,21 @@ void mm_task_destroy(struct mm_task *task)
  **********************************************************************/
 
 static inline struct mm_task *
-mm_task_self(void)
+mm_task_selfptr(void)
 {
-	return mm_core->task;
+	return mm_core_selfptr()->task;
+}
+
+struct mm_task *
+mm_task_getptr(mm_task_t id);
+
+mm_task_t __attribute__((nonnull(1)))
+mm_task_getid(const struct mm_task *task);
+
+static inline mm_task_t
+mm_task_self()
+{
+	return mm_task_getid(mm_task_selfptr());
 }
 
 static inline const char *
@@ -218,13 +230,8 @@ mm_task_getname(const struct mm_task *task)
 	return task->name;
 }
 
-void mm_task_setname(struct mm_task *task, const char *name)
-	__attribute__((nonnull(1, 2)));
-
-mm_task_t mm_task_getid(const struct mm_task *task)
-	__attribute__((nonnull(1)));
-
-struct mm_task * mm_task_getptr(mm_task_t id);
+void __attribute__((nonnull(1, 2)))
+mm_task_setname(struct mm_task *task, const char *name);
 
 /**********************************************************************
  * Task execution.
@@ -262,7 +269,7 @@ void mm_task_exit(mm_value_t result)
 static inline void
 mm_task_testcancel(void)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	if (unlikely(MM_TASK_CANCEL_TEST(task->flags))) {
 		task->flags |= MM_TASK_CANCEL_OCCURRED;
 		mm_task_exit(MM_RESULT_CANCELED);
@@ -272,7 +279,7 @@ mm_task_testcancel(void)
 static inline void
 mm_task_testcancel_asynchronous(void)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(task->flags))) {
 		task->flags |= MM_TASK_CANCEL_OCCURRED;
 		mm_task_exit(MM_RESULT_CANCELED);

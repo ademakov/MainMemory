@@ -447,7 +447,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 void *
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	mm_thread_t thread_id = mm_thread_getnumber(thread);
 	return mm_pool_shared_alloc_low(thread_id, pool);
 }
@@ -455,7 +455,7 @@ mm_pool_shared_alloc(struct mm_pool *pool)
 void
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	mm_thread_t thread_id = mm_thread_getnumber(thread);
 	mm_pool_shared_free_low(thread_id, pool, item);
 }
@@ -476,7 +476,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->shared_data.grow_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	char *cdata_name = mm_format(&mm_global_arena, "'%s' memory pool", name);
-	MM_CDATA_ALLOC(mm_domain_self(), cdata_name, pool->shared_data.cdata);
+	MM_CDATA_ALLOC(mm_domain_selfptr(), cdata_name, pool->shared_data.cdata);
 	mm_thread_t n = mm_domain_getnumber(mm_regular_domain);
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =

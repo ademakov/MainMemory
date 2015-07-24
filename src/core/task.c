@@ -122,11 +122,11 @@ mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
 static void
 mm_task_entry(void)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 
 #if ENABLE_TRACE
 	mm_trace_context_prepare(&task->trace, "[%s][%d %s]",
-				 mm_thread_getname(mm_thread_self()),
+				 mm_thread_getname(mm_thread_selfptr()),
 				 mm_task_getid(task),
 				 mm_task_getname(task));
 #endif
@@ -179,7 +179,7 @@ mm_task_new(void)
 	struct mm_task *task = mm_pool_alloc(&mm_task_pool);
 
 	// Store the core that owns the task.
-	task->core = mm_core;
+	task->core = mm_core_selfptr();
 
 	// Initialize the task stack info.
 	task->stack_size = 0;
@@ -250,7 +250,7 @@ mm_task_create(const struct mm_task_attr *attr,
 	uint32_t stack_size = mm_task_attr_getstacksize(attr);
 
 	// Try to reuse a dead task.
-	struct mm_core *core = mm_core_self();
+	struct mm_core *core = mm_core_selfptr();
 	if (core != NULL && !mm_list_empty(&core->dead)) {
 		// Get the last dead task.
 		struct mm_link *link = mm_list_head(&core->dead);
@@ -344,8 +344,20 @@ mm_task_destroy(struct mm_task *task)
  * Task utilities.
  **********************************************************************/
 
+struct mm_task *
+mm_task_getptr(mm_task_t id)
+{
+	return mm_pool_idx2ptr(&mm_task_pool, id);
+}
+
+mm_task_t
+mm_task_getid(const struct mm_task *task)
+{
+	return mm_pool_ptr2idx(&mm_task_pool, task);
+}
+
 /* Set or change the task name. */
-void
+void __attribute__((nonnull(1, 2)))
 mm_task_setname(struct mm_task *task, const char *name)
 {
 	ENTER();
@@ -363,18 +375,6 @@ mm_task_setname(struct mm_task *task, const char *name)
 	LEAVE();
 }
 
-mm_task_t
-mm_task_getid(const struct mm_task *task)
-{
-	return mm_pool_ptr2idx(&mm_task_pool, task);
-}
-
-struct mm_task *
-mm_task_getptr(mm_task_t id)
-{
-	return mm_pool_idx2ptr(&mm_task_pool, id);
-}
-
 /**********************************************************************
  * Task execution.
  **********************************************************************/
@@ -384,29 +384,30 @@ static void
 mm_task_switch(mm_task_state_t state)
 {
 	// Move the currently running task to a new state.
-	struct mm_task *old_task = mm_core->task;
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_task *old_task = core->task;
 	ASSERT(old_task->state == MM_TASK_RUNNING);
 	old_task->state = state;
 
 	if (unlikely(state == MM_TASK_INVALID)) {
 		// Add it to the dead task list.
-		mm_list_append(&mm_core->dead, &old_task->queue);
+		mm_list_append(&core->dead, &old_task->queue);
 	} else {
 		// Reset the priority that could have been temporary raised.
 		old_task->priority = old_task->original_priority;
 		if (state == MM_TASK_PENDING) {
 			// Add it to the run queue.
-			mm_runq_put(&mm_core->runq, old_task);
+			mm_runq_put(&core->runq, old_task);
 		}
 	}
 
 	// Get the next task from the run queue.  As long as this function
 	// is called there is at least a boot task in the run queue.  So
 	// there should never be a NULL value returned.
-	struct mm_task *new_task = mm_runq_get(&mm_core->runq);
+	struct mm_task *new_task = mm_runq_get(&core->runq);
 
 	new_task->state = MM_TASK_RUNNING;
-	mm_core->task = new_task;
+	core->task = new_task;
 
 	// Switch to the new task relinquishing CPU control for a while.
 	mm_cstack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
@@ -424,12 +425,12 @@ mm_task_run(struct mm_task *task)
 	TRACE("queue task: [%d %s], state: %d, priority: %d",
 	      mm_task_getid(task), mm_task_getname(task),
 	      task->state, task->priority);
-	ASSERT(task->core == mm_core);
+	ASSERT(task->core == mm_core_selfptr());
 	ASSERT(task->priority < MM_PRIO_BOOT);
 
 	if (task->state == MM_TASK_BLOCKED) {
 		task->state = MM_TASK_PENDING;
-		mm_runq_put(&mm_core->runq, task);
+		mm_runq_put(&task->core->runq, task);
 	}
 
 	LEAVE();
@@ -443,13 +444,13 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 	TRACE("hoist task: [%d %s], state: %d, priority: %d, %d",
 	      mm_task_getid(task), mm_task_getname(task),
 	      task->state, task->priority, priority);
-	ASSERT(task->core == mm_core);
+	ASSERT(task->core == mm_core_selfptr());
 	ASSERT(task->priority < MM_PRIO_BOOT);
 
 	if (task->priority > priority) {
 		if (task->state == MM_TASK_PENDING) {
 			task->state = MM_TASK_BLOCKED;
-			mm_runq_delete(&mm_core->runq, task);
+			mm_runq_delete(&task->core->runq, task);
 		}
 
 		task->priority = priority;
@@ -457,7 +458,7 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 
 	if (task->state == MM_TASK_BLOCKED) {
 		task->state = MM_TASK_PENDING;
-		mm_runq_put(&mm_core->runq, task);
+		mm_runq_put(&task->core->runq, task);
 	}
 
 	LEAVE();
@@ -487,7 +488,7 @@ mm_task_block(void)
 void
 mm_task_exit(mm_value_t result)
 {
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	TRACE("exiting task '%s' with status %lu", task->name, (unsigned long) result);
 
 	// Set the task result.
@@ -529,7 +530,7 @@ mm_task_setcancelstate(int new_value, int *old_value_ptr)
 	ASSERT(new_value == MM_TASK_CANCEL_ENABLE
 	       || new_value == MM_TASK_CANCEL_DISABLE);
 
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	int old_value = (task->flags & MM_TASK_CANCEL_DISABLE);
 	if (likely(old_value != new_value)) {
 		if (new_value) {
@@ -554,7 +555,7 @@ mm_task_setcanceltype(int new_value, int *old_value_ptr)
 	ASSERT(new_value == MM_TASK_CANCEL_DEFERRED
 	       || new_value == MM_TASK_CANCEL_ASYNCHRONOUS);
 
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	int old_value = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
 	if (likely(old_value != new_value)) {
 		if (new_value) {
@@ -577,7 +578,7 @@ mm_task_enter_cancel_point(void)
 {
 	ENTER();
 
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	int cp = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
 	if (likely(cp == 0)) {
 		task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
@@ -594,7 +595,7 @@ mm_task_leave_cancel_point(int cp)
 	ENTER();
 
 	if (likely(cp == 0)) {
-		struct mm_task *task = mm_task_self();
+		struct mm_task *task = mm_task_selfptr();
 		task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
 	}
 
@@ -608,7 +609,7 @@ mm_task_cancel(struct mm_task *task)
 
 	task->flags |= MM_TASK_CANCEL_REQUIRED;
 	if (unlikely(task->state == MM_TASK_RUNNING)) {
-		ASSERT(task == mm_task_self());
+		ASSERT(task == mm_task_selfptr());
 		mm_task_testcancel_asynchronous();
 	} else {
 		mm_task_run(task);
@@ -631,7 +632,7 @@ mm_task_alloc(size_t size)
 	void *ptr = mm_private_alloc(size + sizeof(struct mm_list));
 
 	/* Keep the allocated memory in the task's chunk list. */
-	struct mm_task *task = mm_task_self();
+	struct mm_task *task = mm_task_selfptr();
 	mm_list_append(&task->chunks, (struct mm_link *) ptr);
 
 	/* Get the address past the list link. */

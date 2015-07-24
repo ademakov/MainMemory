@@ -130,7 +130,7 @@ mc_action_drop_expired(struct mc_tpart *part,
 		       struct mm_stack *bucket,
 		       struct mm_stack *expired)
 {
-	mm_timeval_t time = mm_core->time_manager.time;
+	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
 	mm_stack_prepare(expired);
 
 	struct mm_slink *pred = &bucket->head;
@@ -151,7 +151,7 @@ mc_action_find_victims(struct mc_tpart *part,
 		       struct mm_stack *victims,
 		       uint32_t nrequired)
 {
-	mm_timeval_t time = mm_core_self()->time_manager.time;
+	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
 	uint32_t nvictims = 0;
 	mm_stack_prepare(victims);
 

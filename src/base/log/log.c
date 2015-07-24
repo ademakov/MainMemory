@@ -55,7 +55,7 @@ mm_log_create_chunk(size_t size)
 	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
 	log_chunk->used = 0;
 
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_selfptr());
 	mm_queue_append(queue, &log_chunk->base.qlink);
 
 	return log_chunk;
@@ -74,7 +74,7 @@ mm_log_str(const char *str)
 	size_t len = strlen(str);
 
 	struct mm_log_chunk *chunk = NULL;
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_selfptr());
 	if (!mm_queue_empty(queue)) {
 		struct mm_qlink *link = mm_queue_tail(queue);
 		chunk = containerof(link, struct mm_log_chunk, base.qlink);
@@ -100,7 +100,7 @@ void
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_log_chunk *chunk = NULL;
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	struct mm_queue *queue = mm_thread_getlog(thread);
 	if (!mm_queue_empty(queue)) {
 		struct mm_qlink *link = mm_queue_tail(queue);
@@ -142,7 +142,7 @@ mm_log_fmt(const char *restrict fmt, ...)
 void
 mm_log_relay(void)
 {
-	struct mm_queue *queue = mm_thread_getlog(mm_thread_self());
+	struct mm_queue *queue = mm_thread_getlog(mm_thread_selfptr());
 	if (!mm_queue_empty(queue)) {
 		struct mm_qlink *head = mm_queue_head(queue);
 		struct mm_qlink *tail = mm_queue_tail(queue);

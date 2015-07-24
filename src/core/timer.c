@@ -157,7 +157,8 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
-	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_time_manager *manager = &core->time_manager;
 	struct mm_timer *timer = mm_pool_alloc(&manager->timer_pool);
 	mm_timer_t timer_id = mm_pool_ptr2idx(&manager->timer_pool, timer);
 
@@ -187,7 +188,8 @@ mm_timer_destroy(mm_timer_t timer_id)
 {
 	ENTER();
 
-	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_time_manager *manager = &core->time_manager;
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
@@ -205,7 +207,8 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 {
 	ENTER();
 
-	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_time_manager *manager = &core->time_manager;
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
@@ -244,12 +247,13 @@ mm_timer_block(mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_time_manager *manager = &mm_core->time_manager;
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_time_manager *manager = &core->time_manager;
 	mm_timeval_t time = manager->time + timeout;
 	DEBUG("time: %llu", time);
 
 	struct mm_timer_resume timer = { .manager = manager,
-					 .task = mm_task_self() };
+					 .task = mm_task_selfptr() };
 	mm_timeq_entry_init(&timer.entry, time, MM_TIMER_BLOCK);
 
 	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);

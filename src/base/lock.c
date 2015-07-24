@@ -312,7 +312,7 @@ mm_lock_getstat(struct mm_lock_stat_info *info)
 		stat_set = mm_lock_get_stat_set(info);
 
 	// Get a statistic entry specific to the calling thread.
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	struct mm_domain *domain = mm_thread_getdomain(thread);
 	if (domain != NULL)
 		return mm_lock_get_domain_stat(stat_set, thread, domain);
@@ -357,7 +357,7 @@ mm_lock_stats(void)
 			for (mm_thread_t c = 0; c < domain->nthreads; c++) {
 				struct mm_lock_stat *stat
 					= MM_CDATA_DEREF(c, dom_stat->stat);
-				struct mm_thread *thread = domain->threads[c].thread;
+				struct mm_thread *thread = domain->threads[c];
 				mm_lock_print_stat(thread, stat_set, stat);
 			}
 			dom_link = mm_memory_load(dom_link->next);

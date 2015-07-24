@@ -217,8 +217,9 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	ENTER();
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	wait->task = mm_task_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
@@ -239,8 +240,9 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	ENTER();
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	wait->task = mm_task_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
@@ -272,15 +274,16 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_task *task = mm_memory_load(wait->task);
+		struct mm_core *core = mm_core_selfptr();
 
 		if (likely(task != NULL)) {
 			// Run the task if it has not been reset.
 			mm_core_run_task(task);
 			// Add used wait entry to the pending list.
-			mm_wait_add_pending(&mm_core->wait_cache, wait);
+			mm_wait_add_pending(&core->wait_cache, wait);
 		} else {
 			// Return unused wait entry to the pool.
-			mm_wait_cache_put(&mm_core->wait_cache, wait);
+			mm_wait_cache_put(&core->wait_cache, wait);
 		}
 	}
 
@@ -307,11 +310,12 @@ void __attribute__((nonnull(1)))
 mm_waitset_local_wait(struct mm_waitset *waitset)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
+	ASSERT(waitset->core == mm_core_self());
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	wait->task = mm_task_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
@@ -326,11 +330,12 @@ void __attribute__((nonnull(1)))
 mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
+	ASSERT(waitset->core == mm_core_self());
 
 	// Enqueue the task.
-	struct mm_wait *wait = mm_wait_cache_get(&mm_core->wait_cache);
-	wait->task = mm_task_self();
+	struct mm_core *core = mm_core_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	wait->task = mm_task_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
@@ -345,7 +350,7 @@ void __attribute__((nonnull(1)))
 mm_waitset_local_broadcast(struct mm_waitset *waitset)
 {
 	ENTER();
-	ASSERT(waitset->core == mm_core_selfid());
+	ASSERT(waitset->core == mm_core_self());
 
 	// Capture the waitset.
 	struct mm_stack set = waitset->set;
@@ -364,7 +369,8 @@ mm_waitset_local_broadcast(struct mm_waitset *waitset)
 		}
 
 		// Return unused wait entry to the pool.
-		mm_wait_cache_put(&mm_core->wait_cache, wait);
+		struct mm_core *core = mm_core_selfptr();
+		mm_wait_cache_put(&core->wait_cache, wait);
 	}
 
 	LEAVE();
@@ -391,7 +397,7 @@ mm_waitset_unique_wait(struct mm_waitset *waitset)
 	ENTER();
 
 	// Advertise the waiting task.
-	mm_memory_store(waitset->task, mm_task_self());
+	mm_memory_store(waitset->task, mm_task_selfptr());
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {
@@ -413,7 +419,7 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	ENTER();
 
 	// Advertise the waiting task.
-	mm_memory_store(waitset->task, mm_task_self());
+	mm_memory_store(waitset->task, mm_task_selfptr());
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {

@@ -56,7 +56,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 		// Release the command data
 		struct mc_command *next = command->next;
-		mc_command_destroy(mm_core_selfid(), command);
+		mc_command_destroy(mm_core_self(), command);
 		command = next;
 
 	} while (command != NULL);

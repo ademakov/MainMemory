@@ -64,7 +64,7 @@ static inline uint32_t
 mc_entry_fix_exptime(uint32_t exptime)
 {
 	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
-		exptime += mm_core_self()->time_manager.real_time / 1000000;
+		exptime += mm_core_selfptr()->time_manager.real_time / 1000000;
 	return exptime;
 }
 

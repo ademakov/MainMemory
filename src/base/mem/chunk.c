@@ -71,7 +71,7 @@ mm_chunk_create_private(size_t size)
 {
 	size += sizeof(struct mm_chunk);
 	struct mm_chunk *chunk = mm_private_alloc(size);
-	chunk->base.tag = mm_thread_getnumber(mm_thread_self());
+	chunk->base.tag = mm_thread_self();
 	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }
@@ -119,7 +119,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		mm_regular_free(chunk);
 		return;
 #else
-		struct mm_domain *domain = mm_domain_self();
+		struct mm_domain *domain = mm_domain_selfptr();
 		if (domain == mm_regular_domain) {
 			mm_regular_free(chunk);
 			return;
@@ -130,7 +130,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	// A chunk from a private space can be immediately freed by its
 	// originating thread but it is a subject for asynchronous memory
 	// reclamation mechanism for any other thread.
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	struct mm_domain *domain = mm_thread_getdomain(thread);
 	if (domain == mm_regular_domain && tag == mm_thread_getnumber(thread)) {
 		mm_private_free(chunk);

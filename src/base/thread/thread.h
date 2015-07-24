@@ -186,7 +186,7 @@ mm_thread_destroy(struct mm_thread *thread);
 extern __thread struct mm_thread *__mm_thread_self;
 
 static inline struct mm_thread *
-mm_thread_self(void)
+mm_thread_selfptr(void)
 {
 	return __mm_thread_self;
 }
@@ -207,6 +207,12 @@ static inline mm_thread_t __attribute__((nonnull(1)))
 mm_thread_getnumber(const struct mm_thread *thread)
 {
 	return thread->domain_number;
+}
+
+static inline mm_thread_t
+mm_thread_self(void)
+{
+	return mm_thread_getnumber(mm_thread_selfptr());
 }
 
 #if ENABLE_SMP

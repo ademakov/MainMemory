@@ -258,7 +258,7 @@ mc_binary_parse(struct mc_parser *parser)
 		goto leave;
 	}
 
-	struct mc_command *command = mc_command_create(mm_core_selfid());
+	struct mc_command *command = mc_command_create(mm_core_self());
 	command->params.binary.opaque = header.opaque;
 	command->params.binary.opcode = header.opcode;
 	parser->command = command;

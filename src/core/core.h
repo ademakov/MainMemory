@@ -130,10 +130,16 @@ void mm_core_run_task(struct mm_task *task)
 extern mm_core_t mm_core_num;
 extern struct mm_core *mm_core_set;
 
-extern __thread struct mm_core *mm_core;
+extern __thread struct mm_core *__mm_core_self;
 
 /* Common event dispatch. */
 extern struct mm_dispatch mm_core_dispatch;
+
+static inline struct mm_core *
+mm_core_selfptr(void)
+{
+	return __mm_core_self;
+}
 
 static inline mm_core_t
 mm_core_getnum(void)
@@ -159,21 +165,15 @@ mm_core_getptr(mm_core_t core)
 	if (core == MM_CORE_NONE)
 		return NULL;
 	if (core == MM_CORE_SELF)
-		return mm_core;
+		return mm_core_selfptr();
 	ASSERT(core < mm_core_num);
 	return &mm_core_set[core];
 }
 
-static inline struct mm_core *
+static inline mm_core_t
 mm_core_self(void)
 {
-	return mm_core;
-}
-
-static inline mm_core_t
-mm_core_selfid(void)
-{
-	return mm_core_getid(mm_core_self());
+	return mm_core_getid(mm_core_selfptr());
 }
 
 #endif /* CORE_CORE_H */

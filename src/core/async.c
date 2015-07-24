@@ -75,7 +75,7 @@ mm_async_setup(struct mm_async_node *node, const char *description)
 {
 	// TODO: disable async task cancel
 
-	struct mm_core *core = mm_core_self();
+	struct mm_core *core = mm_core_selfptr();
 	node->task = core->task;
 	node->task->flags |= MM_TASK_WAITING;
 	mm_list_append(&core->async, &node->link);
@@ -114,7 +114,7 @@ mm_async_read(int fd, void *buffer, size_t nbytes)
 	mm_async_setup(&node, __FUNCTION__);
 
 	// Make the async call.
-	struct mm_domain *domain = mm_domain_self();
+	struct mm_domain *domain = mm_domain_selfptr();
 	mm_domain_syscall_3(domain, &node.requestor, SYS_read,
 			    fd, (uintptr_t) buffer, nbytes);
 
@@ -135,7 +135,7 @@ mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
 	mm_async_setup(&node, __FUNCTION__);
 
 	// Make the async call.
-	struct mm_domain *domain = mm_domain_self();
+	struct mm_domain *domain = mm_domain_selfptr();
 	mm_domain_syscall_3(domain, &node.requestor, SYS_writev,
 			    fd, (uintptr_t) iov, iovcnt);
 
@@ -156,7 +156,7 @@ mm_async_write(int fd, const void *buffer, size_t nbytes)
 	mm_async_setup(&node, __FUNCTION__);
 
 	// Make the async call.
-	struct mm_domain *domain = mm_domain_self();
+	struct mm_domain *domain = mm_domain_selfptr();
 	mm_domain_syscall_3(domain, &node.requestor, SYS_write,
 			    fd, (uintptr_t) buffer, nbytes);
 
@@ -177,7 +177,7 @@ mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
 	mm_async_setup(&node, __FUNCTION__);
 
 	// Make the async call.
-	struct mm_domain *domain = mm_domain_self();
+	struct mm_domain *domain = mm_domain_selfptr();
 	mm_domain_syscall_3(domain, &node.requestor, SYS_writev,
 			    fd, (uintptr_t) iov, iovcnt);
 

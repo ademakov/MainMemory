@@ -32,7 +32,7 @@
 static struct mm_trace_context *
 mm_trace_getcontext_default(void)
 {
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	if (unlikely(thread == NULL))
 		ABORT();
 	return mm_thread_gettracecontext(thread);

@@ -37,6 +37,8 @@
 #define MM_THREAD_QUEUE_MIN_SIZE	16
 
 static struct mm_thread mm_thread_main = {
+	.domain_number = MM_THREAD_NONE,
+
 	.log_queue = {
 		.head = { NULL },
 		.tail = &mm_thread_main.log_queue.head
@@ -408,7 +410,7 @@ mm_thread_domain_barrier(void)
 {
 	ENTER();
 
-	struct mm_thread *thread = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
 	if (thread->domain != NULL) {
 		mm_log_relay();
 

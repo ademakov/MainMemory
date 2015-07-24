@@ -159,7 +159,7 @@ static void
 mc_command_flush(uint32_t exptime)
 {
 	// TODO: really use the exptime.
-	mm_timeval_t time = mm_core_self()->time_manager.time;
+	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
 	mc_exptime = time + exptime * 1000000ull;
 
 	for (mm_core_t i = 0; i < mc_table.nparts; i++) {

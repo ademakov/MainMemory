@@ -82,7 +82,7 @@ mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 			struct mm_event_fd *sink)
 {
 	ASSERT(mm_event_target(sink) == MM_THREAD_NONE);
-	mm_thread_t tid = mm_thread_getnumber(mm_thread_self());
+	mm_thread_t tid = mm_thread_self();
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_add(listener, sink, MM_EVENT_REGISTER);
 	mm_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
@@ -93,7 +93,7 @@ mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
 			  struct mm_event_fd *sink)
 {
 	mm_thread_t tid = mm_event_target(sink);
-	ASSERT(tid == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(tid == mm_thread_self());
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_add(listener, sink, MM_EVENT_UNREGISTER);
 	mm_listener_addflags(listener, MM_EVENT_BATCH_UNREGISTER);
@@ -105,7 +105,7 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 {
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t tid = mm_event_target(sink);
-	ASSERT(tid == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(tid == mm_thread_self());
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_add(listener, sink, MM_EVENT_INPUT);
 #else
@@ -120,7 +120,7 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 {
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t tid = mm_event_target(sink);
-	ASSERT(tid == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(tid == mm_thread_self());
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_add(listener, sink, MM_EVENT_OUTPUT);
 #else
@@ -134,7 +134,7 @@ mm_dispatch_detach(struct mm_dispatch *dispatch,
 		   struct mm_event_fd *sink)
 {
 	mm_thread_t tid = mm_event_target(sink);
-	ASSERT(tid == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(tid == mm_thread_self());
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_detach(listener, sink);
 }

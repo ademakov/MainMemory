@@ -141,7 +141,7 @@ mm_domain_destroy(struct mm_domain *domain);
  **********************************************************************/
 
 static inline struct mm_domain *
-mm_domain_self(void)
+mm_domain_selfptr(void)
 {
 	return __mm_domain_self;
 }

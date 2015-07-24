@@ -146,7 +146,7 @@ static inline struct mm_private_space *
 mm_private_space_get(void)
 {
 #if ENABLE_SMP
-	return mm_thread_getspace(mm_thread_self());
+	return mm_thread_getspace(mm_thread_selfptr());
 #else
 	return &mm_regular_space;
 #endif

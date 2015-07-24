@@ -519,7 +519,7 @@ static void
 mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	// Update the read readiness flags.
 	sock->flags |= flags;
@@ -548,7 +548,7 @@ static void
 mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	// Update the write readiness flags.
 	sock->flags |= flags;
@@ -577,7 +577,7 @@ static void
 mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_READ_READY;
 #if MM_ONESHOT_HANDLERS
@@ -593,7 +593,7 @@ static void
 mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_WRITE_READY;
 #if MM_ONESHOT_HANDLERS
@@ -711,7 +711,7 @@ void
 mm_net_spawn_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -741,7 +741,7 @@ void
 mm_net_spawn_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
@@ -771,7 +771,7 @@ void
 mm_net_yield_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 #if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
@@ -811,7 +811,7 @@ void
 mm_net_yield_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 #if ENABLE_TASK_IO_FLAGS
 	struct mm_task *task = mm_task_self();
@@ -896,12 +896,12 @@ mm_net_cleanup(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed socks
 	while (sock->reader != NULL || sock->writer != NULL) {
-		struct mm_task *task = mm_task_self();
+		struct mm_task *task = mm_task_selfptr();
 		mm_priority_t priority = MM_PRIO_UPPER(task->priority, 1);
 		if (sock->reader != NULL)
 			mm_task_hoist(sock->reader, priority);
@@ -927,7 +927,7 @@ mm_net_reader(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
@@ -951,7 +951,7 @@ mm_net_writer(mm_value_t arg)
 	ENTER();
 
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
@@ -1159,7 +1159,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
-	ASSERT(mm_event_target(&srv->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&srv->event) == mm_thread_self());
 
 	mm_brief("stop server: %s", srv->name);
 
@@ -1197,14 +1197,15 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	}
 
 	// Block the task waiting for the socket to become read ready.
+	struct mm_core *core = mm_core_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->reader = mm_task_self();
+		sock->reader = mm_task_selfptr();
 		mm_task_block();
 		sock->reader = NULL;
 		rc = 0;
-	} else if (mm_core->time_manager.time < deadline) {
-		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
-		sock->reader = mm_task_self();
+	} else if (core->time_manager.time < deadline) {
+		mm_timeout_t timeout = deadline - core->time_manager.time;
+		sock->reader = mm_task_selfptr();
 		mm_timer_block(timeout);
 		sock->reader = NULL;
 		rc = 0;
@@ -1245,14 +1246,15 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	}
 
 	// Block the task waiting for the socket to become write ready.
+	struct mm_core *core = mm_core_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->writer = mm_task_self();
+		sock->writer = mm_task_selfptr();
 		mm_task_block();
 		sock->writer = NULL;
 		rc = 0;
-	} else  if (mm_core->time_manager.time < deadline) {
-		mm_timeout_t timeout = deadline - mm_core->time_manager.time;
-		sock->writer = mm_task_self();
+	} else  if (core->time_manager.time < deadline) {
+		mm_timeout_t timeout = deadline - core->time_manager.time;
+		sock->writer = mm_task_selfptr();
 		mm_timer_block(timeout);
 		sock->writer = NULL;
 		rc = 0;
@@ -1277,13 +1279,15 @@ ssize_t
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	ssize_t n;
 
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_manager.time + sock->read_timeout;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
+		struct mm_core *core = mm_core_selfptr();
+		deadline = core->time_manager.time + sock->read_timeout;
+	}
 
 retry:
 	// Check to see if the socket is ready for reading.
@@ -1330,13 +1334,15 @@ ssize_t
 mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	ssize_t n;
 
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_manager.time + sock->write_timeout;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
+		struct mm_core *core = mm_core_selfptr();
+		deadline = core->time_manager.time + sock->write_timeout;
+	}
 
 retry:
 	// Check to see if the socket is ready for writing.
@@ -1385,13 +1391,15 @@ mm_net_readv(struct mm_net_socket *sock,
 	     ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	ssize_t n;
 
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_manager.time + sock->read_timeout;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
+		struct mm_core *core = mm_core_selfptr();
+		deadline = core->time_manager.time + sock->read_timeout;
+	}
 
 retry:
 	// Check to see if the socket is ready for reading.
@@ -1440,13 +1448,15 @@ mm_net_writev(struct mm_net_socket *sock,
 	      ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	ssize_t n;
 
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
-		deadline = mm_core->time_manager.time + sock->write_timeout;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
+		struct mm_core *core = mm_core_selfptr();
+		deadline = core->time_manager.time + sock->write_timeout;
+	}
 
 retry:
 	// Check to see if the socket is ready for writing.
@@ -1493,7 +1503,7 @@ void
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1512,7 +1522,7 @@ void
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -1532,7 +1542,7 @@ void
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_core_selfid());
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;

@@ -61,7 +61,7 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 		      mm_event_t event, struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(receiver->control_thread == mm_thread_getnumber(mm_thread_self()));
+	ASSERT(receiver->control_thread == mm_thread_self());
 
 	mm_thread_t target = mm_memory_load(sink->target);
 	mm_memory_load_fence();
