@@ -646,10 +646,11 @@ mm_core_boot_init(struct mm_core *core)
 static void
 mm_core_boot_term(struct mm_core *core)
 {
+	mm_thread_domain_barrier();
+
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_stop_hook, false);
-
 		mm_dispatch_cleanup(&mm_core_dispatch);
 	}
 
