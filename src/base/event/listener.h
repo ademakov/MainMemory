@@ -156,7 +156,7 @@ static inline bool __attribute__((nonnull(1)))
 mm_listener_has_urgent_changes(struct mm_listener *listener)
 {
 	return mm_event_batch_hasflags(&listener->changes,
-		MM_EVENT_BATCH_REGISTER | MM_EVENT_BATCH_UNREGISTER);
+				       MM_EVENT_BATCH_UNREGISTER);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */

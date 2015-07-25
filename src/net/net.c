@@ -661,9 +661,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 			(sock->server->proto->detach)(sock);
 		break;
 
-	case MM_EVENT_REGISTER:
-		break;
-
 	case MM_EVENT_UNREGISTER:
 		// At this time there are no and will not be any I/O messages
 		// related to this socket in the event processing pipeline.

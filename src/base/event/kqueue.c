@@ -171,24 +171,6 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 }
 
 static void
-mm_event_kqueue_get_register_events(struct mm_event_receiver *return_events,
-				    struct mm_event_batch *change_events,
-				    unsigned int first, unsigned int last)
-{
-	for (unsigned int i = first; i < last; i++) {
-		struct mm_event *event = &change_events->events[i];
-		struct mm_event_fd *ev_fd = event->ev_fd;
-
-		// Reset the change flag.
-		ev_fd->changed = 0;
-
-		// Store the pertinent event.
-		if (event->event == MM_EVENT_REGISTER)
-			mm_event_receiver_add(return_events, MM_EVENT_REGISTER, ev_fd);
-	}
-}
-
-static void
 mm_event_kqueue_get_unregister_events(struct mm_event_receiver *return_events,
 				      struct mm_event_batch *change_events,
 				      unsigned int first, unsigned int last)
@@ -196,6 +178,9 @@ mm_event_kqueue_get_unregister_events(struct mm_event_receiver *return_events,
 	for (unsigned int i = first; i < last; i++) {
 		struct mm_event *event = &change_events->events[i];
 		struct mm_event_fd *ev_fd = event->ev_fd;
+
+		// Reset the change flag.
+		ev_fd->changed = 0;
 
 		// Store the pertinent event.
 		if (event->event == MM_EVENT_UNREGISTER)
@@ -209,9 +194,6 @@ mm_event_kqueue_get_events(struct mm_event_receiver *return_events,
 			   struct mm_event_batch *change_events,
 			   unsigned int first, unsigned int last)
 {
-	// Store register events.
-	mm_event_kqueue_get_register_events(return_events, change_events, first, last);
-
 	// Store incoming events.
 	mm_event_kqueue_get_incoming_events(event_backend, return_events);
 

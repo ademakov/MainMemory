@@ -53,8 +53,6 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 		rc = epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD, ev_fd->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
-
-		mm_event_receiver_add(return_events, MM_EVENT_REGISTER, ev_fd);
 		break;
 
 	case MM_EVENT_UNREGISTER:

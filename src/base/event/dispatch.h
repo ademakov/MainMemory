@@ -81,8 +81,12 @@ static inline void __attribute__((nonnull(1, 2)))
 mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 			struct mm_event_fd *sink)
 {
-	ASSERT(mm_event_target(sink) == MM_THREAD_NONE);
-	mm_thread_t tid = mm_thread_self();
+	mm_thread_t tid = mm_event_target(sink);
+	if (tid == MM_THREAD_NONE) {
+		tid = sink->target = mm_thread_self();
+	} else {
+		ASSERT(mm_event_target(sink) == tid);
+	}
 	struct mm_listener *listener = &dispatch->listeners[tid];
 	mm_listener_add(listener, sink, MM_EVENT_REGISTER);
 	mm_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
