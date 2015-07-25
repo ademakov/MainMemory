@@ -73,8 +73,9 @@ struct mm_listener
 	/* A counter to ensure visibility of change events. */
 	uint32_t changes_stamp;
 
-	/* A counter to detect detach feasibility. */
+	/* Counters to detect detach feasibility. */
 	uint32_t arrival_stamp;
+	uint32_t handle_stamp;
 
 	/* Listener's event sinks waiting to be detached. */
 	struct mm_list detach_list;

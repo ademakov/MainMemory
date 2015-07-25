@@ -50,6 +50,7 @@ mm_listener_prepare(struct mm_listener *listener)
 	listener->changes_stamp = 0;
 
 	listener->arrival_stamp = 0;
+	listener->handle_stamp = 0;
 
 	mm_list_prepare(&listener->detach_list);
 

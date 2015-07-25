@@ -98,8 +98,8 @@ mm_dispatch_handle_events(struct mm_listener *listener)
 		mm_event_handle(event->ev_fd, event->event);
 	}
 
-	// Update private event arrival stamp.
-	listener->arrival_stamp = mm_event_batch_getstamp(&listener->events);
+	// Update private event handling stamp.
+	listener->handle_stamp = listener->arrival_stamp;
 
 	// Forget just handled events.
 	mm_event_batch_clear(&listener->events);
@@ -112,7 +112,7 @@ mm_dispatch_handle_detach(struct mm_listener *listener)
 		struct mm_link *link = mm_list_head(&listener->detach_list);
 		struct mm_event_fd *sink
 			= containerof(link, struct mm_event_fd, detach_link);
-		mm_event_detach(sink, listener->arrival_stamp);
+		mm_event_detach(sink, listener->handle_stamp);
 	}
 }
 
@@ -224,6 +224,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 
 		// Update private event arrival stamp.
 		listener->arrival_stamp = receiver->arrival_stamp;
+		listener->handle_stamp = receiver->arrival_stamp;
 
 		// Forward incoming events that belong to other threads.
 		mm_thread_t target = mm_event_receiver_first_target(receiver);
@@ -233,10 +234,9 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 
 			// Forward incoming events.
 			mm_regular_lock(&target_listener->lock);
-			mm_event_batch_setstamp(&target_listener->events,
-						receiver->arrival_stamp);
 			mm_event_batch_append(&target_listener->events,
 					      &receiver->events[target]);
+			listener->arrival_stamp = receiver->arrival_stamp;
 			mm_regular_unlock(&target_listener->lock);
 
 			// Wake up the target thread if it is sleeping.
