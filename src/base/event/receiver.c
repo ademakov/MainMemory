@@ -32,6 +32,14 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver,
 
 	receiver->arrival_stamp = 0;
 
+	receiver->nlisteners = ntargets;
+
+	// Allocate listener info.
+	receiver->listeners = mm_common_calloc(ntargets,
+					       sizeof(struct mm_listener));
+	for (mm_thread_t i = 0; i < ntargets; i++)
+		mm_listener_prepare(&receiver->listeners[i]);
+
 	receiver->events = mm_common_calloc(ntargets,
 					    sizeof(struct mm_event_batch));
 	for (mm_thread_t i = 0; i < ntargets; i++)
@@ -48,10 +56,60 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
-	for (mm_thread_t i = 0; i < mm_bitset_size(&receiver->targets); i++)
+	// Release listener info.
+	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
+		mm_listener_cleanup(&receiver->listeners[i]);
+	mm_common_free(receiver->listeners);
+
+	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
 		mm_event_batch_cleanup(&receiver->events[i]);
 
 	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1, 3)))
+mm_event_receiver_listen(struct mm_event_receiver *receiver,
+			 mm_thread_t thread,
+			 struct mm_event_backend *backend,
+			 mm_timeout_t timeout)
+{
+	ENTER();
+
+	receiver->control_thread = thread;
+	mm_bitset_clear_all(&receiver->targets);
+
+	// Poll for incoming events or wait for timeout expiration.
+	struct mm_listener *listener = &receiver->listeners[thread];
+	mm_listener_poll(listener, backend, receiver, timeout);
+
+	// Update the private arrival stamp.
+	listener->arrival_stamp = receiver->arrival_stamp;
+
+	// Forward incoming events that belong to other threads.
+	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
+	while (target != MM_THREAD_NONE) {
+		struct mm_listener *target_listener = &receiver->listeners[target];
+
+		// Forward incoming events.
+		mm_regular_lock(&target_listener->lock);
+		mm_event_batch_append(&target_listener->events,
+				      &receiver->events[target]);
+		target_listener->arrival_stamp = receiver->arrival_stamp;
+		mm_regular_unlock(&target_listener->lock);
+
+		// Wake up the target thread if it is sleeping.
+		mm_listener_notify(target_listener, backend);
+
+		// Forget just forwarded events.
+		mm_event_batch_clear(&receiver->events[target]);
+
+		if (++target < mm_bitset_size(&receiver->targets))
+			target = mm_bitset_find(&receiver->targets, target);
+		else
+			break;
+	}
 
 	LEAVE();
 }
@@ -66,7 +124,7 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 	mm_thread_t target = mm_memory_load(sink->target);
 	mm_memory_load_fence();
 
-	// If the event sink is detached attach it to the control thread.
+	// If the event sink is detached then attach it to the control thread.
 	if (target != receiver->control_thread) {
 		uint32_t detach_stamp = mm_memory_load(sink->detach_stamp);
 		if (detach_stamp == sink->arrival_stamp) {

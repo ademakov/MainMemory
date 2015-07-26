@@ -205,27 +205,28 @@ mm_listener_notify(struct mm_listener *listener,
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
-mm_listener_listen(struct mm_listener *listener,
-		   struct mm_event_backend *backend,
-		   struct mm_event_receiver *receiver,
-		   mm_timeout_t timeout)
+static void __attribute__((nonnull(1)))
+mm_listener_finish(struct mm_listener *listener)
+{
+	// Advertise that the thread starts another working cycle.
+	mm_memory_store(listener->notify_stamp, listener->listen_stamp);
+	mm_memory_store_fence();
+	mm_memory_store(listener->listen_stamp, listener->listen_stamp + 1);
+
+#if 0
+	mm_memory_strict_fence();
+#endif
+}
+
+void __attribute__((nonnull(1, 2, 3)))
+mm_listener_poll(struct mm_listener *listener,
+		 struct mm_event_backend *backend,
+		 struct mm_event_receiver *receiver,
+		 mm_timeout_t timeout)
 {
 	ENTER();
 
-	if (timeout == 0) {
-
-		if (backend != NULL) {
-			// Cleanup stale event notifications.
-			mm_event_backend_dampen(backend);
-
-			// Check for incoming events.
-			mm_event_backend_listen(backend, &listener->changes,
-						receiver, 0);
-		}
-
-	} else if (backend != NULL) {
-
+	if (timeout != 0) {
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(backend);
 
@@ -244,10 +245,23 @@ mm_listener_listen(struct mm_listener *listener,
 
 		// Advertise that the thread has woken up.
 		mm_memory_store(listener->state, MM_LISTENER_RUNNING);
-
 	} else {
-		// TODO: spin holding CPU a little checking for notifications
+		// Check for incoming events.
+		mm_event_backend_listen(backend, &listener->changes,
+					receiver, 0);
+	}
 
+	mm_listener_finish(listener);
+
+	LEAVE();
+}
+
+void __attribute__((nonnull(1)))
+mm_listener_wait(struct mm_listener *listener, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (timeout != 0) {
 		// Advertise that the thread is about to sleep.
 		mm_memory_store(listener->state, MM_LISTENER_WAITING);
 
@@ -262,14 +276,7 @@ mm_listener_listen(struct mm_listener *listener,
 		mm_memory_store(listener->state, MM_LISTENER_RUNNING);
 	}
 
-	// Advertise that the thread starts another working cycle.
-	mm_memory_store(listener->notify_stamp, listener->listen_stamp);
-	mm_memory_store_fence();
-	mm_memory_store(listener->listen_stamp, listener->listen_stamp + 1);
-
-#if 0
-	mm_memory_strict_fence();
-#endif
+	mm_listener_finish(listener);
 
 	LEAVE();
 }

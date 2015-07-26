@@ -108,11 +108,15 @@ void __attribute__((nonnull(1, 2)))
 mm_listener_notify(struct mm_listener *listener,
 		   struct mm_event_backend *backend);
 
+void __attribute__((nonnull(1, 2, 3)))
+mm_listener_poll(struct mm_listener *listener,
+		 struct mm_event_backend *backend,
+		 struct mm_event_receiver *receiver,
+		 mm_timeout_t timeout);
+
 void __attribute__((nonnull(1)))
-mm_listener_listen(struct mm_listener *listener,
-		   struct mm_event_backend *backend,
-		   struct mm_event_receiver *receiver,
-		   mm_timeout_t timeout);
+mm_listener_wait(struct mm_listener *listener,
+		 mm_timeout_t timeout);
 
 /**********************************************************************
  * I/O events support.

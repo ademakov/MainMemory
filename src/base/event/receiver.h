@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 
 struct mm_event_receiver
 {
@@ -31,6 +32,10 @@ struct mm_event_receiver
 
 	/* A counter to detect event sink detach feasibility. */
 	uint32_t arrival_stamp;
+
+	/* Event listeners. */
+	struct mm_listener *listeners;
+	mm_thread_t nlisteners;
 
 	/* The received events for target threads. */
 	struct mm_event_batch *events;
@@ -46,29 +51,16 @@ void __attribute__((nonnull(1)))
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
 static inline void __attribute__((nonnull(1)))
-mm_event_receiver_start(struct mm_event_receiver *receiver,
-			mm_thread_t thread)
+mm_event_receiver_start(struct mm_event_receiver *receiver)
 {
 	receiver->arrival_stamp++;
-	receiver->control_thread = thread;
-	mm_bitset_clear_all(&receiver->targets);
 }
 
-static inline mm_thread_t __attribute__((nonnull(1)))
-mm_event_receiver_first_target(struct mm_event_receiver *receiver)
-{
-	return mm_bitset_find(&receiver->targets, 0);
-}
-
-static inline mm_thread_t __attribute__((nonnull(1)))
-mm_event_receiver_next_target(struct mm_event_receiver *receiver,
-			      mm_thread_t thread)
-{
-	if (++thread < mm_bitset_size(&receiver->targets))
-		return mm_bitset_find(&receiver->targets, thread);
-	else
-		return MM_THREAD_NONE;
-}
+void __attribute__((nonnull(1, 3)))
+mm_event_receiver_listen(struct mm_event_receiver *receiver,
+			 mm_thread_t thread,
+			 struct mm_event_backend *backend,
+			 mm_timeout_t timeout);
 
 void __attribute__((nonnull(1, 3)))
 mm_event_receiver_add(struct mm_event_receiver *receiver,
