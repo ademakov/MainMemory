@@ -23,8 +23,10 @@
 #include "base/log/trace.h"
 #include "base/mem/memory.h"
 
-void __attribute__((nonnull(1)))
-mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
+void __attribute__((nonnull(1, 3)))
+mm_dispatch_prepare(struct mm_dispatch *dispatch,
+		    mm_thread_t nthreads,
+		    struct mm_thread *threads[])
 {
 	ENTER();
 	ASSERT(nlisteners > 0);
@@ -40,7 +42,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 	mm_event_batch_prepare(&dispatch->changes);
 
 	// Allocate pending event batches.
-	mm_event_receiver_prepare(&dispatch->receiver, nlisteners);
+	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
@@ -55,7 +57,6 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners)
 				&dispatch->receiver,
 				0);
 	mm_event_batch_clear(&dispatch->changes);
-	mm_event_batch_clear(&dispatch->receiver.events[0]);
 
 	LEAVE();
 }
@@ -75,22 +76,6 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 	mm_event_backend_cleanup(&dispatch->backend);
 
 	LEAVE();
-}
-
-static void
-mm_dispatch_handle_events(struct mm_listener *listener)
-{
-	// Handle arrived events.
-	for (unsigned i = 0; i < listener->events.nevents; i++) {
-		struct mm_event *event = &listener->events.events[i];
-		mm_event_handle(event->ev_fd, event->event);
-	}
-
-	// Update private event handling stamp.
-	listener->handle_stamp = listener->arrival_stamp;
-
-	// Forget just handled events.
-	mm_event_batch_clear(&listener->events);
 }
 
 static void
@@ -117,6 +102,18 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 	mm_regular_lock(&dispatch->lock);
 	mm_thread_t control_thread = dispatch->control_thread;
 	if (control_thread == MM_THREAD_NONE) {
+
+		// About to become a control thread check to see if there
+		// are any unhandled events forwarded by a previous control
+		// thread. If this is so then bail out in order to handle
+		// them. This is to preserve event arrival order.
+		if (listener->arrival_stamp != listener->handle_stamp) {
+			DEBUG("arrival stamp %d, handle_stamp %d",
+			      listener->arrival_stamp,
+			      listener->handle_stamp);
+			mm_regular_unlock(&dispatch->lock);
+			goto leave;
+		}
 
 #if ENABLE_DEBUG
 		if (dispatch->last_control_thread != thread) {
@@ -194,23 +191,9 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		if (mm_listener_has_urgent_changes(listener))
 			timeout = 0;
 
-		// Handle events that might have been forwarded to this
-		// listener by a previous control thread. There is no need
-		// to lock the listener here as only the control thread and
-		// the listener owner thread could ever access the events
-		// concurrently. And both of these threads are the same one
-		// at this point.
-		if (mm_listener_has_events(listener)) {
-			mm_dispatch_handle_events(listener);
-			timeout = 0;
-		}
-
 		// Wait for incoming events or timeout expiration.
 		mm_event_receiver_listen(&dispatch->receiver, thread,
 					 &dispatch->backend, timeout);
-
-		// Update private event stamp.
-		listener->handle_stamp = listener->arrival_stamp;
 
 		// Give up the control thread role.
 		mm_memory_store_fence();
@@ -220,17 +203,13 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_event_batch_clear(&listener->changes);
 
 	} else {
-		// Wait for forwarded events or timeout expiration.
-		mm_listener_wait(listener, timeout);
-
-		// Handle the forwarded events.
-		mm_regular_lock(&listener->lock);
-		mm_dispatch_handle_events(listener);
-		mm_regular_unlock(&listener->lock);
-
 		// Finalize the detach requests.
 		mm_dispatch_handle_detach(listener);
+
+		// Wait for forwarded events or timeout expiration.
+		mm_listener_wait(listener, timeout);
 	}
 
+leave:
 	LEAVE();
 }

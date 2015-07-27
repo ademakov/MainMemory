@@ -631,7 +631,9 @@ mm_core_boot_init(struct mm_core *core)
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(mm_regular_domain);
 
-		mm_dispatch_prepare(&mm_core_dispatch, mm_core_num);
+		mm_dispatch_prepare(&mm_core_dispatch,
+				    mm_regular_domain->nthreads,
+				    mm_regular_domain->threads);
 
 		mm_thread_domain_barrier();
 	} else {

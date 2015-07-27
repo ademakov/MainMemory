@@ -37,15 +37,14 @@ struct mm_event_receiver
 	struct mm_listener *listeners;
 	mm_thread_t nlisteners;
 
-	/* The received events for target threads. */
-	struct mm_event_batch *events;
 	/* Target threads that have received events. */
 	struct mm_bitset targets;
 };
 
-void __attribute__((nonnull(1)))
+void __attribute__((nonnull(1, 3)))
 mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t ntargets);
+			  mm_thread_t nthreads,
+			  struct mm_thread *threads[]);
 
 void __attribute__((nonnull(1)))
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);

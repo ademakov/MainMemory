@@ -50,8 +50,10 @@ struct mm_dispatch
 	struct mm_event_backend backend;
 };
 
-void __attribute__((nonnull(1)))
-mm_dispatch_prepare(struct mm_dispatch *dispatch, mm_thread_t nlisteners);
+void __attribute__((nonnull(1, 3)))
+mm_dispatch_prepare(struct mm_dispatch *dispatch,
+		    mm_thread_t nthreads,
+		    struct mm_thread *threads[]);
 
 void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);

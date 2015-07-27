@@ -19,34 +19,31 @@
 
 #include "base/event/receiver.h"
 
+#include "base/base.h"
 #include "base/event/batch.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/mem/memory.h"
+#include "base/thread/thread.h"
 
-void __attribute__((nonnull(1)))
+void __attribute__((nonnull(1, 3)))
 mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t ntargets)
+			  mm_thread_t nthreads,
+			  struct mm_thread *threads[])
 {
 	ENTER();
 
 	receiver->arrival_stamp = 0;
 
-	receiver->nlisteners = ntargets;
-
 	// Allocate listener info.
-	receiver->listeners = mm_common_calloc(ntargets,
+	receiver->nlisteners = nthreads;
+	receiver->listeners = mm_common_calloc(nthreads,
 					       sizeof(struct mm_listener));
-	for (mm_thread_t i = 0; i < ntargets; i++)
-		mm_listener_prepare(&receiver->listeners[i]);
-
-	receiver->events = mm_common_calloc(ntargets,
-					    sizeof(struct mm_event_batch));
-	for (mm_thread_t i = 0; i < ntargets; i++)
-		mm_event_batch_prepare(&receiver->events[i]);
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_listener_prepare(&receiver->listeners[i], threads[i]);
 
 	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena,
-			  ntargets);
+			  nthreads);
 
 	LEAVE();
 }
@@ -61,10 +58,201 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 		mm_listener_cleanup(&receiver->listeners[i]);
 	mm_common_free(receiver->listeners);
 
-	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
-		mm_event_batch_cleanup(&receiver->events[i]);
-
 	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_handle_0_req(uintptr_t context __mm_unused__,
+			       uintptr_t *arguments)
+{
+	ENTER();
+
+	// Update private event stamp.
+	struct mm_listener *listener = (struct mm_listener *) arguments[0];
+	listener->handle_stamp = arguments[1];
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_handle_1_req(uintptr_t context __mm_unused__,
+			       uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	mm_event_t event_1 = arguments[1];
+
+	// Handle events.
+	mm_event_handle(sink_1, event_1);
+
+	// Update private event stamp.
+	struct mm_listener *listener = (struct mm_listener *) arguments[2];
+	listener->handle_stamp = arguments[3];
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_handle_2_req(uintptr_t context __mm_unused__,
+			       uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	mm_event_t event_1 = arguments[2] & 0xff;
+	mm_event_t event_2 = (arguments[2] >> 8) & 0xff;
+
+	// Handle events.
+	mm_event_handle(sink_1, event_1);
+	mm_event_handle(sink_2, event_2);
+
+	// Update private event stamp.
+	struct mm_listener *listener = (struct mm_listener *) arguments[3];
+	listener->handle_stamp = arguments[4];
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_handle_3_req(uintptr_t context __mm_unused__,
+			       uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
+	mm_event_t event_1 = arguments[3] & 0xff;
+	mm_event_t event_2 = (arguments[3] >> 8) & 0xff;
+	mm_event_t event_3 = (arguments[3] >> 16) & 0xff;
+
+	// Handle events.
+	mm_event_handle(sink_1, event_1);
+	mm_event_handle(sink_2, event_2);
+	mm_event_handle(sink_3, event_3);
+
+	// Update private event stamp.
+	struct mm_listener *listener = (struct mm_listener *) arguments[4];
+	listener->handle_stamp = arguments[5];
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_handle_4_req(uintptr_t context __mm_unused__,
+			       uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
+	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[3];
+	mm_event_t event_1 = arguments[4] & 0xff;
+	mm_event_t event_2 = (arguments[4] >> 8) & 0xff;
+	mm_event_t event_3 = (arguments[4] >> 16) & 0xff;
+	mm_event_t event_4 = (arguments[4] >> 24) & 0xff;
+
+	// Handle events.
+	mm_event_handle(sink_1, event_1);
+	mm_event_handle(sink_2, event_2);
+	mm_event_handle(sink_3, event_3);
+	mm_event_handle(sink_4, event_4);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_batch_add(struct mm_listener *listener,
+			    mm_event_t event, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	struct mm_event_batch *batch = &listener->events;
+	if (batch->nevents == 4) {
+		mm_thread_send_5(listener->thread,
+				 mm_event_receiver_handle_4_req,
+				 (uintptr_t) batch->events[0].ev_fd,
+				 (uintptr_t) batch->events[1].ev_fd,
+				 (uintptr_t) batch->events[2].ev_fd,
+				 (uintptr_t) batch->events[3].ev_fd,
+				 batch->events[0].event |
+				 (batch->events[1].event << 8) |
+				 (batch->events[2].event << 16) |
+				 (batch->events[3].event << 24));
+		mm_event_batch_clear(batch);
+	}
+
+	mm_event_batch_add(batch, event, sink);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_batch_flush(struct mm_listener *listener,
+			      uint32_t stamp)
+{
+	ENTER();
+
+	struct mm_event_batch *batch = &listener->events;
+	switch (batch->nevents) {
+	case 1:
+		mm_thread_send_4(listener->thread,
+				 mm_event_receiver_handle_1_req,
+				 (uintptr_t) batch->events[0].ev_fd,
+				 batch->events[0].event,
+				 (uintptr_t) listener,
+				 stamp);
+		mm_event_batch_clear(batch);
+		break;
+	case 2:
+		mm_thread_send_5(listener->thread,
+				 mm_event_receiver_handle_2_req,
+				 (uintptr_t) batch->events[0].ev_fd,
+				 (uintptr_t) batch->events[1].ev_fd,
+				 batch->events[0].event |
+				 (batch->events[1].event << 8),
+				 (uintptr_t) listener,
+				 stamp);
+		mm_event_batch_clear(batch);
+		break;
+	case 3:
+		mm_thread_send_6(listener->thread,
+				 mm_event_receiver_handle_3_req,
+				 (uintptr_t) batch->events[0].ev_fd,
+				 (uintptr_t) batch->events[1].ev_fd,
+				 (uintptr_t) batch->events[2].ev_fd,
+				 batch->events[0].event |
+				 (batch->events[1].event << 8) |
+				 (batch->events[2].event << 16),
+				 (uintptr_t) listener,
+				 stamp);
+		mm_event_batch_clear(batch);
+		break;
+	case 4:
+		mm_thread_send_5(listener->thread,
+				 mm_event_receiver_handle_4_req,
+				 (uintptr_t) batch->events[0].ev_fd,
+				 (uintptr_t) batch->events[1].ev_fd,
+				 (uintptr_t) batch->events[2].ev_fd,
+				 (uintptr_t) batch->events[3].ev_fd,
+				 batch->events[0].event |
+				 (batch->events[1].event << 8) |
+				 (batch->events[2].event << 16) |
+				 (batch->events[3].event << 24));
+		mm_thread_send_2(listener->thread,
+				 mm_event_receiver_handle_0_req,
+				 (uintptr_t) listener,
+				 stamp);
+		mm_event_batch_clear(batch);
+		break;
+	default:
+		ABORT();
+	}
 
 	LEAVE();
 }
@@ -84,8 +272,8 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver,
 	struct mm_listener *listener = &receiver->listeners[thread];
 	mm_listener_poll(listener, backend, receiver, timeout);
 
-	// Update the private arrival stamp.
-	listener->arrival_stamp = receiver->arrival_stamp;
+	// Update private event stamp.
+	listener->handle_stamp = listener->arrival_stamp;
 
 	// Forward incoming events that belong to other threads.
 	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
@@ -93,22 +281,16 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver,
 		struct mm_listener *target_listener = &receiver->listeners[target];
 
 		// Forward incoming events.
-		mm_regular_lock(&target_listener->lock);
-		mm_event_batch_append(&target_listener->events,
-				      &receiver->events[target]);
-		target_listener->arrival_stamp = receiver->arrival_stamp;
-		mm_regular_unlock(&target_listener->lock);
+		mm_event_receiver_batch_flush(target_listener,
+					      receiver->arrival_stamp);
 
 		// Wake up the target thread if it is sleeping.
 		mm_listener_notify(target_listener, backend);
 
-		// Forget just forwarded events.
-		mm_event_batch_clear(&receiver->events[target]);
-
 		if (++target < mm_bitset_size(&receiver->targets))
 			target = mm_bitset_find(&receiver->targets, target);
 		else
-			break;
+			target = MM_THREAD_NONE;
 	}
 
 	LEAVE();
@@ -136,6 +318,8 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 	// Update the arrival stamp. This disables detachment of the event
 	// sink until the received event jumps through all the hoops and
 	// the detach stamp is updated accordingly.
+	struct mm_listener *listener = &receiver->listeners[target];
+	listener->arrival_stamp = receiver->arrival_stamp;
 	sink->arrival_stamp = receiver->arrival_stamp;
 
 	// If the event sink belongs to the control thread then handle it
@@ -144,8 +328,7 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 	if (target == receiver->control_thread) {
 		mm_event_handle(sink, event);
 	} else {
-		mm_event_batch_add(&receiver->events[target],
-				   event, sink);
+		mm_event_receiver_batch_add(listener, event, sink);
 		mm_bitset_set(&receiver->targets, target);
 	}
 

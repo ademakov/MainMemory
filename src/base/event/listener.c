@@ -37,8 +37,8 @@
 # include "base/sys/clock.h"
 #endif
 
-void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener)
+void __attribute__((nonnull(1, 2)))
+mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
 {
 	ENTER();
 
@@ -65,10 +65,10 @@ mm_listener_prepare(struct mm_listener *listener)
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
-	listener->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-
 	mm_event_batch_prepare(&listener->changes);
 	mm_event_batch_prepare(&listener->events);
+
+	listener->thread = thread;
 
 	LEAVE();
 }

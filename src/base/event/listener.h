@@ -42,6 +42,7 @@
 /* Forward declarations. */
 struct mm_event_backend;
 struct mm_event_receiver;
+struct mm_thread;
 
 typedef enum
 {
@@ -93,13 +94,13 @@ struct mm_listener
 	/* Listener's incoming events store. */
 	struct mm_event_batch events;
 
-	/* A lock to protect the events store. */
-	mm_regular_lock_t lock;
+	/* Associated thread. */
+	struct mm_thread *thread;
 
 } __mm_align_cacheline__;
 
-void __attribute__((nonnull(1)))
-mm_listener_prepare(struct mm_listener *listener);
+void __attribute__((nonnull(1, 2)))
+mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread);
 
 void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);
