@@ -65,8 +65,8 @@ mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
 	mm_monitor_prepare(&listener->monitor);
 #endif
 
-	mm_event_batch_prepare(&listener->changes);
-	mm_event_batch_prepare(&listener->events);
+	mm_event_batch_prepare(&listener->changes, 256);
+	mm_event_batch_prepare(&listener->events, 4);
 
 	listener->thread = thread;
 

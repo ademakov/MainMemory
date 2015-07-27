@@ -23,17 +23,17 @@
 #include "base/log/trace.h"
 #include "base/mem/memory.h"
 
-#define MM_EVENT_BATCH_NEVENTS_MIN	(512)
-#define MM_EVENT_BATCH_NEVENTS_MAX	(32 * MM_EVENT_BATCH_NEVENTS_MIN)
+#define MM_EVENT_BATCH_NEVENTS_MIN	(4u)
+#define MM_EVENT_BATCH_NEVENTS_MAX	(16u * 1024u)
 
 void __attribute__((nonnull(1)))
-mm_event_batch_prepare(struct mm_event_batch *batch)
+mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
 {
 	ENTER();
 
 	batch->flags = 0;
 	batch->nevents = 0;
-	batch->nevents_max = MM_EVENT_BATCH_NEVENTS_MIN;
+	batch->nevents_max = max(size, MM_EVENT_BATCH_NEVENTS_MIN);
 	batch->events = mm_common_alloc(batch->nevents_max * sizeof(struct mm_event));
 
 	LEAVE();

@@ -39,7 +39,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 #endif
 
 	// Initialize space for change events.
-	mm_event_batch_prepare(&dispatch->changes);
+	mm_event_batch_prepare(&dispatch->changes, 1024);
 
 	// Allocate pending event batches.
 	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);

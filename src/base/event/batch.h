@@ -35,7 +35,7 @@ struct mm_event_batch
 };
 
 void __attribute__((nonnull(1)))
-mm_event_batch_prepare(struct mm_event_batch *batch);
+mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size);
 
 void __attribute__((nonnull(1)))
 mm_event_batch_cleanup(struct mm_event_batch *batch);
