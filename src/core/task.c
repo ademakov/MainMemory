@@ -403,7 +403,7 @@ mm_task_switch(mm_task_state_t state)
 	}
 
 	// Execute requests associated with the core.
-	mm_core_execute_requests(core);
+	mm_core_execute_requests(core, 1);
 
 	// Get the next task from the run queue.  As long as this function
 	// is called there is at least a boot task in the run queue.  So

@@ -131,7 +131,7 @@ void __attribute__((nonnull(1)))
 mm_core_run_task(struct mm_task *task);
 
 void __attribute__((nonnull(1)))
-mm_core_execute_requests(struct mm_core *core);
+mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit);
 
 /**********************************************************************
  * Core Information.
