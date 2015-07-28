@@ -433,12 +433,8 @@ mm_core_master(mm_value_t arg)
  * Dealer task.
  **********************************************************************/
 
-// Dealer loop sleep time - 1 second
+// Dealer loop sleep time - 10 seconds
 #define MM_DEALER_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
-
-// Dealer loop hang on times
-#define MM_DEALER_POLL_TIMEOUT	((mm_timeout_t) 10)
-#define MM_DEALER_HOLD_TIMEOUT	((mm_timeout_t) 25)
 
 #if ENABLE_DEALER_STATS
 static mm_atomic_uint32_t mm_core_deal_count;
@@ -469,13 +465,10 @@ mm_core_execute_requests(struct mm_core *core)
 	LEAVE();
 }
 
-static bool
+static void
 mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
-
-	uint64_t cswitch_count = core->cswitch_count;
-	uint64_t request_count = core->request_count;
 
 	// Start current timer tasks.
 	mm_timer_tick(&core->time_manager);
@@ -496,28 +489,24 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_atomic_uint32_inc(&mm_core_deal_count);
 #endif
 
-	cswitch_count = core->cswitch_count - cswitch_count;
-	request_count = core->request_count - request_count;
-
 	LEAVE();
-	return ((cswitch_count > 1) | (request_count > 0));
 }
 
 static void
-mm_core_halt(struct mm_core *core, mm_timeout_t timeout)
+mm_core_halt(struct mm_core *core)
 {
 	ENTER();
 
-	// Get the halt timeout.
-	if (timeout) {
-		// Get the closest timer expiration time.
-		mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
-		if (next_timer < core->time_manager.time + timeout) {
-			if (next_timer > core->time_manager.time)
-				timeout = next_timer - core->time_manager.time;
-			else
-				timeout = 0;
-		}
+	// Get the closest timer expiration time.
+	mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
+
+	// Calculate the timeout.
+	mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
+	if (next_timer < core->time_manager.time + timeout) {
+		if (next_timer > core->time_manager.time)
+			timeout = next_timer - core->time_manager.time;
+		else
+			timeout = 0;
 	}
 
 	mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
@@ -537,10 +526,10 @@ mm_core_dealer(mm_value_t arg)
 	struct mm_thread *thread = mm_thread_selfptr();
 
 	while (!mm_memory_load(core->stop)) {
-		bool rc = mm_core_deal(core, thread);
+		mm_core_deal(core, thread);
 
 		mm_core_disable_yield();
-		mm_core_halt(core, rc ? 0 : MM_DEALER_HALT_TIMEOUT);
+		mm_core_halt(core);
 		mm_core_enable_yield();
 	}
 
