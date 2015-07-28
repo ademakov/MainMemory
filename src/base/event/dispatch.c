@@ -37,7 +37,9 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 #if ENABLE_DEBUG
 	dispatch->last_control_thread = MM_THREAD_NONE;
 #endif
+#if ENABLE_DISPATCH_BUSYWAIT
 	dispatch->busywait = 0;
+#endif
 
 	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
@@ -187,7 +189,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 
 	// Wait for incoming events.
 	if (control_thread == MM_THREAD_NONE) {
-#if ENABLE_SMP
+#if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->busywait) {
 			// Presume that if there were incoming events
 			// moments ago then there is a chance to get
@@ -208,7 +210,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_event_receiver_listen(&dispatch->receiver, thread,
 					 &dispatch->backend, timeout);
 
-#if ENABLE_SMP
+#if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->receiver.got_events)
 			dispatch->busywait = 250;
 #endif

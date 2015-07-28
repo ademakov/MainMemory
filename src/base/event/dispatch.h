@@ -29,6 +29,8 @@
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
 
+#define ENABLE_DISPATCH_BUSYWAIT	0
+
 struct mm_dispatch
 {
 	/* A lock that protects the change events. */
@@ -40,8 +42,10 @@ struct mm_dispatch
 	mm_thread_t last_control_thread;
 #endif
 
+#if ENABLE_DISPATCH_BUSYWAIT
 	/* Counter for event busy waiting. */
 	uint16_t busywait;
+#endif
 
 	/* A common store for published change events. */
 	struct mm_event_batch changes;
