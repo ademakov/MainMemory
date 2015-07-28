@@ -209,6 +209,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
 		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
+		//mm_domain_notify(domain);
 	} else {
 		// Submit it to the thread request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
@@ -441,7 +442,7 @@ static mm_atomic_uint32_t mm_core_deal_count;
 #endif
 
 void
-mm_core_execute_requests(struct mm_core *core)
+mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 {
 	ENTER();
 	struct mm_request_data request;
@@ -454,12 +455,15 @@ mm_core_execute_requests(struct mm_core *core)
 	}
 
 #if ENABLE_SMP
-	int count = 0;
-	while (count < 4 && mm_domain_receive(mm_regular_domain, &request)) {
+	uint32_t count = 0;
+	while (count < domain_limit
+	       && mm_domain_receive(mm_regular_domain, &request)) {
 		mm_request_execute(mm_thread_getnumber(thread), &request);
 		core->request_count++;
 		count++;
 	}
+#else
+	(void) domain_limit;
 #endif
 
 	LEAVE();
@@ -470,7 +474,12 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 {
 	ENTER();
 
+	// Execute requests associated with the core.
+	mm_core_execute_requests(core, UINT32_MAX);
+
 	// Start current timer tasks.
+	mm_timer_update_time(&core->time_manager);
+	mm_timer_update_real_time(&core->time_manager);
 	mm_timer_tick(&core->time_manager);
 
 	// Run the pending tasks.
@@ -510,9 +519,6 @@ mm_core_halt(struct mm_core *core)
 	}
 
 	mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
-
-	mm_timer_update_time(&core->time_manager);
-	mm_timer_update_real_time(&core->time_manager);
 
 	LEAVE();
 }
