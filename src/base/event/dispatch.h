@@ -40,6 +40,9 @@ struct mm_dispatch
 	mm_thread_t last_control_thread;
 #endif
 
+	/* Counter for event busy waiting. */
+	uint16_t busywait;
+
 	/* A common store for published change events. */
 	struct mm_event_batch changes;
 

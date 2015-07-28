@@ -265,6 +265,7 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver,
 {
 	ENTER();
 
+	receiver->got_events = false;
 	receiver->control_thread = thread;
 	mm_bitset_clear_all(&receiver->targets);
 
@@ -302,6 +303,8 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 {
 	ENTER();
 	ASSERT(receiver->control_thread == mm_thread_self());
+
+	receiver->got_events = true;
 
 	mm_thread_t target = mm_memory_load(sink->target);
 	mm_memory_load_fence();

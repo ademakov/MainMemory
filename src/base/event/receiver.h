@@ -27,6 +27,9 @@
 
 struct mm_event_receiver
 {
+	/* The flag indicating that some events were received. */
+	bool got_events;
+
 	/* The thread that currently owns the receiver. */
 	mm_thread_t control_thread;
 

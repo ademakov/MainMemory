@@ -213,7 +213,8 @@ mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
 	// Publish the log before a possible sleep.
-	mm_log_relay();
+	if (timeout)
+		mm_log_relay();
 
 	// Poll the system for events.
 	int n = kevent(event_backend->event_fd,

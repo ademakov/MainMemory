@@ -94,7 +94,8 @@ mm_event_epoll_poll(struct mm_event_epoll *event_backend, mm_timeout_t timeout)
 	timeout /= 1000;
 
 	// Publish the log before a possible sleep.
-	mm_log_relay();
+	if (timeout)
+		mm_log_relay();
 
 	// Poll the system for events.
 	int n = epoll_wait(event_backend->event_fd,

@@ -37,6 +37,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 #if ENABLE_DEBUG
 	dispatch->last_control_thread = MM_THREAD_NONE;
 #endif
+	dispatch->busywait = 0;
 
 	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
@@ -186,14 +187,31 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 
 	// Wait for incoming events.
 	if (control_thread == MM_THREAD_NONE) {
-		// Check to see if there are any changes that need to be
-		// immediately acknowledged.
-		if (mm_listener_has_urgent_changes(listener))
+#if ENABLE_SMP
+		if (dispatch->busywait) {
+			// Presume that if there were incoming events
+			// moments ago then there is a chance to get
+			// some more immediately. Spin a little bit to
+			// avoid context switches.
+			dispatch->busywait--;
 			timeout = 0;
+		}
+		else
+#endif
+		if (mm_listener_has_urgent_changes(listener)) {
+			// There are changes that need to be immediately
+			// acknowledged.
+			timeout = 0;
+		}
 
 		// Wait for incoming events or timeout expiration.
 		mm_event_receiver_listen(&dispatch->receiver, thread,
 					 &dispatch->backend, timeout);
+
+#if ENABLE_SMP
+		if (dispatch->receiver.got_events)
+			dispatch->busywait = 250;
+#endif
 
 		// Give up the control thread role.
 		mm_memory_store_fence();
