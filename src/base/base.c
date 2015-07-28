@@ -76,7 +76,8 @@ mm_base_loop(struct mm_base_params *params)
 	mm_domain_attr_prepare(&attr);
 	mm_domain_attr_setname(&attr, name);
 	mm_domain_attr_setnumber(&attr, mm_ncpus);
-	mm_domain_attr_setnotify(&attr, params->thread_notify);
+	mm_domain_attr_setdomainnotify(&attr, params->domain_notify);
+	mm_domain_attr_setthreadnotify(&attr, params->thread_notify);
 	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
 	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
 	mm_domain_attr_setspace(&attr, true);

@@ -63,15 +63,23 @@ mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number)
 }
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify)
-{
-	attr->notify = notify;
-}
-
-void __attribute__((nonnull(1)))
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 {
 	attr->private_space = enable;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
+			       mm_domain_notify_t notify)
+{
+	attr->domain_notify = notify;
+}
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
+			       mm_thread_notify_t notify)
+{
+	attr->thread_notify = notify;
 }
 
 void __attribute__((nonnull(1)))
@@ -134,6 +142,11 @@ mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
  * Domain creation routines.
  **********************************************************************/
 
+static void
+mm_domain_notify_dummy(struct mm_domain *domain __mm_unused__)
+{
+}
+
 struct mm_domain * __attribute__((nonnull(2)))
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 {
@@ -150,6 +163,12 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 		if (domain->nthreads == 0)
 			mm_fatal(0, "invalid domain attributes.");
 	}
+
+	// Set domain notification routine.
+	if (attr != NULL && attr->domain_notify != NULL)
+		domain->notify = attr->domain_notify;
+	else
+		domain->notify = mm_domain_notify_dummy;
 
 	// Create domain request queue if required.
 	if (attr != NULL && attr->domain_request_queue) {
@@ -179,7 +198,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	uint32_t stack_size = 0;
 	uint32_t guard_size = 0;
 	if (attr != NULL) {
-		mm_thread_attr_setnotify(&thread_attr, attr->notify);
+		mm_thread_attr_setnotify(&thread_attr, attr->thread_notify);
 		mm_thread_attr_setspace(&thread_attr, attr->private_space);
 		mm_thread_attr_setrequestqueue(&thread_attr,
 					       attr->thread_request_queue);

@@ -41,6 +41,9 @@ struct mm_domain_thread_attr
 	uint32_t cpu_tag;
 };
 
+/* Domain wake-up notification routine. */
+typedef void (*mm_domain_notify_t)(struct mm_domain *domain);
+
 /* Domain creation attributes. */
 struct mm_domain_attr
 {
@@ -54,8 +57,11 @@ struct mm_domain_attr
 	uint32_t domain_request_queue;
 	uint32_t thread_request_queue;
 
-	/* Common notification routine for domain's threads. */
-	mm_thread_notify_t notify;
+	/* Notification routine for random domain's thread. */
+	mm_domain_notify_t domain_notify;
+
+	/* Notification routine for specific domain's threads. */
+	mm_thread_notify_t thread_notify;
 
 	/* Common stack parameters for domain's threads. */
 	uint32_t stack_size;
@@ -74,6 +80,9 @@ struct mm_domain
 	/* Domain threads. */
 	mm_thread_t nthreads;
 	struct mm_thread **threads;
+
+	/* Wake-up notification routine. */
+	mm_domain_notify_t notify;
 
 	/* Domain request queue. */
 	struct mm_ring_mpmc *request_queue;
@@ -106,10 +115,15 @@ void __attribute__((nonnull(1)))
 mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number);
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setnotify(struct mm_domain_attr *attr, mm_thread_notify_t notify);
+mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 
 void __attribute__((nonnull(1)))
-mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
+mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
+			       mm_domain_notify_t notify);
+
+void __attribute__((nonnull(1)))
+mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
+			       mm_thread_notify_t notify);
 
 void __attribute__((nonnull(1)))
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size);
@@ -162,6 +176,12 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
 /**********************************************************************
  * Domain control routines.
  **********************************************************************/
+
+static inline void __attribute__((nonnull(1)))
+mm_domain_notify(struct mm_domain *domain)
+{
+	(domain->notify)(domain);
+}
 
 void __attribute__((nonnull(1)))
 mm_domain_join(struct mm_domain *domain);

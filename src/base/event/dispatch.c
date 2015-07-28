@@ -231,3 +231,20 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 leave:
 	LEAVE();
 }
+
+void __attribute__((nonnull(1)))
+mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
+{
+	ENTER();
+
+	mm_thread_t n = dispatch->receiver.nlisteners;
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_listener *listener = mm_dispatch_listener(dispatch, i);
+		if (mm_memory_load(listener->state) == MM_LISTENER_WAITING) {
+			mm_listener_notify(listener, &dispatch->backend);
+			break;
+		}
+	}
+
+	LEAVE();
+}

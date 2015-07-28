@@ -76,6 +76,9 @@ mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 }
 
 void __attribute__((nonnull(1)))
+mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
+
+void __attribute__((nonnull(1)))
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout);
 
