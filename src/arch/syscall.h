@@ -24,7 +24,7 @@
 
 #if 0 && ARCH_X86
 # include "arch/x86/syscall.h"
-#elif 0 && ARCH_X86_64
+#elif ARCH_X86_64
 # include "arch/x86-64/syscall.h"
 #else
 # include "arch/generic/syscall.h"
