@@ -21,19 +21,19 @@
 #define ARCH_X86_64_SYSCALL_H
 
 static inline intptr_t
-mm_syscall_result(intptr_t result)
+mm_syscall_result(uintptr_t result)
 {
-	if (result < 0 && result > -4096) {
+	if (unlikely(result > (uintptr_t) -4096)) {
 		errno = -result;
 		return -1;
 	}
-	return result;
+	return (intptr_t) result;
 }
 
 static inline intptr_t
 mm_syscall_0(int n)
 {
-	intptr_t result;
+	uintptr_t result;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n)
@@ -44,7 +44,7 @@ mm_syscall_0(int n)
 static inline intptr_t
 mm_syscall_1(int n, uintptr_t a1)
 {
-	intptr_t result;
+	uintptr_t result;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1)
@@ -55,7 +55,7 @@ mm_syscall_1(int n, uintptr_t a1)
 static inline intptr_t
 mm_syscall_2(int n, uintptr_t a1, uintptr_t a2)
 {
-	intptr_t result;
+	uintptr_t result;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1), "S"(a2)
@@ -66,7 +66,7 @@ mm_syscall_2(int n, uintptr_t a1, uintptr_t a2)
 static inline intptr_t
 mm_syscall_3(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
-	intptr_t result;
+	uintptr_t result;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1), "S"(a2), "d"(a3)
@@ -77,7 +77,7 @@ mm_syscall_3(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 static inline intptr_t
 mm_syscall_4(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
-	intptr_t result;
+	uintptr_t result;
 	register uintptr_t r4 __asm__("r10") = a4;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
@@ -90,7 +90,7 @@ static inline intptr_t
 mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
 	     uintptr_t a5)
 {
-	intptr_t result;
+	uintptr_t result;
 	register uintptr_t r4 __asm__("r10") = a4;
 	register uintptr_t r5 __asm__("r8") = a5;
 	__asm__ __volatile__("syscall"
@@ -105,7 +105,7 @@ static inline intptr_t
 mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 	     uintptr_t a5, uintptr_t a6)
 {
-	intptr_t result;
+	uintptr_t result;
 	register uintptr_t r4 __asm__("r10") = a4;
 	register uintptr_t r5 __asm__("r8") = a5;
 	register uintptr_t r6 __asm__("r9") = a6;
