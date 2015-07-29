@@ -22,44 +22,44 @@
 
 #include <unistd.h>
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_0(int n)
 {
 	return syscall(n);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_1(int n, uintptr_t a1)
 {
 	return syscall(n, a1);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_2(int n, uintptr_t a1, uintptr_t a2)
 {
 	return syscall(n, a1, a2);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_3(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
 	return syscall(n, a1, a2, a3);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_4(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
 	return syscall(n, a1, a2, a3, a4);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
 	     uintptr_t a5)
 {
 	return syscall(n, a1, a2, a3, a4, a5);
 }
 
-static inline uintptr_t
+static inline intptr_t
 mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 	     uintptr_t a5, uintptr_t a6)
 {
