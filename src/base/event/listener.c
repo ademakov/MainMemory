@@ -29,7 +29,7 @@
 #if ENABLE_LINUX_FUTEX
 # include <unistd.h>
 # include <linux/futex.h>
-# include <sys/syscall.h>
+# include "arch/syscall.h"
 #elif ENABLE_MACH_SEMAPHORE
 # include <mach/mach_init.h>
 # include <mach/task.h>
@@ -99,7 +99,8 @@ mm_listener_signal(struct mm_listener *listener, uint32_t listen_stamp)
 
 #if ENABLE_LINUX_FUTEX
 	(void) listen_stamp;
-	syscall(SYS_futex, &listener->notify_stamp, FUTEX_WAKE_PRIVATE, 1);
+	mm_syscall_3(SYS_futex, &listener->notify_stamp,
+		     FUTEX_WAKE_PRIVATE, 1);
 #elif ENABLE_MACH_SEMAPHORE
 	(void) listen_stamp;
 	semaphore_signal(listener->semaphore);
@@ -128,8 +129,8 @@ mm_listener_timedwait(struct mm_listener *listener,
 	// Publish the log before a sleep.
 	mm_log_relay();
 
-	int rc = syscall(SYS_futex, &listener->notify_stamp,
-			 FUTEX_WAIT_PRIVATE, notify_stamp, &ts);
+	int rc = mm_syscall_4(SYS_futex, &listener->notify_stamp,
+			      FUTEX_WAIT_PRIVATE, notify_stamp, &ts);
 	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
 		mm_fatal(errno, "futex");
 #elif ENABLE_MACH_SEMAPHORE

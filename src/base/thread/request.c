@@ -19,8 +19,8 @@
 
 #include "base/thread/request.h"
 
+#include "arch/syscall.h"
 #include <sys/syscall.h>
-#include <unistd.h>
 
 /**********************************************************************
  * System call requests.
@@ -36,5 +36,5 @@ mm_request_syscall_handler(uintptr_t context __mm_unused__,
 	uintptr_t arg_3 = arguments[3];
 	uintptr_t arg_4 = arguments[4];
 
-	return syscall(number, arg_1, arg_2, arg_3, arg_4);
+	return mm_syscall_4(number, arg_1, arg_2, arg_3, arg_4);
 }
