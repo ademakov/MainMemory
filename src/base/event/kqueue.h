@@ -24,6 +24,7 @@
 
 #if HAVE_SYS_EVENT_H
 
+#include <sys/types.h>
 #include <sys/event.h>
 
 #define MM_EVENT_KQUEUE_NEVENTS	(512)

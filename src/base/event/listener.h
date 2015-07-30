@@ -36,7 +36,7 @@
 #elif ENABLE_MACH_SEMAPHORE
 # include <mach/semaphore.h>
 #else
-# include "base/thr/monitor.h"
+# include "base/thread/monitor.h"
 #endif
 
 /* Forward declarations. */

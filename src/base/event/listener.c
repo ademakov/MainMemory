@@ -34,7 +34,7 @@
 # include <mach/mach_init.h>
 # include <mach/task.h>
 #else
-# include "base/sys/clock.h"
+# include "base/clock.h"
 #endif
 
 void __attribute__((nonnull(1, 2)))
