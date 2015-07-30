@@ -81,7 +81,7 @@ mm_atomic_cas_type(void *, ptr)
 	static inline int						\
 	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
 	{								\
-		return !func(p, 1);					\
+		return func(p, 1) != 0;					\
 	}
 
 /* Define atomic fetch-and-set ops. */
