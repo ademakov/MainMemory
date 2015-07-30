@@ -58,7 +58,12 @@ AC_SEARCH_LIBS([pthread_create], [pthread],
 dnl Checks for header files.
 AC_CHECK_HEADERS([stdlib.h unistd.h ucontext.h])
 AC_CHECK_HEADERS([mach/semaphore.h mach/thread_policy.h])
-AC_CHECK_HEADERS([pthread.h pthread_np.h sched.h sys/cpuset.h])
+AC_CHECK_HEADERS([pthread.h pthread_np.h sched.h])
+AC_CHECK_HEADERS([sys/param.h sys/cpuset.h], [], [], [[
+#if HAVE_SYS_PARAM_H
+# include <sys/param.h>
+#endif
+]])
 AC_CHECK_HEADERS([sys/epoll.h sys/event.h sys/sysctl.h linux/futex.h])
 AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h]) 
 AC_CHECK_HEADERS([xmmintrin.h])
