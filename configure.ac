@@ -19,7 +19,7 @@ case "$host" in
 		arch=x86
 		AC_DEFINE([ARCH_X86], 1, [Build for x86 architecture.])
 		;;
-	x86_64-*-*)
+	x86_64-*-*|amd64-*-*)
 		arch=x86-64
 		AC_DEFINE([ARCH_X86_64], 1, [Build for x86-64 architecture.])
 		;;
