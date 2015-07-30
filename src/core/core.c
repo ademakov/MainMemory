@@ -208,13 +208,14 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	} else if (core == NULL) {
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
-		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
+		mm_domain_send_1(domain, mm_core_post_work_req,
+				(uintptr_t) work);
 		//mm_domain_notify(domain);
 	} else {
 		// Submit it to the thread request queue.
-		struct mm_domain *domain = mm_domain_selfptr();
-		struct mm_thread *thread = mm_domain_getthread(domain, core_id);
-		mm_thread_send_1(thread, mm_core_post_work_req, (uintptr_t) work);
+		struct mm_thread *thread = core->thread;
+		mm_thread_send_1(thread, mm_core_post_work_req,
+				(uintptr_t) work);
 		mm_thread_notify(thread);
 	}
 
@@ -279,9 +280,7 @@ mm_core_run_task(struct mm_task *task)
 		mm_task_run(task);
 	} else {
 		// Submit the task to the thread request queue.
-		struct mm_domain *domain = mm_domain_selfptr();
-		struct mm_thread *thread
-			= mm_domain_getthread(domain, mm_core_getid(task->core));
+		struct mm_thread *thread = task->core->thread;
 		mm_thread_send_1(thread, mm_core_run_task_req, (uintptr_t) task);
 		mm_thread_notify(thread);
 	}
@@ -446,19 +445,20 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 {
 	ENTER();
 	struct mm_request_data request;
-	struct mm_thread *thread = mm_domain_getthread(mm_regular_domain,
-						       mm_core_getid(core));
+
+	struct mm_thread *const thread = core->thread;
+	struct mm_domain *const domain = mm_thread_getdomain(thread);
+	const mm_thread_t number = mm_thread_getnumber(thread);
 
 	while (mm_thread_receive(thread, &request)) {
-		mm_request_execute(mm_thread_getnumber(thread), &request);
+		mm_request_execute(number, &request);
 		core->request_count++;
 	}
 
 #if ENABLE_SMP
 	uint32_t count = 0;
-	while (count < domain_limit
-	       && mm_domain_receive(mm_regular_domain, &request)) {
-		mm_request_execute(mm_thread_getnumber(thread), &request);
+	while (count < domain_limit && mm_domain_receive(domain, &request)) {
+		mm_request_execute(number, &request);
 		core->request_count++;
 		count++;
 	}
@@ -529,10 +529,9 @@ mm_core_dealer(mm_value_t arg)
 	ENTER();
 
 	struct mm_core *core = (struct mm_core *) arg;
-	struct mm_thread *thread = mm_thread_selfptr();
 
 	while (!mm_memory_load(core->stop)) {
-		mm_core_deal(core, thread);
+		mm_core_deal(core, core->thread);
 
 		mm_core_disable_yield();
 		mm_core_halt(core);
@@ -621,14 +620,16 @@ mm_core_boot_init(struct mm_core *core)
 {
 	struct mm_private_space *space = mm_private_space_get();
 	if (MM_CORE_IS_PRIMARY(core)) {
+		struct mm_domain *domain = mm_domain_selfptr();
+
 		// Call the start hooks on the primary core.
 		mm_timer_init(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
-		mm_cdata_summary(mm_regular_domain);
+		mm_cdata_summary(domain);
 
 		mm_dispatch_prepare(&mm_core_dispatch,
-				    mm_regular_domain->nthreads,
-				    mm_regular_domain->threads);
+				    domain->nthreads,
+				    domain->threads);
 
 		mm_thread_domain_barrier();
 	} else {
@@ -682,6 +683,7 @@ mm_core_boot(mm_value_t arg)
 	ENTER();
 
 	struct mm_core *core = &mm_core_set[arg];
+	core->thread = mm_thread_selfptr();
 
 	// Set the thread-specific data.
 	__mm_core_self = core;
@@ -692,7 +694,7 @@ mm_core_boot(mm_value_t arg)
 
 #if ENABLE_TRACE
 	mm_trace_context_prepare(&core->task->trace, "[%s][%d %s]",
-				 mm_thread_getname(mm_thread_selfptr()),
+				 mm_thread_getname(core->thread),
 				 mm_task_getid(core->task),
 				 mm_task_getname(core->task));
 #endif
@@ -748,6 +750,9 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->nworkers_max = nworkers_max;
 
 	core->master = NULL;
+	core->dealer = NULL;
+
+	core->thread = NULL;
 
 	core->stop = false;
 

@@ -92,6 +92,9 @@ struct mm_core
 	/* The bootstrap task. */
 	struct mm_task *boot;
 
+	/* The underlying thread. */
+	struct mm_thread *thread;
+
 	/*
 	 * The fields below engage in cross-core communication.
 	 */
