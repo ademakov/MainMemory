@@ -28,6 +28,10 @@
 
 #include <sched.h>
 
+#if HAVE_PTHREAD_NP_H
+# include <pthread_np.h>
+#endif
+
 #if HAVE_MACH_THREAD_POLICY_H
 # include <mach/mach_init.h>
 # include <mach/thread_act.h>
@@ -187,7 +191,11 @@ mm_thread_setstack_attr(pthread_attr_t *pthr_attr, struct mm_thread_attr *attr)
 static void
 mm_thread_setaffinity(uint32_t cpu_tag)
 {
-	cpu_set_t cpu_set;
+#if HAVE_SYS_CPUSET_H
+	cpuset_t cpu_set; // FreeBSD CPU set declaration.
+#else
+	cpu_set_t cpu_set; // Linux CPU set declaration.
+#endif
 	CPU_ZERO(&cpu_set);
 	CPU_SET(cpu_tag, &cpu_set);
 
