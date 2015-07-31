@@ -24,6 +24,7 @@
 #include "core/task.h"
 #include "core/timer.h"
 
+#include "base/stdcall.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
@@ -1301,7 +1302,7 @@ retry:
 	if (sock->async_read)
 		n = mm_async_read(sock->event.fd, buffer, nbytes);
 	else
-		n = read(sock->event.fd, buffer, nbytes);
+		n = mm_read(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_read_ready(sock);
@@ -1356,7 +1357,7 @@ retry:
 	if (sock->async_write)
 		n = mm_async_write(sock->event.fd, buffer, nbytes);
 	else
-		n = write(sock->event.fd, buffer, nbytes);
+		n = mm_write(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_write_ready(sock);
@@ -1413,7 +1414,7 @@ retry:
 	if (sock->async_read)
 		n = mm_async_readv(sock->event.fd, iov, iovcnt);
 	else
-		n = readv(sock->event.fd, iov, iovcnt);
+		n = mm_readv(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_read_ready(sock);
@@ -1470,7 +1471,7 @@ retry:
 	if (sock->async_write)
 		n = mm_async_writev(sock->event.fd, iov, iovcnt);
 	else
-		n = writev(sock->event.fd, iov, iovcnt);
+		n = mm_writev(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_write_ready(sock);
