@@ -85,6 +85,13 @@ if test "x$smp" = "xyes"; then
 	AC_DEFINE([ENABLE_SMP], 1, [Define to 1 to enable SMP support.])
 fi
 
+AC_ARG_ENABLE([inline-syscalls],
+	[AS_HELP_STRING([--enable-inline-syscalls], [enable inline syscalls (default=yes)])],
+	[inline_syscalls="$enableval"], [inline_syscalls=yes])
+if test "x$inline_syscalls" = "xyes"; then
+	AC_DEFINE([ENABLE_INLINE_SYSCALLS], 1, [Define to 1 to enable inline syscalls.])
+fi
+
 AC_ARG_ENABLE([lock-stats],
 	[AS_HELP_STRING([--enable-lock-stats], [enable lock statistics (default=no)])],
 	[lock_stats="$enableval"], [lock_stats=no])

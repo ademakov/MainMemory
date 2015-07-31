@@ -22,8 +22,6 @@
 
 #include "common.h"
 
-#define ENABLE_SYSCALL_WRAPPERS	1
-
 /*
  * This header provides wrappers for common system calls. Such wrappers
  * are normally defined in the <unistd.h> header and libc library. But
@@ -31,7 +29,7 @@
  * is often present in libc/libpthread versions of the wrappers.
  */
 
-#if ENABLE_SYSCALL_WRAPPERS
+#if ENABLE_INLINE_SYSCALLS
 
 #include "arch/syscall.h"
 #include <sys/syscall.h>
