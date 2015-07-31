@@ -28,7 +28,7 @@
 #include "base/thread/domain.h"
 #include "base/thread/request.h"
 
-#include <unistd.h>
+#include "arch/syscall.h"
 #include <sys/syscall.h>
 
 /* Asynchronous operation information. */
@@ -115,7 +115,8 @@ mm_async_read(int fd, void *buffer, size_t nbytes)
 
 	// Make the async call.
 	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor, SYS_read,
+	mm_domain_syscall_3(domain, &node.requestor,
+			    MM_SYSCALL_N(SYS_read),
 			    fd, (uintptr_t) buffer, nbytes);
 
 	// Wait for completion.
@@ -136,7 +137,8 @@ mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
 
 	// Make the async call.
 	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor, SYS_writev,
+	mm_domain_syscall_3(domain, &node.requestor,
+			    MM_SYSCALL_N(SYS_writev),
 			    fd, (uintptr_t) iov, iovcnt);
 
 	// Wait for completion.
@@ -178,7 +180,8 @@ mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
 
 	// Make the async call.
 	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor, SYS_writev,
+	mm_domain_syscall_3(domain, &node.requestor,
+			    MM_SYSCALL_N(SYS_writev),
 			    fd, (uintptr_t) iov, iovcnt);
 
 	// Wait for completion.

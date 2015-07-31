@@ -30,4 +30,8 @@
 # include "arch/generic/syscall.h"
 #endif
 
+#ifndef MM_SYSCALL_N
+# define MM_SYSCALL_N(n)	(n)
+#endif
+
 #endif /* ARCH_SYSCALL_H */

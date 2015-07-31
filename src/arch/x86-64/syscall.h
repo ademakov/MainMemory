@@ -20,6 +20,10 @@
 #ifndef ARCH_X86_64_SYSCALL_H
 #define ARCH_X86_64_SYSCALL_H
 
+#ifdef __APPLE__
+# define MM_SYSCALL_N(n)	(n | (2 << 24))
+#endif
+
 static inline intptr_t
 mm_syscall_result(uintptr_t result)
 {
