@@ -21,6 +21,7 @@
 
 #if HAVE_SYS_EVENT_H
 
+#include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/receiver.h"
@@ -29,12 +30,9 @@
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
-#include <unistd.h>
+# include <time.h>
 
 #if ENABLE_INLINE_SYSCALLS
-# include "arch/syscall.h"
-# include <sys/syscall.h>
-
 static inline int
 mm_kqueue(void)
 {
@@ -282,7 +280,7 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend)
 	ENTER();
 
 	// Close the kqueue file descriptor.
-	close(event_backend->event_fd);
+	mm_close(event_backend->event_fd);
 
 	LEAVE();
 }
