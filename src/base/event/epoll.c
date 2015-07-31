@@ -19,6 +19,9 @@
 
 #include "base/event/epoll.h"
 
+#if HAVE_SYS_EPOLL_H
+
+#include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/receiver.h"
@@ -27,9 +30,34 @@
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
-#include <unistd.h>
+#if ENABLE_INLINE_SYSCALLS
+static inline int
+mm_epoll_create(int n)
+{
+	return mm_syscall_1(SYS_epoll_create, n);
+}
 
-#if HAVE_SYS_EPOLL_H
+static inline int
+mm_epoll_ctl(int ep, int op, int fd, struct epoll_event *event)
+{
+	return mm_syscall_4(SYS_epoll_ctl, ep, op, fd, (uintptr_t) event);
+}
+
+static inline int
+mm_epoll_wait(int ep, struct epoll_event *events, int nevents, int timeout)
+{
+	return mm_syscall_4(SYS_epoll_wait, ep,
+			    (uintptr_t) events, nevents,
+			    timeout);
+}
+
+#else
+
+# define mm_epoll_create	epoll_create
+# define mm_epoll_ctl		epoll_ctl
+# define mm_epoll_wait		epoll_wait
+
+#endif
 
 static void
 mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
@@ -50,13 +78,15 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 		if (ev_fd->regular_output)
 			ee.events |= EPOLLOUT | EPOLLET;
 
-		rc = epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD, ev_fd->fd, &ee);
+		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD,
+				  ev_fd->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 		break;
 
 	case MM_EVENT_UNREGISTER:
-		rc = epoll_ctl(event_backend->event_fd, EPOLL_CTL_DEL, ev_fd->fd, &ee);
+		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_DEL,
+				  ev_fd->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
@@ -98,9 +128,9 @@ mm_event_epoll_poll(struct mm_event_epoll *event_backend, mm_timeout_t timeout)
 		mm_log_relay();
 
 	// Poll the system for events.
-	int n = epoll_wait(event_backend->event_fd,
-			   event_backend->events, MM_EVENT_EPOLL_NEVENTS,
-			   timeout);
+	int n = mm_epoll_wait(event_backend->event_fd,
+			      event_backend->events, MM_EVENT_EPOLL_NEVENTS,
+			      timeout);
 
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
@@ -134,7 +164,7 @@ mm_event_epoll_cleanup(struct mm_event_epoll *event_backend)
 	ENTER();
 
 	// Close the epoll file descriptor.
-	close(event_backend->event_fd);
+	mm_close(event_backend->event_fd);
 
 	LEAVE();
 }
