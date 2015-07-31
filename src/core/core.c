@@ -447,7 +447,6 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 	struct mm_request_data request;
 
 	struct mm_thread *const thread = core->thread;
-	struct mm_domain *const domain = mm_thread_getdomain(thread);
 	const mm_thread_t number = mm_thread_getnumber(thread);
 
 	while (mm_thread_receive(thread, &request)) {
@@ -456,6 +455,8 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 	}
 
 #if ENABLE_SMP
+	struct mm_domain *const domain = mm_thread_getdomain(thread);
+
 	uint32_t count = 0;
 	while (count < domain_limit && mm_domain_receive(domain, &request)) {
 		mm_request_execute(number, &request);
