@@ -408,7 +408,13 @@ mm_thread_yield(void)
 {
 	ENTER();
 
+#if HAVE_PTHREAD_YIELD
+	pthread_yield();
+#elif HAVE_PTHREAD_YIELD_NP
+	pthread_yield_np();
+#else
 	sched_yield();
+#endif
 
 	LEAVE();
 }
