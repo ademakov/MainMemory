@@ -25,8 +25,9 @@
 /*
  * This header provides wrappers for common system calls. Such wrappers
  * are normally defined in the <unistd.h> header and libc library. But
- * the wrappers defined here bypass thread cancellation mechanism that
- * is often present in libc/libpthread versions of the wrappers.
+ * the wrappers defined here might be a bit cheaper to execute as they
+ * bypass the thread cancellation mechanism often implemented by libc
+ * or libpthread versions of the wrappers.
  */
 
 #if ENABLE_INLINE_SYSCALLS
