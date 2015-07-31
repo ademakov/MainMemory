@@ -19,6 +19,8 @@
 
 #include "base/event/kqueue.h"
 
+#if HAVE_SYS_EVENT_H
+
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/receiver.h"
@@ -29,7 +31,31 @@
 
 #include <unistd.h>
 
-#if HAVE_SYS_EVENT_H
+#if ENABLE_INLINE_SYSCALLS
+# include "arch/syscall.h"
+# include <sys/syscall.h>
+
+static inline int
+mm_kqueue(void)
+{
+	return mm_syscall_0(MM_SYSCALL_N(SYS_kqueue));
+}
+
+static inline int
+mm_kevent(int kq, const struct kevent *changes, int nchanges,
+	  struct kevent *events, int nevents, const struct timespec *ts)
+{
+	return mm_syscall_6(MM_SYSCALL_N(SYS_kevent),
+			    kq, (uintptr_t) changes, nchanges,
+			    (uintptr_t) events, nevents, (uintptr_t) ts);
+}
+
+#else
+
+# define mm_kqueue	kqueue
+# define mm_kevent	kevent
+
+#endif
 
 static bool
 mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
@@ -217,10 +243,10 @@ mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout
 		mm_log_relay();
 
 	// Poll the system for events.
-	int n = kevent(event_backend->event_fd,
-		       event_backend->events, event_backend->nevents,
-		       event_backend->events, MM_EVENT_KQUEUE_NEVENTS,
-		       &ts);
+	int n = mm_kevent(event_backend->event_fd,
+			  event_backend->events, event_backend->nevents,
+			  event_backend->events, MM_EVENT_KQUEUE_NEVENTS,
+			  &ts);
 
 	DEBUG("kevent changed: %d, received: %d", event_backend->nevents, n);
 
@@ -243,7 +269,7 @@ mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend)
 	ENTER();
 
 	// Open a kqueue file descriptor.
-	event_backend->event_fd = kqueue();
+	event_backend->event_fd = mm_kqueue();
 	if (event_backend->event_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
 
