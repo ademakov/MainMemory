@@ -74,7 +74,7 @@ mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
 static inline void __attribute__((nonnull(1)))
 mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
-	ASSERT(thread < dispatch->nlisteners);
+	ASSERT(thread < dispatch->receiver.nlisteners);
 	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_listener_notify(listener, &dispatch->backend);
 }

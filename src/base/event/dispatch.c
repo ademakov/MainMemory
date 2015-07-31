@@ -29,7 +29,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 		    struct mm_thread *threads[])
 {
 	ENTER();
-	ASSERT(nlisteners > 0);
+	ASSERT(nthreads > 0);
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
@@ -97,7 +97,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(thread < dispatch->nlisteners);
+	ASSERT(thread < dispatch->receiver.nlisteners);
 	struct mm_event_receiver *receiver = &dispatch->receiver;
 	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
 
