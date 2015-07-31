@@ -18,6 +18,7 @@ libmmbase_a_SOURCES = \
 	list.h \
 	lock.c lock.h \
 	ring.c ring.h \
+	stdcall.h \
 	timeq.c timeq.h \
 	topology.c topology.h \
 	event/backend.c event/backend.h \
