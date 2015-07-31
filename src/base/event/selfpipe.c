@@ -22,6 +22,7 @@
 #include "arch/atomic.h"
 #include "arch/memory.h"
 
+#include "base/stdcall.h"
 #include "base/event/nonblock.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -107,8 +108,8 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	close(selfpipe->event_fd.fd);
-	close(selfpipe->write_fd);
+	mm_close(selfpipe->event_fd.fd);
+	mm_close(selfpipe->write_fd);
 
 	LEAVE();
 }
@@ -120,7 +121,7 @@ mm_selfpipe_write(struct mm_selfpipe *selfpipe)
 
 	mm_atomic_uint32_inc(&mm_selfpipe_write_count);
 
-	(void) write(selfpipe->write_fd, "", 1);
+	(void) mm_write(selfpipe->write_fd, "", 1);
 
 	LEAVE();
 }
@@ -134,7 +135,7 @@ mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 		selfpipe->read_ready = false;
 
 		char dummy[64];
-		while (read(selfpipe->event_fd.fd, dummy, sizeof dummy) == sizeof dummy) {
+		while (mm_read(selfpipe->event_fd.fd, dummy, sizeof dummy) == sizeof dummy) {
 			/* do nothing */
 		}
 	}
