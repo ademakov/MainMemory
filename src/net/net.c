@@ -212,7 +212,7 @@ mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 	TRACE("sock: %d", sock);
 
 	/* Close the socket. */
-	close(sock);
+	mm_close(sock);
 
 	/* Remove the Unix-domain socket file. */
 	mm_net_remove_unix_socket(addr);
@@ -437,7 +437,7 @@ retry:
 	struct mm_net_socket *sock = mm_net_create_socket(srv, fd);
 	if (sock == NULL) {
 		mm_error(0, "%s: failed to allocate socket data", srv->name);
-		close(fd);
+		mm_close(fd);
 		goto leave;
 	}
 
@@ -878,7 +878,7 @@ mm_net_destroy(mm_value_t arg)
 
 	// Close the socket.
 	// TODO: set linger off and/or close concurrently to avoid stalls.
-	close(sock->event.fd);
+	mm_close(sock->event.fd);
 	sock->event.fd = -1;
 
 	// Remove the socket from the server lists.
