@@ -21,15 +21,15 @@
 #define ARCH_X86_64_SYSCALL_H
 
 #ifdef __APPLE__
+
 # define MM_SYSCALL_N(n)	(n | (2 << 24))
-#endif
 
 static inline intptr_t
-mm_syscall_result(uintptr_t result)
+mm_syscall_result(uintptr_t result, uint8_t error)
 {
-	if (unlikely(result > (uintptr_t) -4096)) {
-		errno = -result;
-		return -1;
+	if (error) {
+		errno = result;
+		result = -1;
 	}
 	return (intptr_t) result;
 }
@@ -38,6 +38,127 @@ static inline intptr_t
 mm_syscall_0(int n)
 {
 	uintptr_t result;
+	uint8_t error;
+
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_1(int n, uintptr_t a1)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_2(int n, uintptr_t a1, uintptr_t a2)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1), "S"(a2)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_3(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_4(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	register uintptr_t r4 __asm__("r10") = a4;
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
+	     uintptr_t a5)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	register uintptr_t r4 __asm__("r10") = a4;
+	register uintptr_t r5 __asm__("r8") = a5;
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
+			       "r"(r5)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+static inline intptr_t
+mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
+	     uintptr_t a5, uintptr_t a6)
+{
+	uintptr_t result;
+	uint8_t error;
+
+	register uintptr_t r4 __asm__("r10") = a4;
+	register uintptr_t r5 __asm__("r8") = a5;
+	register uintptr_t r6 __asm__("r9") = a6;
+	__asm__ __volatile__("syscall\n\t"
+			     "setc %1"
+			     : "=a"(result), "=c"(error)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
+			       "r"(r5), "r"(r6)
+			     : "cc", "memory", "r11");
+	return mm_syscall_result(result, error);
+}
+
+#else /* !__APPLE__ */
+
+static inline intptr_t
+mm_syscall_result(uintptr_t result)
+{
+	if (unlikely(result > (uintptr_t) -4096)) {
+		errno = -result;
+		result = -1;
+	}
+	return (intptr_t) result;
+}
+
+static inline intptr_t
+mm_syscall_0(int n)
+{
+	uintptr_t result;
+
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n)
@@ -60,6 +181,7 @@ static inline intptr_t
 mm_syscall_2(int n, uintptr_t a1, uintptr_t a2)
 {
 	uintptr_t result;
+
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1), "S"(a2)
@@ -71,6 +193,7 @@ static inline intptr_t
 mm_syscall_3(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
 	uintptr_t result;
+
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1), "S"(a2), "d"(a3)
@@ -82,6 +205,7 @@ static inline intptr_t
 mm_syscall_4(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
 	uintptr_t result;
+
 	register uintptr_t r4 __asm__("r10") = a4;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
@@ -95,6 +219,7 @@ mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
 	     uintptr_t a5)
 {
 	uintptr_t result;
+
 	register uintptr_t r4 __asm__("r10") = a4;
 	register uintptr_t r5 __asm__("r8") = a5;
 	__asm__ __volatile__("syscall"
@@ -110,6 +235,7 @@ mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 	     uintptr_t a5, uintptr_t a6)
 {
 	uintptr_t result;
+
 	register uintptr_t r4 __asm__("r10") = a4;
 	register uintptr_t r5 __asm__("r8") = a5;
 	register uintptr_t r6 __asm__("r9") = a6;
@@ -120,5 +246,7 @@ mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 			     : "cc", "memory", "rcx", "r11");
 	return mm_syscall_result(result);
 }
+
+#endif /* !__APPLE__ */
 
 #endif /* ARCH_X86_64_SYSCALL_H */
