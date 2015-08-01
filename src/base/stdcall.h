@@ -21,6 +21,8 @@
 #define BASE_STDCALL_H
 
 #include "common.h"
+#include <sys/socket.h>
+#include <sys/uio.h>
 
 /*
  * This header provides wrappers for common system calls. Such wrappers
@@ -34,36 +36,42 @@
 
 #include "arch/syscall.h"
 #include <sys/syscall.h>
-#include <sys/uio.h>
 
 static inline ssize_t
 mm_read(int fd, void *buf, size_t cnt)
 {
-	return mm_syscall_3(MM_SYSCALL_N(SYS_read), fd, (intptr_t) buf, cnt);
+	return mm_syscall_3(MM_SYSCALL_N(SYS_read), fd, (uintptr_t) buf, cnt);
 }
 
 static inline ssize_t
 mm_write(int fd, const void *buf, size_t cnt)
 {
-	return mm_syscall_3(MM_SYSCALL_N(SYS_write), fd, (intptr_t) buf, cnt);
+	return mm_syscall_3(MM_SYSCALL_N(SYS_write), fd, (uintptr_t) buf, cnt);
 }
 
 static inline ssize_t
 mm_readv(int fd, const struct iovec *iov, int iovcnt)
 {
-	return mm_syscall_3(MM_SYSCALL_N(SYS_readv), fd, (intptr_t) iov, iovcnt);
+	return mm_syscall_3(MM_SYSCALL_N(SYS_readv), fd, (uintptr_t) iov, iovcnt);
 }
 
 static inline ssize_t
 mm_writev(int fd, const struct iovec *iov, int iovcnt)
 {
-	return mm_syscall_3(MM_SYSCALL_N(SYS_writev), fd, (intptr_t) iov, iovcnt);
+	return mm_syscall_3(MM_SYSCALL_N(SYS_writev), fd, (uintptr_t) iov, iovcnt);
 }
 
 static inline int
 mm_close(int fd)
 {
 	return mm_syscall_1(MM_SYSCALL_N(SYS_close), fd);
+}
+
+static inline int
+mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len)
+{
+	return mm_syscall_3(MM_SYSCALL_N(SYS_accept), sock, (uintptr_t) addr,
+			    (uintptr_t) addr_len);
 }
 
 #else
@@ -75,6 +83,7 @@ mm_close(int fd)
 #define mm_readv	readv
 #define mm_writev	writev
 #define mm_close	close
+#define mm_accept	accept
 
 #endif
 
