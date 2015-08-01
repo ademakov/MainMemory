@@ -412,7 +412,8 @@ mm_net_accept(struct mm_net_server *srv)
 retry:
 	// Try to accept a connection.
 	salen = sizeof sa;
-	fd = accept(srv->event.fd, (struct sockaddr *) &sa, &salen);
+	fd = mm_accept(srv->event.fd, (struct sockaddr *) &sa, &salen);
+	mm_brief("sock: %d", fd);
 	if (unlikely(fd < 0)) {
 		if (errno == EINTR)
 			goto retry;
