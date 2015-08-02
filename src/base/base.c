@@ -18,6 +18,7 @@
  */
 
 #include "base/base.h"
+#include "base/cksum.h"
 #include "base/clock.h"
 #include "base/topology.h"
 #include "base/log/debug.h"
@@ -45,6 +46,7 @@ mm_base_init(void)
 	// Initialize basic subsystems.
 	mm_memory_init();
 	mm_thread_init();
+	mm_cksum_init();
 	mm_clock_init();
 
 	LEAVE();
