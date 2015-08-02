@@ -256,7 +256,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 	// Remember the wait time.
 	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t deadline = core->time_manager.time + timeout;
+	mm_timeval_t deadline = mm_core_gettime(core) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
@@ -270,7 +270,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_task_testcancel();
 
 		// Check if timed out.
-		if (deadline <= core->time_manager.time) {
+		if (deadline <= mm_core_gettime(core)) {
 			DEBUG("future timed out");
 			break;
 		}
@@ -416,7 +416,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 	// Remember the wait time.
 	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t deadline = core->time_manager.time + timeout;
+	mm_timeval_t deadline = mm_core_gettime(core) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_future_start(future, MM_CORE_NONE);
@@ -428,7 +428,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_task_testcancel();
 
 		// Check if timed out.
-		if (deadline <= core->time_manager.time) {
+		if (deadline <= mm_core_gettime(core)) {
 			DEBUG("future timed out");
 			break;
 		}

@@ -63,8 +63,10 @@ struct mc_entry
 static inline uint32_t
 mc_entry_fix_exptime(uint32_t exptime)
 {
-	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30))
-		exptime += mm_core_selfptr()->time_manager.real_time / 1000000;
+	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30)) {
+		struct mm_core *core = mm_core_selfptr();
+		exptime += mm_core_getrealtime(core) / 1000000;
+	}
 	return exptime;
 }
 

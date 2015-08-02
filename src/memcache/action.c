@@ -30,20 +30,26 @@
  **********************************************************************/
 
 static bool
-mc_action_is_expired_entry(struct mc_tpart *part, struct mc_entry *entry, mm_timeval_t time)
+mc_action_is_expired_entry(struct mc_tpart *part, struct mc_entry *entry, uint32_t time)
 {
-	if (entry->exp_time && entry->exp_time <= time)
+	if (entry->exp_time && entry->exp_time <= time) {
+		TRACE("expired entry");
 		return true;
-	if (entry->stamp < part->flush_stamp)
+	}
+	if (entry->stamp < part->flush_stamp) {
+		TRACE("flushed entry");
 		return true;
+	}
 	return false;
 }
 
 static bool
-mc_action_is_eviction_victim(struct mc_tpart *part, struct mc_entry *entry, mm_timeval_t time)
+mc_action_is_eviction_victim(struct mc_tpart *part, struct mc_entry *entry, uint32_t time)
 {
-	if (entry->state == MC_ENTRY_USED_MIN)
+	if (entry->state == MC_ENTRY_USED_MIN) {
+		TRACE("rarely used entry");
 		return true;
+	}
 	return mc_action_is_expired_entry(part, entry, time);
 }
 
@@ -130,8 +136,11 @@ mc_action_drop_expired(struct mc_tpart *part,
 		       struct mm_stack *bucket,
 		       struct mm_stack *expired)
 {
-	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
 	mm_stack_prepare(expired);
+
+	struct mm_core *core = mm_core_selfptr();
+	mm_timeval_t real_time = mm_core_getrealtime(core);
+	uint32_t time = real_time / 1000000; // useconds -> seconds.
 
 	struct mm_slink *pred = &bucket->head;
 	while (!mm_stack_is_tail(pred)) {
@@ -151,9 +160,12 @@ mc_action_find_victims(struct mc_tpart *part,
 		       struct mm_stack *victims,
 		       uint32_t nrequired)
 {
-	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
 	uint32_t nvictims = 0;
 	mm_stack_prepare(victims);
+
+	struct mm_core *core = mm_core_selfptr();
+	mm_timeval_t real_time = mm_core_getrealtime(core);
+	uint32_t time = real_time / 1000000; // useconds -> seconds.
 
 	bool end = false;
 	while (nvictims < nrequired) {

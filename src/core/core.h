@@ -189,4 +189,16 @@ mm_core_self(void)
 	return mm_core_getid(mm_core_selfptr());
 }
 
+static inline mm_timeval_t
+mm_core_gettime(struct mm_core *core)
+{
+	return mm_timer_getclocktime(&core->time_manager);
+}
+
+static inline mm_timeval_t
+mm_core_getrealtime(struct mm_core *core)
+{
+	return mm_timer_getrealclocktime(&core->time_manager);
+}
+
 #endif /* CORE_CORE_H */

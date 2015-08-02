@@ -478,12 +478,7 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	// Execute requests associated with the core.
 	mm_core_execute_requests(core, UINT32_MAX);
 
-	// Start current timer tasks.
-	mm_timer_update_time(&core->time_manager);
-	mm_timer_update_real_time(&core->time_manager);
-	mm_timer_tick(&core->time_manager);
-
-	// Run the pending tasks.
+	// Run the queued tasks if any.
 	mm_task_yield();
 
 	// Cleanup the temporary data.
@@ -507,19 +502,37 @@ mm_core_halt(struct mm_core *core)
 {
 	ENTER();
 
-	// Get the closest timer expiration time.
-	mm_timeval_t next_timer = mm_timer_next(&core->time_manager);
+	// Get the closest expiring timer if any.
+	mm_timeval_t wake_time = mm_timer_next(&core->time_manager);
+	if (wake_time != MM_TIMEVAL_MAX) {
+		// Calculate the timeout.
+		mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
+		mm_timeval_t time = mm_core_gettime(core);
+		if (wake_time < (time + timeout)) {
+			if (wake_time > time)
+				timeout = wake_time - time;
+			else
+				timeout = 0;
+		}
 
-	// Calculate the timeout.
-	mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
-	if (next_timer < core->time_manager.time + timeout) {
-		if (next_timer > core->time_manager.time)
-			timeout = next_timer - core->time_manager.time;
-		else
-			timeout = 0;
+		// Halt the core waiting for incoming events.
+		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
+				   timeout);
+
+		// Indicate that clocks need to be updated.
+		mm_timer_resetclocks(&core->time_manager);
+
+		// Fire reached timers.
+		mm_timer_tick(&core->time_manager);
+
+	} else {
+		// Halt the core waiting for incoming events.
+		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
+				   MM_DEALER_HALT_TIMEOUT);
+
+		// Indicate that clocks need to be updated.
+		mm_timer_resetclocks(&core->time_manager);
 	}
-
-	mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
 
 	LEAVE();
 }
@@ -624,7 +637,7 @@ mm_core_boot_init(struct mm_core *core)
 		struct mm_domain *domain = mm_domain_selfptr();
 
 		// Call the start hooks on the primary core.
-		mm_timer_init(&core->time_manager, &space->xarena);
+		mm_timer_prepare(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_cdata_summary(domain);
 
@@ -638,7 +651,7 @@ mm_core_boot_init(struct mm_core *core)
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
 
-		mm_timer_init(&core->time_manager, &space->xarena);
+		mm_timer_prepare(&core->time_manager, &space->xarena);
 	}
 }
 
@@ -653,7 +666,7 @@ mm_core_boot_term(struct mm_core *core)
 		mm_dispatch_cleanup(&mm_core_dispatch);
 	}
 
-	mm_timer_term(&core->time_manager);
+	mm_timer_cleanup(&core->time_manager);
 
 	// TODO:
 	//mm_task_destroy(core->master);

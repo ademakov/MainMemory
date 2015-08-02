@@ -1,7 +1,7 @@
 /*
  * core/timer.c - MainMemory timers.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -84,7 +84,8 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 		}
 
 		if (timer->interval) {
-			entry->value = manager->time + timer->interval;
+			entry->value
+				= mm_timer_getclocktime(manager) + timer->interval;
 			mm_timeq_insert(manager->time_queue, entry);
 		}
 	}
@@ -92,14 +93,14 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 	LEAVE();
 }
 
-void
-mm_timer_init(struct mm_time_manager *manager, mm_arena_t arena)
+void __attribute__((nonnull(1)))
+mm_timer_prepare(struct mm_time_manager *manager, mm_arena_t arena)
 {
 	ENTER();
 
 	// Update the time.
-	mm_timer_update_time(manager);
-	mm_timer_update_real_time(manager);
+	mm_timer_updateclock(manager);
+	mm_timer_updaterealclock(manager);
 
 	// Create the time queue.
 	manager->time_queue = mm_timeq_create(arena);
@@ -111,8 +112,8 @@ mm_timer_init(struct mm_time_manager *manager, mm_arena_t arena)
 	LEAVE();
 }
 
-void
-mm_timer_term(struct mm_time_manager *manager)
+void __attribute__((nonnull(1)))
+mm_timer_cleanup(struct mm_time_manager *manager)
 {
 	ENTER();
 
@@ -122,23 +123,26 @@ mm_timer_term(struct mm_time_manager *manager)
 	LEAVE();
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_timer_tick(struct mm_time_manager *manager)
 {
 	ENTER();
 
+	// Execute the timers which time has come.
 	struct mm_timeq_entry *entry = mm_timeq_getmin(manager->time_queue);
-	while (entry != NULL && entry->value <= manager->time) {
+	while (entry != NULL && entry->value <= mm_timer_getclocktime(manager)) {
+		// Remove the timer from the queue.
 		mm_timeq_delete(manager->time_queue, entry);
+		// Execute the timer action.
 		mm_timer_fire(manager, entry);
-
+		// Get the next timer.
 		entry = mm_timeq_getmin(manager->time_queue);
 	}
 
 	LEAVE();
 }
 
-mm_timeval_t
+mm_timeval_t __attribute__((nonnull(1)))
 mm_timer_next(struct mm_time_manager *manager)
 {
 	ENTER();
@@ -222,12 +226,17 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 	if (value != 0) {
 		if (abstime) {
 			if (timer->clock == MM_CLOCK_MONOTONIC) {
-				timer->entry.value = value + manager->time;
+				timer->entry.value = value;
 			} else {
-				timer->entry.value = value - manager->real_time + manager->time;
+				mm_timeval_t time
+					= mm_timer_getclocktime(manager);
+				mm_timeval_t real_time
+					= mm_timer_getrealclocktime(manager);
+				timer->entry.value = value - real_time + time;
 			}
 		} else {
-			timer->entry.value = value + manager->time;
+			mm_timeval_t time = mm_timer_getclocktime(manager);
+			timer->entry.value = value + time;
 		}
 
 		mm_timeq_insert(manager->time_queue, &timer->entry);
@@ -249,7 +258,7 @@ mm_timer_block(mm_timeout_t timeout)
 
 	struct mm_core *core = mm_core_selfptr();
 	struct mm_time_manager *manager = &core->time_manager;
-	mm_timeval_t time = manager->time + timeout;
+	mm_timeval_t time = mm_timer_getclocktime(manager) + timeout;
 	DEBUG("time: %llu", time);
 
 	struct mm_timer_resume timer = { .manager = manager,

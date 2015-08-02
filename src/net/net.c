@@ -1201,8 +1201,8 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		mm_task_block();
 		sock->reader = NULL;
 		rc = 0;
-	} else if (core->time_manager.time < deadline) {
-		mm_timeout_t timeout = deadline - core->time_manager.time;
+	} else if (mm_core_gettime(core) < deadline) {
+		mm_timeout_t timeout = deadline - mm_core_gettime(core);
 		sock->reader = mm_task_selfptr();
 		mm_timer_block(timeout);
 		sock->reader = NULL;
@@ -1250,8 +1250,8 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		mm_task_block();
 		sock->writer = NULL;
 		rc = 0;
-	} else  if (core->time_manager.time < deadline) {
-		mm_timeout_t timeout = deadline - core->time_manager.time;
+	} else  if (mm_core_gettime(core) < deadline) {
+		mm_timeout_t timeout = deadline - mm_core_gettime(core);
 		sock->writer = mm_task_selfptr();
 		mm_timer_block(timeout);
 		sock->writer = NULL;
@@ -1284,7 +1284,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
 		struct mm_core *core = mm_core_selfptr();
-		deadline = core->time_manager.time + sock->read_timeout;
+		deadline = mm_core_gettime(core) + sock->read_timeout;
 	}
 
 retry:
@@ -1339,7 +1339,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
 		struct mm_core *core = mm_core_selfptr();
-		deadline = core->time_manager.time + sock->write_timeout;
+		deadline = mm_core_gettime(core) + sock->write_timeout;
 	}
 
 retry:
@@ -1396,7 +1396,7 @@ mm_net_readv(struct mm_net_socket *sock,
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
 		struct mm_core *core = mm_core_selfptr();
-		deadline = core->time_manager.time + sock->read_timeout;
+		deadline = mm_core_gettime(core) + sock->read_timeout;
 	}
 
 retry:
@@ -1453,7 +1453,7 @@ mm_net_writev(struct mm_net_socket *sock,
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
 		struct mm_core *core = mm_core_selfptr();
-		deadline = core->time_manager.time + sock->write_timeout;
+		deadline = mm_core_gettime(core) + sock->write_timeout;
 	}
 
 retry:

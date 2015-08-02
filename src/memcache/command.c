@@ -34,7 +34,7 @@
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
 
-static mm_timeval_t mc_exptime;
+static uint32_t mc_exptime;
 
 static struct mm_pool mc_command_pool;
 
@@ -159,8 +159,9 @@ static void
 mc_command_flush(uint32_t exptime)
 {
 	// TODO: really use the exptime.
-	mm_timeval_t time = mm_core_selfptr()->time_manager.time;
-	mc_exptime = time + exptime * 1000000ull;
+	struct mm_core *core = mm_core_selfptr();
+	mm_timeval_t real_time = mm_core_getrealtime(core);
+	mc_exptime = real_time / 1000000 + exptime;
 
 	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
 #if ENABLE_MEMCACHE_DELEGATE
