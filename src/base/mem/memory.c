@@ -85,7 +85,7 @@ mm_memory_init(void)
 void
 mm_memory_term(void)
 {
-	// Flush logs before memory space with possible log chunks is unmapped.
+	// Flush logs before a memory space with possible log chunks is unmapped.
 	mm_log_relay();
 	mm_log_flush();
 

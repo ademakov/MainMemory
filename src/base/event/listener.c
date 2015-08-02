@@ -242,6 +242,7 @@ mm_listener_poll(struct mm_listener *listener,
 		if (listen_stamp == notify_stamp)
 			timeout = 0;
 
+		// Check for incoming events.
 		mm_event_backend_listen(backend, &listener->changes,
 					receiver, timeout);
 
