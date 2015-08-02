@@ -23,6 +23,7 @@
 #include "common.h"
 #include "memcache/table.h"
 #include "base/hash.h"
+#include "base/cksum.h"
 #include "core/core.h"
 
 #if ENABLE_MEMCACHE_COMBINER

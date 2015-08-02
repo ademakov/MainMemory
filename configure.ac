@@ -3,6 +3,7 @@ dnl Process this file with autoconf to produce a configure script.
 dnl Initialize autoconf.
 AC_PREREQ(2.68)
 AC_INIT([MainMemory], [0.0], [ademakov@gmail.com])
+AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([src/core/runq.c])
 AC_CONFIG_HEADERS([src/config.h])
@@ -69,6 +70,7 @@ AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h])
 AC_CHECK_HEADERS([xmmintrin.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
+AX_CHECK_COMPILE_FLAG([-msse4.2], AX_APPEND_FLAG([-msse4.2], [CFLAGS]), [], [], [])
 
 dnl Checks for library functions.
 AC_CHECK_FUNCS(pthread_setaffinity_np)

@@ -33,8 +33,13 @@
 /* Enable entry chunk allocation in private space. */
 #define ENABLE_MEMCACHE_PRIVATE_CHUNKS	0
 
+/* Build with -msse4.2 to enable hash based on the SSE4.2 crc32 instruction. */
 #ifndef mc_hash
-# define mc_hash			mm_hash_murmur3_32
+# if __SSE4_2__
+#  define mc_hash			mm_cksum
+# else
+#  define mc_hash			mm_hash_murmur3_32
+# endif
 #endif
 
 /* Maximum total data size by default. */
