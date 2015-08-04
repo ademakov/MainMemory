@@ -19,6 +19,8 @@
 
 #include "base/event/backend.h"
 
+#include "base/event/batch.h"
+
 void __attribute__((nonnull(1)))
 mm_event_backend_prepare(struct mm_event_backend *backend)
 {
@@ -32,6 +34,14 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 
 	// Open the event self-pipe.
 	mm_selfpipe_prepare(&backend->selfpipe);
+
+	// Register the self-pipe.
+	struct mm_event_batch changes;
+	mm_event_batch_prepare(&changes, 1);
+	mm_event_batch_add(&changes, MM_EVENT_REGISTER,
+			   &backend->selfpipe.event_fd);
+	mm_event_backend_listen(backend, &changes, NULL, 0);
+	mm_event_batch_cleanup(&changes);
 }
 
 void __attribute__((nonnull(1)))
