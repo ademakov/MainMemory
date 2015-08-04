@@ -56,7 +56,9 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 	mm_event_backend_listen(backend, &changes, NULL, 0);
 	mm_event_batch_cleanup(&changes);
 
+#if MM_EVENT_NATIVE_NOTIFY
 leave:
+#endif
 	LEAVE();
 }
 
