@@ -24,11 +24,39 @@
 #include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
+#include "base/event/nonblock.h"
 #include "base/event/receiver.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
+
+#if HAVE_SYS_EVENTFD_H
+# include <sys/eventfd.h>
+#endif
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+/* Event poll notification handler ID. */
+static mm_event_hid_t mm_event_epoll_notify_handler;
+
+static void
+mm_event_epoll_handle_notify(mm_event_t event __mm_unused__, void *data)
+{
+	ENTER();
+
+	struct mm_event_epoll *event_backend
+		= containerof(data, struct mm_event_epoll, notify_fd);
+
+	uint64_t value;
+	int n = mm_read(event_backend->notify_fd.fd, &value, sizeof value);
+	if (n != sizeof value)
+		mm_warning(errno, "eventfd read");
+
+	LEAVE();
+}
+
+#endif
 
 #if ENABLE_INLINE_SYSCALLS
 
@@ -52,13 +80,34 @@ mm_epoll_wait(int ep, struct epoll_event *events, int nevents, int timeout)
 			    timeout);
 }
 
+static inline int
+mm_eventfd(unsigned int value, int flags)
+{
+	return mm_syscall_2(SYS_eventfd, value, flags);
+}
+
 #else
 
 # define mm_epoll_create	epoll_create
 # define mm_epoll_ctl		epoll_ctl
 # define mm_epoll_wait		epoll_wait
+# define mm_eventfd		eventfd
 
 #endif
+
+void
+mm_event_epoll_init(void)
+{
+	ENTER();
+
+#if MM_EVENT_NATIVE_NOTIFY
+	// Register the notify event handler.
+	mm_event_epoll_notify_handler
+		= mm_event_register_handler(mm_event_epoll_handle_notify);
+#endif
+
+	LEAVE();
+}
 
 static void
 mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
@@ -153,7 +202,10 @@ mm_event_epoll_prepare(struct mm_event_epoll *event_backend)
 	// Open a epoll file descriptor.
 	event_backend->event_fd = epoll_create(511);
 	if (event_backend->event_fd < 0)
-		mm_fatal(errno, "Failed to create epoll fd");
+		mm_fatal(errno, "failed to create epoll fd");
+
+	// Mark the evenefd file descriptor as unused.
+	event_backend->notify_fd.fd = -1;
 
 	LEAVE();
 }
@@ -162,6 +214,9 @@ void __attribute__((nonnull(1)))
 mm_event_epoll_cleanup(struct mm_event_epoll *event_backend)
 {
 	ENTER();
+
+	if (event_backend->notify_fd.fd >= 0)
+		mm_close(event_backend->notify_fd.fd);
 
 	// Close the epoll file descriptor.
 	mm_close(event_backend->event_fd);
@@ -193,5 +248,58 @@ mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 
 	LEAVE();
 }
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool __attribute__((nonnull(1)))
+mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend)
+{
+	ENTER();
+	bool rc = true;
+
+	// Create a file descriptor for notifications.
+	int fd = mm_eventfd(0, 0);
+	if (fd < 0) {
+		mm_warning(errno, "eventfd");
+		rc = false;
+		goto leave;
+	}
+
+	// Set it up for non-blocking I/O.
+	mm_set_nonblocking(fd);
+
+	// Initialize the corrponding event sink.
+	mm_event_prepare_fd(&event_backend->notify_fd, fd,
+			    mm_event_epoll_notify_handler,
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED);
+
+	// Register the event sink.
+	struct epoll_event ee;
+	ee.events = EPOLLIN | EPOLLET;
+	ee.data.ptr = &event_backend->notify_fd;
+	int er = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD,
+			      event_backend->notify_fd.fd, &ee);
+	if (unlikely(er < 0))
+		mm_fatal(errno, "epoll_ctl");
+
+leave:
+	LEAVE();
+	return rc;
+}
+
+void __attribute__((nonnull(1)))
+mm_event_epoll_notify(struct mm_event_epoll *event_backend)
+{
+	ENTER();
+
+	uint64_t value = 1;
+	int n = mm_write(event_backend->notify_fd.fd, &value, sizeof value);
+	if (unlikely(n != sizeof value))
+		mm_fatal(errno, "eventfd write");
+
+	LEAVE();
+}
+
+#endif
 
 #endif /* HAVE_SYS_EPOLL_H */

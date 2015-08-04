@@ -24,9 +24,15 @@
 
 #if HAVE_SYS_EPOLL_H
 
+#include <base/event/event.h>
+
 #include <sys/epoll.h>
 
-#define MM_EVENT_EPOLL_NEVENTS	(512)
+#if HAVE_SYS_EVENTFD_H
+# define MM_EVENT_NATIVE_NOTIFY		1
+#endif
+
+#define MM_EVENT_EPOLL_NEVENTS		(512)
 
 /* Forward declarations. */
 struct mm_event_batch;
@@ -38,9 +44,17 @@ struct mm_event_epoll
 	/* The epoll file descriptor. */
 	int event_fd;
 
+#if MM_EVENT_NATIVE_NOTIFY
+	/* The eventfd descriptor used for notification. */
+	struct mm_event_fd notify_fd;
+#endif
+
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
 };
+
+void
+mm_event_epoll_init(void);
 
 void __attribute__((nonnull(1)))
 mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
@@ -53,6 +67,16 @@ mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		      struct mm_event_batch *change_events,
 		      struct mm_event_receiver *return_events,
 		      mm_timeout_t timeout);
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool __attribute__((nonnull(1)))
+mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend);
+
+void __attribute__((nonnull(1)))
+mm_event_epoll_notify(struct mm_event_epoll *event_backend);
+
+#endif
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */

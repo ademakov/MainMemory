@@ -30,15 +30,16 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 	// Open the epoll/kqueue file descriptor.
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_prepare(&backend->backend);
-#endif
-#if HAVE_SYS_EVENT_H
+#elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_prepare(&backend->backend);
 #endif
 
 	// Try to use native system notify mechanism.
 #if MM_EVENT_NATIVE_NOTIFY
-# if HAVE_SYS_EVENT_H
 	backend->native_notify
+# if HAVE_SYS_EPOLL_H
+		= mm_event_epoll_enable_notify(&backend->backend);
+# elif HAVE_SYS_EVENT_H
 		= mm_event_kqueue_enable_notify(&backend->backend);
 # endif
 	if (backend->native_notify)
@@ -78,8 +79,7 @@ mm_event_backend_cleanup(struct mm_event_backend *backend)
 	// Close the epoll/kqueue file descriptor.
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_cleanup(&backend->backend);
-#endif
-#if HAVE_SYS_EVENT_H
+#elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_cleanup(&backend->backend);
 #endif
 

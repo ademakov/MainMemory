@@ -30,8 +30,7 @@ struct mm_event_backend
 	/* Events system-specific backend. */
 #if HAVE_SYS_EPOLL_H
 	struct mm_event_epoll backend;
-#endif
-#if HAVE_SYS_EVENT_H
+#elif HAVE_SYS_EVENT_H
 	struct mm_event_kqueue backend;
 #endif
 
@@ -59,8 +58,7 @@ mm_event_backend_listen(struct mm_event_backend *backend,
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_listen(&backend->backend, changes, receiver, timeout);
-#endif
-#if HAVE_SYS_EVENT_H
+#elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_listen(&backend->backend, changes, receiver, timeout);
 #endif
 }
@@ -70,9 +68,11 @@ mm_event_backend_notify(struct mm_event_backend *backend)
 {
 #if MM_EVENT_NATIVE_NOTIFY
 	if (backend->native_notify) {
-#if HAVE_SYS_EVENT_H
+# if HAVE_SYS_EPOLL_H
+		mm_event_epoll_notify(&backend->backend);
+# elif HAVE_SYS_EVENT_H
 		mm_event_kqueue_notify(&backend->backend);
-#endif
+# endif
 		return;
 	}
 #endif

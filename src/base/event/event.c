@@ -19,6 +19,7 @@
 
 #include "base/event/event.h"
 
+#include "base/event/epoll.h"
 #include "base/event/selfpipe.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
@@ -203,6 +204,10 @@ mm_event_init(void)
 	// Initialize generic data.
 	mm_event_init_handlers();
 	mm_selfpipe_init();
+
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_init();
+#endif
 
 	LEAVE();
 }
