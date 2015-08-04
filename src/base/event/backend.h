@@ -45,7 +45,7 @@ mm_event_backend_prepare(struct mm_event_backend *backend);
 void __attribute__((nonnull(1)))
 mm_event_backend_cleanup(struct mm_event_backend *backend);
 
-static inline void __attribute__((nonnull(1, 2, 3)))
+static inline void __attribute__((nonnull(1, 2)))
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_batch *changes,
 			struct mm_event_receiver *receiver,

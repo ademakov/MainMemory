@@ -38,9 +38,6 @@ struct mm_event_epoll
 	/* The epoll file descriptor. */
 	int event_fd;
 
-	/* The epoll list size. */
-	int nevents;
-
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
 };
@@ -51,7 +48,7 @@ mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
 void __attribute__((nonnull(1)))
 mm_event_epoll_cleanup(struct mm_event_epoll *event_backend);
 
-void __attribute__((nonnull(1, 2, 3)))
+void __attribute__((nonnull(1, 2)))
 mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		      struct mm_event_batch *change_events,
 		      struct mm_event_receiver *return_events,

@@ -163,9 +163,9 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 
 static void
 mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
-				    struct mm_event_receiver *return_events)
+				    struct mm_event_receiver *return_events,
+				    int nevents)
 {
-	int nevents = event_backend->nevents;
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &event_backend->events[i];
 
@@ -213,19 +213,27 @@ mm_event_kqueue_get_unregister_events(struct mm_event_receiver *return_events,
 }
 
 static void
-mm_event_kqueue_get_events(struct mm_event_receiver *return_events,
-			   struct mm_event_kqueue *event_backend,
-			   struct mm_event_batch *change_events,
-			   unsigned int first, unsigned int last)
+mm_event_kqueue_change(struct mm_event_kqueue *event_backend)
 {
-	// Store incoming events.
-	mm_event_kqueue_get_incoming_events(event_backend, return_events);
+	ENTER();
 
-	// Store unregister events.
-	mm_event_kqueue_get_unregister_events(return_events, change_events, first, last);
+	// Submit change events.
+	int n = mm_kevent(event_backend->event_fd,
+			  event_backend->events, event_backend->nevents,
+			  NULL, 0, NULL);
+	DEBUG("kevent changed: %d, received: %d", event_backend->nevents, n);
+	if (unlikely(n < 0)) {
+		if (errno == EINTR)
+			mm_warning(errno, "kevent");
+		else
+			mm_error(errno, "kevent");
+	}
+	event_backend->nevents = 0;
+
+	LEAVE();
 }
 
-static void
+static int
 mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout)
 {
 	ENTER();
@@ -245,20 +253,18 @@ mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout
 			  event_backend->events, event_backend->nevents,
 			  event_backend->events, MM_EVENT_KQUEUE_NEVENTS,
 			  &ts);
-
 	DEBUG("kevent changed: %d, received: %d", event_backend->nevents, n);
-
-	if (n < 0) {
+	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
 		else
 			mm_error(errno, "kevent");
-		event_backend->nevents = 0;
-	} else {
-		event_backend->nevents = n;
+		n = 0;
 	}
+	event_backend->nevents = 0;
 
 	LEAVE();
+	return n;
 }
 
 void __attribute__((nonnull(1)))
@@ -270,6 +276,8 @@ mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend)
 	event_backend->event_fd = mm_kqueue();
 	if (event_backend->event_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
+
+	event_backend->nevents = 0;
 
 	LEAVE();
 }
@@ -285,7 +293,7 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2, 3)))
+void __attribute__((nonnull(1, 2)))
 mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		       struct mm_event_batch *change_events,
 		       struct mm_event_receiver *return_events,
@@ -294,7 +302,6 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 	ENTER();
 
 	// Make event changes.
-	event_backend->nevents = 0;
 	unsigned int first = 0, next = 0;
 	while (next < change_events->nevents) {
 		struct mm_event *event = &change_events->events[next];
@@ -303,26 +310,36 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 			next++;
 		} else {
 			// Flush event changes.
-			mm_event_kqueue_poll(event_backend, 0);
+			mm_event_kqueue_change(event_backend);
 
-			// Collect returned events.
-			mm_event_kqueue_get_events(return_events, event_backend,
-						   change_events, first, next);
+			// Store unregister events.
+			mm_event_kqueue_get_unregister_events(return_events,
+							      change_events,
+							      first, next);
 
-			// Store incoming events.
 			// Proceed with more change events if any.
-			event_backend->nevents = 0;
 			first = next;
 			continue;
 		}
 	}
 
-	// Poll for incoming events.
-	mm_event_kqueue_poll(event_backend, timeout);
+	if (return_events != NULL) {
+		// Poll for incoming events.
+		int n = mm_event_kqueue_poll(event_backend, timeout);
 
-	// Collect returned events.
-	mm_event_kqueue_get_events(return_events, event_backend,
-				   change_events, first, change_events->nevents);
+		// Store incoming events.
+		mm_event_kqueue_get_incoming_events(event_backend,
+						    return_events, n);
+
+		// Store unregister events.
+		mm_event_kqueue_get_unregister_events(return_events,
+						      change_events,
+						      first,
+						      change_events->nevents);
+	} else {
+		// Flush event changes.
+		mm_event_kqueue_change(event_backend);
+	}
 
 	LEAVE();
 }

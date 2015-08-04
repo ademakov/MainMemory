@@ -54,11 +54,9 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	mm_event_batch_add(&dispatch->changes,
 			   MM_EVENT_REGISTER,
 			   &dispatch->backend.selfpipe.event_fd);
-	mm_event_receiver_start(&dispatch->receiver);
 	mm_event_backend_listen(&dispatch->backend,
 				&dispatch->changes,
-				&dispatch->receiver,
-				0);
+				NULL, 0);
 	mm_event_batch_clear(&dispatch->changes);
 
 	LEAVE();

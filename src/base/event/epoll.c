@@ -99,10 +99,11 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 }
 
 static void
-mm_event_epoll_get_events(struct mm_event_receiver *return_events,
-			  struct mm_event_epoll *event_backend)
+mm_event_epoll_get_events(struct mm_event_epoll *event_backend,
+			  struct mm_event_receiver *return_events,
+			  int nevents)
 {
-	for (int i = 0; i < event_backend->nevents; i++) {
+	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &event_backend->events[i];
 		struct mm_event_fd *ev_fd = event->data.ptr;
 
@@ -115,7 +116,7 @@ mm_event_epoll_get_events(struct mm_event_receiver *return_events,
 	}
 }
 
-static void
+static int
 mm_event_epoll_poll(struct mm_event_epoll *event_backend, mm_timeout_t timeout)
 {
 	ENTER();
@@ -131,18 +132,16 @@ mm_event_epoll_poll(struct mm_event_epoll *event_backend, mm_timeout_t timeout)
 	int n = mm_epoll_wait(event_backend->event_fd,
 			      event_backend->events, MM_EVENT_EPOLL_NEVENTS,
 			      timeout);
-
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "epoll_wait");
 		else
 			mm_error(errno, "epoll_wait");
-		event_backend->nevents = 0;
-	} else {
-		event_backend->nevents = n;
+		n = 0;
 	}
 
 	LEAVE();
+	return n;
 }
 
 void __attribute__((nonnull(1)))
@@ -169,7 +168,7 @@ mm_event_epoll_cleanup(struct mm_event_epoll *event_backend)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2, 3)))
+void __attribute__((nonnull(1, 2)))
 mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		      struct mm_event_batch *change_events,
 		      struct mm_event_receiver *return_events,
@@ -183,11 +182,13 @@ mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		mm_event_epoll_add_event(event_backend, change_event, return_events);
 	}
 
-	// Poll for incoming events.
-	mm_event_epoll_poll(event_backend, timeout);
+	if (return_events != NULL) {
+		// Poll for incoming events.
+		int n = mm_event_epoll_poll(event_backend, timeout);
 
-	// Store incoming events.
-	mm_event_epoll_get_events(return_events, event_backend);
+		// Store incoming events.
+		mm_event_epoll_get_events(event_backend, return_events, n);
+	}
 
 	LEAVE();
 }
