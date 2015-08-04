@@ -65,7 +65,8 @@ AC_CHECK_HEADERS([sys/param.h sys/cpuset.h], [], [], [[
 # include <sys/param.h>
 #endif
 ]])
-AC_CHECK_HEADERS([sys/epoll.h sys/event.h sys/sysctl.h linux/futex.h])
+AC_CHECK_HEADERS([sys/epoll.h sys/eventfd.h sys/event.h])
+AC_CHECK_HEADERS([sys/sysctl.h linux/futex.h])
 AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h]) 
 AC_CHECK_HEADERS([xmmintrin.h])
 
