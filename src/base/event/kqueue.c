@@ -35,6 +35,7 @@
 #define MM_EVENT_KQUEUE_NOTIFY_ID	123
 
 #if ENABLE_INLINE_SYSCALLS
+
 static inline int
 mm_kqueue(void)
 {

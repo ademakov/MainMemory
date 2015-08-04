@@ -31,6 +31,7 @@
 #include "base/log/trace.h"
 
 #if ENABLE_INLINE_SYSCALLS
+
 static inline int
 mm_epoll_create(int n)
 {
