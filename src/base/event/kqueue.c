@@ -32,6 +32,8 @@
 
 # include <time.h>
 
+#define MM_EVENT_KQUEUE_NOTIFY_ID	123
+
 #if ENABLE_INLINE_SYSCALLS
 static inline int
 mm_kqueue(void)
@@ -190,6 +192,9 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);
 			else
 				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT, ev_fd);
+
+		} else if (event->filter == EVFILT_USER) {
+			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
 		}
 	}
 }
@@ -343,5 +348,51 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 
 	LEAVE();
 }
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool __attribute__((nonnull(1)))
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *event_backend)
+{
+	ENTER();
+	bool rc = true;
+
+	static const struct kevent event = {
+		.filter = EVFILT_USER,
+		.ident = MM_EVENT_KQUEUE_NOTIFY_ID,
+		.flags = EV_ADD | EV_CLEAR,
+	};
+
+	int n = mm_kevent(event_backend->event_fd, &event, 1, NULL, 0, NULL);
+	DEBUG("kevent notify: %d", n);
+	if (unlikely(n < 0)) {
+		mm_warning(errno, "kevent");
+		rc = false;
+	}
+
+	LEAVE();
+	return rc;
+}
+
+void __attribute__((nonnull(1)))
+mm_event_kqueue_notify(struct mm_event_kqueue *event_backend)
+{
+	ENTER();
+
+	static const struct kevent event = {
+		.filter = EVFILT_USER,
+		.ident = MM_EVENT_KQUEUE_NOTIFY_ID,
+		.fflags = NOTE_TRIGGER,
+	};
+
+	int n = mm_kevent(event_backend->event_fd, &event, 1, NULL, 0, NULL);
+	DEBUG("kevent notify: %d", n);
+	if (unlikely(n < 0))
+		mm_error(errno, "kevent");
+
+	LEAVE();
+}
+
+#endif
 
 #endif /* HAVE_SYS_EVENT_H */

@@ -27,7 +27,11 @@
 #include <sys/types.h>
 #include <sys/event.h>
 
-#define MM_EVENT_KQUEUE_NEVENTS	(512)
+#ifdef EVFILT_USER
+# define MM_EVENT_NATIVE_NOTIFY		1
+#endif
+
+#define MM_EVENT_KQUEUE_NEVENTS		(512)
 
 /* Forward declarations. */
 struct mm_event_batch;
@@ -57,6 +61,16 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		       struct mm_event_batch *change_events,
 		       struct mm_event_receiver *return_events,
 		       mm_timeout_t timeout);
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool __attribute__((nonnull(1)))
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *event_backend);
+
+void __attribute__((nonnull(1)))
+mm_event_kqueue_notify(struct mm_event_kqueue *event_backend);
+
+#endif
 
 #endif /* HAVE_SYS_EVENT_H */
 #endif /* BASE_EVENT_KQUEUE_H */

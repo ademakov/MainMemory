@@ -27,9 +27,6 @@
 
 struct mm_event_backend
 {
-	/* Event loop self-pipe. */
-	struct mm_selfpipe selfpipe;
-
 	/* Events system-specific backend. */
 #if HAVE_SYS_EPOLL_H
 	struct mm_event_epoll backend;
@@ -37,6 +34,15 @@ struct mm_event_backend
 #if HAVE_SYS_EVENT_H
 	struct mm_event_kqueue backend;
 #endif
+
+#if MM_EVENT_NATIVE_NOTIFY
+	/* A flag indicating that the system supports a better
+	   notification mechanism than a self-pipe. */
+	bool native_notify;
+#endif
+
+	/* Event loop self-pipe. */
+	struct mm_selfpipe selfpipe;
 };
 
 void __attribute__((nonnull(1)))
@@ -62,12 +68,24 @@ mm_event_backend_listen(struct mm_event_backend *backend,
 static inline void __attribute__((nonnull(1)))
 mm_event_backend_notify(struct mm_event_backend *backend)
 {
+#if MM_EVENT_NATIVE_NOTIFY
+	if (backend->native_notify) {
+#if HAVE_SYS_EVENT_H
+		mm_event_kqueue_notify(&backend->backend);
+#endif
+		return;
+	}
+#endif
 	mm_selfpipe_write(&backend->selfpipe);
 }
 
 static inline void __attribute__((nonnull(1)))
 mm_event_backend_dampen(struct mm_event_backend *backend)
 {
+#if MM_EVENT_NATIVE_NOTIFY
+	if (backend->native_notify)
+		return;
+#endif
 	mm_selfpipe_drain(&backend->selfpipe);
 }
 
