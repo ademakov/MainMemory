@@ -81,6 +81,13 @@ mm_dispatch_handle_detach(struct mm_listener *listener)
 	}
 }
 
+static inline bool __attribute__((nonnull(1)))
+mm_dispatch_has_urgent_changes(struct mm_listener *listener)
+{
+	return mm_event_batch_hasflags(&listener->changes,
+				       MM_EVENT_BATCH_UNREGISTER);
+}
+
 void __attribute__((nonnull(1)))
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout)
@@ -134,7 +141,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		// be handled (perhaps by the very same thread).
 		listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
 
-	} else if (mm_listener_has_changes(listener)) {
+	} else if (mm_dispatch_has_urgent_changes(listener)) {
 
 		// Publish the private change events.
 		mm_event_batch_append(&dispatch->changes, &listener->changes);
@@ -189,7 +196,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		}
 		else
 #endif
-		if (mm_listener_has_urgent_changes(listener)) {
+		if (mm_dispatch_has_urgent_changes(listener)) {
 			// There are changes that need to be immediately
 			// acknowledged.
 			timeout = 0;

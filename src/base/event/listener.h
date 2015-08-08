@@ -91,7 +91,7 @@ struct mm_listener
 
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
-	/* Listener's incoming events store. */
+	/* Listener's incoming events temporary store. */
 	struct mm_event_batch events;
 
 	/* Associated thread. */
@@ -147,22 +147,9 @@ mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_listener_has_events(struct mm_listener *listener)
-{
-	return !mm_event_batch_empty(&listener->events);
-}
-
-static inline bool __attribute__((nonnull(1)))
 mm_listener_has_changes(struct mm_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);
-}
-
-static inline bool __attribute__((nonnull(1)))
-mm_listener_has_urgent_changes(struct mm_listener *listener)
-{
-	return mm_event_batch_hasflags(&listener->changes,
-				       MM_EVENT_BATCH_UNREGISTER);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
