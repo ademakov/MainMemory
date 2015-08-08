@@ -125,6 +125,7 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 	ASSERT(thread == mm_thread_self());
 	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_listener_add(listener, sink, MM_EVENT_INPUT);
+	mm_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 #else
 	(void) dispatch;
 	(void) sink;
@@ -140,6 +141,7 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 	ASSERT(thread == mm_thread_self());
 	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_listener_add(listener, sink, MM_EVENT_OUTPUT);
+	mm_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 #else
 	(void) dispatch;
 	(void) sink;

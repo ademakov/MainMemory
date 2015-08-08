@@ -25,6 +25,7 @@
 
 #define MM_EVENT_BATCH_REGISTER		((unsigned int) 1)
 #define MM_EVENT_BATCH_UNREGISTER	((unsigned int) 2)
+#define MM_EVENT_BATCH_INPUT_OUTPUT	((unsigned int) 4)
 
 struct mm_event_batch
 {
