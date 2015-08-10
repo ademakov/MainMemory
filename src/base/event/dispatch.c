@@ -141,7 +141,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		// be handled (perhaps by the very same thread).
 		listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
 
-	} else if (mm_dispatch_has_urgent_changes(listener)) {
+	} else if (mm_listener_has_changes(listener)) {
 
 		// Publish the private change events.
 		mm_event_batch_append(&dispatch->changes, &listener->changes);
