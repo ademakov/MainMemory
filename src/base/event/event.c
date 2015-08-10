@@ -84,10 +84,9 @@ mm_event_register_handler(mm_event_handler_t handler)
  **********************************************************************/
 
 bool
-mm_event_prepare_fd(struct mm_event_fd *sink,
-		    int fd, mm_event_hid_t handler,
-		    mm_event_mode_t input_mode,
-		    mm_event_mode_t output_mode)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
+		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
+		    mm_event_target_t target)
 {
 	ASSERT(fd >= 0);
 	ASSERT(handler > 0);
@@ -96,6 +95,9 @@ mm_event_prepare_fd(struct mm_event_fd *sink,
 	sink->fd = fd;
 	sink->target = MM_THREAD_NONE;
 	sink->handler = handler;
+
+	sink->loose_target = (target == MM_EVENT_TARGET_LOOSE);
+	sink->bound_target = (target == MM_EVENT_TARGET_BOUND);
 
 	if (input_mode == MM_EVENT_IGNORED) {
 		sink->regular_input = false;

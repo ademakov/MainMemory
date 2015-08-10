@@ -306,33 +306,54 @@ mm_event_receiver_add(struct mm_event_receiver *receiver,
 
 	receiver->got_events = true;
 
-	mm_thread_t target = mm_memory_load(sink->target);
-	mm_memory_load_fence();
-
-	// If the event sink is detached then attach it to the control thread.
-	if (target != receiver->control_thread) {
-		uint32_t detach_stamp = mm_memory_load(sink->detach_stamp);
-		if (detach_stamp == sink->arrival_stamp) {
-			sink->target = receiver->control_thread;
-			target = receiver->control_thread;
-		}
-	}
-
-	// Update the arrival stamp. This disables detachment of the event
-	// sink until the received event jumps through all the hoops and
-	// the detach stamp is updated accordingly.
-	struct mm_listener *listener = &receiver->listeners[target];
-	listener->arrival_stamp = receiver->arrival_stamp;
-	sink->arrival_stamp = receiver->arrival_stamp;
-
-	// If the event sink belongs to the control thread then handle it
-	// immediately, otherwise store it for later delivery to the target
-	// thread.
-	if (target == receiver->control_thread) {
+	if (sink->loose_target) {
+		// Handle the event.
 		mm_event_handle(sink, event);
+
+	} else if (sink->bound_target) {
+		// If the event sink belongs to the control thread then
+		// handle it immediately, otherwise store it for later
+		// delivery to the target thread.
+		mm_thread_t target = sink->target;
+		if (target == receiver->control_thread) {
+			mm_event_handle(sink, event);
+		} else {
+			struct mm_listener *listener
+				= &receiver->listeners[target];
+			mm_event_receiver_batch_add(listener, event, sink);
+			mm_bitset_set(&receiver->targets, target);
+		}
+
 	} else {
-		mm_event_receiver_batch_add(listener, event, sink);
-		mm_bitset_set(&receiver->targets, target);
+		mm_thread_t target = sink->target;
+		mm_memory_load_fence();
+
+		// If the event sink is detached then attach it to the
+		// control thread.
+		if (target != receiver->control_thread) {
+			uint32_t detach_stamp = mm_memory_load(sink->detach_stamp);
+			if (detach_stamp == sink->arrival_stamp) {
+				sink->target = receiver->control_thread;
+				target = receiver->control_thread;
+			}
+		}
+
+		// Update the arrival stamp. This disables detachment of
+		// the event sink until the received event jumps through
+		// all the hoops and the detach stamp is updated accordingly.
+		struct mm_listener *listener = &receiver->listeners[target];
+		listener->arrival_stamp = receiver->arrival_stamp;
+		sink->arrival_stamp = receiver->arrival_stamp;
+
+		// If the event sink belongs to the control thread then
+		// handle it immediately, otherwise store it for later
+		// delivery to the target thread.
+		if (target == receiver->control_thread) {
+			mm_event_handle(sink, event);
+		} else {
+			mm_event_receiver_batch_add(listener, event, sink);
+			mm_bitset_set(&receiver->targets, target);
+		}
 	}
 
 	LEAVE();

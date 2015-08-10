@@ -47,6 +47,12 @@ typedef enum {
 	MM_EVENT_ONESHOT,
 } mm_event_mode_t;
 
+typedef enum {
+	MM_EVENT_TARGET_LOOSE,
+	MM_EVENT_TARGET_BOUND,
+	MM_EVENT_TARGET_HANDY,
+} mm_event_target_t;
+
 /* Event details. */
 struct mm_event
 {
@@ -91,9 +97,6 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 /* Event sink. */
 struct mm_event_fd
 {
-	/* Pending detach list link. */
-	struct mm_link detach_link;
-
 	/* The file descriptor to watch. */
 	int fd;
 
@@ -104,6 +107,8 @@ struct mm_event_fd
 	mm_event_hid_t handler;
 
 	/* Immutable flags. */
+	unsigned loose_target : 1;
+	unsigned bound_target : 1;
 	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;
 	unsigned regular_output : 1;
@@ -124,13 +129,15 @@ struct mm_event_fd
 	/* Flags used by the owner thread. */
 	unsigned attached : 1;
 	unsigned pending_detach : 1;
+
+	/* Pending detach list link. */
+	struct mm_link detach_link;
 };
 
 bool __attribute__((nonnull(1)))
-mm_event_prepare_fd(struct mm_event_fd *sink,
-		    int fd, mm_event_hid_t handler,
-		    mm_event_mode_t input_mode,
-		    mm_event_mode_t output_mode);
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
+		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
+		    mm_event_target_t target);
 
 void __attribute__((nonnull(1)))
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
