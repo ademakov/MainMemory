@@ -55,6 +55,9 @@ struct mm_dispatch
 
 	/* A system-specific event backend. */
 	struct mm_event_backend backend;
+
+	/* The event batch flags that require serialization. */
+	unsigned int serial_changes;
 };
 
 void __attribute__((nonnull(1, 3)))

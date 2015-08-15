@@ -50,6 +50,23 @@ mm_event_backend_prepare(struct mm_event_backend *backend);
 void __attribute__((nonnull(1)))
 mm_event_backend_cleanup(struct mm_event_backend *backend);
 
+/*
+ * Tell if the backend requires all change events to be serialized.
+ *
+ * The existing backends (epoll and kqueue) do not require this. So
+ * this is just a stub for possible future implementation of select
+ * or poll backends.
+ */
+static inline bool __attribute__((nonnull(1)))
+mm_event_backend_serial(struct mm_event_backend *backend __mm_unused__)
+{
+#if HAVE_SYS_EPOLL_H
+	return false;
+#elif HAVE_SYS_EVENT_H
+	return false;
+#endif
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_batch *changes,

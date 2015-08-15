@@ -50,6 +50,19 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
 
+	// Determine event flags that require change event serialization.
+	if (mm_event_backend_serial(&dispatch->backend)) {
+		// The backend requires all changes to be serialized.
+		dispatch->serial_changes = (MM_EVENT_BATCH_REGISTER
+					    | MM_EVENT_BATCH_UNREGISTER
+					    | MM_EVENT_BATCH_INPUT_OUTPUT);
+	} else {
+		// The backend has no requirements. However we want to
+		// ensure that event sinks get no other events after
+		// unregistering.
+		dispatch->serial_changes = MM_EVENT_BATCH_UNREGISTER;
+	}
+
 	LEAVE();
 }
 
