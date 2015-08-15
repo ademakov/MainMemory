@@ -84,8 +84,7 @@ mm_dispatch_handle_detach(struct mm_listener *listener)
 static inline bool __attribute__((nonnull(1)))
 mm_dispatch_has_urgent_changes(struct mm_listener *listener)
 {
-	return mm_event_batch_hasflags(&listener->changes,
-				       MM_EVENT_BATCH_UNREGISTER);
+	return mm_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 void __attribute__((nonnull(1)))

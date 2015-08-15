@@ -136,6 +136,12 @@ mm_listener_addflags(struct mm_listener *listener, unsigned int flags)
 	mm_event_batch_addflags(&listener->changes, flags);
 }
 
+static inline bool __attribute__((nonnull(1)))
+mm_listener_hasflags(struct mm_listener *listener, unsigned int flags)
+{
+	return mm_event_batch_hasflags(&listener->changes, flags);
+}
+
 static inline void __attribute__((nonnull(1, 2)))
 mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 {
