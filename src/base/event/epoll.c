@@ -271,7 +271,8 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend)
 	// Initialize the corrponding event sink.
 	mm_event_prepare_fd(&event_backend->notify_fd, fd,
 			    mm_event_epoll_notify_handler,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED);
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED,
+			    MM_EVENT_TARGET_LOOSE);
 
 	// Register the event sink.
 	struct epoll_event ee;
