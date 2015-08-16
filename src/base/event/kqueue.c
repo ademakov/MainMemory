@@ -201,20 +201,30 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 }
 
 static void
-mm_event_kqueue_get_unregister_events(struct mm_event_receiver *return_events,
-				      struct mm_event_batch *change_events,
-				      unsigned int first, unsigned int last)
+mm_event_kqueue_postprocess_changes(struct mm_event_batch *change_events,
+				    struct mm_event_receiver *return_events,
+				    unsigned int first, unsigned int last)
 {
-	for (unsigned int i = first; i < last; i++) {
-		struct mm_event *event = &change_events->events[i];
-		struct mm_event_fd *ev_fd = event->ev_fd;
+	if (return_events != NULL) {
+		for (unsigned int i = first; i < last; i++) {
+			struct mm_event *event = &change_events->events[i];
+			struct mm_event_fd *sink = event->ev_fd;
 
-		// Reset the change flag.
-		ev_fd->changed = 0;
+			// Reset the change flag.
+			sink->changed = 0;
 
-		// Store the pertinent event.
-		if (event->event == MM_EVENT_UNREGISTER)
-			mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
+			// Store the pertinent event.
+			if (event->event == MM_EVENT_UNREGISTER)
+				mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, sink);
+		}
+	} else {
+		for (unsigned int i = first; i < last; i++) {
+			struct mm_event *event = &change_events->events[i];
+			struct mm_event_fd *sink = event->ev_fd;
+
+			// Reset the change flag.
+			sink->changed = 0;
+		}
 	}
 }
 
@@ -319,9 +329,9 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 			mm_event_kqueue_change(event_backend);
 
 			// Store unregister events.
-			mm_event_kqueue_get_unregister_events(return_events,
-							      change_events,
-							      first, next);
+			mm_event_kqueue_postprocess_changes(change_events,
+							    return_events,
+							    first, next);
 
 			// Proceed with more change events if any.
 			first = next;
@@ -336,16 +346,16 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		// Store incoming events.
 		mm_event_kqueue_get_incoming_events(event_backend,
 						    return_events, n);
-
-		// Store unregister events.
-		mm_event_kqueue_get_unregister_events(return_events,
-						      change_events,
-						      first,
-						      change_events->nevents);
 	} else {
 		// Flush event changes.
 		mm_event_kqueue_change(event_backend);
 	}
+
+	// Store unregister events.
+	mm_event_kqueue_postprocess_changes(change_events,
+					    return_events,
+					    first,
+					    change_events->nevents);
 
 	LEAVE();
 }
