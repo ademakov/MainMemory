@@ -242,6 +242,8 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 		return MM_CDATA_DEREF(dom_index, recheck_stat->stat);
 	}
 
+	mm_stack_insert(&stat_set->domain_list, &dom_stat->link);
+
 	// End critical section.
 	mm_global_unlock(&stat_set->domain_lock);
 
