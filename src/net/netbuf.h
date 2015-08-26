@@ -53,8 +53,8 @@ mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
 ssize_t __attribute__((nonnull(1, 2)))
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size);
 
-static inline mm_core_t
-mm_netbuf_core(struct mm_netbuf_socket *sock)
+static inline mm_thread_t
+mm_netbuf_thread(struct mm_netbuf_socket *sock)
 {
 	return mm_event_target(&sock->sock.event);
 }

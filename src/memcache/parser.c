@@ -197,10 +197,10 @@ mc_parser_parse(struct mc_parser *parser)
 	uint64_t num64 = 0;
 	char *match = "";
 
-	mm_core_t core = mm_netbuf_core(&parser->state->sock);
+	mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
 
 	// The current command.
-	struct mc_command *command = mc_command_create(core);
+	struct mc_command *command = mc_command_create(thread);
 	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
@@ -549,7 +549,7 @@ again:
 					goto again;
 				} else {
 					state = S_KEY;
-					command->next = mc_command_create(core);
+					command->next = mc_command_create(thread);
 					command->next->type = command->type;
 					command = command->next;
 					goto again;
@@ -826,7 +826,7 @@ again:
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
-						mc_command_destroy(core, tmp);
+						mc_command_destroy(thread, tmp);
 					} while (command != NULL);
 
 					parser->command->next = NULL;
