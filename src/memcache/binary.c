@@ -106,21 +106,35 @@ mc_binary_invalid_arguments(struct mc_parser *parser, uint32_t body_len)
 	return mc_binary_error(parser, body_len, MC_BINARY_STATUS_INVALID_ARGUMENTS);
 }
 
+static void
+mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
+{
+	struct mm_slider *cursor = &parser->cursor;
+	if (unlikely(cursor->ptr == cursor->end))
+		mm_slider_next_used(cursor);
+
+	struct mc_command *command = parser->command;
+	if (cursor->ptr + key_len <= cursor->end) {
+		command->action.key = cursor->ptr;
+		command->own_key = false;
+		cursor->ptr += key_len;
+	} else {
+		char *key = mm_private_alloc(key_len);
+		mm_slider_read(cursor, key, key_len);
+		command->action.key = key;
+		command->own_key = true;
+	}
+	command->action.key_len = key_len;
+}
+
 static bool
 mc_binary_read_key(struct mc_parser *parser, uint32_t key_len)
 {
 	if (!mc_binary_fill(parser, key_len))
 		return false;
 
-	char *key = mm_private_alloc(key_len);
-	mm_slider_read(&parser->cursor, key, key_len);
-
-	struct mc_command *command = parser->command;
-	command->action.key_len = key_len;
-	command->action.key = key;
-	command->own_key = true;
-
-	mc_action_hash(&command->action);
+	mc_binary_set_key(parser, key_len);
+	mc_action_hash(&parser->command->action);
 
 	return true;
 }
