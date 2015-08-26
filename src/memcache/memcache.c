@@ -48,7 +48,9 @@ static void
 mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
- 
+
+	mm_thread_t thread = mm_netbuf_thread(&state->sock);
+
 	do {
 		// Handle the command if it has associated
 		// execution routine.
@@ -56,7 +58,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 		// Release the command data
 		struct mc_command *next = command->next;
-		mc_command_destroy(mm_core_self(), command);
+		mc_command_destroy(thread, command);
 		command = next;
 
 	} while (command != NULL);
