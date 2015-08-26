@@ -220,17 +220,12 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 	} extras;
 	mm_slider_read(&parser->cursor, &extras, 20);
 
-	char *key = mm_private_alloc(key_len);
-	mm_slider_read(&parser->cursor, key, key_len);
-
 	struct mc_command *command = parser->command;
 	command->delta = mm_ntohll(extras.delta);
 	command->value = mm_ntohll(extras.value);
 	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
-	command->action.key_len = key_len;
-	command->action.key = key;
-	command->own_key = true;
 
+	mc_binary_set_key(parser, key_len);
 	mc_action_hash(&command->action);
 
 	return true;
