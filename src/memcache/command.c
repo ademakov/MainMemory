@@ -107,11 +107,12 @@ mc_command_stop(void)
  **********************************************************************/
 
 struct mc_command *
-mc_command_create(mm_core_t core)
+mc_command_create(mm_thread_t thread)
 {
 	ENTER();
 
-	struct mc_command *command = mm_pool_shared_alloc_low(core, &mc_command_pool);
+	struct mc_command *command
+		= mm_pool_shared_alloc_low(thread, &mc_command_pool);
 	memset(command, 0, sizeof(struct mc_command));
 
 	LEAVE();
@@ -119,7 +120,7 @@ mc_command_create(mm_core_t core)
 }
 
 void
-mc_command_destroy(mm_core_t core, struct mc_command *command)
+mc_command_destroy(mm_thread_t thread, struct mc_command *command)
 {
 	ENTER();
 
@@ -128,7 +129,7 @@ mc_command_destroy(mm_core_t core, struct mc_command *command)
 
 	mc_action_cleanup(&command->action);
 
-	mm_pool_shared_free_low(core, &mc_command_pool, command);
+	mm_pool_shared_free_low(thread, &mc_command_pool, command);
 
 	LEAVE();
 }

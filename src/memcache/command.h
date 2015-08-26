@@ -183,8 +183,8 @@ struct mc_command
 void mc_command_start(void);
 void mc_command_stop(void);
 
-struct mc_command * mc_command_create(mm_core_t core);
-void mc_command_destroy(mm_core_t core, struct mc_command *command);
+struct mc_command *mc_command_create(mm_thread_t thread);
+void mc_command_destroy(mm_thread_t thread, struct mc_command *command);
 
 static inline void
 mc_command_execute(struct mc_state *state, struct mc_command *command)
