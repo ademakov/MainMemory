@@ -18,12 +18,11 @@
  */
 
 #include "memcache/entry.h"
-#include "memcache/action.h"
 
 #include <ctype.h>
 
-void __attribute__((nonnull(1, 2)))
-mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
+void __attribute__((nonnull(1)))
+mc_entry_setnum(struct mc_entry *entry, uint64_t value)
 {
 	char buffer[MC_ENTRY_NUM_LEN_MAX];
 	size_t value_len = 0;
@@ -34,8 +33,6 @@ mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value
 	} while (value);
 
 	entry->value_len = value_len;
-	mc_entry_alloc_chunks(entry);
-	mc_entry_setkey(entry, action->key);
 
 	char *v = mc_entry_getvalue(entry);
 	do {

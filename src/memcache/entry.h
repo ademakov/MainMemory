@@ -126,8 +126,8 @@ mc_entry_free_chunks(struct mc_entry *entry)
 	mm_chunk_destroy_chain(mm_stack_head(&entry->chunks));
 }
 
-void __attribute__((nonnull(1, 2)))
-mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value);
+void __attribute__((nonnull(1)))
+mc_entry_setnum(struct mc_entry *entry, uint64_t value);
 
 bool __attribute__((nonnull(1, 2)))
 mc_entry_getnum(struct mc_entry *entry, uint64_t *value);
