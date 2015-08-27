@@ -262,23 +262,9 @@ mc_action_insert(struct mc_action *action)
 }
 
 static inline void
-mc_action_update(struct mc_action *action)
-{
-	action->use_old_entry = false;
-	action->use_new_entry = false;
-#if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_UPDATE);
-#elif ENABLE_MEMCACHE_DELEGATE
-	mc_delegate_execute(action, mc_action_update_low);
-#else
-	mc_action_update_low(action);
-#endif
-}
-
-static inline void
-mc_action_compare_and_update(struct mc_action *action,
-			     bool use_old_entry,
-			     bool use_new_entry)
+mc_action_update(struct mc_action *action,
+		 bool use_old_entry,
+		 bool use_new_entry)
 {
 	action->use_old_entry = use_old_entry;
 	action->use_new_entry = use_new_entry;
