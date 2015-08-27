@@ -239,17 +239,11 @@ mc_command_transmit_entry(struct mc_state *state,
 }
 
 static void
-mc_command_transmit_delta(struct mc_state *state,
-			  struct mc_command *command)
+mc_command_transmit_delta(struct mc_state *state, const char *value)
 {
 	ENTER();
 
-	struct mc_entry *entry = command->action.new_entry;
-	char *value = mc_entry_getvalue(entry);
-	uint32_t value_len = entry->value_len;
-
-	mm_netbuf_splice(&state->sock, value, value_len,
-			 mc_command_transmit_unref, (uintptr_t) entry);
+	mm_netbuf_write(&state->sock, value, strlen(value));
 
 	WRITE(&state->sock, mc_result_end);
 
@@ -478,49 +472,61 @@ mc_command_prepend(struct mc_command *command)
 	LEAVE();
 }
 
+static void
+mm_command_store_value(char *buffer, struct mc_entry *entry)
+{
+	if (buffer) {
+		char *value = mc_entry_getvalue(entry);
+		uint32_t value_len = entry->value_len;
+		memcpy(buffer, value, value_len);
+		buffer[value_len] = 0;
+	}
+}
+
 static uint64_t
-mc_command_increment(struct mc_command *command, bool ascii)
+mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 {
 	ENTER();
 	uint64_t value = 0;
+	struct mc_action *action = &command->action;
 
-	mc_action_lookup(&command->action);
+	mc_action_lookup(action);
 
 	for (;;) {
-		if (command->action.old_entry == NULL) {
+		if (action->old_entry == NULL) {
 			if (ascii)
 				break;
 
 			value = command->value;
-			command->action.stamp = 0;
+			action->stamp = 0;
 		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
+			if (!mc_entry_getnum(action->old_entry, &value)) {
+				mc_action_finish(action);
+				if (action->new_entry != NULL)
+					mc_action_cancel(action);
 				break;
 			}
 			value += command->delta;
-			command->action.stamp = command->action.old_entry->stamp;
+			action->stamp = action->old_entry->stamp;
 		}
 
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action, MC_ENTRY_NUM_LEN_MAX);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-			mc_entry_setkey(command->action.new_entry, command->action.key);
+		if (action->new_entry == NULL) {
+			mc_action_create(action, MC_ENTRY_NUM_LEN_MAX);
+			if (action->old_entry != NULL)
+				mc_command_copy_extra(action->new_entry,
+						      action->old_entry);
+			mc_entry_setkey(action->new_entry, action->key);
 		}
-		mc_entry_setnum(command->action.new_entry, value);
+		mc_entry_setnum(action->new_entry, value);
 
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
+		if (action->old_entry == NULL) {
+			mc_action_insert(action);
+			if (action->old_entry == NULL)
 				break;
 		} else {
-			bool use_new = ascii && !command->ascii.noreply;
-			mc_action_update(&command->action, true, use_new);
-			if (command->action.entry_match)
+			mm_command_store_value(buffer, action->new_entry);
+			mc_action_update(action, true, false);
+			if (action->entry_match)
 				break;
 		}
 	}
@@ -530,51 +536,52 @@ mc_command_increment(struct mc_command *command, bool ascii)
 }
 
 static uint64_t
-mc_command_decrement(struct mc_command *command, bool ascii)
+mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 {
 	ENTER();
 	uint64_t value = 0;
+	struct mc_action *action = &command->action;
 
-	mc_action_lookup(&command->action);
+	mc_action_lookup(action);
 
 	for (;;) {
-		if (command->action.old_entry == NULL) {
+		if (action->old_entry == NULL) {
 			if (ascii)
 				break;
 
 			value = command->value;
-			command->action.stamp = 0;
+			action->stamp = 0;
 		} else {
-			if (!mc_entry_getnum(command->action.old_entry, &value)) {
-				mc_action_finish(&command->action);
-				if (command->action.new_entry != NULL)
-					mc_action_cancel(&command->action);
+			if (!mc_entry_getnum(action->old_entry, &value)) {
+				mc_action_finish(action);
+				if (action->new_entry != NULL)
+					mc_action_cancel(action);
 				break;
 			}
 			if (value > command->delta)
 				value -= command->delta;
 			else
 				value = 0;
-			command->action.stamp = command->action.old_entry->stamp;
+			action->stamp = action->old_entry->stamp;
 		}
 
-		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action, MC_ENTRY_NUM_LEN_MAX);
-			if (command->action.old_entry != NULL)
-				mc_command_copy_extra(command->action.new_entry,
-						      command->action.old_entry);
-			mc_entry_setkey(command->action.new_entry, command->action.key);
+		if (action->new_entry == NULL) {
+			mc_action_create(action, MC_ENTRY_NUM_LEN_MAX);
+			if (action->old_entry != NULL)
+				mc_command_copy_extra(action->new_entry,
+						      action->old_entry);
+			mc_entry_setkey(action->new_entry, action->key);
 		}
-		mc_entry_setnum(command->action.new_entry, value);
+		mc_entry_setnum(action->new_entry, value);
 
-		if (command->action.old_entry == NULL) {
-			mc_action_insert(&command->action);
-			if (command->action.old_entry == NULL)
+		if (action->old_entry == NULL) {
+			mc_action_insert(action);
+			if (action->old_entry == NULL)
 				break;
 		} else {
-			bool use_new = ascii && !command->ascii.noreply;
-			mc_action_update(&command->action, true, use_new);
-			if (command->action.entry_match)
+			mm_command_store_value(buffer, action->new_entry);
+			mc_action_update(action, true, false);
+			if (action->entry_match)
 				break;
 		}
 	}
@@ -729,12 +736,13 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_increment(command, true);
+	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
+	mc_command_increment(command, true, buffer);
 
 	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
-		mc_command_transmit_delta(state, command);
+		mc_command_transmit_delta(state, buffer);
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_delta_non_num);
 	else
@@ -749,12 +757,13 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_decrement(command, true);
+	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
+	mc_command_decrement(command, true, buffer);
 
 	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
-		mc_command_transmit_delta(state, command);
+		mc_command_transmit_delta(state, buffer);
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_delta_non_num);
 	else
@@ -1180,7 +1189,7 @@ mc_command_execute_binary_increment(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value = mc_command_increment(command, false);
+	uint64_t value = mc_command_increment(command, false, NULL);
 
 	if (command->action.new_entry != NULL)
 		mc_command_transmit_binary_value(state, command, value);
@@ -1200,7 +1209,7 @@ mc_command_execute_binary_incrementq(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_increment(command, false);
+	mc_command_increment(command, false, NULL);
 
 	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
@@ -1220,7 +1229,7 @@ mc_command_execute_binary_decrement(struct mc_state *state,
 {
 	ENTER();
 
-	uint64_t value = mc_command_decrement(command, false);
+	uint64_t value = mc_command_decrement(command, false, NULL);
 
 	if (command->action.new_entry != NULL)
 		mc_command_transmit_binary_value(state, command, value);
@@ -1240,7 +1249,7 @@ mc_command_execute_binary_decrementq(struct mc_state *state,
 {
 	ENTER();
 
-	mc_command_decrement(command, false);
+	mc_command_decrement(command, false, NULL);
 
 	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
