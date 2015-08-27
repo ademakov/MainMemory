@@ -107,7 +107,7 @@ mc_parser_scan_value(struct mc_parser *parser)
 		mm_slider_reset_used(&parser->cursor);
 	}
 
-	// Read the required number of bytes from buffer.
+	// Read the entry value.
 	char *value = mc_entry_getvalue(entry);
 	mm_slider_read(&parser->cursor, value, entry->value_len);
 
