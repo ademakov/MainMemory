@@ -86,6 +86,8 @@ mc_parser_scan_value(struct mc_parser *parser)
 	struct mc_entry *entry = action->new_entry;
 
 	// Initialize entry data memory and key.
+	entry->flags = command->flags;
+	entry->exp_time = command->exp_time;
 	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, action->key);
 
@@ -545,7 +547,7 @@ again:
 				mc_action_hash(&command->action);
 				if (c == '\r' || c == '\n') {
 					state = S_EOL;
-					command->params.last = true;
+					command->ascii.last = true;
 					goto again;
 				} else {
 					state = S_KEY;
@@ -561,27 +563,25 @@ again:
 				goto again;
 
 			case S_SET_2:
-				mc_action_hash(&command->action);
-				mc_action_create(&command->action);
 				state = S_NUM32;
 				shift = S_SET_3;
 				goto again;
 
 			case S_SET_3:
-				command->action.new_entry->flags = num32;
+				command->flags = num32;
 				state = S_NUM32;
 				shift = S_SET_4;
 				goto again;
 
 			case S_SET_4:
-				command->action.new_entry->exp_time = mc_entry_fix_exptime(num32);
+				command->exp_time = mc_entry_fix_exptime(num32);
 				state = S_NUM32;
 				shift = S_SET_5;
 				goto again;
 
 			case S_SET_5:
-				command->action.new_entry->key_len = command->action.key_len;
-				command->action.new_entry->value_len = num32;
+				mc_action_hash(&command->action);
+				mc_action_create(&command->action, num32);
 				if (command->type == &mc_command_ascii_cas) {
 					state = S_NUM64;
 					shift = S_CAS;
@@ -597,7 +597,7 @@ again:
 				}
 
 			case S_SET_6:
-				command->params.noreply = true;
+				command->ascii.noreply = true;
 				state = S_VALUE;
 				goto again;
 
@@ -737,7 +737,7 @@ again:
 				}
 
 			case S_NOREPLY:
-				command->params.noreply = true;
+				command->ascii.noreply = true;
 				state = S_EOL;
 				goto again;
 

@@ -70,8 +70,16 @@ struct mc_action
 {
 	const char *key;
 	uint32_t key_len;
-
 	uint32_t hash;
+
+	uint32_t value_len;
+
+	/* Input flags indicating if update should retain old and new
+	   entry references after the action. */
+	bool use_old_entry;
+	bool use_new_entry;
+	/* Output flag indicating if the entry match succeeded. */
+	bool entry_match;
 
 	struct mc_tpart *part;
 	struct mc_entry *new_entry;
@@ -86,13 +94,6 @@ struct mc_action
 #if ENABLE_MEMCACHE_DELEGATE
 	struct mm_future future;
 #endif
-
-	/* Input flags indicating if update should retain old and new
-	   entry references after the action. */
-	bool use_old_entry;
-	bool use_new_entry;
-	/* Output flag indicating if the entry match succeeded. */
-	bool entry_match;
 };
 
 void mc_action_lookup_low(struct mc_action *action)
@@ -224,8 +225,9 @@ mc_action_delete(struct mc_action *action)
 }
 
 static inline void
-mc_action_create(struct mc_action *action)
+mc_action_create(struct mc_action *action, uint32_t value_len)
 {
+	action->value_len = value_len;
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, MC_ACTION_CREATE);
 #elif ENABLE_MEMCACHE_DELEGATE

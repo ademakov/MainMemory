@@ -129,19 +129,6 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  * Command data.
  **********************************************************************/
 
-struct mc_command_params_binary
-{
-	uint32_t opaque;
-	uint8_t opcode;
-};
-
-union mc_command_params
-{
-	struct mc_command_params_binary binary;
-	bool noreply;
-	bool last;
-};
-
 struct mc_command_slabs
 {
 };
@@ -155,7 +142,23 @@ struct mc_command
 	struct mc_command *next;
 	struct mc_command_type *type;
 	struct mc_action action;
-	union mc_command_params params;
+
+	union
+	{
+		struct
+		{
+			bool noreply;
+			bool last;
+		} ascii;
+
+		struct
+		{
+			uint32_t opaque;
+			uint8_t opcode;
+		} binary;
+
+		uint32_t nopts;
+	};
 
 	union
 	{
@@ -166,12 +169,10 @@ struct mc_command
 		};
 		struct mc_command_slabs slabs;
 		struct mc_command_stats stats;
+		uint32_t flags;
 	};
 
-	union {
-		uint32_t exp_time;
-		uint32_t nopts;
-	};
+	uint32_t exp_time;
 
 	bool own_key;
 };

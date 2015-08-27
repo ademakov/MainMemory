@@ -230,7 +230,7 @@ mc_command_transmit_entry(struct mc_state *state,
 	mm_netbuf_splice(&state->sock, value, value_len,
 			 mc_command_transmit_unref, (uintptr_t) entry);
 
-	if (command->params.last)
+	if (command->ascii.last)
 		WRITE(&state->sock, mc_result_end2);
 	else
 		WRITE(&state->sock, mc_result_nl);
@@ -266,8 +266,8 @@ mc_command_transmit_binary_status(struct mc_state *state,
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = mm_htons(status);
-	header.opcode = command->params.binary.opcode;
-	header.opaque = command->params.binary.opaque;
+	header.opcode = command->binary.opcode;
+	header.opaque = command->binary.opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -291,8 +291,8 @@ mc_command_transmit_binary_string(struct mc_state *state,
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = mm_htons(status);
-	header.opcode = command->params.binary.opcode;
-	header.opaque = command->params.binary.opaque;
+	header.opcode = command->binary.opcode;
+	header.opaque = command->binary.opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -315,8 +315,8 @@ mc_command_transmit_binary_stamp(struct mc_state *state,
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = MC_BINARY_STATUS_NO_ERROR;
-	header.opcode = command->params.binary.opcode;
-	header.opaque = command->params.binary.opaque;
+	header.opcode = command->binary.opcode;
+	header.opaque = command->binary.opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -348,8 +348,8 @@ mc_command_transmit_binary_entry(struct mc_state *state,
 
 	packet.header.magic = MC_BINARY_RESPONSE;
 	packet.header.status = MC_BINARY_STATUS_NO_ERROR;
-	packet.header.opcode = command->params.binary.opcode;
-	packet.header.opaque = command->params.binary.opaque;
+	packet.header.opcode = command->binary.opcode;
+	packet.header.opaque = command->binary.opaque;
 	packet.header.key_len = mm_htons(key_len);
 	packet.header.ext_len = 4;
 	packet.header.data_type = 0;
@@ -384,8 +384,8 @@ mc_command_transmit_binary_value(struct mc_state *state,
 
 	packet.header.magic = MC_BINARY_RESPONSE;
 	packet.header.status = MC_BINARY_STATUS_NO_ERROR;
-	packet.header.opcode = command->params.binary.opcode;
-	packet.header.opaque = command->params.binary.opaque;
+	packet.header.opcode = command->binary.opcode;
+	packet.header.opaque = command->binary.opaque;
 	packet.header.key_len = 0;
 	packet.header.ext_len = 0;
 	packet.header.data_type = 0;
@@ -505,7 +505,7 @@ mc_command_increment(struct mc_command *command, bool ascii)
 		}
 
 		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
+			mc_action_create(&command->action, MC_ENTRY_NUM_LEN_MAX);
 			if (command->action.old_entry != NULL)
 				mc_command_copy_extra(command->action.new_entry,
 						      command->action.old_entry);
@@ -519,7 +519,7 @@ mc_command_increment(struct mc_command *command, bool ascii)
 			if (command->action.old_entry == NULL)
 				break;
 		} else {
-			bool use_new = ascii && !command->params.noreply;
+			bool use_new = ascii && !command->ascii.noreply;
 			mc_action_compare_and_update(&command->action, true, use_new);
 			if (command->action.entry_match)
 				break;
@@ -560,7 +560,7 @@ mc_command_decrement(struct mc_command *command, bool ascii)
 		}
 
 		if (command->action.new_entry == NULL) {
-			mc_action_create(&command->action);
+			mc_action_create(&command->action, MC_ENTRY_NUM_LEN_MAX);
 			if (command->action.old_entry != NULL)
 				mc_command_copy_extra(command->action.new_entry,
 						      command->action.old_entry);
@@ -574,7 +574,7 @@ mc_command_decrement(struct mc_command *command, bool ascii)
 			if (command->action.old_entry == NULL)
 				break;
 		} else {
-			bool use_new = ascii && !command->params.noreply;
+			bool use_new = ascii && !command->ascii.noreply;
 			mc_action_compare_and_update(&command->action, true, use_new);
 			if (command->action.entry_match)
 				break;
@@ -595,7 +595,7 @@ mc_command_execute_ascii_get(struct mc_state *state,
 
 	if (command->action.old_entry != NULL)
 		mc_command_transmit_entry(state, command, false);
-	else if (command->params.last)
+	else if (command->ascii.last)
 		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
@@ -611,7 +611,7 @@ mc_command_execute_ascii_gets(struct mc_state *state,
 
 	if (command->action.old_entry != NULL)
 		mc_command_transmit_entry(state, command, true);
-	else if (command->params.last)
+	else if (command->ascii.last)
 		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
@@ -625,7 +625,7 @@ mc_command_execute_ascii_set(struct mc_state *state,
 
 	mc_action_upsert(&command->action);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_stored);
@@ -641,7 +641,7 @@ mc_command_execute_ascii_add(struct mc_state *state,
 
 	mc_action_insert(&command->action);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry == NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -659,7 +659,7 @@ mc_command_execute_ascii_replace(struct mc_state *state,
 
 	mc_action_update(&command->action);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -677,7 +677,7 @@ mc_command_execute_ascii_cas(struct mc_state *state,
 
 	mc_action_compare_and_update(&command->action, false, false);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.entry_match)
 		WRITE(&state->sock, mc_result_stored);
@@ -697,7 +697,7 @@ mc_command_execute_ascii_append(struct mc_state *state,
 
 	mc_command_append(command);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -715,7 +715,7 @@ mc_command_execute_ascii_prepend(struct mc_state *state,
 
 	mc_command_prepend(command);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
@@ -733,7 +733,7 @@ mc_command_execute_ascii_incr(struct mc_state *state,
 
 	mc_command_increment(command, true);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
@@ -753,7 +753,7 @@ mc_command_execute_ascii_decr(struct mc_state *state,
 
 	mc_command_decrement(command, true);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, command);
@@ -773,7 +773,7 @@ mc_command_execute_ascii_delete(struct mc_state *state,
 
 	mc_action_delete(&command->action);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_deleted);
@@ -808,7 +808,7 @@ mc_command_execute_ascii_touch(struct mc_state *state,
 		mc_action_finish(&command->action);
 	}
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_touched);
@@ -847,7 +847,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state,
 
 	mc_command_flush(command->exp_time);
 
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
@@ -874,7 +874,7 @@ mc_command_execute_ascii_verbosity(struct mc_state *state,
 
 	mc_verbose = min(command->value, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
-	if (command->params.noreply)
+	if (command->ascii.noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);

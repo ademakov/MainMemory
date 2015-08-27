@@ -38,6 +38,8 @@ struct mc_action;
 #define MC_ENTRY_USED_MAX	32
 #define MC_ENTRY_NOT_USED	255
 
+#define MC_ENTRY_NUM_LEN_MAX	20
+
 struct mc_entry
 {
 	struct mm_slink link;

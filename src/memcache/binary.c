@@ -160,14 +160,13 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	// Create an entry.
 	struct mc_command *command = parser->command;
-	mc_action_create(&command->action);
+	uint32_t value_len = body_len - key_len - sizeof extras;
+	mc_action_create(&command->action, value_len);
 
 	// Initialize the entry and its key.
 	struct mc_entry *entry = command->action.new_entry;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
-	entry->key_len = key_len;
-	entry->value_len = body_len - key_len - sizeof extras;
 	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, command->action.key);
 
@@ -189,12 +188,11 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	// Create an entry.
 	struct mc_command *command = parser->command;
-	mc_action_create(&command->action);
+	uint32_t value_len = body_len - key_len;
+	mc_action_create(&command->action, value_len);
 
 	// Initialize the entry and its key.
 	struct mc_entry *entry = command->action.new_entry;
-	entry->key_len = key_len;
-	entry->value_len = body_len - key_len;
 	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, command->action.key);
 
@@ -268,8 +266,8 @@ mc_binary_parse(struct mc_parser *parser)
 	}
 
 	struct mc_command *command = mc_command_create(mm_core_self());
-	command->params.binary.opaque = header.opaque;
-	command->params.binary.opcode = header.opcode;
+	command->binary.opaque = header.opaque;
+	command->binary.opcode = header.opcode;
 	parser->command = command;
 
 	// The current command.

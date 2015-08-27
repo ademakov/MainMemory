@@ -25,7 +25,7 @@
 void __attribute__((nonnull(1, 2)))
 mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value)
 {
-	char buffer[32];
+	char buffer[MC_ENTRY_NUM_LEN_MAX];
 	size_t value_len = 0;
 	do {
 		int c = (int) (value % 10);
@@ -33,7 +33,6 @@ mc_entry_setnum(struct mc_entry *entry, struct mc_action *action, uint64_t value
 		value /= 10;
 	} while (value);
 
-	entry->key_len = action->key_len;
 	entry->value_len = value_len;
 	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, action->key);

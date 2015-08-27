@@ -411,6 +411,8 @@ mc_action_create_low(struct mc_action *action)
 	mc_table_reserve_entries(action->part);
 
 	action->new_entry->hash = action->hash;
+	action->new_entry->key_len = action->key_len;
+	action->new_entry->value_len = action->value_len;
 	mm_stack_prepare(&action->new_entry->chunks);
 
 	LEAVE();
