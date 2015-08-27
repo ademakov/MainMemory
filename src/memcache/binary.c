@@ -152,29 +152,24 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	} extras;
 	mm_slider_read(&parser->cursor, &extras, sizeof extras);
 
-	uint32_t value_len = body_len - key_len - sizeof extras;
-	uint32_t size = mc_entry_sum_length(key_len, value_len);
-#if ENABLE_MEMCACHE_PRIVATE_CHUNKS
-	struct mm_chunk *chunk = mm_chunk_create_private(size);
-#else
-	struct mm_chunk *chunk = mm_chunk_create_regular(size);
-#endif
-	mm_slider_read(&parser->cursor, chunk->data, key_len + value_len);
-
+	// Create an entry.
 	struct mc_command *command = parser->command;
-	command->action.key_len = key_len;
-	command->action.key = chunk->data;
-	command->own_key = false;
-
+	mc_binary_set_key(parser, key_len);
 	mc_action_hash(&command->action);
 	mc_action_create(&command->action);
 
+	// Initialize the entry and its key.
 	struct mc_entry *entry = command->action.new_entry;
-	entry->key_len = key_len;
-	entry->value_len = value_len;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
-	mm_stack_insert(&entry->chunks, &chunk->base.slink);
+	entry->key_len = key_len;
+	entry->value_len = body_len - key_len - sizeof extras;
+	mc_entry_alloc_chunks(entry);
+	mc_entry_setkey(entry, command->action.key);
+
+	// Read the entry value.
+	char *value = mc_entry_getvalue(entry);
+	mm_slider_read(&parser->cursor, value, entry->value_len);
 
 	return true;
 }
@@ -185,23 +180,22 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	if (!mc_binary_fill(parser, body_len))
 		return false;
 
-	uint32_t value_len = body_len - key_len;
-	uint32_t size = mc_entry_sum_length(key_len, value_len);
-	struct mm_chunk *chunk = mm_chunk_create_private(size);
-	mm_slider_read(&parser->cursor, chunk->data, key_len + value_len);
-
+	// Create an entry.
 	struct mc_command *command = parser->command;
-	command->action.key_len = key_len;
-	command->action.key = chunk->data;
-	command->own_key = false;
-
+	mc_binary_set_key(parser, key_len);
 	mc_action_hash(&command->action);
 	mc_action_create(&command->action);
 
+	// Initialize the entry and its key.
 	struct mc_entry *entry = command->action.new_entry;
 	entry->key_len = key_len;
-	entry->value_len = value_len;
-	mm_stack_insert(&entry->chunks, &chunk->base.slink);
+	entry->value_len = body_len - key_len;
+	mc_entry_alloc_chunks(entry);
+	mc_entry_setkey(entry, command->action.key);
+
+	// Read the entry value.
+	char *value = mc_entry_getvalue(entry);
+	mm_slider_read(&parser->cursor, value, entry->value_len);
 
 	return true;
 }
