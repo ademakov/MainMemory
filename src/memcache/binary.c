@@ -109,22 +109,24 @@ mc_binary_invalid_arguments(struct mc_parser *parser, uint32_t body_len)
 static void
 mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 {
+	struct mc_command *command = parser->command;
+
 	struct mm_slider *cursor = &parser->cursor;
 	if (unlikely(cursor->ptr == cursor->end))
 		mm_slider_next_used(cursor);
 
-	struct mc_command *command = parser->command;
+	char *key;
 	if (cursor->ptr + key_len <= cursor->end) {
-		command->action.key = cursor->ptr;
-		command->own_key = false;
+		key = cursor->ptr;
 		cursor->ptr += key_len;
+		command->own_key = false;
 	} else {
-		char *key = mm_private_alloc(key_len);
+		key = mm_private_alloc(key_len);
 		mm_slider_read(cursor, key, key_len);
-		command->action.key = key;
 		command->own_key = true;
 	}
-	command->action.key_len = key_len;
+
+	mc_action_set_key(&command->action, key, key_len);
 }
 
 static bool
@@ -133,8 +135,8 @@ mc_binary_read_key(struct mc_parser *parser, uint32_t key_len)
 	if (!mc_binary_fill(parser, key_len))
 		return false;
 
+	// Read the key.
 	mc_binary_set_key(parser, key_len);
-	mc_action_hash(&parser->command->action);
 
 	return true;
 }
@@ -145,6 +147,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	if (!mc_binary_fill(parser, body_len))
 		return false;
 
+	// Read the extras.
 	struct
 	{
 		uint32_t flags;
@@ -152,10 +155,11 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	} extras;
 	mm_slider_read(&parser->cursor, &extras, sizeof extras);
 
+	// Read the key.
+	mc_binary_set_key(parser, key_len);
+
 	// Create an entry.
 	struct mc_command *command = parser->command;
-	mc_binary_set_key(parser, key_len);
-	mc_action_hash(&command->action);
 	mc_action_create(&command->action);
 
 	// Initialize the entry and its key.
@@ -180,10 +184,11 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	if (!mc_binary_fill(parser, body_len))
 		return false;
 
+	// Read the key.
+	mc_binary_set_key(parser, key_len);
+
 	// Create an entry.
 	struct mc_command *command = parser->command;
-	mc_binary_set_key(parser, key_len);
-	mc_action_hash(&command->action);
 	mc_action_create(&command->action);
 
 	// Initialize the entry and its key.
@@ -206,6 +211,7 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 	if (!mc_binary_fill(parser, key_len))
 		return false;
 
+	// Read the extras.
 	struct
 	{
 		uint64_t delta;
@@ -219,8 +225,8 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 	command->value = mm_ntohll(extras.value);
 	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
 
+	// Read the key.
 	mc_binary_set_key(parser, key_len);
-	mc_action_hash(&command->action);
 
 	return true;
 }

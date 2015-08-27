@@ -144,6 +144,14 @@ mc_action_hash(struct mc_action *action)
 }
 
 static inline void
+mc_action_set_key(struct mc_action *action, const char *key, uint32_t key_len)
+{
+	action->key_len = key_len;
+	action->key = key;
+	mc_action_hash(action);
+}
+
+static inline void
 mc_action_wait(struct mc_action *action __mm_unused__)
 {
 #if ENABLE_MEMCACHE_COMBINER
