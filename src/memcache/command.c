@@ -509,7 +509,6 @@ mc_command_increment(struct mc_command *command, bool ascii)
 			if (command->action.old_entry != NULL)
 				mc_command_copy_extra(command->action.new_entry,
 						      command->action.old_entry);
-			mc_entry_alloc_chunks(command->action.new_entry);
 			mc_entry_setkey(command->action.new_entry, command->action.key);
 		}
 		mc_entry_setnum(command->action.new_entry, value);
@@ -564,7 +563,6 @@ mc_command_decrement(struct mc_command *command, bool ascii)
 			if (command->action.old_entry != NULL)
 				mc_command_copy_extra(command->action.new_entry,
 						      command->action.old_entry);
-			mc_entry_alloc_chunks(command->action.new_entry);
 			mc_entry_setkey(command->action.new_entry, command->action.key);
 		}
 		mc_entry_setnum(command->action.new_entry, value);

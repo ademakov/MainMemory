@@ -88,7 +88,6 @@ mc_parser_scan_value(struct mc_parser *parser)
 	// Initialize entry data memory and key.
 	entry->flags = command->flags;
 	entry->exp_time = command->exp_time;
-	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, action->key);
 
 	// Try to read the value and required LF and optional CR.

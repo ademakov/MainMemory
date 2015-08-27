@@ -167,7 +167,6 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	struct mc_entry *entry = command->action.new_entry;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
-	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, command->action.key);
 
 	// Read the entry value.
@@ -193,7 +192,6 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	// Initialize the entry and its key.
 	struct mc_entry *entry = command->action.new_entry;
-	mc_entry_alloc_chunks(entry);
 	mc_entry_setkey(entry, command->action.key);
 
 	// Read the entry value.
