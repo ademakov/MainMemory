@@ -77,7 +77,6 @@ struct mc_action
 	/* Input flags indicating if update should retain old and new
 	   entry references after the action. */
 	bool use_old_entry;
-	bool use_new_entry;
 	/* Output flag indicating if the entry match succeeded. */
 	bool entry_match;
 
@@ -262,12 +261,9 @@ mc_action_insert(struct mc_action *action)
 }
 
 static inline void
-mc_action_update(struct mc_action *action,
-		 bool use_old_entry,
-		 bool use_new_entry)
+mc_action_update(struct mc_action *action, bool use_old_entry)
 {
 	action->use_old_entry = use_old_entry;
-	action->use_new_entry = use_new_entry;
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, MC_ACTION_UPDATE);
 #elif ENABLE_MEMCACHE_DELEGATE

@@ -481,12 +481,9 @@ mc_action_update_low(struct mc_action *action)
 
 	mc_action_bucket_update(action, bucket, &freelist);
 	if (action->entry_match) {
-		if (action->use_new_entry)
-			mc_action_ref_entry(action->new_entry);
 		mc_action_access_entry(action->new_entry);
-	} else {
-		if (action->use_old_entry && action->old_entry != NULL)
-			mc_action_ref_entry(action->old_entry);
+	} else if (action->use_old_entry && action->old_entry != NULL) {
+		mc_action_ref_entry(action->old_entry);
 	}
 
 	mc_table_lookup_unlock(action->part);
