@@ -126,6 +126,8 @@ mc_command_destroy(mm_thread_t thread, struct mc_command *command)
 
 	if (command->own_key)
 		mm_private_free((char *) command->action.key);
+	if (command->own_alter_value)
+		mm_private_free((char *) command->action.alter_value);
 
 	mc_action_cleanup(&command->action);
 
@@ -402,20 +404,16 @@ mc_command_append(struct mc_command *command)
 	ENTER();
 
 	struct mc_entry *new_entry = command->action.new_entry;
-
-	char *append_value = mc_entry_getvalue(new_entry);
-	uint32_t append_value_len = new_entry->value_len;
-	struct mm_stack chunks = new_entry->chunks;
-	mm_stack_prepare(&new_entry->chunks);
+	const char *append_value = command->action.alter_value;
+	uint32_t append_value_len = command->action.value_len;
 
 	mc_action_lookup(&command->action);
 
 	while (command->action.old_entry != NULL) {
 		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + append_value_len;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		new_entry->value_len = value_len;
+		new_entry->value_len = old_entry->value_len + append_value_len;
 		mc_entry_free_chunks(new_entry);
 		mc_entry_alloc_chunks(new_entry);
 		mc_entry_setkey(new_entry, command->action.key);
@@ -430,8 +428,6 @@ mc_command_append(struct mc_command *command)
 			break;
 	}
 
-	mm_chunk_destroy_chain(mm_stack_head(&chunks));
-
 	LEAVE();
 }
 
@@ -441,20 +437,16 @@ mc_command_prepend(struct mc_command *command)
 	ENTER();
 
 	struct mc_entry *new_entry = command->action.new_entry;
-
-	char *prepend_value = mc_entry_getvalue(new_entry);
-	uint32_t prepend_value_len = new_entry->value_len;
-	struct mm_stack chunks = new_entry->chunks;
-	mm_stack_prepare(&new_entry->chunks);
+	const char *prepend_value = command->action.alter_value;
+	uint32_t prepend_value_len = command->action.value_len;
 
 	mc_action_lookup(&command->action);
 
 	while (command->action.old_entry != NULL) {
 		struct mc_entry *old_entry = command->action.old_entry;
-		size_t value_len = old_entry->value_len + prepend_value_len;
 		char *old_value = mc_entry_getvalue(old_entry);
 
-		new_entry->value_len = value_len;
+		new_entry->value_len = old_entry->value_len + prepend_value_len;
 		mc_entry_free_chunks(new_entry);
 		mc_entry_alloc_chunks(new_entry);
 		mc_entry_setkey(new_entry, command->action.key);
@@ -468,8 +460,6 @@ mc_command_prepend(struct mc_command *command)
 		if (command->action.entry_match)
 			break;
 	}
-
-	mm_chunk_destroy_chain(mm_stack_head(&chunks));
 
 	LEAVE();
 }

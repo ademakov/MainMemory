@@ -156,8 +156,6 @@ struct mc_command
 			uint32_t opaque;
 			uint8_t opcode;
 		} binary;
-
-		uint32_t nopts;
 	};
 
 	union
@@ -169,12 +167,18 @@ struct mc_command
 		};
 		struct mc_command_slabs slabs;
 		struct mc_command_stats stats;
-		uint32_t flags;
 	};
 
-	uint32_t exp_time;
+	union
+	{
+		uint32_t exp_time;
+		uint32_t nopts;
+	};
 
+	/* Action key memory is owned by the command. */
 	bool own_key;
+	/* Action value memory is owned by the command. */
+	bool own_alter_value;
 };
 
 /**********************************************************************

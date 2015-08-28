@@ -81,18 +81,13 @@ mc_parser_scan_value(struct mc_parser *parser)
 	ENTER();
 	bool rc = true;
 
+	struct mm_slider *cursor = &parser->cursor;
 	struct mc_command *command = parser->command;
 	struct mc_action *action = &command->action;
-	struct mc_entry *entry = action->new_entry;
-
-	// Initialize entry data memory and key.
-	entry->flags = command->flags;
-	entry->exp_time = command->exp_time;
-	mc_entry_setkey(entry, action->key);
 
 	// Try to read the value and required LF and optional CR.
-	uint32_t required = entry->value_len + 1;
-	uint32_t available = mm_slider_getsize_used(&parser->cursor);
+	uint32_t required = action->value_len + 1;
+	uint32_t available = mm_slider_getsize_used(cursor);
 	if (required > available) {
 		mm_netbuf_demand(&parser->state->sock, required - available + 1);
 		do {
@@ -105,12 +100,27 @@ mc_parser_scan_value(struct mc_parser *parser)
 			}
 			available += n;
 		} while (required > available);
-		mm_slider_reset_used(&parser->cursor);
+		mm_slider_reset_used(cursor);
 	}
 
 	// Read the entry value.
-	char *value = mc_entry_getvalue(entry);
-	mm_slider_read(&parser->cursor, value, entry->value_len);
+	if (action->alter_type == MC_ACTION_ALTER_OTHER) {
+		struct mc_entry *entry = action->new_entry;
+		char *value = mc_entry_getvalue(entry);
+		mm_slider_read(cursor, value, action->value_len);
+	} else {
+		if (unlikely(cursor->ptr == cursor->end))
+			mm_slider_next_used(cursor);
+		if (cursor->ptr + action->value_len <= cursor->end) {
+			action->alter_value = cursor->ptr;
+			cursor->ptr += action->value_len;
+		} else {
+			char *value = mm_private_alloc(action->value_len);
+			mm_slider_read(cursor, value, action->value_len);
+			action->alter_value = value;
+			command->own_alter_value = true;
+		}
+	}
 
 leave:
 	LEAVE();
@@ -198,9 +208,12 @@ mc_parser_parse(struct mc_parser *parser)
 	uint64_t num64 = 0;
 	char *match = "";
 
-	mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
+	// Initialize storage command parameters.
+	uint32_t set_flags = 0;
+	uint32_t set_exp_time = 0;
 
 	// The current command.
+	mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
 	struct mc_command *command = mc_command_create(thread);
 	parser->command = command;
 
@@ -315,12 +328,14 @@ again:
 					break;
 				} else if (start == Cx4('a', 'p', 'p', 'e')) {
 					command->type = &mc_command_ascii_append;
+					command->action.alter_type = MC_ACTION_ALTER_APPEND;
 					state = S_MATCH;
 					match = "nd";
 					shift = S_SET_1;
 					break;
 				} else if (start == Cx4('p', 'r', 'e', 'p')) {
 					command->type = &mc_command_ascii_prepend;
+					command->action.alter_type = MC_ACTION_ALTER_PREPEND;
 					state = S_MATCH;
 					match = "end";
 					shift = S_SET_1;
@@ -567,13 +582,13 @@ again:
 				goto again;
 
 			case S_SET_3:
-				command->flags = num32;
+				set_flags = num32;
 				state = S_NUM32;
 				shift = S_SET_4;
 				goto again;
 
 			case S_SET_4:
-				command->exp_time = mc_entry_fix_exptime(num32);
+				set_exp_time = mc_entry_fix_exptime(num32);
 				state = S_NUM32;
 				shift = S_SET_5;
 				goto again;
@@ -581,6 +596,11 @@ again:
 			case S_SET_5:
 				mc_action_hash(&command->action);
 				mc_action_create(&command->action, num32);
+				command->action.new_entry->flags = set_flags;
+				command->action.new_entry->exp_time = set_exp_time;
+				if (command->action.alter_type == MC_ACTION_ALTER_OTHER)
+					mc_entry_setkey(command->action.new_entry,
+							command->action.key);
 				if (command->type == &mc_command_ascii_cas) {
 					state = S_NUM64;
 					shift = S_CAS;

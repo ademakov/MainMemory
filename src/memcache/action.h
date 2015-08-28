@@ -68,23 +68,41 @@ typedef enum {
 } mc_action_t;
 #endif
 
+typedef enum
+{
+	MC_ACTION_ALTER_OTHER,
+	MC_ACTION_ALTER_APPEND,
+	MC_ACTION_ALTER_PREPEND,
+} mc_action_alter_t;
+
 struct mc_action
 {
-	const char *key;
-	uint32_t key_len;
 	uint32_t hash;
+	uint32_t key_len;
 
+	/* If not zero then match it against old_entry stamp. */
+	uint64_t stamp;
+
+	/* The entry key. */
+	const char *key;
+
+	/* The table partition corresponding to the key. */
+	struct mc_tpart *part;
+
+	struct mc_entry *new_entry;
+	struct mc_entry *old_entry;
+
+	/* The value length. */
 	uint32_t value_len;
 
 	/* Output flag indicating if the entry match succeeded. */
 	bool entry_match;
 
-	struct mc_tpart *part;
-	struct mc_entry *new_entry;
-	struct mc_entry *old_entry;
+	/* The alter action type. */
+	mc_action_alter_t alter_type;
 
-	/* If not zero then match it against old_entry stamp. */
-	uint64_t stamp;
+	/* The alter action value. */
+	const char *alter_value;
 
 #if ENABLE_MEMCACHE_COMBINER
 	mc_action_t action;

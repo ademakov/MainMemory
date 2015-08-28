@@ -119,7 +119,6 @@ mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 	if (cursor->ptr + key_len <= cursor->end) {
 		key = cursor->ptr;
 		cursor->ptr += key_len;
-		command->own_key = false;
 	} else {
 		key = mm_private_alloc(key_len);
 		mm_slider_read(cursor, key, key_len);
@@ -190,13 +189,19 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	uint32_t value_len = body_len - key_len;
 	mc_action_create(&command->action, value_len);
 
-	// Initialize the entry and its key.
-	struct mc_entry *entry = command->action.new_entry;
-	mc_entry_setkey(entry, command->action.key);
-
-	// Read the entry value.
-	char *value = mc_entry_getvalue(entry);
-	mm_slider_read(&parser->cursor, value, entry->value_len);
+	// Read the value.
+	struct mm_slider *cursor = &parser->cursor;
+	if (unlikely(cursor->ptr == cursor->end))
+		mm_slider_next_used(cursor);
+	if (cursor->ptr + value_len <= cursor->end) {
+		command->action.alter_value = cursor->ptr;
+		cursor->ptr += value_len;
+	} else {
+		char *value = mm_private_alloc(value_len);
+		mm_slider_read(cursor, value, value_len);
+		command->action.alter_value = value;
+		command->own_alter_value = true;
+	}
 
 	return true;
 }
@@ -312,6 +317,16 @@ mc_binary_parse(struct mc_parser *parser)
 		    || unlikely(key_len == 0)) {
 			rc = mc_binary_invalid_arguments(parser, body_len);
 			goto leave;
+		}
+		switch (header.opcode) {
+		case MC_BINARY_OPCODE_APPEND:
+		case MC_BINARY_OPCODE_APPENDQ:
+			command->action.alter_type = MC_ACTION_ALTER_APPEND;
+			break;
+		case MC_BINARY_OPCODE_PREPEND:
+		case MC_BINARY_OPCODE_PREPENDQ:
+			command->action.alter_type = MC_ACTION_ALTER_PREPEND;
+			break;
 		}
 		rc = mc_binary_read_chunk(parser, body_len, key_len);
 		break;
