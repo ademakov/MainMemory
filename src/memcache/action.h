@@ -46,16 +46,18 @@ typedef enum {
 	/* Delete existing entry if any. */
 	MC_ACTION_DELETE,
 
-	/* Create a fresh entry. */
+	/* Create a new entry. */
 	MC_ACTION_CREATE,
-	/* Abandon a created entry. */
+	/* Abandon a newly created entry. */
 	MC_ACTION_CANCEL,
-	/* Insert newly created entry. */
+	/* Insert a newly created entry. */
 	MC_ACTION_INSERT,
-	/* Replace existing entry if any. */
+	/* Replace an existing entry if any. */
 	MC_ACTION_UPDATE,
-	/* Either insert new or replace existing entry. */
+	/* Either insert a new or replace an existing entry. */
 	MC_ACTION_UPSERT,
+	/* Replace an existing entry with conflict detection. */
+	MC_ACTION_ALTER,
 
 	MC_ACTION_STRIDE,
 
@@ -74,9 +76,6 @@ struct mc_action
 
 	uint32_t value_len;
 
-	/* Input flags indicating if update should retain old and new
-	   entry references after the action. */
-	bool use_old_entry;
 	/* Output flag indicating if the entry match succeeded. */
 	bool entry_match;
 
@@ -95,38 +94,41 @@ struct mc_action
 #endif
 };
 
-void mc_action_lookup_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_lookup_low(struct mc_action *action);
 
-void mc_action_finish_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_finish_low(struct mc_action *action);
 
-void mc_action_delete_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_delete_low(struct mc_action *action);
 
-void mc_action_create_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_create_low(struct mc_action *action);
 
-void mc_action_cancel_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_cancel_low(struct mc_action *action);
 
-void mc_action_insert_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_insert_low(struct mc_action *action);
 
-void mc_action_update_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_update_low(struct mc_action *action);
 
-void mc_action_upsert_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_upsert_low(struct mc_action *action);
 
-void mc_action_stride_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_alter_low(struct mc_action *action);
 
-void mc_action_evict_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_stride_low(struct mc_action *action);
 
-void mc_action_flush_low(struct mc_action *action)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mc_action_evict_low(struct mc_action *action);
+
+void __attribute__((nonnull(1)))
+mc_action_flush_low(struct mc_action *action);
 
 static inline void __attribute__((nonnull(1)))
 mc_action_cleanup(struct mc_action *action __mm_unused__)
@@ -136,14 +138,14 @@ mc_action_cleanup(struct mc_action *action __mm_unused__)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_hash(struct mc_action *action)
 {
 	action->hash = mc_hash(action->key, action->key_len);
 	action->part = mc_table_part(action->hash);
 }
 
-static inline void
+static inline void __attribute__((nonnull(1, 2)))
 mc_action_set_key(struct mc_action *action, const char *key, uint32_t key_len)
 {
 	action->key_len = key_len;
@@ -151,7 +153,7 @@ mc_action_set_key(struct mc_action *action, const char *key, uint32_t key_len)
 	mc_action_hash(action);
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_wait(struct mc_action *action __mm_unused__)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -164,7 +166,7 @@ mc_action_wait(struct mc_action *action __mm_unused__)
 }
 
 #if ENABLE_MEMCACHE_COMBINER
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_combiner_execute(struct mc_action *action,
 		    mc_action_t action_tag)
 {
@@ -175,7 +177,7 @@ mc_combiner_execute(struct mc_action *action,
 #endif
 
 #if ENABLE_MEMCACHE_DELEGATE
-static inline void
+static inline void __attribute__((nonnull(1, 2)))
 mc_delegate_execute(struct mc_action *action,
 		    void (*action_routine)(struct mc_action *))
 {
@@ -187,7 +189,7 @@ mc_delegate_execute(struct mc_action *action,
 }
 #endif
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_lookup(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -199,7 +201,7 @@ mc_action_lookup(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_finish(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -211,7 +213,7 @@ mc_action_finish(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_delete(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -223,7 +225,7 @@ mc_action_delete(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_create(struct mc_action *action, uint32_t value_len)
 {
 	action->value_len = value_len;
@@ -236,7 +238,7 @@ mc_action_create(struct mc_action *action, uint32_t value_len)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_cancel(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -248,7 +250,7 @@ mc_action_cancel(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_insert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -260,10 +262,9 @@ mc_action_insert(struct mc_action *action)
 #endif
 }
 
-static inline void
-mc_action_update(struct mc_action *action, bool use_old_entry)
+static inline void __attribute__((nonnull(1)))
+mc_action_update(struct mc_action *action)
 {
-	action->use_old_entry = use_old_entry;
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, MC_ACTION_UPDATE);
 #elif ENABLE_MEMCACHE_DELEGATE
@@ -273,7 +274,7 @@ mc_action_update(struct mc_action *action, bool use_old_entry)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_upsert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -285,7 +286,19 @@ mc_action_upsert(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
+mc_action_alter(struct mc_action *action)
+{
+#if ENABLE_MEMCACHE_COMBINER
+	mc_combiner_execute(action, MC_ACTION_ALTER);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_alter_low);
+#else
+	mc_action_alter_low(action);
+#endif
+}
+
+static inline void __attribute__((nonnull(1)))
 mc_action_stride(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -297,7 +310,7 @@ mc_action_stride(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_evict(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
@@ -309,7 +322,7 @@ mc_action_evict(struct mc_action *action)
 #endif
 }
 
-static inline void
+static inline void __attribute__((nonnull(1)))
 mc_action_flush(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER

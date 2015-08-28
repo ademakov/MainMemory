@@ -136,8 +136,6 @@ mc_action_drop_expired(struct mc_tpart *part,
 		       struct mm_stack *bucket,
 		       struct mm_stack *expired)
 {
-	mm_stack_prepare(expired);
-
 	struct mm_core *core = mm_core_selfptr();
 	mm_timeval_t real_time = mm_core_getrealtime(core);
 	uint32_t time = real_time / 1000000; // useconds -> seconds.
@@ -293,6 +291,29 @@ mc_action_bucket_update(struct mc_action *action,
 	action->old_entry = NULL;
 }
 
+static struct mm_stack *
+mm_action_bucket_start(struct mc_action *action, struct mm_stack *freelist)
+{
+	mm_stack_prepare(freelist);
+
+	mc_table_lookup_lock(action->part);
+
+	uint32_t index = mc_table_index(action->part, action->hash);
+	return &action->part->buckets[index];
+}
+
+static void
+mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
+{
+	mc_table_lookup_unlock(action->part);
+
+	if (!mm_stack_empty(freelist)) {
+		mc_table_freelist_lock(action->part);
+		mc_action_free_entries(action->part, freelist);
+		mc_table_freelist_unlock(action->part);
+	}
+}
+
 /**********************************************************************
  * Table Actions.
  **********************************************************************/
@@ -303,10 +324,7 @@ mc_action_lookup_low(struct mc_action *action)
 	ENTER();
 
 	struct mm_stack freelist;
-	mc_table_lookup_lock(action->part);
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_stack *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
 	mc_action_bucket_lookup(action, bucket, &freelist);
 	if (action->old_entry != NULL) {
@@ -314,12 +332,7 @@ mc_action_lookup_low(struct mc_action *action)
 		mc_action_access_entry(action->old_entry);
 	}
 
-	mc_table_lookup_unlock(action->part);
-	if (!mm_stack_empty(&freelist)) {
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &freelist);
-		mc_table_freelist_unlock(action->part);
-	}
+	mc_action_bucket_finish(action, &freelist);
 
 	LEAVE();
 }
@@ -346,20 +359,12 @@ mc_action_delete_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mm_stack finish_list;
-	mc_table_lookup_lock(action->part);
+	struct mm_stack freelist;
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_stack *bucket = &action->part->buckets[index];
+	mc_action_bucket_delete(action, bucket, &freelist);
 
-	mc_action_bucket_delete(action, bucket, &finish_list);
-
-	mc_table_lookup_unlock(action->part);
-	if (!mm_stack_empty(&finish_list)) {
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &finish_list);
-		mc_table_freelist_unlock(action->part);
-	}
+	mc_action_bucket_finish(action, &freelist);
 
 	LEAVE();
 }
@@ -439,28 +444,18 @@ mc_action_insert_low(struct mc_action *action)
 	ENTER();
 
 	struct mm_stack freelist;
-	mc_table_lookup_lock(action->part);
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_stack *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
 	mc_action_bucket_lookup(action, bucket, &freelist);
-	if (action->old_entry == NULL) {
+	if (action->old_entry == NULL)
 		mc_action_bucket_insert(action, bucket, MC_ENTRY_USED_MIN);
-	}
 
-	mc_table_lookup_unlock(action->part);
-	if (!mm_stack_empty(&freelist)) {
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &freelist);
-		mc_table_freelist_unlock(action->part);
-	}
+	mc_action_bucket_finish(action, &freelist);
 
-	if (action->old_entry == NULL) {
+	if (action->old_entry == NULL)
 		mc_table_reserve_volume(action->part);
-	} else {
+	else
 		mc_action_cancel_low(action);
-	}
 
 	LEAVE();
 }
@@ -470,34 +465,19 @@ mc_action_update_low(struct mc_action *action)
 {
 	ENTER();
 
-	if (action->old_entry != NULL)
-		mc_action_finish_low(action);
-
 	struct mm_stack freelist;
-	mc_table_lookup_lock(action->part);
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_stack *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
 	mc_action_bucket_update(action, bucket, &freelist);
-	if (action->entry_match) {
+	if (action->entry_match)
 		mc_action_access_entry(action->new_entry);
-	} else if (action->use_old_entry && action->old_entry != NULL) {
-		mc_action_ref_entry(action->old_entry);
-	}
 
-	mc_table_lookup_unlock(action->part);
-	if (!mm_stack_empty(&freelist)) {
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &freelist);
-		mc_table_freelist_unlock(action->part);
-	}
+	mc_action_bucket_finish(action, &freelist);
 
-	if (action->entry_match) {
+	if (action->entry_match)
 		mc_table_reserve_volume(action->part);
-	} else if (!action->use_old_entry || action->old_entry == NULL) {
+	else
 		mc_action_cancel_low(action);
-	}
 
 	LEAVE();
 }
@@ -508,22 +488,41 @@ mc_action_upsert_low(struct mc_action *action)
 	ENTER();
 
 	struct mm_stack freelist;
-	mc_table_lookup_lock(action->part);
-
-	uint32_t index = mc_table_index(action->part, action->hash);
-	struct mm_stack *bucket = &action->part->buckets[index];
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
 	mc_action_bucket_delete(action, bucket, &freelist);
 	mc_action_bucket_insert(action, bucket, MC_ENTRY_USED_MIN);
 
-	mc_table_lookup_unlock(action->part);
-	if (!mm_stack_empty(&freelist)) {
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &freelist);
-		mc_table_freelist_unlock(action->part);
-	}
+	mc_action_bucket_finish(action, &freelist);
 
 	mc_table_reserve_volume(action->part);
+
+	LEAVE();
+}
+
+void
+mc_action_alter_low(struct mc_action *action)
+{
+	ENTER();
+
+	if (action->old_entry != NULL)
+		mc_action_finish_low(action);
+
+	struct mm_stack freelist;
+	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
+
+	mc_action_bucket_update(action, bucket, &freelist);
+	if (action->entry_match)
+		mc_action_access_entry(action->new_entry);
+	else if (action->old_entry != NULL)
+		mc_action_ref_entry(action->old_entry);
+
+	mc_action_bucket_finish(action, &freelist);
+
+	if (action->entry_match)
+		mc_table_reserve_volume(action->part);
+	else if (action->old_entry == NULL)
+		mc_action_cancel_low(action);
 
 	LEAVE();
 }
@@ -638,6 +637,9 @@ mc_action_perform(uintptr_t data)
 		break;
 	case MC_ACTION_UPSERT:
 		mc_action_upsert_low(action);
+		break;
+	case MC_ACTION_ALTER:
+		mc_action_alter_low(action);
 		break;
 	case MC_ACTION_STRIDE:
 		mc_action_stride_low(action);

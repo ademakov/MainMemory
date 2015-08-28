@@ -422,7 +422,7 @@ mc_command_append(struct mc_command *command)
 		memcpy(new_value + old_entry->value_len, append_value, append_value_len);
 		command->action.stamp = old_entry->stamp;
 
-		mc_action_update(&command->action, true);
+		mc_action_alter(&command->action);
 		if (command->action.entry_match)
 			break;
 	}
@@ -462,7 +462,7 @@ mc_command_prepend(struct mc_command *command)
 		memcpy(new_value + prepend_value_len, old_value, old_entry->value_len);
 		command->action.stamp = old_entry->stamp;
 
-		mc_action_update(&command->action, true);
+		mc_action_alter(&command->action);
 		if (command->action.entry_match)
 			break;
 	}
@@ -512,9 +512,6 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 
 		if (action->new_entry == NULL) {
 			mc_action_create(action, MC_ENTRY_NUM_LEN_MAX);
-			if (action->old_entry != NULL)
-				mc_command_copy_extra(action->new_entry,
-						      action->old_entry);
 			mc_entry_setkey(action->new_entry, action->key);
 		}
 		mc_entry_setnum(action->new_entry, value);
@@ -525,7 +522,9 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 				break;
 		} else {
 			mm_command_store_value(buffer, action->new_entry);
-			mc_action_update(action, true);
+			mc_command_copy_extra(action->new_entry,
+					      action->old_entry);
+			mc_action_alter(action);
 			if (action->entry_match)
 				break;
 		}
@@ -567,9 +566,6 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 
 		if (action->new_entry == NULL) {
 			mc_action_create(action, MC_ENTRY_NUM_LEN_MAX);
-			if (action->old_entry != NULL)
-				mc_command_copy_extra(action->new_entry,
-						      action->old_entry);
 			mc_entry_setkey(action->new_entry, action->key);
 		}
 		mc_entry_setnum(action->new_entry, value);
@@ -580,7 +576,9 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 				break;
 		} else {
 			mm_command_store_value(buffer, action->new_entry);
-			mc_action_update(action, true);
+			mc_command_copy_extra(action->new_entry,
+					      action->old_entry);
+			mc_action_alter(action);
 			if (action->entry_match)
 				break;
 		}
@@ -662,7 +660,7 @@ mc_command_execute_ascii_replace(struct mc_state *state,
 {
 	ENTER();
 
-	mc_action_update(&command->action, false);
+	mc_action_update(&command->action);
 
 	if (command->ascii.noreply)
 		/* Be quiet. */;
@@ -680,7 +678,7 @@ mc_command_execute_ascii_cas(struct mc_state *state,
 {
 	ENTER();
 
-	mc_action_update(&command->action, false);
+	mc_action_update(&command->action);
 
 	if (command->ascii.noreply)
 		/* Be quiet. */;
@@ -980,7 +978,7 @@ mc_command_execute_binary_set(struct mc_state *state,
 	ENTER();
 
 	if (command->action.stamp) {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.entry_match)
 			mc_command_transmit_binary_stamp(state, command,
 							 command->action.stamp);
@@ -1006,7 +1004,7 @@ mc_command_execute_binary_setq(struct mc_state *state,
 	ENTER();
 
 	if (command->action.stamp) {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.entry_match)
 			/* Be quiet. */;
 		else if (command->action.old_entry != NULL)
@@ -1062,7 +1060,7 @@ mc_command_execute_binary_replace(struct mc_state *state,
 	ENTER();
 
 	if (command->action.stamp) {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.entry_match)
 			mc_command_transmit_binary_stamp(state, command,
 							 command->action.stamp);
@@ -1073,7 +1071,7 @@ mc_command_execute_binary_replace(struct mc_state *state,
 			mc_command_transmit_binary_status(state, command,
 							  MC_BINARY_STATUS_KEY_NOT_FOUND);
 	} else {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.old_entry != NULL)
 			mc_command_transmit_binary_stamp(state, command,
 							 command->action.stamp);
@@ -1092,7 +1090,7 @@ mc_command_execute_binary_replaceq(struct mc_state *state,
 	ENTER();
 
 	if (command->action.stamp) {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.entry_match)
 			/* Be quiet. */;
 		else if (command->action.old_entry != NULL)
@@ -1102,7 +1100,7 @@ mc_command_execute_binary_replaceq(struct mc_state *state,
 			mc_command_transmit_binary_status(state, command,
 							  MC_BINARY_STATUS_KEY_NOT_FOUND);
 	} else {
-		mc_action_update(&command->action, false);
+		mc_action_update(&command->action);
 		if (command->action.old_entry != NULL)
 			/* Be quiet. */;
 		else
