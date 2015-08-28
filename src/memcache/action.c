@@ -505,17 +505,21 @@ mc_action_alter_low(struct mc_action *action)
 {
 	ENTER();
 
-	if (action->old_entry != NULL)
-		mc_action_finish_low(action);
+	uint32_t flags = action->old_entry->flags;
+	uint32_t exp_time = action->old_entry->exp_time;
+	mc_action_finish_low(action);
 
 	struct mm_stack freelist;
 	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
 
 	mc_action_bucket_update(action, bucket, &freelist);
-	if (action->entry_match)
+	if (action->entry_match) {
 		mc_action_access_entry(action->new_entry);
-	else if (action->old_entry != NULL)
+		action->new_entry->flags = flags;
+		action->new_entry->exp_time = exp_time;
+	} else if (action->old_entry != NULL) {
 		mc_action_ref_entry(action->old_entry);
+	}
 
 	mc_action_bucket_finish(action, &freelist);
 

@@ -135,7 +135,7 @@ mc_command_destroy(mm_thread_t thread, struct mc_command *command)
 }
 
 /**********************************************************************
- * Command Processing.
+ * Command processing helpers.
  **********************************************************************/
 
 static void
@@ -175,13 +175,6 @@ mc_command_flush(uint32_t exptime)
 #endif
 	}
 
-}
-
-static void
-mc_command_copy_extra(struct mc_entry *new_entry, struct mc_entry *old_entry)
-{
-	new_entry->flags = old_entry->flags;
-	new_entry->exp_time = old_entry->exp_time;
 }
 
 static void
@@ -393,6 +386,17 @@ mc_command_transmit_binary_value(struct mc_state *state,
 }
 
 static void
+mm_command_store_value(char *buffer, struct mc_entry *entry)
+{
+	if (buffer) {
+		char *value = mc_entry_getvalue(entry);
+		uint32_t value_len = entry->value_len;
+		memcpy(buffer, value, value_len);
+		buffer[value_len] = 0;
+	}
+}
+
+static void
 mc_command_append(struct mc_command *command)
 {
 	ENTER();
@@ -415,7 +419,6 @@ mc_command_append(struct mc_command *command)
 		mc_entry_free_chunks(new_entry);
 		mc_entry_alloc_chunks(new_entry);
 		mc_entry_setkey(new_entry, command->action.key);
-		mc_command_copy_extra(new_entry, old_entry);
 
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
@@ -455,7 +458,6 @@ mc_command_prepend(struct mc_command *command)
 		mc_entry_free_chunks(new_entry);
 		mc_entry_alloc_chunks(new_entry);
 		mc_entry_setkey(new_entry, command->action.key);
-		mc_command_copy_extra(new_entry, old_entry);
 
 		char *new_value = mc_entry_getvalue(new_entry);
 		memcpy(new_value, prepend_value, prepend_value_len);
@@ -470,17 +472,6 @@ mc_command_prepend(struct mc_command *command)
 	mm_chunk_destroy_chain(mm_stack_head(&chunks));
 
 	LEAVE();
-}
-
-static void
-mm_command_store_value(char *buffer, struct mc_entry *entry)
-{
-	if (buffer) {
-		char *value = mc_entry_getvalue(entry);
-		uint32_t value_len = entry->value_len;
-		memcpy(buffer, value, value_len);
-		buffer[value_len] = 0;
-	}
 }
 
 static uint64_t
@@ -522,8 +513,6 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 				break;
 		} else {
 			mm_command_store_value(buffer, action->new_entry);
-			mc_command_copy_extra(action->new_entry,
-					      action->old_entry);
 			mc_action_alter(action);
 			if (action->entry_match)
 				break;
@@ -576,8 +565,6 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 				break;
 		} else {
 			mm_command_store_value(buffer, action->new_entry);
-			mc_command_copy_extra(action->new_entry,
-					      action->old_entry);
 			mc_action_alter(action);
 			if (action->entry_match)
 				break;
@@ -587,6 +574,10 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 	LEAVE();
 	return value;
 }
+
+/**********************************************************************
+ * ASCII protocol commands.
+ **********************************************************************/
 
 static void
 mc_command_execute_ascii_get(struct mc_state *state,
@@ -908,6 +899,10 @@ mc_command_execute_ascii_error(struct mc_state *state,
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Binary protocol commands.
+ **********************************************************************/
 
 static void
 mc_command_execute_binary_get(struct mc_state *state,
