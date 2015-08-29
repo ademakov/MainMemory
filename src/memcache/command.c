@@ -402,29 +402,37 @@ static void
 mc_command_append(struct mc_command *command)
 {
 	ENTER();
+	struct mc_action *action = &command->action;
+	const char *alter_value = action->alter_value;
+	uint32_t alter_value_len = action->value_len;
 
-	struct mc_entry *new_entry = command->action.new_entry;
-	const char *append_value = command->action.alter_value;
-	uint32_t append_value_len = command->action.value_len;
+	mc_action_lookup(action);
 
-	mc_action_lookup(&command->action);
+	while (action->old_entry != NULL) {
+		struct mc_entry *old_entry = action->old_entry;
 
-	while (command->action.old_entry != NULL) {
-		struct mc_entry *old_entry = command->action.old_entry;
-		char *old_value = mc_entry_getvalue(old_entry);
+		uint32_t value_len = old_entry->value_len + alter_value_len;
+		if (action->new_entry == NULL) {
+			mc_action_create(action, value_len);
+			mc_entry_setkey(action->new_entry, action->key);
+		}
+		struct mc_entry *new_entry = action->new_entry;
 
-		new_entry->value_len = old_entry->value_len + append_value_len;
-		mc_entry_free_chunks(new_entry);
-		mc_entry_alloc_chunks(new_entry);
-		mc_entry_setkey(new_entry, command->action.key);
+		if (new_entry->value_len != value_len) {
+			new_entry->value_len = value_len;
+			mc_entry_free_chunks(new_entry);
+			mc_entry_alloc_chunks(new_entry);
+			mc_entry_setkey(new_entry, action->key);
+		}
 
 		char *new_value = mc_entry_getvalue(new_entry);
+		char *old_value = mc_entry_getvalue(old_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
-		memcpy(new_value + old_entry->value_len, append_value, append_value_len);
-		command->action.stamp = old_entry->stamp;
+		memcpy(new_value + old_entry->value_len, alter_value, alter_value_len);
+		action->stamp = old_entry->stamp;
 
-		mc_action_alter(&command->action);
-		if (command->action.entry_match)
+		mc_action_alter(action);
+		if (action->entry_match)
 			break;
 	}
 
@@ -435,29 +443,37 @@ static void
 mc_command_prepend(struct mc_command *command)
 {
 	ENTER();
+	struct mc_action *action = &command->action;
+	const char *alter_value = action->alter_value;
+	uint32_t alter_value_len = action->value_len;
 
-	struct mc_entry *new_entry = command->action.new_entry;
-	const char *prepend_value = command->action.alter_value;
-	uint32_t prepend_value_len = command->action.value_len;
+	mc_action_lookup(action);
 
-	mc_action_lookup(&command->action);
+	while (action->old_entry != NULL) {
+		struct mc_entry *old_entry = action->old_entry;
 
-	while (command->action.old_entry != NULL) {
-		struct mc_entry *old_entry = command->action.old_entry;
-		char *old_value = mc_entry_getvalue(old_entry);
+		uint32_t value_len = old_entry->value_len + alter_value_len;
+		if (action->new_entry == NULL) {
+			mc_action_create(action, value_len);
+			mc_entry_setkey(action->new_entry, action->key);
+		}
+		struct mc_entry *new_entry = action->new_entry;
 
-		new_entry->value_len = old_entry->value_len + prepend_value_len;
-		mc_entry_free_chunks(new_entry);
-		mc_entry_alloc_chunks(new_entry);
-		mc_entry_setkey(new_entry, command->action.key);
+		if (new_entry->value_len != value_len) {
+			new_entry->value_len = value_len;
+			mc_entry_free_chunks(new_entry);
+			mc_entry_alloc_chunks(new_entry);
+			mc_entry_setkey(new_entry, action->key);
+		}
 
 		char *new_value = mc_entry_getvalue(new_entry);
-		memcpy(new_value, prepend_value, prepend_value_len);
-		memcpy(new_value + prepend_value_len, old_value, old_entry->value_len);
-		command->action.stamp = old_entry->stamp;
+		char *old_value = mc_entry_getvalue(old_entry);
+		memcpy(new_value, alter_value, alter_value_len);
+		memcpy(new_value + alter_value_len, old_value, old_entry->value_len);
+		action->stamp = old_entry->stamp;
 
-		mc_action_alter(&command->action);
-		if (command->action.entry_match)
+		mc_action_alter(action);
+		if (action->entry_match)
 			break;
 	}
 

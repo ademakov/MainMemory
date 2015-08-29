@@ -184,10 +184,10 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	// Read the key.
 	mc_binary_set_key(parser, key_len);
 
-	// Create an entry.
+	// Find the value length.
 	struct mc_command *command = parser->command;
 	uint32_t value_len = body_len - key_len;
-	mc_action_create(&command->action, value_len);
+	command->action.value_len = value_len;
 
 	// Read the value.
 	struct mm_slider *cursor = &parser->cursor;

@@ -595,12 +595,15 @@ again:
 
 			case S_SET_5:
 				mc_action_hash(&command->action);
-				mc_action_create(&command->action, num32);
-				command->action.new_entry->flags = set_flags;
-				command->action.new_entry->exp_time = set_exp_time;
-				if (command->action.alter_type == MC_ACTION_ALTER_OTHER)
+				if (command->action.alter_type == MC_ACTION_ALTER_OTHER) {
+					mc_action_create(&command->action, num32);
+					command->action.new_entry->flags = set_flags;
+					command->action.new_entry->exp_time = set_exp_time;
 					mc_entry_setkey(command->action.new_entry,
 							command->action.key);
+				} else {
+					command->action.value_len = num32;
+				}
 				if (command->type == &mc_command_ascii_cas) {
 					state = S_NUM64;
 					shift = S_CAS;
