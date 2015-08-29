@@ -48,6 +48,8 @@ typedef enum {
 
 	/* Create a new entry. */
 	MC_ACTION_CREATE,
+	/* Resize a new entry. */
+	MC_ACTION_RESIZE,
 	/* Abandon a newly created entry. */
 	MC_ACTION_CANCEL,
 	/* Insert a newly created entry. */
@@ -123,6 +125,9 @@ mc_action_delete_low(struct mc_action *action);
 
 void __attribute__((nonnull(1)))
 mc_action_create_low(struct mc_action *action);
+
+void __attribute__((nonnull(1)))
+mc_action_resize_low(struct mc_action *action);
 
 void __attribute__((nonnull(1)))
 mc_action_cancel_low(struct mc_action *action);
@@ -253,6 +258,19 @@ mc_action_create(struct mc_action *action, uint32_t value_len)
 	mc_delegate_execute(action, mc_action_create_low);
 #else
 	mc_action_create_low(action);
+#endif
+}
+
+static inline void __attribute__((nonnull(1)))
+mc_action_resize(struct mc_action *action, uint32_t value_len)
+{
+	action->value_len = value_len;
+#if ENABLE_MEMCACHE_COMBINER
+	mc_combiner_execute(action, MC_ACTION_RESIZE);
+#elif ENABLE_MEMCACHE_DELEGATE
+	mc_delegate_execute(action, mc_action_resize_low);
+#else
+	mc_action_resize_low(action);
 #endif
 }
 

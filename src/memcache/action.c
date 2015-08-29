@@ -425,6 +425,18 @@ mc_action_create_low(struct mc_action *action)
 }
 
 void
+mc_action_resize_low(struct mc_action *action)
+{
+	ENTER();
+
+	action->new_entry->value_len = action->value_len;
+	mc_entry_free_chunks(action->new_entry);
+	mc_entry_alloc_chunks(action->new_entry);
+
+	LEAVE();
+}
+
+void
 mc_action_cancel_low(struct mc_action *action)
 {
 	ENTER();
@@ -629,6 +641,9 @@ mc_action_perform(uintptr_t data)
 		break;
 	case MC_ACTION_CREATE:
 		mc_action_create_low(action);
+		break;
+	case MC_ACTION_RESIZE:
+		mc_action_resize_low(action);
 		break;
 	case MC_ACTION_CANCEL:
 		mc_action_cancel_low(action);

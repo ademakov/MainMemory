@@ -415,16 +415,12 @@ mc_command_append(struct mc_command *command)
 		if (action->new_entry == NULL) {
 			mc_action_create(action, value_len);
 			mc_entry_setkey(action->new_entry, action->key);
+		} else if (action->new_entry->value_len != value_len) {
+			mc_action_resize(action, value_len);
+			mc_entry_setkey(action->new_entry, action->key);
 		}
+
 		struct mc_entry *new_entry = action->new_entry;
-
-		if (new_entry->value_len != value_len) {
-			new_entry->value_len = value_len;
-			mc_entry_free_chunks(new_entry);
-			mc_entry_alloc_chunks(new_entry);
-			mc_entry_setkey(new_entry, action->key);
-		}
-
 		char *new_value = mc_entry_getvalue(new_entry);
 		char *old_value = mc_entry_getvalue(old_entry);
 		memcpy(new_value, old_value, old_entry->value_len);
@@ -456,16 +452,12 @@ mc_command_prepend(struct mc_command *command)
 		if (action->new_entry == NULL) {
 			mc_action_create(action, value_len);
 			mc_entry_setkey(action->new_entry, action->key);
+		} else if (action->new_entry->value_len != value_len) {
+			mc_action_resize(action, value_len);
+			mc_entry_setkey(action->new_entry, action->key);
 		}
+
 		struct mc_entry *new_entry = action->new_entry;
-
-		if (new_entry->value_len != value_len) {
-			new_entry->value_len = value_len;
-			mc_entry_free_chunks(new_entry);
-			mc_entry_alloc_chunks(new_entry);
-			mc_entry_setkey(new_entry, action->key);
-		}
-
 		char *new_value = mc_entry_getvalue(new_entry);
 		char *old_value = mc_entry_getvalue(old_entry);
 		memcpy(new_value, alter_value, alter_value_len);
