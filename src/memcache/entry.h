@@ -107,25 +107,6 @@ mc_entry_getvalue(struct mc_entry *entry)
 	return chunk->data + entry->key_len;
 }
 
-static inline void
-mc_entry_alloc_chunks(struct mc_entry *entry)
-{
-	ASSERT(mm_stack_empty(&entry->chunks));
-	uint32_t size = mc_entry_size(entry);
-#if ENABLE_MEMCACHE_PRIVATE_CHUNKS
-	struct mm_chunk *chunk = mm_chunk_create_private(size);
-#else
-	struct mm_chunk *chunk = mm_chunk_create_regular(size);
-#endif
-	mm_stack_insert(&entry->chunks, &chunk->base.slink);
-}
-
-static inline void
-mc_entry_free_chunks(struct mc_entry *entry)
-{
-	mm_chunk_destroy_chain(mm_stack_head(&entry->chunks));
-}
-
 void __attribute__((nonnull(1)))
 mc_entry_setnum(struct mc_entry *entry, uint64_t value);
 

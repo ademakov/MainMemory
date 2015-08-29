@@ -119,13 +119,32 @@ mc_action_free_entry(struct mc_tpart *part, struct mc_entry *entry)
 }
 
 static void
+mc_action_alloc_chunks(struct mc_entry *entry)
+{
+	ASSERT(mm_stack_empty(&entry->chunks));
+	uint32_t size = mc_entry_size(entry);
+#if ENABLE_MEMCACHE_PRIVATE_CHUNKS
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
+#else
+	struct mm_chunk *chunk = mm_chunk_create_regular(size);
+#endif
+	mm_stack_insert(&entry->chunks, &chunk->base.slink);
+}
+
+static void
+mc_action_free_chunks(struct mc_entry *entry)
+{
+	mm_chunk_destroy_chain(mm_stack_head(&entry->chunks));
+}
+
+static void
 mc_action_free_entries(struct mc_tpart *part, struct mm_stack *victims)
 {
 	while (!mm_stack_empty(victims)) {
 		struct mm_slink *link = mm_stack_remove(victims);
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_unref_entry(entry)) {
-			mc_entry_free_chunks(entry);
+			mc_action_free_chunks(entry);
 			mc_action_free_entry(part, entry);
 		}
 	}
@@ -344,7 +363,7 @@ mc_action_finish_low(struct mc_action *action)
 
 	struct mc_entry *entry = action->old_entry;
 	if (mc_action_unref_entry(entry)) {
-		mc_entry_free_chunks(entry);
+		mc_action_free_chunks(entry);
 
 		mc_table_freelist_lock(action->part);
 		mc_action_free_entry(action->part, action->old_entry);
@@ -419,7 +438,7 @@ mc_action_create_low(struct mc_action *action)
 	action->new_entry->key_len = action->key_len;
 	action->new_entry->value_len = action->value_len;
 	mm_stack_prepare(&action->new_entry->chunks);
-	mc_entry_alloc_chunks(action->new_entry);
+	mc_action_alloc_chunks(action->new_entry);
 
 	LEAVE();
 }
@@ -430,8 +449,8 @@ mc_action_resize_low(struct mc_action *action)
 	ENTER();
 
 	action->new_entry->value_len = action->value_len;
-	mc_entry_free_chunks(action->new_entry);
-	mc_entry_alloc_chunks(action->new_entry);
+	mc_action_free_chunks(action->new_entry);
+	mc_action_alloc_chunks(action->new_entry);
 
 	LEAVE();
 }
@@ -441,7 +460,7 @@ mc_action_cancel_low(struct mc_action *action)
 {
 	ENTER();
 
-	mc_entry_free_chunks(action->new_entry);
+	mc_action_free_chunks(action->new_entry);
 
 	mc_table_freelist_lock(action->part);
 	mc_action_free_entry(action->part, action->new_entry);
