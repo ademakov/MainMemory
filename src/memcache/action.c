@@ -214,26 +214,6 @@ mc_action_free_entries(struct mc_tpart *part, struct mm_stack *victims)
 	}
 }
 
-static void
-mc_action_drop_expired(struct mc_tpart *part,
-		       struct mm_stack *bucket,
-		       struct mm_stack *expired)
-{
-	uint32_t time = mc_action_get_exp_time();
-
-	struct mm_slink *pred = &bucket->head;
-	while (!mm_stack_is_tail(pred)) {
-		struct mm_slink *link = pred->next;
-		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		if (mc_action_is_expired_entry(part, entry, time)) {
-			mc_action_unlink_entry(part, pred, entry);
-			mm_stack_insert(expired, &entry->link);
-		} else {
-			pred = link;
-		}
-	}
-}
-
 static bool
 mc_action_find_victims(struct mc_tpart *part,
 		       struct mm_stack *victims,
@@ -309,18 +289,27 @@ mc_action_bucket_lookup(struct mc_action *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
-	mc_action_drop_expired(action->part, bucket, freelist);
-	struct mm_slink *link = mm_stack_head(bucket);
-	while (link != NULL) {
+	struct mc_tpart *part = action->part;
+	struct mm_slink *pred = &bucket->head;
+	uint32_t time = mc_action_get_exp_time();
+
+	while (!mm_stack_is_tail(pred)) {
+		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		if (mc_action_match_entry(action, entry)) {
-			ASSERT(entry->state >= MC_ENTRY_USED_MIN);
-			ASSERT(entry->state <= MC_ENTRY_USED_MAX);
-			action->old_entry = entry;
-			return;
+		if (mc_action_is_expired_entry(part, entry, time)) {
+			mc_action_unlink_entry(part, pred, entry);
+			mm_stack_insert(freelist, &entry->link);
+		} else {
+			if (mc_action_match_entry(action, entry)) {
+				ASSERT(entry->state >= MC_ENTRY_USED_MIN);
+				ASSERT(entry->state <= MC_ENTRY_USED_MAX);
+				action->old_entry = entry;
+				return;
+			}
+			pred = link;
 		}
-		link = link->next;
 	}
+
 	action->old_entry = NULL;
 }
 
@@ -329,19 +318,27 @@ mc_action_bucket_delete(struct mc_action *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
-	mc_action_drop_expired(action->part, bucket, freelist);
+	struct mc_tpart *part = action->part;
 	struct mm_slink *pred = &bucket->head;
+	uint32_t time = mc_action_get_exp_time();
+
 	while (!mm_stack_is_tail(pred)) {
 		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		if (mc_action_match_entry(action, entry)) {
-			mc_action_unlink_entry(action->part, pred, entry);
+		if (mc_action_is_expired_entry(part, entry, time)) {
+			mc_action_unlink_entry(part, pred, entry);
 			mm_stack_insert(freelist, &entry->link);
-			action->old_entry = entry;
-			return;
+		} else {
+			if (mc_action_match_entry(action, entry)) {
+				mc_action_unlink_entry(action->part, pred, entry);
+				mm_stack_insert(freelist, &entry->link);
+				action->old_entry = entry;
+				return;
+			}
+			pred = link;
 		}
-		pred = link;
 	}
+
 	action->old_entry = NULL;
 }
 
@@ -350,26 +347,35 @@ mc_action_bucket_update(struct mc_action *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
-	mc_action_drop_expired(action->part, bucket, freelist);
+	struct mc_tpart *part = action->part;
 	struct mm_slink *pred = &bucket->head;
+	uint32_t time = mc_action_get_exp_time();
+
 	while (!mm_stack_is_tail(pred)) {
 		struct mm_slink *link = pred->next;
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
-		if (mc_action_match_entry(action, entry)) {
-			action->old_entry = entry;
-			action->entry_match = !action->stamp || action->stamp == entry->stamp;
-			if (action->entry_match) {
-				uint8_t state = entry->state;
-				mc_action_unlink_entry(action->part, pred, entry);
-				mm_stack_insert(freelist, &entry->link);
-				mc_action_bucket_insert(action, bucket, state);
+		if (mc_action_is_expired_entry(part, entry, time)) {
+			mc_action_unlink_entry(part, pred, entry);
+			mm_stack_insert(freelist, &entry->link);
+		} else {
+			if (mc_action_match_entry(action, entry)) {
+				action->old_entry = entry;
+				action->entry_match = (!action->stamp
+						       || action->stamp == entry->stamp);
+				if (action->entry_match) {
+					uint8_t state = entry->state;
+					mc_action_unlink_entry(action->part, pred, entry);
+					mm_stack_insert(freelist, &entry->link);
+					mc_action_bucket_insert(action, bucket, state);
+				}
+				return;
 			}
-			return;
+			pred = link;
 		}
-		pred = link;
 	}
-	action->entry_match = false;
+
 	action->old_entry = NULL;
+	action->entry_match = false;
 }
 
 static struct mm_stack *
