@@ -43,7 +43,7 @@ struct mc_action;
 struct mc_entry
 {
 	struct mm_slink link;
-	struct mm_stack chunks;
+	char *data;
 
 	uint32_t hash;
 	uint32_t exp_time;
@@ -73,23 +73,17 @@ mc_entry_fix_exptime(uint32_t exptime)
 }
 
 static inline uint32_t
-mc_entry_sum_length(uint8_t key_len, uint32_t value_len)
-{
-	return sizeof(struct mc_entry) + key_len + value_len;
-}
-
-static inline uint32_t
 mc_entry_size(struct mc_entry *entry)
 {
-	return mc_entry_sum_length(entry->key_len, entry->value_len);
+	return (sizeof(struct mc_entry)
+		+ entry->key_len + entry->value_len
+		+ MM_ALLOC_OVERHEAD);
 }
 
 static inline char *
 mc_entry_getkey(struct mc_entry *entry)
 {
-	struct mm_slink *link = mm_stack_head(&entry->chunks);
-	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
-	return chunk->data;
+	return entry->data;
 }
 
 static inline void
@@ -102,9 +96,7 @@ mc_entry_setkey(struct mc_entry *entry, const char *key)
 static inline char *
 mc_entry_getvalue(struct mc_entry *entry)
 {
-	struct mm_slink *link = mm_stack_head(&entry->chunks);
-	struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
-	return chunk->data + entry->key_len;
+	return entry->data + entry->key_len;
 }
 
 void __attribute__((nonnull(1)))

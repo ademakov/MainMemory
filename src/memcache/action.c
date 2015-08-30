@@ -122,23 +122,18 @@ static void
 mc_action_alloc_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
 	ASSERT(mm_stack_empty(&entry->chunks));
-	size_t size = mc_entry_size(entry) + sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_mspace_alloc(part->data_space, size);
-	if (unlikely(chunk == NULL))
+	size_t size = entry->key_len + entry->value_len;
+	entry->data = mm_mspace_alloc(part->data_space, size);
+	if (unlikely(entry->data == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 }
 
 static void
 mc_action_free_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
-	struct mm_slink *link = mm_stack_head(&entry->chunks);
-	while (link != NULL) {
-		struct mm_slink *next = link->next;
-		struct mm_chunk *chunk
-			= containerof(link, struct mm_chunk, base.slink);
-		mm_mspace_free(part->data_space, chunk);
-		link = next;
+	if (likely(entry->data != NULL)) {
+		mm_mspace_free(part->data_space, entry->data);
+		entry->data = NULL;
 	}
 }
 
@@ -437,7 +432,6 @@ mc_action_create_low(struct mc_action *action)
 	action->new_entry->hash = action->hash;
 	action->new_entry->key_len = action->key_len;
 	action->new_entry->value_len = action->value_len;
-	mm_stack_prepare(&action->new_entry->chunks);
 	mc_action_alloc_chunks(action->part, action->new_entry);
 
 	mc_table_freelist_unlock(action->part);
