@@ -26,7 +26,72 @@
 #define MC_TABLE_STRIDE		64
 
 /**********************************************************************
- * Helper Routines.
+ * Entry expiration timer.
+ **********************************************************************/
+
+#if 0
+
+static uint32_t mc_action_exp_time;
+static mm_timer_t mc_action_exp_timer;
+
+static uint32_t
+mc_action_get_exp_time(void)
+{
+	return mm_memory_load(mc_action_exp_time);
+}
+
+static mm_value_t
+mc_action_exp_time_handler(mm_value_t value)
+{
+	ENTER();
+
+	struct mm_core *core = mm_core_getptr(value);
+	mm_timeval_t real_time = mm_core_getrealtime(core);
+	mc_action_exp_time = real_time / 1000000; // useconds -> seconds.
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mc_action_exp_time_start(void)
+{
+	mc_action_exp_timer = mm_timer_create(MM_CLOCK_REALTIME,
+					      mc_action_exp_time_handler,
+					      mm_core_self());
+	mm_timer_settime(mc_action_exp_timer, false, 0, 1000000);
+}
+
+static void
+mc_action_exp_time_stop(void)
+{
+	mm_timer_destroy(mc_action_exp_timer);
+}
+
+#else
+
+static uint32_t
+mc_action_get_exp_time(void)
+{
+	struct mm_core *core = mm_core_selfptr();
+	mm_timeval_t real_time = mm_core_getrealtime(core);
+	return real_time / 1000000; // useconds -> seconds.
+}
+
+static void
+mc_action_exp_time_start(void)
+{
+}
+
+static void
+mc_action_exp_time_stop(void)
+{
+}
+
+#endif
+
+/**********************************************************************
+ * Helper routines.
  **********************************************************************/
 
 static bool
@@ -154,9 +219,7 @@ mc_action_drop_expired(struct mc_tpart *part,
 		       struct mm_stack *bucket,
 		       struct mm_stack *expired)
 {
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t real_time = mm_core_getrealtime(core);
-	uint32_t time = real_time / 1000000; // useconds -> seconds.
+	uint32_t time = mc_action_get_exp_time();
 
 	struct mm_slink *pred = &bucket->head;
 	while (!mm_stack_is_tail(pred)) {
@@ -333,7 +396,7 @@ mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
 }
 
 /**********************************************************************
- * Table Actions.
+ * Table actions.
  **********************************************************************/
 
 void
@@ -695,3 +758,27 @@ mc_action_perform(uintptr_t data)
 }
 
 #endif
+
+/**********************************************************************
+ * Memcache table action initialization and termination.
+ **********************************************************************/
+
+void
+mc_action_start(void)
+{
+	ENTER();
+
+	mc_action_exp_time_start();
+
+	LEAVE();
+}
+
+void
+mc_action_stop(void)
+{
+	ENTER();
+
+	mc_action_exp_time_stop();
+
+	LEAVE();
+}
