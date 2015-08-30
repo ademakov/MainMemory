@@ -41,7 +41,7 @@ ssize_t __attribute__((nonnull(1)))
 mm_netbuf_fill(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_netbuf_core(sock) == mm_thread_self());
+	ASSERT(mm_netbuf_thread(sock) == mm_thread_self());
 
 	struct mm_buffer *rbuf = &sock->rbuf;
 
@@ -91,7 +91,7 @@ ssize_t __attribute__((nonnull(1)))
 mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_netbuf_core(sock) == mm_core_self());
+	ASSERT(mm_netbuf_thread(sock) == mm_core_self());
 
 	struct mm_buffer *tbuf = &sock->tbuf;
 
