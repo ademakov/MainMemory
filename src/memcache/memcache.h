@@ -30,9 +30,6 @@
 /* Enable table access with locking. */
 #define ENABLE_MEMCACHE_LOCKING		0
 
-/* Enable entry chunk allocation in private space. */
-#define ENABLE_MEMCACHE_PRIVATE_CHUNKS	0
-
 /* Build with -msse4.2 to enable hash based on the SSE4.2 crc32 instruction. */
 #ifndef mc_hash
 # if __SSE4_2__

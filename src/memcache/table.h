@@ -27,6 +27,7 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
+#include "base/mem/alloc.h"
 
 #if ENABLE_MEMCACHE_LOCKING
 # include "base/lock.h"
@@ -54,6 +55,9 @@ struct mc_tpart
 	uint32_t nentries;
 	uint32_t nentries_void;
 	uint32_t nentries_free;
+
+	/* The memory space for key/value data. */
+	mm_mspace_t data_space;
 
 	/* The total data size of all entries. */
 	size_t volume;

@@ -119,22 +119,27 @@ mc_action_free_entry(struct mc_tpart *part, struct mc_entry *entry)
 }
 
 static void
-mc_action_alloc_chunks(struct mc_entry *entry)
+mc_action_alloc_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
 	ASSERT(mm_stack_empty(&entry->chunks));
-	uint32_t size = mc_entry_size(entry);
-#if ENABLE_MEMCACHE_PRIVATE_CHUNKS
-	struct mm_chunk *chunk = mm_chunk_create_private(size);
-#else
-	struct mm_chunk *chunk = mm_chunk_create_regular(size);
-#endif
+	size_t size = mc_entry_size(entry) + sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_mspace_alloc(part->data_space, size);
+	if (unlikely(chunk == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 	mm_stack_insert(&entry->chunks, &chunk->base.slink);
 }
 
 static void
-mc_action_free_chunks(struct mc_entry *entry)
+mc_action_free_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
-	mm_chunk_destroy_chain(mm_stack_head(&entry->chunks));
+	struct mm_slink *link = mm_stack_head(&entry->chunks);
+	while (link != NULL) {
+		struct mm_slink *next = link->next;
+		struct mm_chunk *chunk
+			= containerof(link, struct mm_chunk, base.slink);
+		mm_mspace_free(part->data_space, chunk);
+		link = next;
+	}
 }
 
 static void
@@ -144,7 +149,7 @@ mc_action_free_entries(struct mc_tpart *part, struct mm_stack *victims)
 		struct mm_slink *link = mm_stack_remove(victims);
 		struct mc_entry *entry = containerof(link, struct mc_entry, link);
 		if (mc_action_unref_entry(entry)) {
-			mc_action_free_chunks(entry);
+			mc_action_free_chunks(part, entry);
 			mc_action_free_entry(part, entry);
 		}
 	}
@@ -361,11 +366,9 @@ mc_action_finish_low(struct mc_action *action)
 {
 	ENTER();
 
-	struct mc_entry *entry = action->old_entry;
-	if (mc_action_unref_entry(entry)) {
-		mc_action_free_chunks(entry);
-
+	if (mc_action_unref_entry(action->old_entry)) {
 		mc_table_freelist_lock(action->part);
+		mc_action_free_chunks(action->part, action->old_entry);
 		mc_action_free_entry(action->part, action->old_entry);
 		mc_table_freelist_unlock(action->part);
 	}
@@ -431,14 +434,14 @@ mc_action_create_low(struct mc_action *action)
 	action->new_entry->state = MC_ENTRY_NOT_USED;
 	action->new_entry->ref_count = 1;
 
-	mc_table_freelist_unlock(action->part);
-	mc_table_reserve_entries(action->part);
-
 	action->new_entry->hash = action->hash;
 	action->new_entry->key_len = action->key_len;
 	action->new_entry->value_len = action->value_len;
 	mm_stack_prepare(&action->new_entry->chunks);
-	mc_action_alloc_chunks(action->new_entry);
+	mc_action_alloc_chunks(action->part, action->new_entry);
+
+	mc_table_freelist_unlock(action->part);
+	mc_table_reserve_entries(action->part);
 
 	LEAVE();
 }
@@ -449,8 +452,11 @@ mc_action_resize_low(struct mc_action *action)
 	ENTER();
 
 	action->new_entry->value_len = action->value_len;
-	mc_action_free_chunks(action->new_entry);
-	mc_action_alloc_chunks(action->new_entry);
+
+	mc_table_freelist_lock(action->part);
+	mc_action_free_chunks(action->part, action->new_entry);
+	mc_action_alloc_chunks(action->part, action->new_entry);
+	mc_table_freelist_unlock(action->part);
 
 	LEAVE();
 }
@@ -460,9 +466,8 @@ mc_action_cancel_low(struct mc_action *action)
 {
 	ENTER();
 
-	mc_action_free_chunks(action->new_entry);
-
 	mc_table_freelist_lock(action->part);
+	mc_action_free_chunks(action->part, action->new_entry);
 	mc_action_free_entry(action->part, action->new_entry);
 	mc_table_freelist_unlock(action->part);
 

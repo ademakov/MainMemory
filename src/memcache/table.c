@@ -292,6 +292,7 @@ mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
 	part->nentries_free = 0;
 	part->nentries_void = 0;
 
+	part->data_space = mm_mspace_create();
 	part->volume = 0;
 
 	mm_waitset_prepare(&part->waitset);
@@ -419,26 +420,11 @@ mc_table_term(void)
 {
 	ENTER();
 
-	// FIXME: currently this does not work on shutdown if entries are
-	// created on per-thread private memory spaces. The threads are
-	// finished already at this point and cannot serve chunk reclaim
-	// queues.
-#if !ENABLE_MEMCACHE_PRIVATE_CHUNKS
 	// Free the table entries.
 	for (mm_core_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
-		for (uint32_t i = 0; i < part->nbuckets; i++) {
-			struct mm_slink *link = mm_stack_head(&part->buckets[i]);
-			while (link != NULL) {
-				struct mc_entry *entry =
-					containerof(link, struct mc_entry, link);
-				link = link->next;
-
-				mc_entry_free_chunks(entry);
-			}
-		}
+		mm_mspace_destroy(part->data_space);
 	}
-#endif
 
 	// Free the table partitions.
 	mm_regular_free(mc_table.parts);
