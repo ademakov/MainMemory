@@ -86,7 +86,7 @@ mm_chunk_create(size_t size)
 		return mm_chunk_create_private(size);
 #else
 	struct mm_domain *domain = mm_domain_selfptr();
-	if (domain == mm_regular_domain)
+	if (domain == mm_regular_domain && mm_private_space_ready(&mm_regular_space))
 		return mm_chunk_create_regular(size);
 #endif
 
