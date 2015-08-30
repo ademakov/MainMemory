@@ -121,7 +121,6 @@ mc_action_free_entry(struct mc_tpart *part, struct mc_entry *entry)
 static void
 mc_action_alloc_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
-	ASSERT(mm_stack_empty(&entry->chunks));
 	size_t size = entry->key_len + entry->value_len;
 	entry->data = mm_mspace_alloc(part->data_space, size);
 	if (unlikely(entry->data == NULL))
