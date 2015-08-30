@@ -223,7 +223,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime,
 	timer->value = value;
 	timer->interval = interval;
 
-	if (value != 0) {
+	if (value != 0 || interval != 0) {
 		if (abstime) {
 			if (timer->clock == MM_CLOCK_MONOTONIC) {
 				timer->entry.value = value;
