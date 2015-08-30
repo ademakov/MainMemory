@@ -1127,7 +1127,6 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	mm_brief("start server '%s'", srv->name);
 	ASSERT(srv->event.fd == -1);
-	ASSERT(mm_event_target(&srv->event) == MM_CORE_NONE);
 
 	// Find the cores to run the server on.
 	if (mm_bitset_any(&srv->affinity))
