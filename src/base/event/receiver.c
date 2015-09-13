@@ -172,22 +172,23 @@ mm_event_receiver_batch_add(struct mm_listener *listener,
 {
 	ENTER();
 
-	struct mm_event_batch *batch = &listener->events;
-	if (batch->nevents == 4) {
+	if (listener->nevents == 4) {
 		mm_thread_send_5(listener->thread,
 				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) batch->events[0].ev_fd,
-				 (uintptr_t) batch->events[1].ev_fd,
-				 (uintptr_t) batch->events[2].ev_fd,
-				 (uintptr_t) batch->events[3].ev_fd,
-				 batch->events[0].event |
-				 (batch->events[1].event << 8) |
-				 (batch->events[2].event << 16) |
-				 (batch->events[3].event << 24));
-		mm_event_batch_clear(batch);
+				 (uintptr_t) listener->events[0].ev_fd,
+				 (uintptr_t) listener->events[1].ev_fd,
+				 (uintptr_t) listener->events[2].ev_fd,
+				 (uintptr_t) listener->events[3].ev_fd,
+				 listener->events[0].event |
+				 (listener->events[1].event << 8) |
+				 (listener->events[2].event << 16) |
+				 (listener->events[3].event << 24));
+		listener->nevents = 0;
 	}
 
-	mm_event_batch_add(batch, event, sink);
+	unsigned int n = listener->nevents++;
+	listener->events[n].event = event;
+	listener->events[n].ev_fd = sink;
 
 	LEAVE();
 }
@@ -198,57 +199,56 @@ mm_event_receiver_batch_flush(struct mm_listener *listener,
 {
 	ENTER();
 
-	struct mm_event_batch *batch = &listener->events;
-	switch (batch->nevents) {
+	switch (listener->nevents) {
 	case 1:
 		mm_thread_send_4(listener->thread,
 				 mm_event_receiver_handle_1_req,
-				 (uintptr_t) batch->events[0].ev_fd,
-				 batch->events[0].event,
+				 (uintptr_t) listener->events[0].ev_fd,
+				 listener->events[0].event,
 				 (uintptr_t) listener,
 				 stamp);
-		mm_event_batch_clear(batch);
+		listener->nevents = 0;
 		break;
 	case 2:
 		mm_thread_send_5(listener->thread,
 				 mm_event_receiver_handle_2_req,
-				 (uintptr_t) batch->events[0].ev_fd,
-				 (uintptr_t) batch->events[1].ev_fd,
-				 batch->events[0].event |
-				 (batch->events[1].event << 8),
+				 (uintptr_t) listener->events[0].ev_fd,
+				 (uintptr_t) listener->events[1].ev_fd,
+				 listener->events[0].event |
+				 (listener->events[1].event << 8),
 				 (uintptr_t) listener,
 				 stamp);
-		mm_event_batch_clear(batch);
+		listener->nevents = 0;
 		break;
 	case 3:
 		mm_thread_send_6(listener->thread,
 				 mm_event_receiver_handle_3_req,
-				 (uintptr_t) batch->events[0].ev_fd,
-				 (uintptr_t) batch->events[1].ev_fd,
-				 (uintptr_t) batch->events[2].ev_fd,
-				 batch->events[0].event |
-				 (batch->events[1].event << 8) |
-				 (batch->events[2].event << 16),
+				 (uintptr_t) listener->events[0].ev_fd,
+				 (uintptr_t) listener->events[1].ev_fd,
+				 (uintptr_t) listener->events[2].ev_fd,
+				 listener->events[0].event |
+				 (listener->events[1].event << 8) |
+				 (listener->events[2].event << 16),
 				 (uintptr_t) listener,
 				 stamp);
-		mm_event_batch_clear(batch);
+		listener->nevents = 0;
 		break;
 	case 4:
 		mm_thread_send_5(listener->thread,
 				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) batch->events[0].ev_fd,
-				 (uintptr_t) batch->events[1].ev_fd,
-				 (uintptr_t) batch->events[2].ev_fd,
-				 (uintptr_t) batch->events[3].ev_fd,
-				 batch->events[0].event |
-				 (batch->events[1].event << 8) |
-				 (batch->events[2].event << 16) |
-				 (batch->events[3].event << 24));
+				 (uintptr_t) listener->events[0].ev_fd,
+				 (uintptr_t) listener->events[1].ev_fd,
+				 (uintptr_t) listener->events[2].ev_fd,
+				 (uintptr_t) listener->events[3].ev_fd,
+				 listener->events[0].event |
+				 (listener->events[1].event << 8) |
+				 (listener->events[2].event << 16) |
+				 (listener->events[3].event << 24));
 		mm_thread_send_2(listener->thread,
 				 mm_event_receiver_handle_0_req,
 				 (uintptr_t) listener,
 				 stamp);
-		mm_event_batch_clear(batch);
+		listener->nevents = 0;
 		break;
 	default:
 		ABORT();

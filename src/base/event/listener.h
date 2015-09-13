@@ -91,8 +91,10 @@ struct mm_listener
 
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
+
 	/* Listener's incoming events temporary store. */
-	struct mm_event_batch events;
+	struct mm_event events[4];
+	unsigned int nevents;
 
 	/* Associated thread. */
 	struct mm_thread *thread;

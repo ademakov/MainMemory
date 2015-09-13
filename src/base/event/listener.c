@@ -66,7 +66,8 @@ mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
 #endif
 
 	mm_event_batch_prepare(&listener->changes, 256);
-	mm_event_batch_prepare(&listener->events, 4);
+
+	listener->nevents = 0;
 
 	listener->thread = thread;
 
@@ -87,7 +88,6 @@ mm_listener_cleanup(struct mm_listener *listener)
 #endif
 
 	mm_event_batch_cleanup(&listener->changes);
-	mm_event_batch_cleanup(&listener->events);
 
 	LEAVE();
 }
