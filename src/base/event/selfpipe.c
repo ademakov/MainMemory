@@ -66,19 +66,6 @@ mm_selfpipe_init(void)
 }
 
 /**********************************************************************
- * Self-pipe Statistics.
- **********************************************************************/
-
-static mm_atomic_uint32_t mm_selfpipe_write_count;
-
-void
-mm_selfpipe_stats(void)
-{
-	uint32_t write_count = mm_memory_load(mm_selfpipe_write_count);
-	mm_verbose("selfpipe stats: write = %u", write_count);
-}
-
-/**********************************************************************
  * Self-pipe instance.
  **********************************************************************/
 
@@ -119,8 +106,6 @@ void __attribute__((nonnull(1)))
 mm_selfpipe_write(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
-
-	mm_atomic_uint32_inc(&mm_selfpipe_write_count);
 
 	(void) mm_write(selfpipe->write_fd, "", 1);
 
