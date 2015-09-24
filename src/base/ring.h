@@ -43,10 +43,11 @@ struct mm_ring_base
 
 	/* Shared data. */
 	uintptr_t mask __mm_align_cacheline__;
+	uintptr_t data[7]; /* User data. */
 };
 
-void mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks);
 
 /* Multi-producer task synchronization. */
 static inline bool
@@ -131,7 +132,7 @@ struct mm_ring_spsc
 struct mm_ring_spsc *
 mm_ring_spsc_create(size_t size, uint8_t locks);
 
-void
+void __attribute__((nonnull(1)))
 mm_ring_spsc_destroy(struct mm_ring_spsc *ring);
 
 void __attribute__((nonnull(1)))
@@ -231,7 +232,7 @@ struct mm_ring_mpmc
 struct mm_ring_mpmc *
 mm_ring_mpmc_create(size_t size);
 
-void
+void __attribute__((nonnull(1)))
 mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring);
 
 void __attribute__((nonnull(1)))
