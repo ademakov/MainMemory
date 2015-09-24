@@ -401,6 +401,15 @@ mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
 	}
 }
 
+static void
+mc_action_complete(struct mc_action *action __mm_unused__)
+{
+#if ENABLE_MEMCACHE_COMBINER
+	mm_memory_store_fence();
+	action->ready = 1;
+#endif
+}
+
 /**********************************************************************
  * Table actions.
  **********************************************************************/
@@ -421,6 +430,8 @@ mc_action_lookup_low(struct mc_action *action)
 
 	mc_action_bucket_finish(action, &freelist);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -436,6 +447,8 @@ mc_action_finish_low(struct mc_action *action)
 		mc_table_freelist_unlock(action->part);
 	}
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -450,6 +463,8 @@ mc_action_delete_low(struct mc_action *action)
 	mc_action_bucket_delete(action, bucket, &freelist);
 
 	mc_action_bucket_finish(action, &freelist);
+
+	mc_action_complete(action);
 
 	LEAVE();
 }
@@ -505,6 +520,8 @@ mc_action_create_low(struct mc_action *action)
 	mc_table_freelist_unlock(action->part);
 	mc_table_reserve_entries(action->part);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -520,6 +537,8 @@ mc_action_resize_low(struct mc_action *action)
 	mc_action_alloc_chunks(action->part, action->new_entry);
 	mc_table_freelist_unlock(action->part);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -532,6 +551,8 @@ mc_action_cancel_low(struct mc_action *action)
 	mc_action_free_chunks(action->part, action->new_entry);
 	mc_action_free_entry(action->part, action->new_entry);
 	mc_table_freelist_unlock(action->part);
+
+	mc_action_complete(action);
 
 	LEAVE();
 }
@@ -555,6 +576,8 @@ mc_action_insert_low(struct mc_action *action)
 	else
 		mc_action_cancel_low(action);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -577,6 +600,8 @@ mc_action_update_low(struct mc_action *action)
 	else
 		mc_action_cancel_low(action);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -594,6 +619,8 @@ mc_action_upsert_low(struct mc_action *action)
 	mc_action_bucket_finish(action, &freelist);
 
 	mc_table_reserve_volume(action->part);
+
+	mc_action_complete(action);
 
 	LEAVE();
 }
@@ -625,6 +652,8 @@ mc_action_alter_low(struct mc_action *action)
 		mc_table_reserve_volume(action->part);
 	else if (action->old_entry == NULL)
 		mc_action_cancel_low(action);
+
+	mc_action_complete(action);
 
 	LEAVE();
 }
@@ -675,6 +704,8 @@ mc_action_stride_low(struct mc_action *action)
 
 	mc_table_lookup_unlock(action->part);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -694,6 +725,8 @@ mc_action_evict_low(struct mc_action *action)
 		mc_table_freelist_unlock(action->part);
 	}
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
 
@@ -706,64 +739,10 @@ mc_action_flush_low(struct mc_action *action)
 	action->part->flush_stamp = action->part->stamp;
 	mc_table_lookup_unlock(action->part);
 
+	mc_action_complete(action);
+
 	LEAVE();
 }
-
-#if ENABLE_MEMCACHE_COMBINER
-
-void
-mc_action_perform(uintptr_t data)
-{
-	struct mc_action *action = (struct mc_action *) data;
-	switch (action->action) {
-	case MC_ACTION_LOOKUP:
-		mc_action_lookup_low(action);
-		break;
-	case MC_ACTION_FINISH:
-		mc_action_finish_low(action);
-		break;
-	case MC_ACTION_DELETE:
-		mc_action_delete_low(action);
-		break;
-	case MC_ACTION_CREATE:
-		mc_action_create_low(action);
-		break;
-	case MC_ACTION_RESIZE:
-		mc_action_resize_low(action);
-		break;
-	case MC_ACTION_CANCEL:
-		mc_action_cancel_low(action);
-		break;
-	case MC_ACTION_INSERT:
-		mc_action_insert_low(action);
-		break;
-	case MC_ACTION_UPDATE:
-		mc_action_update_low(action);
-		break;
-	case MC_ACTION_UPSERT:
-		mc_action_upsert_low(action);
-		break;
-	case MC_ACTION_ALTER:
-		mc_action_alter_low(action);
-		break;
-	case MC_ACTION_STRIDE:
-		mc_action_stride_low(action);
-		break;
-	case MC_ACTION_EVICT:
-		mc_action_evict_low(action);
-		break;
-	case MC_ACTION_FLUSH:
-		mc_action_flush_low(action);
-		break;
-	default:
-		ABORT();
-	}
-
-	mm_memory_store_fence();
-	action->action = MC_ACTION_DONE;
-}
-
-#endif
 
 /**********************************************************************
  * Memcache table action initialization and termination.

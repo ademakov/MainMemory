@@ -298,8 +298,7 @@ mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
 	mm_waitset_prepare(&part->waitset);
 
 #if ENABLE_MEMCACHE_COMBINER
-	part->combiner = mm_combiner_create(mc_action_perform,
-					    MC_COMBINER_SIZE,
+	part->combiner = mm_combiner_create(MC_COMBINER_SIZE,
 					    MC_COMBINER_HANDOFF);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mm_verbose("bind partition %d to core %d", index, core);

@@ -33,43 +33,6 @@
 # include "core/future.h"
 #endif
 
-#if ENABLE_MEMCACHE_COMBINER
-typedef enum {
-
-	MC_ACTION_DONE,
-
-	/* Search for an entry. */
-	MC_ACTION_LOOKUP,
-	/* Finish using found entry. */
-	MC_ACTION_FINISH,
-
-	/* Delete existing entry if any. */
-	MC_ACTION_DELETE,
-
-	/* Create a new entry. */
-	MC_ACTION_CREATE,
-	/* Resize a new entry. */
-	MC_ACTION_RESIZE,
-	/* Abandon a newly created entry. */
-	MC_ACTION_CANCEL,
-	/* Insert a newly created entry. */
-	MC_ACTION_INSERT,
-	/* Replace an existing entry if any. */
-	MC_ACTION_UPDATE,
-	/* Either insert a new or replace an existing entry. */
-	MC_ACTION_UPSERT,
-	/* Replace an existing entry with conflict detection. */
-	MC_ACTION_ALTER,
-
-	MC_ACTION_STRIDE,
-
-	MC_ACTION_EVICT,
-
-	MC_ACTION_FLUSH,
-
-} mc_action_t;
-#endif
-
 typedef enum
 {
 	MC_ACTION_ALTER_OTHER,
@@ -107,7 +70,7 @@ struct mc_action
 	const char *alter_value;
 
 #if ENABLE_MEMCACHE_COMBINER
-	mc_action_t action;
+	uint8_t ready;
 #endif
 #if ENABLE_MEMCACHE_DELEGATE
 	struct mm_future future;
@@ -180,7 +143,7 @@ static inline void __attribute__((nonnull(1)))
 mc_action_wait(struct mc_action *action __mm_unused__)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	while (action->action != MC_ACTION_DONE)
+	while (!action->ready)
 		mm_spin_pause();
 	mm_memory_load_fence();
 #elif ENABLE_MEMCACHE_DELEGATE
@@ -191,32 +154,35 @@ mc_action_wait(struct mc_action *action __mm_unused__)
 #if ENABLE_MEMCACHE_COMBINER
 static inline void __attribute__((nonnull(1)))
 mc_combiner_execute(struct mc_action *action,
-		    mc_action_t action_tag)
+		    void (*routine)(struct mc_action *))
 {
-	action->action = action_tag;
-	mm_combiner_execute(action->part->combiner, (uintptr_t) action);
+	action->ready = 0;
+	mm_memory_fence();
+	mm_combiner_execute(action->part->combiner,
+			    (mm_combiner_routine_t) routine,
+			    (uintptr_t) action);
 	mc_action_wait(action);
 }
 #endif
 
 #if ENABLE_MEMCACHE_DELEGATE
 static inline void __attribute__((nonnull(1, 2)))
-mc_delegate_execute(struct mc_action *action,
-		    void (*action_routine)(struct mc_action *))
+mc_delegate_execute(struct mc_action *action, void (*routine)(struct mc_action *))
 {
 	mm_future_unique_prepare(&action->future,
-				 (mm_routine_t) action_routine,
+				 (mm_routine_t) routine,
 				 (mm_value_t) action);
 	mm_future_unique_start(&action->future, action->part->core);
 	mc_action_wait(action);
 }
 #endif
 
+/* Find an entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_lookup(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_LOOKUP);
+	mc_combiner_execute(action, mc_action_lookup_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_lookup_low);
 #else
@@ -224,11 +190,12 @@ mc_action_lookup(struct mc_action *action)
 #endif
 }
 
+/* Finish using a found entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_finish(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_FINISH);
+	mc_combiner_execute(action, mc_action_finish_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_finish_low);
 #else
@@ -236,11 +203,12 @@ mc_action_finish(struct mc_action *action)
 #endif
 }
 
+/* Delete a matching entry if any. */
 static inline void __attribute__((nonnull(1)))
 mc_action_delete(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_DELETE);
+	mc_combiner_execute(action, mc_action_delete_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_delete_low);
 #else
@@ -248,12 +216,13 @@ mc_action_delete(struct mc_action *action)
 #endif
 }
 
+/* Create a new entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_create(struct mc_action *action, uint32_t value_len)
 {
 	action->value_len = value_len;
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_CREATE);
+	mc_combiner_execute(action, mc_action_create_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_create_low);
 #else
@@ -261,12 +230,13 @@ mc_action_create(struct mc_action *action, uint32_t value_len)
 #endif
 }
 
+/* Resize a new entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_resize(struct mc_action *action, uint32_t value_len)
 {
 	action->value_len = value_len;
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_RESIZE);
+	mc_combiner_execute(action, mc_action_resize_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_resize_low);
 #else
@@ -274,11 +244,12 @@ mc_action_resize(struct mc_action *action, uint32_t value_len)
 #endif
 }
 
+/* Abandon a newly created entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_cancel(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_CANCEL);
+	mc_combiner_execute(action, mc_action_cancel_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_cancel_low);
 #else
@@ -286,11 +257,12 @@ mc_action_cancel(struct mc_action *action)
 #endif
 }
 
+/* Insert a newly created entry. */
 static inline void __attribute__((nonnull(1)))
 mc_action_insert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_INSERT);
+	mc_combiner_execute(action, mc_action_insert_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_insert_low);
 #else
@@ -298,11 +270,12 @@ mc_action_insert(struct mc_action *action)
 #endif
 }
 
+/* Replace a matching entry if any. */
 static inline void __attribute__((nonnull(1)))
 mc_action_update(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_UPDATE);
+	mc_combiner_execute(action, mc_action_update_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_update_low);
 #else
@@ -310,11 +283,12 @@ mc_action_update(struct mc_action *action)
 #endif
 }
 
+/* Either replace a matching entry or insert a new one. */
 static inline void __attribute__((nonnull(1)))
 mc_action_upsert(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_UPSERT);
+	mc_combiner_execute(action, mc_action_upsert_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_upsert_low);
 #else
@@ -322,11 +296,12 @@ mc_action_upsert(struct mc_action *action)
 #endif
 }
 
+/* Replace a matching entry with conflict detection. */
 static inline void __attribute__((nonnull(1)))
 mc_action_alter(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_ALTER);
+	mc_combiner_execute(action, mc_action_alter_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_alter_low);
 #else
@@ -338,7 +313,7 @@ static inline void __attribute__((nonnull(1)))
 mc_action_stride(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_STRIDE);
+	mc_combiner_execute(action, mc_action_stride_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_stride_low);
 #else
@@ -350,7 +325,7 @@ static inline void __attribute__((nonnull(1)))
 mc_action_evict(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_EVICT);
+	mc_combiner_execute(action, mc_action_evict_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_evict_low);
 #else
@@ -362,7 +337,7 @@ static inline void __attribute__((nonnull(1)))
 mc_action_flush(struct mc_action *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
-	mc_combiner_execute(action, MC_ACTION_FLUSH);
+	mc_combiner_execute(action, mc_action_flush_low);
 #elif ENABLE_MEMCACHE_DELEGATE
 	mc_delegate_execute(action, mc_action_flush_low);
 #else
