@@ -1,7 +1,7 @@
 /*
  * core/combiner.h - MainMemory task combining synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -33,20 +33,18 @@ struct mm_task_combiner
 	struct mm_combiner combiner;
 };
 
-struct mm_task_combiner * mm_task_combiner_create(const char *name,
-						  mm_combiner_routine_t routine,
-						  size_t size, size_t handoff);
+struct mm_task_combiner *
+mm_task_combiner_create(const char *name, size_t size, size_t handoff);
 
-void mm_task_combiner_destroy(struct mm_task_combiner *combiner)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_task_combiner_destroy(struct mm_task_combiner *combiner);
 
-void mm_task_combiner_prepare(struct mm_task_combiner *combiner,
-			      const char *name,
-			      mm_combiner_routine_t routine,
-			      size_t size, size_t handoff)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_task_combiner_prepare(struct mm_task_combiner *combiner, const char *name,
+			 size_t size, size_t handoff);
 
-void mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1, 2)))
+mm_task_combiner_execute(struct mm_task_combiner *combiner,
+			 mm_combiner_routine_t routine, uintptr_t data);
 
 #endif /* CORE_COMBINER_H */

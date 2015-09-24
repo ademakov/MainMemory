@@ -23,18 +23,16 @@ routine(void *arg __mm_unused__)
 	size_t i;
 	for (i = 0; i < g_consumer_data_size; i++) {
 		delay_producer();
-		mm_combiner_execute(g_combiner, 0);
+		mm_combiner_execute(g_combiner, execute, 0);
 	}
 }
-
-extern size_t xxx[1000];
 
 int
 main(int ac, char **av)
 {
 	mm_memory_init();
 	set_params(ac, av, TEST_COMBINER);
-	g_combiner = mm_combiner_create(execute, g_ring_size, g_handoff);
+	g_combiner = mm_combiner_create(g_ring_size, g_handoff);
 	test1(NULL, routine);
 	printf("nexec: %zu\n", g_nexec);
 	return EXIT_SUCCESS;

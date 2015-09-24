@@ -1,7 +1,7 @@
 /*
  * base/combiner.h - MainMemory combining synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,25 +27,19 @@ typedef void (*mm_combiner_routine_t)(uintptr_t data);
 
 struct mm_combiner
 {
-	mm_combiner_routine_t routine;
-
-	size_t handoff;
-
 	struct mm_ring_mpmc ring;
 };
 
-struct mm_combiner * mm_combiner_create(mm_combiner_routine_t routine,
-					size_t size, size_t handoff);
+struct mm_combiner *
+mm_combiner_create(size_t size, size_t handoff);
 
-void mm_combiner_destroy(struct mm_combiner *combiner)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_combiner_destroy(struct mm_combiner *combiner);
 
-void mm_combiner_prepare(struct mm_combiner *combiner,
-			 mm_combiner_routine_t routine,
-			 size_t size, size_t handoff)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_combiner_prepare(struct mm_combiner *combiner, size_t size, size_t handoff);
 
-void mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1, 2)))
+mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine, uintptr_t data);
 
 #endif /* BASE_COMBINER_H */

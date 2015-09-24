@@ -1,7 +1,7 @@
 /*
  * base/combiner.c - MainMemory combining synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,9 +27,20 @@
 #define MM_COMBINER_MINIMUM_HANDOFF	4
 #define MM_COMBINER_DEFAULT_HANDOFF	16
 
+static size_t
+mm_combiner_gethandoff(const struct mm_combiner *combiner)
+{
+	return combiner->ring.base.data[0];
+}
+
+static void
+mm_combiner_sethandoff(struct mm_combiner *combiner, size_t value)
+{
+	combiner->ring.base.data[0] = value;
+}
+
 struct mm_combiner *
-mm_combiner_create(mm_combiner_routine_t routine,
-		   size_t size, size_t handoff)
+mm_combiner_create(size_t size, size_t handoff)
 {
 	ENTER();
 	ASSERT(size != 0);
@@ -43,13 +54,13 @@ mm_combiner_create(mm_combiner_routine_t routine,
 
 	// Create the combiner.
 	struct mm_combiner *combiner = mm_common_aligned_alloc(MM_CACHELINE, nbytes);
-	mm_combiner_prepare(combiner, routine, size, handoff);
+	mm_combiner_prepare(combiner, size, handoff);
 
 	LEAVE();
 	return combiner;
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_combiner_destroy(struct mm_combiner *combiner)
 {
 	ENTER();
@@ -59,10 +70,8 @@ mm_combiner_destroy(struct mm_combiner *combiner)
 	LEAVE();
 }
 
-void
-mm_combiner_prepare(struct mm_combiner *combiner,
-		    mm_combiner_routine_t routine,
-		    size_t size, size_t handoff)
+void __attribute__((nonnull(1)))
+mm_combiner_prepare(struct mm_combiner *combiner, size_t size, size_t handoff)
 {
 	ENTER();
 	ASSERT(mm_is_pow2(size));
@@ -71,18 +80,15 @@ mm_combiner_prepare(struct mm_combiner *combiner,
 		handoff = MM_COMBINER_DEFAULT_HANDOFF;
 	if (handoff < MM_COMBINER_MINIMUM_HANDOFF)
 		handoff = MM_COMBINER_MINIMUM_HANDOFF;
-
-	combiner->routine = routine;
-	combiner->handoff = handoff;
+	mm_combiner_sethandoff(combiner, handoff);
 
 	mm_ring_mpmc_prepare(&combiner->ring, size);
-	mm_ring_base_prepare_locks(&combiner->ring.base, MM_RING_LOCKED_GET);
 
 	LEAVE();
 }
 
-void
-mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
+void __attribute__((nonnull(1, 2)))
+mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine, uintptr_t data)
 {
 	ENTER();
 
@@ -98,7 +104,8 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 
 	// Put the request to the slot.
 	mm_memory_fence(); /* TODO: load_store fence */
-	mm_memory_store(node->data[0], data);
+	mm_memory_store(node->data[0], (uintptr_t) routine);
+	mm_memory_store(node->data[1], data);
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
 
@@ -108,18 +115,19 @@ mm_combiner_execute(struct mm_combiner *combiner, uintptr_t data)
 		// Check if it is actually our turn to execute the requests.
 		uintptr_t head = mm_memory_load(ring->base.head);
 		if (head == tail) {
-			uintptr_t last = tail + combiner->handoff;
+			uintptr_t last = tail + mm_combiner_gethandoff(combiner);
 			while (head != last) {
 				struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
 				if (mm_memory_load(node->lock) != (head + 1))
 					break;
 
 				mm_memory_load_fence();
-				uintptr_t data = mm_memory_load(node->data[0]);
+				uintptr_t data_0 = mm_memory_load(node->data[0]);
+				uintptr_t data_1 = mm_memory_load(node->data[1]);
 				mm_memory_fence(); /* TODO: load_store fence */
 				mm_memory_store(node->lock, head + 1 + ring->base.mask);
 
-				(*combiner->routine)(data);
+				((mm_combiner_routine_t) data_0)(data_1);
 
 				head = head + 1;
 			}

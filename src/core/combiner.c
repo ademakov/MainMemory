@@ -1,7 +1,7 @@
 /*
  * core/combiner.c - MainMemory task combining synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,9 +27,7 @@
 #include "base/thread/domain.h"
 
 struct mm_task_combiner *
-mm_task_combiner_create(const char *name,
-			mm_combiner_routine_t routine,
-			size_t size, size_t handoff)
+mm_task_combiner_create(const char *name, size_t size, size_t handoff)
 {
 	ENTER();
 	ASSERT(size != 0);
@@ -43,13 +41,13 @@ mm_task_combiner_create(const char *name,
 
 	// Create the combiner.
 	struct mm_task_combiner *combiner = mm_common_aligned_alloc(MM_CACHELINE, nbytes);
-	mm_task_combiner_prepare(combiner, name, routine, size, handoff);
+	mm_task_combiner_prepare(combiner, name, size, handoff);
 
 	LEAVE();
 	return combiner;
 }
 
-void
+void __attribute__((nonnull(1)))
 mm_task_combiner_destroy(struct mm_task_combiner *combiner)
 {
 	ENTER();
@@ -59,15 +57,13 @@ mm_task_combiner_destroy(struct mm_task_combiner *combiner)
 	LEAVE();
 }
 
-void
-mm_task_combiner_prepare(struct mm_task_combiner *combiner,
-			 const char *name,
-			 mm_combiner_routine_t routine,
+void __attribute__((nonnull(1)))
+mm_task_combiner_prepare(struct mm_task_combiner *combiner, const char *name,
 			 size_t size, size_t handoff)
 {
 	ENTER();
 
-	mm_combiner_prepare(&combiner->combiner, routine, size, handoff);
+	mm_combiner_prepare(&combiner->combiner, size, handoff);
 
 	MM_CDATA_ALLOC(mm_domain_selfptr(), name, combiner->wait_queue);
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
@@ -78,8 +74,9 @@ mm_task_combiner_prepare(struct mm_task_combiner *combiner,
 	LEAVE();
 }
 
-void
-mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
+void __attribute__((nonnull(1, 2)))
+mm_task_combiner_execute(struct mm_task_combiner *combiner,
+			 mm_combiner_routine_t routine, uintptr_t data)
 {
 	ENTER();
 
@@ -102,7 +99,7 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 	while (mm_list_head(wait_queue) != &task->wait_queue)
 		mm_task_block();
 
-	mm_combiner_execute(&combiner->combiner, data);
+	mm_combiner_execute(&combiner->combiner, routine, data);
 
 	// Remove the request from the per-core queue.
 	mm_list_delete(&task->wait_queue);
