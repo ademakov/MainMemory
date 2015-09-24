@@ -97,7 +97,7 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 	task->flags |= MM_TASK_COMBINING;
 	mm_list_append(wait_queue, &task->wait_queue);
 
-	// White until the current request becomes the head of the
+	// Wait until the current request becomes the head of the
 	// per-core queue.
 	while (mm_list_head(wait_queue) != &task->wait_queue)
 		mm_task_block();
@@ -109,7 +109,7 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner, uintptr_t data)
 	task->flags &= ~MM_TASK_COMBINING;
 
 	// If the per-core queue is not empty then let its new head take
-	// the next turn.  Otherwise
+	// the next turn.
 	if (!mm_list_empty(wait_queue)) {
 		struct mm_link *link = mm_list_head(wait_queue);
 		task = containerof(link, struct mm_task, wait_queue);
