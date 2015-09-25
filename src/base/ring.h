@@ -112,15 +112,6 @@ mm_ring_consumer_unlock(struct mm_ring_base *ring)
  * consumers with spinlock protection.
  */
 
-#define MM_RING_SPSC(name, size)				\
-	union {							\
-		struct mm_ring_spsc name;			\
-		struct {					\
-			struct mm_ring_base base;		\
-			void *ring[size];			\
-		} name##_store;					\
-	}
-
 struct mm_ring_spsc
 {
 	/* Ring header. */
@@ -205,15 +196,6 @@ mm_ring_spsc_locked_get(struct mm_ring_spsc *ring, void **data_ptr)
  * Design and Evaluation of Scalable Concurrent Queues for Many-Core
  * Architectures.
  */
-
-#define MM_RING_MPMC(name, size)				\
-	union {							\
-		struct mm_ring_mpmc name;			\
-		struct {					\
-			struct mm_ring_base base;		\
-			struct mm_ring_node name##_store[size];	\
-		} name##_store;					\
-	}
 
 struct mm_ring_node
 {

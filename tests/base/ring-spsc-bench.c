@@ -7,28 +7,13 @@
 
 #define LOCKS (MM_RING_LOCKED_PUT | MM_RING_LOCKED_GET)
 
-#if TEST_STATIC_RING
-
-MM_RING_SPSC(ring, RING_SIZE) _g_ring;
-struct mm_ring_spsc *g_ring = &_g_ring.ring;
-
-void
-init(void)
-{
-	mm_ring_spsc_prepare(g_ring, RING_SIZE, LOCKS);
-}
-
-#else
-
 struct mm_ring_spsc *g_ring;
 
 void
 init(void)
 {
-	g_ring = mm_ring_spsc_create(RING_SIZE, LOCKS);
+	g_ring = mm_ring_spsc_create(g_ring_size, LOCKS);
 }
-
-#endif
 
 void
 producer(void *arg)

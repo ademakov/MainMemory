@@ -5,28 +5,13 @@
 
 #include <stdlib.h>
 
-#if TEST_STATIC_RING
-
-MM_RING_MPMC(ring, RING_SIZE) _g_ring;
-struct mm_ring_mpmc *g_ring = &_g_ring.ring;
-
-void
-init(void)
-{
-	mm_ring_mpmc_prepare(g_ring, RING_SIZE);
-}
-
-#else
-
 struct mm_ring_mpmc *g_ring;
 
 void
 init(void)
 {
-	g_ring = mm_ring_mpmc_create(RING_SIZE);
+	g_ring = mm_ring_mpmc_create(g_ring_size);
 }
-
-#endif
 
 void
 producer(void *arg)

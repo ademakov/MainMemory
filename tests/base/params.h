@@ -22,15 +22,7 @@ extern int g_consumers;
 
 extern int g_handoff;
 
-#ifndef TEST_STATIC_RING
-# define TEST_STATIC_RING	0
-#endif
-#if TEST_STATIC_RING
-#define RING_SIZE		DEFAULT_RING_SIZE
-#else
-#define RING_SIZE		g_ring_size
 extern int g_ring_size;
-#endif
 
 extern unsigned long g_data_size;
 extern unsigned long g_producer_data_size;

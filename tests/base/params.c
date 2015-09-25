@@ -14,9 +14,7 @@ int g_consumers = DEFAULT_CONSUMERS;
 
 int g_handoff = DEFAULT_HANDOFF;
 
-#if !TEST_STATIC_RING
 int g_ring_size = DEFAULT_RING_SIZE;
-#endif
 
 unsigned long g_data_size = DEFAULT_DATA_SIZE;
 unsigned long g_producer_data_size = DEFAULT_DATA_SIZE / DEFAULT_PRODUCERS;
@@ -44,10 +42,9 @@ usage(char *prog_name, char *message)
 			" [-c <consumers>]"
 			" [-e <producer-delay>]"
 			" [-d <consumer-delay>]"
-#if !TEST_STATIC_RING
 			" [-r <ring-size>]"
-#endif
-			" [-n <repeat-count>]\n",
+			" [-n <repeat-count>]"
+			" [-o]\n",
 			prog_name);
 	else if (g_test == TEST_LOCK)
 		fprintf(stderr,
@@ -89,11 +86,7 @@ void
 set_params(int ac, char **av, int test)
 {
 	static const char *lock_options = ":c:n:e:d:";
-#if TEST_STATIC_RING
-	static const char *ring_options = ":p:c:n:e:d:o";
-#else
 	static const char *ring_options = ":p:c:r:n:e:d:o";
-#endif
 	static const char *combiner_options = ":c:r:f:n:e:d:";
 
 	const char *options =
@@ -114,11 +107,9 @@ set_params(int ac, char **av, int test)
 		case 'f':
 			g_handoff = getnum(av[0], optarg, 1, 0);
 			break;
-#if !TEST_STATIC_RING
 		case 'r':
 			g_ring_size = getnum(av[0], optarg, 1, 0);
 			break;
-#endif
 		case 'n':
 			g_data_size = getnum(av[0], optarg, 0, 0);
 			break;
@@ -139,7 +130,7 @@ set_params(int ac, char **av, int test)
 	}
 
 	if (g_test == TEST_RING) {
-		if (!mm_is_pow2(RING_SIZE))
+		if (!mm_is_pow2(g_ring_size))
 			usage(av[0], "ring size must be a power of two");
 
 		g_producer_data_size = g_data_size / g_producers;
@@ -156,7 +147,7 @@ set_params(int ac, char **av, int test)
 			"consumer delay: %lu\n"
 			"optimize for single thread: %s\n",
 			g_producers, g_consumers,
-			RING_SIZE, g_data_size,
+			g_ring_size, g_data_size,
 			g_producer_delay, g_consumer_delay,
 			g_optimize ? "yes" : "no");
 	} else if (test == TEST_LOCK) {
