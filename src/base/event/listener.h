@@ -44,11 +44,13 @@ struct mm_event_backend;
 struct mm_event_receiver;
 struct mm_thread;
 
+#define MM_LISTENER_STATE_MASK	((uint32_t) 3)
+
 typedef enum
 {
-	MM_LISTENER_RUNNING,
-	MM_LISTENER_POLLING,
-	MM_LISTENER_WAITING,
+	MM_LISTENER_RUNNING = 0,
+	MM_LISTENER_POLLING = 1,
+	MM_LISTENER_WAITING = 2,
 
 } mm_listener_state_t;
 
@@ -61,12 +63,22 @@ typedef enum
 
 struct mm_listener
 {
-	/* The state of listening. */
-	mm_listener_state_t state;
-
-	/* Counters to pair listen/notify calls. */
+	/*
+	 * The listener state.
+	 *
+	 * The two least-significant bits contain a mm_listener_state_t
+	 * value. The rest of the bits contain the listen cycle counter.
+	 */
 	uint32_t listen_stamp;
-	uint32_t notify_stamp;
+
+	/*
+	 * The listener notification state.
+	 *
+	 * The two least-significant bits always contain a zero value.
+	 * The rest of the bits is matched against the listen_stamp
+	 * to detect a pending notification.
+	 */
+	uint32_t notify_stamp __mm_align_cacheline__;
 
 	/* The state of pending changes. */
 	mm_listener_changes_state_t changes_state;
@@ -74,8 +86,9 @@ struct mm_listener
 	/* A counter to ensure visibility of change events. */
 	uint32_t changes_stamp;
 
-	/* Counters to detect detach feasibility. */
+	/* The last received event stamp (to detect detach feasibility). */
 	uint32_t arrival_stamp;
+	/* The last handled event stamp (to detect detach feasibility). */
 	uint32_t handle_stamp;
 
 	/* Listener's event sinks waiting to be detached. */
@@ -108,18 +121,21 @@ void __attribute__((nonnull(1)))
 mm_listener_cleanup(struct mm_listener *listener);
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_notify(struct mm_listener *listener,
-		   struct mm_event_backend *backend);
+mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backend);
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_listener_poll(struct mm_listener *listener,
-		 struct mm_event_backend *backend,
-		 struct mm_event_receiver *receiver,
-		 mm_timeout_t timeout);
+mm_listener_poll(struct mm_listener *listener, struct mm_event_backend *backend,
+		 struct mm_event_receiver *receiver, mm_timeout_t timeout);
 
 void __attribute__((nonnull(1)))
-mm_listener_wait(struct mm_listener *listener,
-		 mm_timeout_t timeout);
+mm_listener_wait(struct mm_listener *listener, mm_timeout_t timeout);
+
+static inline mm_listener_state_t __attribute__((nonnull(1)))
+mm_listener_getstate(struct mm_listener *listener)
+{
+	uint32_t stamp = mm_memory_load(listener->listen_stamp);
+	return (stamp & MM_LISTENER_STATE_MASK);
+}
 
 /**********************************************************************
  * I/O events support.
@@ -149,8 +165,7 @@ mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
 {
 	if (!ev_fd->pending_detach) {
 		ev_fd->pending_detach = 1;
-		mm_list_insert(&listener->detach_list,
-				&ev_fd->detach_link);
+		mm_list_insert(&listener->detach_list, &ev_fd->detach_link);
 	}
 }
 
