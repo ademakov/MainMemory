@@ -78,7 +78,7 @@ struct mm_listener
 	 * The rest of the bits is matched against the listen_stamp
 	 * to detect a pending notification.
 	 */
-	uint32_t notify_stamp __mm_align_cacheline__;
+	uint32_t notify_stamp;
 
 	/* The state of pending changes. */
 	mm_listener_changes_state_t changes_state;
