@@ -23,17 +23,16 @@
 #include <stdint.h>
 
 #ifndef __BYTE_ORDER__
-# error "Missing predefined macro __BYTE_ORDER__."
+# error "Missing predefined compiler macro __BYTE_ORDER__."
 #endif
 #ifndef __ORDER_BIG_ENDIAN__
-# error "Missing predefined macro __ORDER_BIG_ENDIAN__."
+# error "Missing predefined compiler macro __ORDER_BIG_ENDIAN__."
 #endif
 #ifndef __ORDER_LITTLE_ENDIAN__
-# error "Missing predefined macro __ORDER_LITTLE_ENDIAN__."
+# error "Missing predefined compiler macro __ORDER_LITTLE_ENDIAN__."
 #endif
-#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ && \
-    __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-# define "Unsupported byte order."
+#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+# error "Unsupported byte order."
 #endif
 
 static inline uint16_t
@@ -56,17 +55,17 @@ mm_bswap64(uint64_t x)
 
 #if __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 
-# define mm_be16toh(x)	(x)
-# define mm_be32toh(x)	(x)
-# define mm_be64toh(x)	(x)
+# define mm_betoh16(x)	(x)
+# define mm_betoh32(x)	(x)
+# define mm_betoh64(x)	(x)
 
 # define mm_htobe16(x)	(x)
 # define mm_htobe32(x)	(x)
 # define mm_htobe64(x)	(x)
 
-# define mm_le16toh(x)	mm_bswap16(x)
-# define mm_le32toh(x)	mm_bswap32(x)
-# define mm_le64toh(x)	mm_bswap64(x)
+# define mm_letoh16(x)	mm_bswap16(x)
+# define mm_letoh32(x)	mm_bswap32(x)
+# define mm_letoh64(x)	mm_bswap64(x)
 
 # define mm_htole16(x)	mm_bswap16(x)
 # define mm_htole32(x)	mm_bswap32(x)
@@ -74,17 +73,17 @@ mm_bswap64(uint64_t x)
 
 #else
 
-# define mm_be16toh(x)	mm_bswap16(x)
-# define mm_be32toh(x)	mm_bswap32(x)
-# define mm_be64toh(x)	mm_bswap64(x)
+# define mm_betoh16(x)	mm_bswap16(x)
+# define mm_betoh32(x)	mm_bswap32(x)
+# define mm_betoh64(x)	mm_bswap64(x)
 
 # define mm_htobe16(x)	mm_bswap16(x)
 # define mm_htobe32(x)	mm_bswap32(x)
 # define mm_htobe64(x)	mm_bswap64(x)
 
-# define mm_le16toh(x)	(x)
-# define mm_le32toh(x)	(x)
-# define mm_le64toh(x)	(x)
+# define mm_letoh16(x)	(x)
+# define mm_letoh32(x)	(x)
+# define mm_letoh64(x)	(x)
 
 # define mm_htole16(x)	(x)
 # define mm_htole32(x)	(x)
@@ -92,9 +91,9 @@ mm_bswap64(uint64_t x)
 
 #endif
 
-#define mm_ntohs(x)	mm_be16toh(x)
-#define mm_ntohl(x)	mm_be32toh(x)
-#define mm_ntohll(x)	mm_be64toh(x)
+#define mm_ntohs(x)	mm_betoh16(x)
+#define mm_ntohl(x)	mm_betoh32(x)
+#define mm_ntohll(x)	mm_betoh64(x)
 
 #define mm_htons(x)	mm_htobe16(x)
 #define mm_htonl(x)	mm_htobe32(x)
