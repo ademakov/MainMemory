@@ -40,7 +40,7 @@ struct mm_thread_local_chunk
 	size_t used;
 };
 
-// CData entry info.
+// Thread local entry info.
 struct mm_thread_local_entry
 {
 	struct mm_qlink link;
@@ -50,7 +50,7 @@ struct mm_thread_local_entry
 };
 
 static struct mm_thread_local_chunk *
-mm_cdata_create_chunk(struct mm_domain *domain)
+mm_thread_local_create_chunk(struct mm_domain *domain)
 {
 	size_t size = MM_THREAD_LOCAL_CHUNK_HEAD + domain->nthreads * MM_THREAD_LOCAL_CHUNK_SIZE;
 
@@ -70,7 +70,7 @@ mm_thread_local_init(struct mm_domain *domain)
 	domain->per_thread_lock = (mm_lock_t) MM_LOCK_INIT;
 
 	// Provision the first chunk w/o locking.
-	struct mm_thread_local_chunk *chunk = mm_cdata_create_chunk(domain);
+	struct mm_thread_local_chunk *chunk = mm_thread_local_create_chunk(domain);
 	mm_queue_append(&domain->per_thread_chunk_list, &chunk->link);
 }
 
@@ -127,7 +127,7 @@ mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 	if (link == NULL) {
 		// Allocate a new chunk.
 		mm_global_unlock(&domain->per_thread_lock);
-		struct mm_thread_local_chunk *chunk = mm_cdata_create_chunk(domain);
+		struct mm_thread_local_chunk *chunk = mm_thread_local_create_chunk(domain);
 		mm_global_lock(&domain->per_thread_lock);
 
 		// Check to see if there is a concurrently added chunk
