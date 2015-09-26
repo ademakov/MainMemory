@@ -1,5 +1,7 @@
 *.o
 *.a
+*.dSYM
+
 *~
 
 .deps
@@ -23,3 +25,5 @@ src/config.h.in
 src/stamp-h1
 
 nbproject
+.cproject
+.project
