@@ -23,9 +23,9 @@
 #include "base/ring.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
-#include "base/mem/cdata.h"
 #include "base/mem/cstack.h"
 #include "base/mem/memory.h"
+#include "base/thread/local.h"
 
 #include <stdio.h>
 
@@ -190,7 +190,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	mm_barrier_init(&domain->barrier, domain->nthreads);
 
 	// Initialize per-thread data.
-	mm_cdata_init(domain);
+	mm_thread_local_init(domain);
 
 	// Set thread attributes.
 	struct mm_thread_attr thread_attr;
@@ -251,7 +251,7 @@ mm_domain_destroy(struct mm_domain *domain)
 		mm_ring_mpmc_destroy(domain->request_queue);
 
 	// Release per-thread data.
-	mm_cdata_term(domain);
+	mm_thread_local_term(domain);
 
 	// Release thread data.
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {

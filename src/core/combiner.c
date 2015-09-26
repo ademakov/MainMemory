@@ -65,9 +65,9 @@ mm_task_combiner_prepare(struct mm_task_combiner *combiner, const char *name,
 
 	mm_combiner_prepare(&combiner->combiner, size, handoff);
 
-	MM_CDATA_ALLOC(mm_domain_selfptr(), name, combiner->wait_queue);
+	MM_THREAD_LOCAL_ALLOC(mm_domain_selfptr(), name, combiner->wait_queue);
 	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
-		struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
+		struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(core, combiner->wait_queue);
 		mm_list_prepare(wait_queue);
 	}
 
@@ -87,7 +87,7 @@ mm_task_combiner_execute(struct mm_task_combiner *combiner,
 
 	// Get per-core queue of pending requests.
 	mm_core_t core = mm_core_self();
-	struct mm_list *wait_queue = MM_CDATA_DEREF(core, combiner->wait_queue);
+	struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(core, combiner->wait_queue);
 
 	// Add the current request to the per-core queue.
 	struct mm_task *task = mm_task_selfptr();

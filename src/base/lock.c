@@ -30,9 +30,9 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/cdata.h"
 #include "base/mem/memory.h"
 #include "base/thread/domain.h"
+#include "base/thread/local.h"
 #include "base/thread/thread.h"
 
 #include "base/util/format.h"
@@ -47,7 +47,7 @@ struct mm_lock_domain_stat
 	// Statistics for next domain.
 	struct mm_slink link;
 	// Per-thread lock statistics.
-	MM_CDATA(struct mm_lock_stat, stat);
+	MM_THREAD_LOCAL(struct mm_lock_stat, stat);
 	// Ready for use flag.
 	mm_atomic_uint8_t ready;
 };
@@ -220,7 +220,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 	struct mm_lock_domain_stat *dom_stat
 		= mm_lock_find_domain_stat(stat_set, domain);
 	if (likely(dom_stat != NULL))
-		return MM_CDATA_DEREF(dom_index, dom_stat->stat);
+		return MM_THREAD_LOCAL_DEREF(dom_index, dom_stat->stat);
 
 	// Allocate a new statistics entry.
 	dom_stat = mm_global_alloc(sizeof(struct mm_lock_domain_stat));
@@ -239,7 +239,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 		// Bail out if so.
 		mm_global_unlock(&stat_set->domain_lock);
 		mm_global_free(dom_stat);
-		return MM_CDATA_DEREF(dom_index, recheck_stat->stat);
+		return MM_THREAD_LOCAL_DEREF(dom_index, recheck_stat->stat);
 	}
 
 	mm_stack_insert(&stat_set->domain_list, &dom_stat->link);
@@ -256,9 +256,9 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 		name = mm_format(&mm_global_arena, "lock %s",
 				 stat_set->location);
 
-	MM_CDATA_ALLOC(domain, name, dom_stat->stat);
+	MM_THREAD_LOCAL_ALLOC(domain, name, dom_stat->stat);
 	for (mm_thread_t c = 0; c < domain->nthreads; c++) {
-		struct mm_lock_stat *stat = MM_CDATA_DEREF(c, dom_stat->stat);
+		struct mm_lock_stat *stat = MM_THREAD_LOCAL_DEREF(c, dom_stat->stat);
 		stat->lock_count = 0;
 		stat->fail_count = 0;
 	}
@@ -268,7 +268,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 	mm_memory_store_fence();
 	dom_stat->ready = 1;
 
-	return MM_CDATA_DEREF(dom_index, dom_stat->stat);
+	return MM_THREAD_LOCAL_DEREF(dom_index, dom_stat->stat);
 }
 
 struct mm_lock_stat *
@@ -358,7 +358,7 @@ mm_lock_stats(void)
 			struct mm_domain *domain = dom_stat->domain;
 			for (mm_thread_t c = 0; c < domain->nthreads; c++) {
 				struct mm_lock_stat *stat
-					= MM_CDATA_DEREF(c, dom_stat->stat);
+					= MM_THREAD_LOCAL_DEREF(c, dom_stat->stat);
 				struct mm_thread *thread = domain->threads[c];
 				mm_lock_print_stat(thread, stat_set, stat);
 			}

@@ -30,10 +30,10 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/cdata.h"
 #include "base/mem/chunk.h"
 #include "base/mem/memory.h"
 #include "base/thread/domain.h"
+#include "base/thread/local.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"
 #include "base/util/hook.h"
@@ -639,7 +639,7 @@ mm_core_boot_init(struct mm_core *core)
 		// Call the start hooks on the primary core.
 		mm_timer_prepare(&core->time_manager, &space->xarena);
 		mm_hook_call(&mm_core_start_hook, false);
-		mm_cdata_summary(domain);
+		mm_thread_local_summary(domain);
 
 		mm_dispatch_prepare(&mm_core_dispatch,
 				    domain->nthreads,

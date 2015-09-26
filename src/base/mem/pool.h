@@ -23,7 +23,7 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/mem/cdata.h"
+#include "base/thread/local.h"
 
 /* Forward declaration. */
 struct mm_arena;
@@ -35,7 +35,7 @@ struct mm_arena;
 struct mm_pool_shared
 {
 	/* Per-core data. */
-	MM_CDATA(struct mm_pool_shared_cdata, cdata);
+	MM_THREAD_LOCAL(struct mm_pool_shared_cdata, cdata);
 
 	/* Pool growth lock. */
 	mm_regular_lock_t grow_lock;

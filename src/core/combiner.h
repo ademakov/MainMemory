@@ -23,12 +23,12 @@
 #include "common.h"
 #include "base/combiner.h"
 #include "base/list.h"
-#include "base/mem/cdata.h"
+#include "base/thread/local.h"
 
 struct mm_task_combiner
 {
 	/* Per-core wait list of pending requests. */
-	MM_CDATA(struct mm_list, wait_queue);
+	MM_THREAD_LOCAL(struct mm_list, wait_queue);
 
 	struct mm_combiner combiner;
 };

@@ -303,7 +303,7 @@ mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 	void *item;
 
 	struct mm_pool_shared_cdata *cdata =
-		MM_CDATA_DEREF(thread, pool->shared_data.cdata);
+		MM_THREAD_LOCAL_DEREF(thread, pool->shared_data.cdata);
 
 	if (!mm_stack_empty(&cdata->cache)) {
 		// Get an item from the core-local cache.
@@ -354,7 +354,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 	ASSERT(mm_pool_contains(pool, item));
 
 	struct mm_pool_shared_cdata *cdata =
-		MM_CDATA_DEREF(thread, pool->shared_data.cdata);
+		MM_THREAD_LOCAL_DEREF(thread, pool->shared_data.cdata);
 
 	// Find out if the core-local cache is too large.
 	if (cdata->cache_size < MM_POOL_FREE_THRESHOLD) {
@@ -384,7 +384,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 		mm_thread_t n = mm_domain_getnumber(mm_domain_selfptr());
 		for (mm_thread_t i = 0; i < n; i++) {
 			struct mm_pool_shared_cdata *cd =
-				MM_CDATA_DEREF(i, pool->shared_data.cdata);
+				MM_THREAD_LOCAL_DEREF(i, pool->shared_data.cdata);
 			struct mm_slink *guard = mm_memory_load(cd->item_guard);
 			if (guard != NULL)
 				guards[nguards++] = guard;
@@ -478,11 +478,11 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	struct mm_domain *domain = mm_domain_selfptr();
 	char *cdata_name = mm_format(&mm_common_space.xarena,
 				     "'%s' memory pool", name);
-	MM_CDATA_ALLOC(domain, cdata_name, pool->shared_data.cdata);
+	MM_THREAD_LOCAL_ALLOC(domain, cdata_name, pool->shared_data.cdata);
 	mm_thread_t n = mm_domain_getnumber(domain);
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =
-			MM_CDATA_DEREF(i, pool->shared_data.cdata);
+			MM_THREAD_LOCAL_DEREF(i, pool->shared_data.cdata);
 
 		mm_stack_prepare(&cdata->cache);
 		cdata->item_guard = 0;
