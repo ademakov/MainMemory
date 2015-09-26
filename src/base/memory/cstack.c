@@ -1,5 +1,5 @@
 /*
- * base/mem/stack.c - MainMemory call stack support.
+ * base/memory/stack.c - MainMemory call stack support.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/cstack.h"
+#include "base/memory/cstack.h"
 
 #include "base/log/debug.h"
 #include "base/log/error.h"

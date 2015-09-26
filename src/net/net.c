@@ -31,8 +31,8 @@
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/mem/pool.h"
+#include "base/memory/alloc.h"
+#include "base/memory/pool.h"
 #include "base/util/exit.h"
 #include "base/util/format.h"
 

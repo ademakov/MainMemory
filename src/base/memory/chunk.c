@@ -1,5 +1,5 @@
 /*
- * base/mem/chunk.c - MainMemory chunks.
+ * base/memory/chunk.c - MainMemory chunks.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,13 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/chunk.h"
+#include "base/memory/chunk.h"
 
 #include "base/base.h"
 #include "base/backoff.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
-#include "base/mem/memory.h"
+#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"

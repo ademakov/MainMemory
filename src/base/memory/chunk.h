@@ -1,5 +1,5 @@
 /*
- * base/mem/chunk.h - MainMemory memory chunks.
+ * base/memory/chunk.h - MainMemory memory chunks.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_CHUNK_H
-#define BASE_MEM_CHUNK_H
+#ifndef BASE_MEMORY_CHUNK_H
+#define BASE_MEMORY_CHUNK_H
 
 #include "common.h"
 #include "base/list.h"
-#include "base/mem/alloc.h"
+#include "base/memory/alloc.h"
 
 struct mm_thread;
 
@@ -128,4 +128,4 @@ mm_chunk_destroy_chain(struct mm_slink *link);
 void __attribute__((nonnull(1)))
 mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush);
 
-#endif /* BASE_MEM_CHUNK_H */
+#endif /* BASE_MEMORY_CHUNK_H */

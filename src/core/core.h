@@ -27,9 +27,9 @@
 #include "core/wait.h"
 
 #include "base/list.h"
-#include "base/mem/chunk.h"
-#include "base/mem/memory.h"
-#include "base/mem/pool.h"
+#include "base/memory/chunk.h"
+#include "base/memory/memory.h"
+#include "base/memory/pool.h"
 #include "base/log/debug.h"
 #include "base/ring.h"
 

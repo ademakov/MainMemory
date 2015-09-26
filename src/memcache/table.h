@@ -27,7 +27,7 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
-#include "base/mem/alloc.h"
+#include "base/memory/alloc.h"
 
 #if ENABLE_MEMCACHE_LOCKING
 # include "base/lock.h"

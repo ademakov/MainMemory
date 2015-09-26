@@ -1,5 +1,5 @@
 /*
- * base/mem/arena.h - MainMemory memory arenas.
+ * base/memory/arena.h - MainMemory memory arenas.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_ARENA_H
-#define BASE_MEM_ARENA_H
+#ifndef BASE_MEMORY_ARENA_H
+#define BASE_MEMORY_ARENA_H
 
 #include "common.h"
 
@@ -102,4 +102,4 @@ mm_arena_strdup(mm_arena_t arena, const char *ptr)
 
 extern const struct mm_arena mm_global_arena;
 
-#endif /* BASE_MEM_ARENA_H */
+#endif /* BASE_MEMORY_ARENA_H */

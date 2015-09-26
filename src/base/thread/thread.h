@@ -24,7 +24,7 @@
 #include "base/barrier.h"
 #include "base/list.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/memory/space.h"
 #include "base/thread/request.h"
 
 #include <pthread.h>

@@ -1,5 +1,5 @@
 /*
- * base/mem/space.c - MainMemory memory spaces.
+ * base/memory/space.c - MainMemory memory spaces.
  *
  * Copyright (C) 2014-2015  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/space.h"
+#include "base/memory/space.h"
 
 #include "base/ring.h"
 

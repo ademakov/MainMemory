@@ -36,18 +36,18 @@ libmmbase_a_SOURCES = \
 	log/log.c log/log.h \
 	log/plain.c log/plain.h \
 	log/trace.c log/trace.h \
-	mem/alloc.c mem/alloc.h \
-	mem/arena.h mem/arena.c \
-	mem/buffer.c mem/buffer.h \
-	mem/chunk.c mem/chunk.h \
-	mem/cstack.c mem/cstack.h \
-	mem/malloc.c mem/malloc.h \
-	mem/memory.c mem/memory.h \
-	mem/pool.c mem/pool.h \
-	mem/slider.c mem/slider.h \
-	mem/space.c mem/space.h \
+	memory/alloc.c memory/alloc.h \
+	memory/arena.h memory/arena.c \
+	memory/buffer.c memory/buffer.h \
+	memory/chunk.c memory/chunk.h \
+	memory/cstack.c memory/cstack.h \
+	memory/malloc.c memory/malloc.h \
+	memory/memory.c memory/memory.h \
+	memory/pool.c memory/pool.h \
+	memory/slider.c memory/slider.h \
+	memory/space.c memory/space.h \
 	thread/domain.c thread/domain.h \
-	thread/local.c mem/local.h \
+	thread/local.c thread/local.h \
 	thread/monitor.c thread/monitor.h \
 	thread/request.c thread/request.h \
 	thread/thread.c thread/thread.h \

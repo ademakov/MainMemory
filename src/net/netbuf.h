@@ -21,8 +21,8 @@
 #define NET_NETBUF_H
 
 #include "common.h"
-#include "base/mem/buffer.h"
-#include "base/mem/slider.h"
+#include "base/memory/buffer.h"
+#include "base/memory/slider.h"
 #include "net/net.h"
 
 struct mm_netbuf_socket

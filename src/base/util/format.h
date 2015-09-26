@@ -21,7 +21,7 @@
 #define	BASE_UTIL_FORMAT_H
 
 #include "common.h"
-#include "base/mem/arena.h"
+#include "base/memory/arena.h"
 #include <stdarg.h>
 
 char * mm_format(mm_arena_t arena, const char *restrict fmt, ...)

@@ -1,5 +1,5 @@
 /*
- * base/mem/pool.h - MainMemory memory pools.
+ * base/memory/pool.h - MainMemory memory pools.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *

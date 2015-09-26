@@ -1,5 +1,5 @@
 /*
- * base/mem/pool.c - MainMemory memory pools.
+ * base/memory/pool.c - MainMemory memory pools.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,14 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/pool.h"
+#include "base/memory/pool.h"
 
 #include "base/base.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/memory.h"
+#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/util/format.h"
 

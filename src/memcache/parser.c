@@ -21,7 +21,7 @@
 #include "memcache/binary.h"
 #include "memcache/state.h"
 
-#include "base/mem/alloc.h"
+#include "base/memory/alloc.h"
 #include "net/netbuf.h"
 
 

@@ -32,9 +32,9 @@
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/mem/chunk.h"
-#include "base/mem/pool.h"
+#include "base/memory/alloc.h"
+#include "base/memory/chunk.h"
+#include "base/memory/pool.h"
 
 struct mm_memcache_config mc_config;
 

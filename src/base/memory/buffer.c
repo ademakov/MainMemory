@@ -1,5 +1,5 @@
 /*
- * base/mem/buffer.c - MainMemory data buffers.
+ * base/memory/buffer.c - MainMemory data buffers.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/buffer.h"
+#include "base/memory/buffer.h"
 
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/mem/memory.h"
+#include "base/memory/memory.h"
 
 #include <stdarg.h>
 #include <stdio.h>

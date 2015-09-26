@@ -1,5 +1,5 @@
 /*
- * base/mem/space.h - MainMemory memory spaces.
+ * base/memory/space.h - MainMemory memory spaces.
  *
  * Copyright (C) 2014-2015  Aleksey Demakov
  *
@@ -17,14 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_SPACE_H
-#define	BASE_MEM_SPACE_H
+#ifndef BASE_MEMORY_SPACE_H
+#define BASE_MEMORY_SPACE_H
 
 #include "common.h"
 #include "base/lock.h"
 #include "base/log/error.h"
-#include "base/mem/alloc.h"
-#include "base/mem/arena.h"
+#include "base/memory/alloc.h"
+#include "base/memory/arena.h"
 
 /* Forward declarations. */
 struct mm_ring_spsc;
@@ -268,4 +268,4 @@ mm_shared_space_trim(struct mm_shared_space *space)
 	mm_common_unlock(&space->lock);
 }
 
-#endif /* BASE_MEM_SPACE_H */
+#endif /* BASE_MEMORY_SPACE_H */

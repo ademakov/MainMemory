@@ -25,9 +25,9 @@
 #include "base/bitops.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/mem/cstack.h"
-#include "base/mem/pool.h"
+#include "base/memory/alloc.h"
+#include "base/memory/cstack.h"
+#include "base/memory/pool.h"
 #include "base/thread/thread.h"
 
 /* Regular task stack size. */

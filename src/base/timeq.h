@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "base/mem/arena.h"
+#include "base/memory/arena.h"
 
 /* Declare opaque time queue type. */
 struct mm_timeq;

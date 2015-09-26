@@ -1,5 +1,5 @@
 /*
- * base/mem/buffer.h - MainMemory data buffers.
+ * base/memory/buffer.h - MainMemory data buffers.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_BUFFER_H
-#define BASE_MEM_BUFFER_H
+#ifndef BASE_MEMORY_BUFFER_H
+#define BASE_MEMORY_BUFFER_H
 
 #include "common.h"
 #include "base/log/debug.h"
-#include "base/mem/chunk.h"
+#include "base/memory/chunk.h"
 #include <stdarg.h>
 
 /*
@@ -146,4 +146,4 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 void __attribute__((nonnull(1)))
 mm_buffer_segment_destroy(struct mm_buffer_segment *seg);
 
-#endif /* BASE_MEM_BUFFER_H */
+#endif /* BASE_MEMORY_BUFFER_H */

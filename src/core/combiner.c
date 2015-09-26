@@ -23,7 +23,7 @@
 #include "base/bitops.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
-#include "base/mem/space.h"
+#include "base/memory/space.h"
 #include "base/thread/domain.h"
 
 struct mm_task_combiner *

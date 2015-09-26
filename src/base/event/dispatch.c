@@ -21,7 +21,7 @@
 
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/memory.h"
+#include "base/memory/memory.h"
 
 void __attribute__((nonnull(1, 3)))
 mm_dispatch_prepare(struct mm_dispatch *dispatch,

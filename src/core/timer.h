@@ -24,8 +24,8 @@
 #include "base/clock.h"
 #include "base/timeq.h"
 #include "base/log/trace.h"
-#include "base/mem/arena.h"
-#include "base/mem/pool.h"
+#include "base/memory/arena.h"
+#include "base/memory/pool.h"
 
 #define MM_TIMER_ERROR	((mm_timer_t) -1)
 #define MM_TIMER_BLOCK	((mm_timer_t) -2)

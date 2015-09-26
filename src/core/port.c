@@ -22,8 +22,8 @@
 #include "core/task.h"
 
 #include "base/log/trace.h"
-#include "base/mem/alloc.h"
-#include "base/mem/pool.h"
+#include "base/memory/alloc.h"
+#include "base/memory/pool.h"
 
 void
 mm_port_init(void)

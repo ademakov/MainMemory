@@ -23,7 +23,7 @@
 #include "memcache/memcache.h"
 
 #include "base/list.h"
-#include "base/mem/chunk.h"
+#include "base/memory/chunk.h"
 #include "core/core.h"
 
 #if !ENABLE_MEMCACHE_COMBINER

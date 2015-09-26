@@ -1,5 +1,5 @@
 /*
- * base/mem/alloc.c - MainMemory memory allocation.
+ * base/memory/alloc.c - MainMemory memory allocation.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/alloc.h"
+#include "base/memory/alloc.h"
+
 #include "base/lock.h"
 #include "base/log/error.h"
+#include "base/memory/malloc.h"
 #include "base/util/libcall.h"
-
-#include "base/mem/malloc.h"
 
 /**********************************************************************
  * Stubs for LIBC Memory Allocation Routines.

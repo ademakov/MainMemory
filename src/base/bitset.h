@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/log/debug.h"
-#include "base/mem/arena.h"
+#include "base/memory/arena.h"
 
 #define MM_BITSET_UNIT		(sizeof(uintptr_t) * 8)
 

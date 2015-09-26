@@ -21,8 +21,8 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/log/debug.h"
-#include "base/mem/space.h"
-#include "base/mem/chunk.h"
+#include "base/memory/space.h"
+#include "base/memory/chunk.h"
 #include "base/thread/thread.h"
 
 #include <stdio.h>

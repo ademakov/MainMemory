@@ -21,9 +21,9 @@
 #define BASE_MEMORY_MEMORY_H
 
 #include "common.h"
-#include "base/mem/alloc.h"
-#include "base/mem/arena.h"
-#include "base/mem/space.h"
+#include "base/memory/alloc.h"
+#include "base/memory/arena.h"
+#include "base/memory/space.h"
 #include "base/thread/thread.h"
 
 /**********************************************************************

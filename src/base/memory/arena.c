@@ -1,5 +1,5 @@
 /*
- * base/mem/arena.c - MainMemory memory arenas.
+ * base/memory/arena.c - MainMemory memory arenas.
  *
  * Copyright (C) 2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/arena.h"
-#include "base/mem/alloc.h"
+#include "base/memory/arena.h"
+#include "base/memory/alloc.h"
 
 /**********************************************************************
  * Global Memory Arena.

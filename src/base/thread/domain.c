@@ -23,8 +23,8 @@
 #include "base/ring.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
-#include "base/mem/cstack.h"
-#include "base/mem/memory.h"
+#include "base/memory/cstack.h"
+#include "base/memory/memory.h"
 #include "base/thread/local.h"
 
 #include <stdio.h>

@@ -1,5 +1,5 @@
 /*
- * base/mem/slider.h - MainMemory data buffer sliding window.
+ * base/memory/slider.h - MainMemory data buffer sliding window.
  *
  * Copyright (C) 2013-2015  Aleksey Demakov
  *
@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_SLIDER_H
-#define BASE_MEM_SLIDER_H
+#ifndef BASE_MEMORY_SLIDER_H
+#define BASE_MEMORY_SLIDER_H
 
 #include "common.h"
-#include "base/mem/buffer.h"
+#include "base/memory/buffer.h"
 
 struct mm_slider
 {
@@ -184,4 +184,4 @@ mm_slider_read(struct mm_slider *slider, void *ptr, size_t size);
 size_t __attribute__((nonnull(1, 2)))
 mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size);
 
-#endif /* BASE_MEM_SLIDER_H */
+#endif /* BASE_MEMORY_SLIDER_H */

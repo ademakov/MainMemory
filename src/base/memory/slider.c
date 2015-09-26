@@ -1,5 +1,5 @@
 /*
- * base/mem/slider.c - MainMemory data buffer sliding window.
+ * base/memory/slider.c - MainMemory data buffer sliding window.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/mem/slider.h"
+#include "base/memory/slider.h"
+
 #include "base/log/trace.h"
 
 void __attribute__((nonnull(1)))

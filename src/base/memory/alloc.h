@@ -1,5 +1,5 @@
 /*
- * base/mem/alloc.h - MainMemory memory allocation.
+ * base/memory/alloc.h - MainMemory memory allocation.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_ALLOC_H
-#define BASE_MEM_ALLOC_H
+#ifndef BASE_MEMORY_ALLOC_H
+#define BASE_MEMORY_ALLOC_H
 
 #include "common.h"
 
@@ -108,4 +108,4 @@ void mm_global_free(void *ptr);
 
 size_t mm_global_getallocsize(const void *ptr);
 
-#endif /* BASE_MEM_ALLOC_H */
+#endif /* BASE_MEMORY_ALLOC_H */

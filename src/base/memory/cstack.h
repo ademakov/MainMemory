@@ -1,5 +1,5 @@
 /*
- * base/mem/cstack.h - MainMemory call stack support.
+ * base/memory/cstack.h - MainMemory call stack support.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEM_CSTACK_H
-#define BASE_MEM_CSTACK_H
+#ifndef BASE_MEMORY_CSTACK_H
+#define BASE_MEMORY_CSTACK_H
 
 #include "common.h"
 
@@ -26,4 +26,4 @@ void * mm_cstack_create(uint32_t stack_size, uint32_t guard_size);
 
 void mm_cstack_destroy(void *stack, uint32_t stack_size);
 
-#endif /* BASE_MEM_CSTACK_H */
+#endif /* BASE_MEMORY_CSTACK_H */
