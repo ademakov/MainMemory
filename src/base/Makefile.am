@@ -44,6 +44,7 @@ libmmbase_a_SOURCES = \
 	memory/malloc.c memory/malloc.h \
 	memory/memory.c memory/memory.h \
 	memory/pool.c memory/pool.h \
+	memory/region.c memory/region.h \
 	memory/slider.c memory/slider.h \
 	memory/space.c memory/space.h \
 	thread/domain.c thread/domain.h \
