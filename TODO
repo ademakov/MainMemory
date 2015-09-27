@@ -5,7 +5,6 @@ ASAP:
 * polish & optimize
 ** optimize event dispatch
 ** try to beautify netbuf interface
-* region allocator
 * configuration file parsing
 * command line argument parsing
 
@@ -41,7 +40,7 @@ Larger items:
 
 Enhancements:
 * DNS resolver
-* DPDK-based or similar net I/O
+* AF_PACKET and/or DPDK-based net I/O
 * background workers
 * proper future cancellation
 ** let tasks to be canceled across cores
