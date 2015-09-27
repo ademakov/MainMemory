@@ -100,6 +100,26 @@ mm_chunk_getsize(const struct mm_chunk *chunk)
 	return mm_chunk_base_getsize(&chunk->base);
 }
 
+static inline struct mm_chunk *
+mm_chunk_from_slink(struct mm_slink *link)
+{
+#if 1
+	return (struct mm_chunk *) link;
+#else
+	return link == NULL ? NULL : containerof(link, struct mm_chunk, base.slink);
+#endif
+}
+
+static inline struct mm_chunk *
+mm_chunk_from_qlink(struct mm_qlink *link)
+{
+#if 1
+	return (struct mm_chunk *) link;
+#else
+	return link == NULL ? NULL : containerof(link, struct mm_chunk, base.qlink);
+#endif
+}
+
 /**********************************************************************
  * Chunk Creation and Destruction.
  **********************************************************************/
