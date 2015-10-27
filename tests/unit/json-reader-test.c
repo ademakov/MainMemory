@@ -421,6 +421,7 @@ main()
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_PARTIAL,
 		-1});
+
 	test_single("0 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
@@ -451,7 +452,17 @@ main()
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
 		-1});
+	test_single("1e1 ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_NUMBER,
+		MM_JSON_END_DOCUMENT,
+		-1});
 	test_single("123 ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_NUMBER,
+		MM_JSON_END_DOCUMENT,
+		-1});
+	test_single("123.4 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
@@ -461,17 +472,27 @@ main()
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
 		-1});
-	test_single("123.456e89 ", (mm_json_token_t[]) {
+	test_single("123.456e7 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
 		-1});
-	test_single("123.456E+89 ", (mm_json_token_t[]) {
+	test_single("123.456e78 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
 		-1});
-	test_single("123.456E-89 ", (mm_json_token_t[]) {
+	test_single("123.456e789 ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_NUMBER,
+		MM_JSON_END_DOCUMENT,
+		-1});
+	test_single("123.456E+7 ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_NUMBER,
+		MM_JSON_END_DOCUMENT,
+		-1});
+	test_single("123.456E-7 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
@@ -486,7 +507,7 @@ main()
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
 		-1});
-	test_single("-123.456E-9 ", (mm_json_token_t[]) {
+	test_single("-123.456E-789 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_NUMBER,
 		MM_JSON_END_DOCUMENT,
@@ -525,15 +546,27 @@ main()
 		MM_JSON_END_DOCUMENT,
 		-1});
 
+	test_single("- ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_ERROR,
+		-1});
 	test_single("01 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_ERROR,
 		-1});
-	test_single("0. ", (mm_json_token_t[]) {
+	test_single("1. ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_ERROR,
 		-1});
-	test_single("0e ", (mm_json_token_t[]) {
+	test_single("1e ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_ERROR,
+		-1});
+	test_single("1e- ", (mm_json_token_t[]) {
+		MM_JSON_START_DOCUMENT,
+		MM_JSON_ERROR,
+		-1});
+	test_single("1e+ ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_ERROR,
 		-1});
