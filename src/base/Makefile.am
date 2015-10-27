@@ -15,6 +15,7 @@ libmmbase_a_SOURCES = \
 	clock.c clock.h \
 	combiner.c combiner.h \
 	hash.c hash.h \
+	json.c json.h \
 	list.h \
 	lock.c lock.h \
 	ring.c ring.h \
