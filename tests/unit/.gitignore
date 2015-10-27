@@ -1,0 +1,6 @@
+*.log
+*.trs
+
+bitops-test
+bitset-test
+json-reader-test
