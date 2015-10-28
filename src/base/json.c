@@ -329,8 +329,6 @@ static uint8_t mm_json_string_table[][256] = {
 	},
 };
 
-#include <stdio.h>
-
 static mm_json_token_t
 mm_json_reader_scan_string(struct mm_json_reader *reader, mm_json_token_t token)
 {
