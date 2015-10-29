@@ -1,7 +1,7 @@
 /*
- * base/backoff.c - MainMemory contention back off.
+ * base/thread/backoff.h - MainMemory contention back off.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,28 +17,32 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/backoff.h"
-#include "base/thread/thread.h"
+#ifndef BASE_THREAD_BACKOFF_H
+#define BASE_THREAD_BACKOFF_H
 
-static __thread mm_backoff_yield_t mm_backoff_yield;
+#include "common.h"
+#include "arch/spin.h"
 
-void
-mm_backoff_set_yield(mm_backoff_yield_t yield)
+#define MM_BACKOFF_SMALL	(0xff)
+
+uint32_t mm_thread_backoff_slow(uint32_t count);
+
+static inline void
+mm_thread_backoff_fixed(uint32_t count)
 {
-	mm_backoff_yield = yield;
+	while (count--)
+		mm_spin_pause();
 }
 
-uint32_t
-mm_backoff_slow(uint32_t count)
+static inline uint32_t
+mm_thread_backoff(uint32_t count)
 {
-	if (count > 0xffff) {
-		mm_thread_yield();
-		return 0;
-	} else {
-		if (mm_backoff_yield == NULL)
-			mm_backoff_fixed(count & 0xfff);
-		else
-			mm_backoff_yield();
+	if (count < MM_BACKOFF_SMALL) {
+		mm_thread_backoff_fixed(count);
 		return count + count + 1;
+	} else {
+		return mm_thread_backoff_slow(count);
 	}
 }
+
+#endif /* BASE_THREAD_BACKOFF_H */

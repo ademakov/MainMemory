@@ -51,7 +51,7 @@ mm_future_cleanup_low(struct mm_future *future)
 		// access the future structure anymore.
 		uint32_t count = 0;
 		while (mm_memory_load(future->task) != NULL)
-			count = mm_backoff(count);
+			count = mm_thread_backoff(count);
 	}
 }
 

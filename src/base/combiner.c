@@ -100,7 +100,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 	// Wait until the slot becomes ready to accept a request.
 	uint32_t backoff = 0;
 	while (mm_memory_load(node->lock) != tail)
-		backoff = mm_backoff(backoff);
+		backoff = mm_thread_backoff(backoff);
 
 	// Put the request to the slot.
 	mm_memory_fence(); /* TODO: load_store fence */
@@ -137,7 +137,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 			break;
 		}
 
-		backoff = mm_backoff(backoff);
+		backoff = mm_thread_backoff(backoff);
 
 	} while (mm_memory_load(node->lock) == (tail + 1));
 

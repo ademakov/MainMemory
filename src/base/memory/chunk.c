@@ -20,10 +20,10 @@
 #include "base/memory/chunk.h"
 
 #include "base/base.h"
-#include "base/backoff.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
 #include "base/memory/memory.h"
+#include "base/thread/backoff.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 #include "base/util/exit.h"
@@ -213,7 +213,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 				thread->deferred_chunks_count++;
 				break;
 			}
-			backoff = mm_backoff(backoff);
+			backoff = mm_thread_backoff(backoff);
 		}
 	}
 

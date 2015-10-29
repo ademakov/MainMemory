@@ -225,7 +225,7 @@ mm_ring_mpmc_busywait(struct mm_ring_node *node, uintptr_t lock)
 {
 	uint32_t backoff = 0;
 	while (mm_memory_load(node->lock) != lock)
-		backoff = mm_backoff(backoff);
+		backoff = mm_thread_backoff(backoff);
 }
 
 /* Multi-Producer enqueue operation without wait. */

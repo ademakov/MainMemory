@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "arch/lock.h"
-#include "base/backoff.h"
+#include "base/thread/backoff.h"
 
 /**********************************************************************
  * Basic TAS(TATAS) Spin Locks.
@@ -39,7 +39,7 @@ mm_global_lock(mm_lock_t *lock)
 	uint32_t backoff = 0;
 	while (mm_lock_acquire(lock)) {
 		do
-			backoff = mm_backoff(backoff);
+			backoff = mm_thread_backoff(backoff);
 		while (mm_memory_load(lock->locked));
 	}
 }
@@ -136,7 +136,7 @@ mm_common_lock(mm_common_lock_t *lock)
 #if ENABLE_LOCK_STATS
 			++fail;
 #endif
-			backoff = mm_backoff(backoff);
+			backoff = mm_thread_backoff(backoff);
 		} while (mm_memory_load(lock->lock.locked));
 	}
 

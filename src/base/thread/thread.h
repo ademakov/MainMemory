@@ -25,6 +25,7 @@
 #include "base/list.h"
 #include "base/log/trace.h"
 #include "base/memory/space.h"
+#include "base/thread/backoff.h"
 #include "base/thread/request.h"
 
 #include <pthread.h>
@@ -48,6 +49,9 @@ struct mm_trace_context;
 
 /* Thread wake-up notification routine. */
 typedef void (*mm_thread_notify_t)(struct mm_thread *thread);
+
+/* Thread synchronization backoff routine. */
+typedef void (*mm_thread_relax_t)(void);
 
 /* Thread creation attributes. */
 struct mm_thread_attr
@@ -89,6 +93,8 @@ struct mm_thread
 
 	/* Wake-up notification routine. */
 	mm_thread_notify_t notify;
+	/* Synchronization backoff routine. */
+	mm_thread_relax_t relax;
 
 	/* Thread request queue. */
 	struct mm_ring_mpmc *request_queue;
@@ -256,6 +262,31 @@ mm_thread_join(struct mm_thread *thread);
 void mm_thread_yield(void);
 
 void mm_thread_domain_barrier(void);
+
+/**********************************************************************
+ * Thread backoff routines.
+ **********************************************************************/
+
+static inline void __attribute__((nonnull(1)))
+mm_thread_relax_low(struct mm_thread *thread)
+{
+	if (thread->relax != NULL)
+		(thread->relax)();
+	else
+		mm_thread_yield();
+}
+
+static inline void
+mm_thread_relax(void)
+{
+	mm_thread_relax_low(mm_thread_selfptr());
+}
+
+static inline void __attribute__((nonnull(1)))
+mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
+{
+	thread->relax = relax;
+}
 
 /**********************************************************************
  * Domain requests.

@@ -68,21 +68,15 @@ struct mm_dispatch mm_core_dispatch;
  **********************************************************************/
 
 static void
-mm_core_yield(void)
+mm_core_enable_yield(struct mm_core *core)
 {
-	mm_task_yield();
+	mm_thread_setrelax(core->thread, mm_task_yield);
 }
 
 static void
-mm_core_enable_yield(void)
+mm_core_disable_yield(struct mm_core *core)
 {
-	mm_backoff_set_yield(mm_core_yield);
-}
-
-static void
-mm_core_disable_yield(void)
-{
-	mm_backoff_set_yield(NULL);
+	mm_thread_setrelax(core->thread, NULL);
 }
 
 /**********************************************************************
@@ -547,9 +541,9 @@ mm_core_dealer(mm_value_t arg)
 	while (!mm_memory_load(core->stop)) {
 		mm_core_deal(core, core->thread);
 
-		mm_core_disable_yield();
+		mm_core_disable_yield(core);
 		mm_core_halt(core);
-		mm_core_enable_yield();
+		mm_core_enable_yield(core);
 	}
 
 	LEAVE();
@@ -720,13 +714,13 @@ mm_core_boot(mm_value_t arg)
 	mm_core_start_basic_tasks(core);
 
 	// Enable yielding to other tasks on busy waiting.
-	mm_core_enable_yield();
+	mm_core_enable_yield(core);
 
 	// Run the other tasks while there are any.
 	mm_task_yield();
 
 	// Disable yielding to other tasks.
-	mm_core_disable_yield();
+	mm_core_disable_yield(core);
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);
