@@ -59,7 +59,7 @@ thread_runner(void *arg)
 	thr->lock_stat.fail_count = 0;
 #endif
 
-	mm_thread_barrier_local_init(&thr->barrier);
+	mm_thread_barrier_local_prepare(&thr->barrier);
 	mm_thread_barrier_wait(&g_barrier, &thr->barrier);
 
 	gettimeofday(&start_time, NULL);
@@ -110,7 +110,7 @@ test1(void *arg, void (*routine)(void*))
 	}
 
 	/* Run threads. */
-	mm_thread_barrier_init(&g_barrier, g_threads);
+	mm_thread_barrier_prepare(&g_barrier, g_threads);
 	for (i = 0; i < g_threads; i++) {
 		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
 		if (ret) {
@@ -163,7 +163,7 @@ test2(void *arg, void (*producer)(void *arg), void (*consumer)(void *arg))
 	}
 
 	/* Run threads. */
-	mm_thread_barrier_init(&g_barrier, g_threads);
+	mm_thread_barrier_prepare(&g_barrier, g_threads);
 	for (i = 0; i < g_threads; i++) {
 		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
 		if (ret) {

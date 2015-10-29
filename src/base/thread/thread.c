@@ -254,7 +254,7 @@ mm_thread_entry(void *arg)
 	// This ensures that domain thread data is complete and
 	// threads might communicate.
 	if (thread->domain != NULL) {
-		mm_thread_barrier_local_init(&thread->domain_barrier);
+		mm_thread_barrier_local_prepare(&thread->domain_barrier);
 		mm_thread_barrier_wait(&thread->domain->barrier,
 				       &thread->domain_barrier);
 	}

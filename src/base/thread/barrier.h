@@ -38,10 +38,10 @@ struct mm_thread_barrier_local
 };
 
 void __attribute__((nonnull(1)))
-mm_thread_barrier_init(struct mm_thread_barrier *barrier, uint32_t count);
+mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count);
 
 void __attribute__((nonnull(1)))
-mm_thread_barrier_local_init(struct mm_thread_barrier_local *local);
+mm_thread_barrier_local_prepare(struct mm_thread_barrier_local *local);
 
 void __attribute__((nonnull(1, 2)))
 mm_thread_barrier_wait(struct mm_thread_barrier *barrier, struct mm_thread_barrier_local *local);
