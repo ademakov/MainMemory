@@ -1,7 +1,7 @@
 /*
  * base/thread/monitor.c - MainMemory monitor thread synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,8 +23,8 @@
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
-void
-mm_monitor_prepare(struct mm_monitor *monitor)
+void __attribute__((nonnull(1)))
+mm_thread_monitor_prepare(struct mm_thread_monitor *monitor)
 {
 	ENTER();
 
@@ -38,8 +38,8 @@ mm_monitor_prepare(struct mm_monitor *monitor)
 	LEAVE();
 }
 
-void
-mm_monitor_cleanup(struct mm_monitor *monitor)
+void __attribute__((nonnull(1)))
+mm_thread_monitor_cleanup(struct mm_thread_monitor *monitor)
 {
 	ENTER();
 
@@ -49,8 +49,8 @@ mm_monitor_cleanup(struct mm_monitor *monitor)
 	LEAVE();
 }
 
-void
-mm_monitor_wait(struct mm_monitor *monitor)
+void __attribute__((nonnull(1)))
+mm_thread_monitor_wait(struct mm_thread_monitor *monitor)
 {
 	ENTER();
 
@@ -64,8 +64,8 @@ mm_monitor_wait(struct mm_monitor *monitor)
 	LEAVE();
 }
 
-bool
-mm_monitor_timedwait(struct mm_monitor *monitor, mm_timeval_t realtime)
+bool __attribute__((nonnull(1)))
+mm_thread_monitor_timedwait(struct mm_thread_monitor *monitor, mm_timeval_t realtime)
 {
 	ENTER();
 	bool rc = true;

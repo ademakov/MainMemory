@@ -99,7 +99,7 @@ struct mm_listener
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_t semaphore;
 #else
-	struct mm_monitor monitor;
+	struct mm_thread_monitor monitor;
 #endif
 
 	/* Listener's private change events store. */

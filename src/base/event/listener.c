@@ -61,7 +61,7 @@ mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
 	if (r != KERN_SUCCESS)
 		mm_fatal(0, "semaphore_create");
 #else
-	mm_monitor_prepare(&listener->monitor);
+	mm_thread_monitor_prepare(&listener->monitor);
 #endif
 
 	mm_event_batch_prepare(&listener->changes, 256);
@@ -83,7 +83,7 @@ mm_listener_cleanup(struct mm_listener *listener)
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_destroy(mach_task_self(), listener->semaphore);
 #else
-	mm_monitor_cleanup(&listener->monitor);
+	mm_thread_monitor_cleanup(&listener->monitor);
 #endif
 
 	mm_event_batch_cleanup(&listener->changes);
@@ -101,9 +101,9 @@ mm_listener_signal(struct mm_listener *listener)
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_signal(listener->semaphore);
 #else
-	mm_monitor_lock(&listener->monitor); 
-	mm_monitor_signal(&listener->monitor);
-	mm_monitor_unlock(&listener->monitor);
+	mm_thread_monitor_lock(&listener->monitor);
+	mm_thread_monitor_signal(&listener->monitor);
+	mm_thread_monitor_unlock(&listener->monitor);
 #endif
 
 	LEAVE();
@@ -142,10 +142,10 @@ mm_listener_timedwait(struct mm_listener *listener, uint32_t stamp, mm_timeout_t
 #else
 	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
 
-	mm_monitor_lock(&listener->monitor); 
+	mm_thread_monitor_lock(&listener->monitor);
 	if (listener->notify_stamp == stamp)
-		mm_monitor_timedwait(&listener->monitor, time);
-	mm_monitor_unlock(&listener->monitor);
+		mm_thread_monitor_timedwait(&listener->monitor, time);
+	mm_thread_monitor_unlock(&listener->monitor);
 #endif
 
 	LEAVE();

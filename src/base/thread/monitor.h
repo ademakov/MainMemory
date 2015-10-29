@@ -1,7 +1,7 @@
 /*
  * base/thread/monitor.h - MainMemory monitor thread synchronization.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,46 +23,46 @@
 #include "common.h"
 #include <pthread.h>
 
-struct mm_monitor
+struct mm_thread_monitor
 {
 	pthread_mutex_t lock;
 	pthread_cond_t cond;
 };
 
-void mm_monitor_prepare(struct mm_monitor *monitor)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_monitor_prepare(struct mm_thread_monitor *monitor);
 
-void mm_monitor_cleanup(struct mm_monitor *monitor)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_monitor_cleanup(struct mm_thread_monitor *monitor);
 
 static inline void __attribute__((nonnull(1)))
-mm_monitor_lock(struct mm_monitor *monitor)
+mm_thread_monitor_lock(struct mm_thread_monitor *monitor)
 {
 	pthread_mutex_lock(&monitor->lock);
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_monitor_unlock(struct mm_monitor *monitor)
+mm_thread_monitor_unlock(struct mm_thread_monitor *monitor)
 {
 	pthread_mutex_unlock(&monitor->lock);
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_monitor_signal(struct mm_monitor *monitor)
+mm_thread_monitor_signal(struct mm_thread_monitor *monitor)
 {
 	pthread_cond_signal(&monitor->cond);
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_monitor_broadcast(struct mm_monitor *monitor)
+mm_thread_monitor_broadcast(struct mm_thread_monitor *monitor)
 {
 	pthread_cond_broadcast(&monitor->cond);
 }
 
-void mm_monitor_wait(struct mm_monitor *monitor)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_monitor_wait(struct mm_thread_monitor *monitor);
 
-bool mm_monitor_timedwait(struct mm_monitor *monitor, mm_timeval_t realtime)
-	__attribute__((nonnull(1)));
+bool __attribute__((nonnull(1)))
+mm_thread_monitor_timedwait(struct mm_thread_monitor *monitor, mm_timeval_t realtime);
 
 #endif /* BASE_THREAD_MONITOR_H */
