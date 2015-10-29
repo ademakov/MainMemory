@@ -1,7 +1,7 @@
 /*
- * base/barrier.h - MainMemory barriers.
+ * base/thread/barrier.h - MainMemory barriers.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_BARRIER_H
-#define	BASE_BARRIER_H
+#ifndef BASE_THREAD_BARRIER_H
+#define BASE_THREAD_BARRIER_H
 
 #include "common.h"
 #include "arch/atomic.h"
 
-struct mm_barrier
+struct mm_thread_barrier
 {
 	uint32_t count __mm_align_cacheline__;
 
@@ -32,18 +32,18 @@ struct mm_barrier
 	uint32_t sense __mm_align_cacheline__;
 };
 
-struct mm_barrier_local
+struct mm_thread_barrier_local
 {
 	uint32_t sense;
 };
 
-void mm_barrier_init(struct mm_barrier *barrier, uint32_t count)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_barrier_init(struct mm_thread_barrier *barrier, uint32_t count);
 
-void mm_barrier_local_init(struct mm_barrier_local *local)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1)))
+mm_thread_barrier_local_init(struct mm_thread_barrier_local *local);
 
-void mm_barrier_wait(struct mm_barrier *barrier, struct mm_barrier_local *local)
-	__attribute__((nonnull(1)));
+void __attribute__((nonnull(1, 2)))
+mm_thread_barrier_wait(struct mm_thread_barrier *barrier, struct mm_thread_barrier_local *local);
 
-#endif /* BASE_BARRIER_H */
+#endif /* BASE_THREAD_BARRIER_H */

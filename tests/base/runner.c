@@ -5,8 +5,8 @@
 #include "arch/atomic.h"
 #include "arch/memory.h"
 #include "arch/spin.h"
-#include "base/barrier.h"
 #include "base/lock.h"
+#include "base/thread/barrier.h"
 
 #include <pthread.h>
 #include <stdio.h>
@@ -16,13 +16,13 @@
 #define _1M_	1000000
 
 static int g_threads;
-static struct mm_barrier g_barrier;
+static struct mm_thread_barrier g_barrier;
 
 struct thread
 {
 	pthread_t thread;
 
-	struct mm_barrier_local barrier;
+	struct mm_thread_barrier_local barrier;
 
 	void (*start)(void *);
 	void *start_arg;
@@ -59,8 +59,8 @@ thread_runner(void *arg)
 	thr->lock_stat.fail_count = 0;
 #endif
 
-	mm_barrier_local_init(&thr->barrier);
-	mm_barrier_wait(&g_barrier, &thr->barrier);
+	mm_thread_barrier_local_init(&thr->barrier);
+	mm_thread_barrier_wait(&g_barrier, &thr->barrier);
 
 	gettimeofday(&start_time, NULL);
 	thr->start(thr->start_arg);
@@ -110,7 +110,7 @@ test1(void *arg, void (*routine)(void*))
 	}
 
 	/* Run threads. */
-	mm_barrier_init(&g_barrier, g_threads);
+	mm_thread_barrier_init(&g_barrier, g_threads);
 	for (i = 0; i < g_threads; i++) {
 		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
 		if (ret) {
@@ -163,7 +163,7 @@ test2(void *arg, void (*producer)(void *arg), void (*consumer)(void *arg))
 	}
 
 	/* Run threads. */
-	mm_barrier_init(&g_barrier, g_threads);
+	mm_thread_barrier_init(&g_barrier, g_threads);
 	for (i = 0; i < g_threads; i++) {
 		ret = pthread_create(&tt[i].thread, NULL, thread_runner, &tt[i]);
 		if (ret) {

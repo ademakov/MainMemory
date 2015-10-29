@@ -21,11 +21,10 @@
 #define BASE_THREAD_THREAD_H
 
 #include "common.h"
-#include "base/barrier.h"
 #include "base/list.h"
 #include "base/log/trace.h"
 #include "base/memory/space.h"
-#include "base/thread/backoff.h"
+#include "base/thread/barrier.h"
 #include "base/thread/request.h"
 
 #include <pthread.h>
@@ -115,7 +114,7 @@ struct mm_thread
 	pthread_t system_thread;
 
 	/* Domain threads start/stop synchronization. */
-	struct mm_barrier_local domain_barrier;
+	struct mm_thread_barrier_local domain_barrier;
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;

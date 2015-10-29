@@ -5,7 +5,6 @@ AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 
 libmmbase_a_SOURCES = \
-	barrier.c barrier.h \
 	base.c base.h \
 	bitops.h \
 	bitset.c bitset.h \
@@ -48,6 +47,7 @@ libmmbase_a_SOURCES = \
 	memory/slider.c memory/slider.h \
 	memory/space.c memory/space.h \
 	thread/backoff.c thread/backoff.h \
+	thread/barrier.c thread/barrier.h \
 	thread/domain.c thread/domain.h \
 	thread/local.c thread/local.h \
 	thread/monitor.c thread/monitor.h \

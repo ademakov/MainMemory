@@ -187,7 +187,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 		strcpy(domain->name, "unnamed");
 
 	// Set thread start/stop barrier.
-	mm_barrier_init(&domain->barrier, domain->nthreads);
+	mm_thread_barrier_init(&domain->barrier, domain->nthreads);
 
 	// Initialize per-thread data.
 	mm_thread_local_init(domain);

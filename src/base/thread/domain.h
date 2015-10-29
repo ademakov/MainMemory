@@ -23,8 +23,8 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/barrier.h"
 #include "base/log/debug.h"
+#include "base/thread/barrier.h"
 #include "base/thread/request.h"
 #include "base/thread/thread.h"
 
@@ -93,7 +93,7 @@ struct mm_domain
 	mm_lock_t per_thread_lock;
 
 	/* Thread start/stop barrier. */
-	struct mm_barrier barrier;
+	struct mm_thread_barrier barrier;
 
 	/* Domain name. */
 	char name[MM_DOMAIN_NAME_SIZE];
