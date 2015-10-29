@@ -44,29 +44,29 @@ struct mm_event_backend;
 struct mm_event_receiver;
 struct mm_thread;
 
-#define MM_LISTENER_STATE_MASK	((uint32_t) 3)
+#define MM_EVENT_LISTENER_STATE		((uint32_t) 3)
 
 typedef enum
 {
-	MM_LISTENER_RUNNING = 0,
-	MM_LISTENER_POLLING = 1,
-	MM_LISTENER_WAITING = 2,
+	MM_EVENT_LISTENER_RUNNING = 0,
+	MM_EVENT_LISTENER_POLLING = 1,
+	MM_EVENT_LISTENER_WAITING = 2,
 
-} mm_listener_state_t;
+} mm_event_listener_state_t;
 
 typedef enum
 {
-	MM_LISTENER_CHANGES_PRIVATE,
-	MM_LISTENER_CHANGES_PUBLISHED,
+	MM_EVENT_LISTENER_CHANGES_PRIVATE,
+	MM_EVENT_LISTENER_CHANGES_PUBLISHED,
 
-} mm_listener_changes_state_t;
+} mm_event_listener_changes_t;
 
-struct mm_listener
+struct mm_event_listener
 {
 	/*
 	 * The listener state.
 	 *
-	 * The two least-significant bits contain a mm_listener_state_t
+	 * The two least-significant bits contain a mm_event_listener_state_t
 	 * value. The rest of the bits contain the listen cycle counter.
 	 */
 	uint32_t listen_stamp;
@@ -81,7 +81,7 @@ struct mm_listener
 	uint32_t notify_stamp;
 
 	/* The state of pending changes. */
-	mm_listener_changes_state_t changes_state;
+	mm_event_listener_changes_t changes_state;
 
 	/* A counter to ensure visibility of change events. */
 	uint32_t changes_stamp;
@@ -115,26 +115,26 @@ struct mm_listener
 } __mm_align_cacheline__;
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread);
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread);
 
 void __attribute__((nonnull(1)))
-mm_listener_cleanup(struct mm_listener *listener);
+mm_event_listener_cleanup(struct mm_event_listener *listener);
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backend);
+mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend);
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_listener_poll(struct mm_listener *listener, struct mm_event_backend *backend,
-		 struct mm_event_receiver *receiver, mm_timeout_t timeout);
+mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
+		       struct mm_event_receiver *receiver, mm_timeout_t timeout);
 
 void __attribute__((nonnull(1)))
-mm_listener_wait(struct mm_listener *listener, mm_timeout_t timeout);
+mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
 
-static inline mm_listener_state_t __attribute__((nonnull(1)))
-mm_listener_getstate(struct mm_listener *listener)
+static inline mm_event_listener_state_t __attribute__((nonnull(1)))
+mm_event_listener_getstate(struct mm_event_listener *listener)
 {
 	uint32_t stamp = mm_memory_load(listener->listen_stamp);
-	return (stamp & MM_LISTENER_STATE_MASK);
+	return (stamp & MM_EVENT_LISTENER_STATE);
 }
 
 /**********************************************************************
@@ -142,35 +142,35 @@ mm_listener_getstate(struct mm_listener *listener)
  **********************************************************************/
 
 static inline void __attribute__((nonnull(1, 2)))
-mm_listener_add(struct mm_listener *listener, struct mm_event_fd *ev_fd,
-		mm_event_t event)
+mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink,
+		      mm_event_t event)
 {
-	mm_event_batch_add(&listener->changes, event, ev_fd);
+	mm_event_batch_add(&listener->changes, event, sink);
 }
 
 static inline void __attribute__((nonnull(1)))
-mm_listener_addflags(struct mm_listener *listener, unsigned int flags)
+mm_event_listener_addflags(struct mm_event_listener *listener, unsigned int flags)
 {
 	mm_event_batch_addflags(&listener->changes, flags);
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_listener_hasflags(struct mm_listener *listener, unsigned int flags)
+mm_event_listener_hasflags(struct mm_event_listener *listener, unsigned int flags)
 {
 	return mm_event_batch_hasflags(&listener->changes, flags);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
-mm_listener_detach(struct mm_listener *listener, struct mm_event_fd *ev_fd)
+mm_event_listener_detach(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	if (!ev_fd->pending_detach) {
-		ev_fd->pending_detach = 1;
-		mm_list_insert(&listener->detach_list, &ev_fd->detach_link);
+	if (!sink->pending_detach) {
+		sink->pending_detach = 1;
+		mm_list_insert(&listener->detach_list, &sink->detach_link);
 	}
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_listener_has_changes(struct mm_listener *listener)
+mm_event_listener_has_changes(struct mm_event_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);
 }

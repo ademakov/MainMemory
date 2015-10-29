@@ -37,7 +37,7 @@ struct mm_event_receiver
 	uint32_t arrival_stamp;
 
 	/* Event listeners. */
-	struct mm_listener *listeners;
+	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
 
 	/* Target threads that have received events. */

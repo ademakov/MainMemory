@@ -68,7 +68,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 void __attribute__((nonnull(1)))
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);
 
-static inline struct mm_listener * __attribute__((nonnull(1)))
+static inline struct mm_event_listener * __attribute__((nonnull(1)))
 mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
 	return &dispatch->receiver.listeners[thread];
@@ -78,8 +78,8 @@ static inline void __attribute__((nonnull(1)))
 mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
 	ASSERT(thread < dispatch->receiver.nlisteners);
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_notify(listener, &dispatch->backend);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_notify(listener, &dispatch->backend);
 }
 
 void __attribute__((nonnull(1)))
@@ -103,9 +103,9 @@ mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 	} else {
 		ASSERT(mm_event_target(sink) == thread);
 	}
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_add(listener, sink, MM_EVENT_REGISTER);
-	mm_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_add(listener, sink, MM_EVENT_REGISTER);
+	mm_event_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
@@ -114,9 +114,9 @@ mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_add(listener, sink, MM_EVENT_UNREGISTER);
-	mm_listener_addflags(listener, MM_EVENT_BATCH_UNREGISTER);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_add(listener, sink, MM_EVENT_UNREGISTER);
+	mm_event_listener_addflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 static inline void __attribute__((nonnull(1, 2)))
@@ -126,9 +126,9 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_add(listener, sink, MM_EVENT_INPUT);
-	mm_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_add(listener, sink, MM_EVENT_INPUT);
+	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 #else
 	(void) dispatch;
 	(void) sink;
@@ -142,9 +142,9 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_add(listener, sink, MM_EVENT_OUTPUT);
-	mm_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_add(listener, sink, MM_EVENT_OUTPUT);
+	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 #else
 	(void) dispatch;
 	(void) sink;
@@ -157,8 +157,8 @@ mm_dispatch_detach(struct mm_dispatch *dispatch,
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_listener_detach(listener, sink);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	mm_event_listener_detach(listener, sink);
 }
 
 #endif /* BASE_EVENT_DISPATCH_H */

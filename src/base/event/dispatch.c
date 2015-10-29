@@ -84,7 +84,7 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 }
 
 static void
-mm_dispatch_handle_detach(struct mm_listener *listener)
+mm_dispatch_handle_detach(struct mm_event_listener *listener)
 {
 	while (!mm_list_empty(&listener->detach_list)) {
 		struct mm_link *link = mm_list_head(&listener->detach_list);
@@ -95,9 +95,9 @@ mm_dispatch_handle_detach(struct mm_listener *listener)
 }
 
 static inline bool __attribute__((nonnull(1)))
-mm_dispatch_has_urgent_changes(struct mm_listener *listener)
+mm_dispatch_has_urgent_changes(struct mm_event_listener *listener)
 {
-	return mm_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
+	return mm_event_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 void __attribute__((nonnull(1)))
@@ -107,7 +107,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 	ENTER();
 	ASSERT(thread < dispatch->receiver.nlisteners);
 	struct mm_event_receiver *receiver = &dispatch->receiver;
-	struct mm_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 
 	// Handle the change events.
 	mm_regular_lock(&dispatch->lock);
@@ -151,9 +151,9 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		// If this thread previously published any change events
 		// then upon this dispatch cycle the events will certainly
 		// be handled (perhaps by the very same thread).
-		listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+		listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
 
-	} else if (mm_listener_has_changes(listener)) {
+	} else if (mm_event_listener_has_changes(listener)) {
 
 		// Publish the private change events.
 		mm_event_batch_append(&dispatch->changes, &listener->changes);
@@ -161,7 +161,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		// The published events might be missed by the current
 		// control thread. So the publisher must force another
 		// dispatch cycle.
-		listener->changes_state = MM_LISTENER_CHANGES_PUBLISHED;
+		listener->changes_state = MM_EVENT_LISTENER_CHANGES_PUBLISHED;
 		listener->changes_stamp = receiver->arrival_stamp;
 
 		mm_regular_unlock(&dispatch->lock);
@@ -180,12 +180,12 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 	} else {
 		mm_regular_unlock(&dispatch->lock);
 
-		if (listener->changes_state != MM_LISTENER_CHANGES_PRIVATE) {
+		if (listener->changes_state != MM_EVENT_LISTENER_CHANGES_PRIVATE) {
 			uint32_t stamp = mm_memory_load(receiver->arrival_stamp);
 			if (listener->changes_stamp != stamp) {
 				// At this point the change events published by this
 				// thread must have been captured by a control thread.
-				listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+				listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
 			} else {
 				// Wake up the control thread if it is still sleeping.
 				mm_dispatch_notify(dispatch, control_thread);
@@ -235,7 +235,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_dispatch_handle_detach(listener);
 
 		// Wait for forwarded events or timeout expiration.
-		mm_listener_wait(listener, timeout);
+		mm_event_listener_wait(listener, timeout);
 	}
 
 leave:
@@ -249,9 +249,9 @@ mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
 
 	mm_thread_t n = dispatch->receiver.nlisteners;
 	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_listener *listener = mm_dispatch_listener(dispatch, i);
-		if (mm_listener_getstate(listener) == MM_LISTENER_WAITING) {
-			mm_listener_notify(listener, &dispatch->backend);
+		struct mm_event_listener *listener = mm_dispatch_listener(dispatch, i);
+		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
+			mm_event_listener_notify(listener, &dispatch->backend);
 			break;
 		}
 	}

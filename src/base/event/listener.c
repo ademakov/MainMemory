@@ -38,14 +38,14 @@
 #endif
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread)
 {
 	ENTER();
 
 	listener->listen_stamp = 0;
 	listener->notify_stamp = 0;
 
-	listener->changes_state = MM_LISTENER_CHANGES_PRIVATE;
+	listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
 	listener->changes_stamp = 0;
 
 	listener->arrival_stamp = 0;
@@ -74,7 +74,7 @@ mm_listener_prepare(struct mm_listener *listener, struct mm_thread *thread)
 }
 
 void __attribute__((nonnull(1)))
-mm_listener_cleanup(struct mm_listener *listener)
+mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
 
@@ -92,7 +92,7 @@ mm_listener_cleanup(struct mm_listener *listener)
 }
 
 static void __attribute__((nonnull(1)))
-mm_listener_signal(struct mm_listener *listener)
+mm_event_listener_signal(struct mm_event_listener *listener)
 {
 	ENTER();
 
@@ -110,7 +110,8 @@ mm_listener_signal(struct mm_listener *listener)
 }
 
 static void __attribute__((nonnull(1)))
-mm_listener_timedwait(struct mm_listener *listener, uint32_t stamp, mm_timeout_t timeout)
+mm_event_listener_timedwait(struct mm_event_listener *listener, uint32_t stamp,
+			    mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -152,7 +153,7 @@ mm_listener_timedwait(struct mm_listener *listener, uint32_t stamp, mm_timeout_t
 }
 
 void __attribute__((nonnull(1, 2)))
-mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backend)
+mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend)
 {
 	ENTER();
 
@@ -163,8 +164,8 @@ mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backen
 	const uint32_t listen_stamp = mm_memory_load(listener->listen_stamp);
 	mm_memory_load_fence();
 	const uint32_t notify_stamp = mm_memory_load(listener->notify_stamp);
-	if (notify_stamp == (listen_stamp & ~MM_LISTENER_STATE_MASK)) {
-		uint32_t next = notify_stamp + MM_LISTENER_STATE_MASK + 1;
+	if (notify_stamp == (listen_stamp & ~MM_EVENT_LISTENER_STATE)) {
+		uint32_t next = notify_stamp + MM_EVENT_LISTENER_STATE + 1;
 		uint32_t prev = mm_atomic_uint32_cas(&listener->notify_stamp, notify_stamp, next);
 		if (prev == notify_stamp) {
 			// Get the current state of the listener. It might
@@ -178,10 +179,11 @@ mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backen
 			// a wrong listener being waken (if another listener
 			// becomes polling). So listeners should be prepared
 			// to get spurious wake up notifications.
-			mm_listener_state_t state = listen_stamp & MM_LISTENER_STATE_MASK;
-			if (state == MM_LISTENER_WAITING)
-				mm_listener_signal(listener);
-			else if (state == MM_LISTENER_POLLING)
+			mm_event_listener_state_t state
+				= listen_stamp & MM_EVENT_LISTENER_STATE;
+			if (state == MM_EVENT_LISTENER_WAITING)
+				mm_event_listener_signal(listener);
+			else if (state == MM_EVENT_LISTENER_POLLING)
 				mm_event_backend_notify(backend);
 		}
 	}
@@ -190,10 +192,10 @@ mm_listener_notify(struct mm_listener *listener, struct mm_event_backend *backen
 }
 
 static void __attribute__((nonnull(1)))
-mm_listener_finish(struct mm_listener *listener, uint32_t listen_stamp)
+mm_event_listener_finish(struct mm_event_listener *listener, uint32_t listen_stamp)
 {
 	// Bump the listen stamp.
-	listen_stamp += MM_LISTENER_STATE_MASK + 1;
+	listen_stamp += MM_EVENT_LISTENER_STATE + 1;
 
 	// Store it first as the notify stamp then as the proper listen stamp.
 	// This order ensures that regardless of a possible race with the CAS
@@ -204,21 +206,21 @@ mm_listener_finish(struct mm_listener *listener, uint32_t listen_stamp)
 }
 
 void __attribute__((nonnull(1, 2, 3)))
-mm_listener_poll(struct mm_listener *listener, struct mm_event_backend *backend,
-		 struct mm_event_receiver *receiver, mm_timeout_t timeout)
+mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
+		       struct mm_event_receiver *receiver, mm_timeout_t timeout)
 {
 	ENTER();
 
 	// Get the current listener state.
 	const uint32_t listen_stamp = listener->listen_stamp;
-	ASSERT((listen_stamp & MM_LISTENER_STATE_MASK) == MM_LISTENER_RUNNING);
+	ASSERT((listen_stamp & MM_EVENT_LISTENER_STATE) == MM_EVENT_LISTENER_RUNNING);
 
 	if (timeout != 0) {
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(backend);
 
 		// Advertise that the thread is about to sleep.
-		uint32_t poll_stamp = listen_stamp | MM_LISTENER_POLLING;
+		uint32_t poll_stamp = listen_stamp | MM_EVENT_LISTENER_POLLING;
 		mm_memory_store(listener->listen_stamp, poll_stamp);
 
 		mm_memory_strict_fence(); // TODO: store_load fence
@@ -233,23 +235,23 @@ mm_listener_poll(struct mm_listener *listener, struct mm_event_backend *backend,
 	mm_event_backend_listen(backend, &listener->changes, receiver, timeout);
 
 	// Advertise the start of another working cycle.
-	mm_listener_finish(listener, listen_stamp);
+	mm_event_listener_finish(listener, listen_stamp);
 
 	LEAVE();
 }
 
 void __attribute__((nonnull(1)))
-mm_listener_wait(struct mm_listener *listener, mm_timeout_t timeout)
+mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
 	// Get the current listener state.
 	const uint32_t listen_stamp = listener->listen_stamp;
-	ASSERT((listen_stamp & MM_LISTENER_STATE_MASK) == MM_LISTENER_RUNNING);
+	ASSERT((listen_stamp & MM_EVENT_LISTENER_STATE_MASK) == MM_EVENT_LISTENER_RUNNING);
 
 	if (timeout != 0) {
 		// Advertise that the thread is about to sleep.
-		uint32_t wait_stamp = listen_stamp | MM_LISTENER_WAITING;
+		uint32_t wait_stamp = listen_stamp | MM_EVENT_LISTENER_WAITING;
 		mm_memory_store(listener->listen_stamp, wait_stamp);
 
 		mm_memory_strict_fence(); // TODO: store_load fence
@@ -257,11 +259,11 @@ mm_listener_wait(struct mm_listener *listener, mm_timeout_t timeout)
 		// Wait for a wake-up notification or timeout unless
 		// an already pending notification is detected.
 		if (listen_stamp == mm_memory_load(listener->notify_stamp))
-			mm_listener_timedwait(listener, listen_stamp, timeout);
+			mm_event_listener_timedwait(listener, listen_stamp, timeout);
 	}
 
 	// Advertise the start of another working cycle.
-	mm_listener_finish(listener, listen_stamp);
+	mm_event_listener_finish(listener, listen_stamp);
 
 	LEAVE();
 }
