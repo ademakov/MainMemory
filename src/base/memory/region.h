@@ -98,8 +98,8 @@ mm_region_extend_fast(struct mm_region *reg, size_t size)
 }
 
 /*
- * Incrementally allocate a memory block and make ensure the current memory
- * chunk is large enough to accommodate the requested block size increment.
+ * Incrementally allocate a memory block and make sure the current memory
+ * chunk is large enough to accommodate the requested size increment.
  * Returns a pointer to the additional memory.
  */
 static inline void * __attribute__((nonnull(1)))
