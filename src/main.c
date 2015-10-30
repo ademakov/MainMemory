@@ -144,21 +144,41 @@ mm_server_init(void)
 	LEAVE();
 }
 
+static void
+mm_cfg_read(int fd, const char *name, struct mm_json_reader *reader)
+{
+	static char buffer[1024];
+	ssize_t n = read(fd, buffer, sizeof buffer);
+	if (n < 0)
+		mm_fatal(errno, "configuration file: %s", name);
+	if (n == 0)
+		mm_fatal(0, "configuration file: %s: invalid data", name);
+	mm_json_reader_feed(reader, buffer, n);
+}
+
 static mm_json_token_t
 mm_cfg_next(int fd, const char *name, struct mm_json_reader *reader)
 {
-	static char buffer[1024];
 	for (;;) {
 		mm_json_token_t token = mm_json_reader_next(reader);
+		if (token == MM_JSON_INVALID)
+			mm_fatal(0, "configuration file: %s: invalid data", name);
 		if (token != MM_JSON_PARTIAL && token != MM_JSON_START_DOCUMENT)
 			return token;
+		mm_cfg_read(fd, name, reader);
+	}
+}
 
-		ssize_t n = read(fd, buffer, sizeof buffer);
-		if (n < 0)
-			mm_fatal(errno, "configuration file: %s", name);
-		if (n == 0)
+static void
+mm_cfg_skip(int fd, const char *name, struct mm_json_reader *reader)
+{
+	for (;;) {
+		mm_json_token_t token = mm_json_reader_skip(reader);
+		if (token == MM_JSON_INVALID)
 			mm_fatal(0, "configuration file: %s: invalid data", name);
-		mm_json_reader_feed(reader, buffer, n);
+		if (token != MM_JSON_PARTIAL)
+			return;
+		mm_cfg_read(fd, name, reader);
 	}
 }
 
@@ -191,7 +211,7 @@ mm_cfg_load(const char *name)
 			if (token == MM_JSON_TRUE)
 				mm_enable_warning(true);
 		} else {
-			mm_json_reader_skip(&reader);
+			mm_cfg_skip(fd, name, &reader);
 		}
 
 	} while (token != MM_JSON_END_OBJECT);
