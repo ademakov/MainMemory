@@ -209,7 +209,7 @@ mm_json_reader_scan_false(struct mm_json_reader *reader)
 
 	ASSERT(cp[0] == 'f');
 	if (unlikely(Cx4(cp[1], cp[2], cp[3], cp[4]) != Cx4('a', 'l', 's', 'e')))
-		return MM_JSON_ERROR;
+		return MM_JSON_INVALID;
 
 	reader->ptr += 5;
 	return MM_JSON_FALSE;
@@ -224,7 +224,7 @@ mm_json_reader_scan_true(struct mm_json_reader *reader)
 
 	ASSERT(cp[0] == 't');
 	if (unlikely(Cx3(cp[1], cp[2], cp[3]) != Cx3('r', 'u', 'e')))
-		return MM_JSON_ERROR;
+		return MM_JSON_INVALID;
 
 	reader->ptr += 4;
 	return MM_JSON_TRUE;
@@ -239,7 +239,7 @@ mm_json_reader_scan_null(struct mm_json_reader *reader)
 
 	ASSERT(cp[0] == 'n');
 	if (unlikely(Cx3(cp[1], cp[2], cp[3]) != Cx3('u', 'l', 'l')))
-		return MM_JSON_ERROR;
+		return MM_JSON_INVALID;
 
 	reader->ptr += 4;
 	return MM_JSON_NULL;
@@ -336,8 +336,8 @@ mm_json_reader_scan_string(struct mm_json_reader *reader, mm_json_token_t token)
 	const char *ep = reader->end;
 	ASSERT(cp[0] == '"');
 
-	reader->extra.string.escaped = false;
-	reader->extra.string.highbit = false;
+	reader->string.escaped = false;
+	reader->string.highbit = false;
 
 	bool split = false;
 	unsigned count = 0;
@@ -358,17 +358,17 @@ mm_json_reader_scan_string(struct mm_json_reader *reader, mm_json_token_t token)
 		uint8_t c = *cp;
 		switch (mm_json_string_table[state][c]) {
 		case MM_JSON_SCTYPE_ERROR:
-			return MM_JSON_ERROR;
+			return MM_JSON_INVALID;
 
 		case MM_JSON_SCTYPE_REGULAR:
 			break;
 
 		case MM_JSON_SCTYPE_HIGHBIT:
-			reader->extra.string.highbit = true;
+			reader->string.highbit = true;
 			break;
 
 		case MM_JSON_SCTYPE_ESCAPE:
-			reader->extra.string.escaped = true;
+			reader->string.escaped = true;
 			state = MM_JSON_SSTATE_ESCAPE;
 			break;
 
@@ -388,6 +388,7 @@ mm_json_reader_scan_string(struct mm_json_reader *reader, mm_json_token_t token)
 			break;
 
 		case MM_JSON_SCTYPE_QUOTE:
+			reader->ptr++;
 			if (unlikely(split)) {
 				mm_json_reader_save_input(reader, cp);
 				reader->input = cp;
@@ -552,8 +553,8 @@ mm_json_reader_scan_number(struct mm_json_reader *reader)
 	const char *ep = reader->end;
 	ASSERT(cp[0] == '-' || cp[0] >= '0' && cp[0] <= '9');
 
-	reader->extra.number.fraction = false;
-	reader->extra.number.exponent = false;
+	reader->number.fraction = false;
+	reader->number.exponent = false;
 
 	bool split = false;
 	mm_json_number_state_t state = MM_JSON_NSTATE_START;
@@ -561,7 +562,7 @@ mm_json_reader_scan_number(struct mm_json_reader *reader)
 		uint8_t c = *cp;
 		switch (mm_json_number_table[state][c]) {
 		case MM_JSON_NCTYPE_ERROR:
-			return MM_JSON_ERROR;
+			return MM_JSON_INVALID;
 
 		case MM_JSON_NCTYPE_MINUS:
 			state = MM_JSON_NSTATE_FIRST;
@@ -754,7 +755,7 @@ mm_json_reader_next(struct mm_json_reader *reader)
 		// Just take up where we left off.
 		break;
 
-	case MM_JSON_ERROR:
+	case MM_JSON_INVALID:
 		// Once an error, always an error.
 		return reader->token;
 
@@ -811,7 +812,7 @@ mm_json_reader_next(struct mm_json_reader *reader)
 		uint8_t c = *reader->ptr;
 		switch (mm_json_text_table[reader->state][c]) {
 		case MM_JSON_CTYPE_ERROR:
-			return (reader->token = MM_JSON_ERROR);
+			return (reader->token = MM_JSON_INVALID);
 
 		case MM_JSON_CTYPE_SPACE:
 			reader->ptr++;
@@ -873,4 +874,50 @@ mm_json_reader_next(struct mm_json_reader *reader)
 			return (reader->token = mm_json_reader_scan_number(reader));
 		}
 	}
+}
+
+mm_json_token_t __attribute__((nonnull(1)))
+mm_json_reader_skip(struct mm_json_reader *reader)
+{
+	for (;;) {
+		mm_json_token_t token = mm_json_reader_next(reader);
+		switch (token) {
+		case MM_JSON_PARTIAL:
+		case MM_JSON_INVALID:
+			return token;
+
+		case MM_JSON_START_OBJECT:
+		case MM_JSON_START_ARRAY:
+			reader->skip_level++;
+			break;
+
+		case MM_JSON_END_OBJECT:
+		case MM_JSON_END_ARRAY:
+			if (reader->skip_level == 0 || --reader->skip_level == 0)
+				return token;
+			break;
+
+		default:
+			if (reader->skip_level == 0)
+				return token;
+			break;
+		}
+	}
+}
+
+/**********************************************************************
+ * JSON reader value handling.
+ **********************************************************************/
+
+bool __attribute__((nonnull(1, 2)))
+mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string)
+{
+	if (reader->string.escaped)
+		return false; // TODO
+
+	size_t length = reader->value_end - reader->value;
+	if (length != strlen(string))
+		return false;
+
+	return memcmp(reader->value, string, length) == 0;
 }

@@ -32,7 +32,7 @@ typedef enum mm_json_token {
 	MM_JSON_PARTIAL,
 
 	/* Input data is invalid. */
-	MM_JSON_ERROR,
+	MM_JSON_INVALID,
 
 	MM_JSON_START_DOCUMENT,
 	MM_JSON_END_DOCUMENT,
@@ -104,7 +104,7 @@ struct mm_json_reader
 			bool escaped;
 			bool highbit;
 		} string;
-	} extra;
+	};
 
 	size_t stack_top;
 	size_t stack_max;
@@ -114,8 +114,14 @@ struct mm_json_reader
 		uintptr_t *large_stack;
 	};
 
+	size_t skip_level;
+
 	mm_arena_t arena;
 };
+
+/**********************************************************************
+ * JSON reader initialization and termination.
+ **********************************************************************/
 
 void __attribute__((nonnull(1)))
 mm_json_reader_prepare(struct mm_json_reader *reader, mm_arena_t arena);
@@ -123,10 +129,24 @@ mm_json_reader_prepare(struct mm_json_reader *reader, mm_arena_t arena);
 void __attribute__((nonnull(1)))
 mm_json_reader_cleanup(struct mm_json_reader *reader);
 
+/**********************************************************************
+ * JSON reader input handling.
+ **********************************************************************/
+
 void __attribute__((nonnull(1, 2)))
 mm_json_reader_feed(struct mm_json_reader *reader, const void *input, size_t input_size);
 
 mm_json_token_t __attribute__((nonnull(1)))
 mm_json_reader_next(struct mm_json_reader *reader);
+
+mm_json_token_t __attribute__((nonnull(1)))
+mm_json_reader_skip(struct mm_json_reader *reader);
+
+/**********************************************************************
+ * JSON reader value handling.
+ **********************************************************************/
+
+bool __attribute__((nonnull(1, 2)))
+mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string);
 
 #endif /* BASE_JSON_H */

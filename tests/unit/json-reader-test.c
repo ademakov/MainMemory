@@ -13,8 +13,8 @@ token_string(mm_json_token_t token)
 		return "initial";
 	case MM_JSON_PARTIAL:
 		return "partial";
-	case MM_JSON_ERROR:
-		return "error";
+	case MM_JSON_INVALID:
+		return "invalid";
 	case MM_JSON_START_DOCUMENT:
 		return "start-document";
 	case MM_JSON_END_DOCUMENT:
@@ -75,23 +75,23 @@ main()
 
 	test_single("x", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single(",", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single(":", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 
 	test_single("false", (mm_json_token_t[]) {
@@ -199,35 +199,35 @@ main()
 	test_single("[x]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("[,]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("[:]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("[}]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("[]]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
 		MM_JSON_END_ARRAY,
 		MM_JSON_END_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("[false,]", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_ARRAY,
 		MM_JSON_FALSE,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 
 	test_single("{\"foo\" : false}", (mm_json_token_t[]) {
@@ -279,42 +279,42 @@ main()
 	test_single("{x}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{,}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{:}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{]}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{}}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
 		MM_JSON_END_OBJECT,
 		MM_JSON_END_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{\"\":}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
 		MM_JSON_NAME,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("{\"\":false,}", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
 		MM_JSON_START_OBJECT,
 		MM_JSON_NAME,
 		MM_JSON_FALSE,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 
 	test_single("\"\\b\"", (mm_json_token_t[]) {
@@ -390,31 +390,31 @@ main()
 
 	test_single("\"\x01\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\x1f\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\\z\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\\u \"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\\u0\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\\u01\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("\"\\u012\"", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 
 	test_single("0", (mm_json_token_t[]) {
@@ -548,27 +548,27 @@ main()
 
 	test_single("- ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("01 ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("1. ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("1e ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("1e- ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 	test_single("1e+ ", (mm_json_token_t[]) {
 		MM_JSON_START_DOCUMENT,
-		MM_JSON_ERROR,
+		MM_JSON_INVALID,
 		-1});
 
 	return fail ? EXIT_FAILURE : EXIT_SUCCESS;
