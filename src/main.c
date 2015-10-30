@@ -22,6 +22,7 @@
 #include "core/core.h"
 
 #include "base/bitset.h"
+#include "base/json.h"
 #include "base/event/event.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -34,6 +35,7 @@
 
 #include "memcache/memcache.h"
 
+#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -84,7 +86,7 @@ mm_cmd_reader(struct mm_net_socket *sock)
 {
 	ENTER();
 
-	char buf[1026];
+	char buf[1024];
 	int n = mm_net_read(sock, buf, sizeof(buf));
 	if (n <= 0) {
 		if (n < 0)
@@ -142,14 +144,72 @@ mm_server_init(void)
 	LEAVE();
 }
 
+static mm_json_token_t
+mm_cfg_next(int fd, const char *name, struct mm_json_reader *reader)
+{
+	static char buffer[1024];
+	for (;;) {
+		mm_json_token_t token = mm_json_reader_next(reader);
+		if (token != MM_JSON_PARTIAL && token != MM_JSON_START_DOCUMENT)
+			return token;
+
+		ssize_t n = read(fd, buffer, sizeof buffer);
+		if (n < 0)
+			mm_fatal(errno, "configuration file: %s", name);
+		if (n == 0)
+			mm_fatal(0, "configuration file: %s: invalid data", name);
+		mm_json_reader_feed(reader, buffer, n);
+	}
+}
+
+static void
+mm_cfg_load(const char *name)
+{
+	int fd = open(name, O_RDONLY);
+	if (fd < 0) {
+		mm_error(errno, "configuration file: %s", name);
+		return;
+	}
+
+	struct mm_json_reader reader;
+	mm_json_reader_prepare(&reader, &mm_global_arena);
+	mm_json_token_t token = mm_cfg_next(fd, name, &reader);
+	if (token != MM_JSON_START_OBJECT)
+		mm_fatal(0, "configuration file: %s: invalid data", name);
+
+	do {
+		token = mm_cfg_next(fd, name, &reader);
+		if (token == MM_JSON_END_OBJECT)
+			break;
+
+		if (mm_json_reader_string_equals(&reader, "verbose")) {
+			token = mm_cfg_next(fd, name, &reader);
+			if (token == MM_JSON_TRUE)
+				mm_enable_verbose(true);
+		} else  if (mm_json_reader_string_equals(&reader, "warning")) {
+			token = mm_cfg_next(fd, name, &reader);
+			if (token == MM_JSON_TRUE)
+				mm_enable_warning(true);
+		} else {
+			mm_json_reader_skip(&reader);
+		}
+
+	} while (token != MM_JSON_END_OBJECT);
+
+	mm_json_reader_cleanup(&reader);
+	close(fd);
+}
+
 int
-main(/*int ac, char *av[]*/)
+main(int ac, char *av[])
 {
 	ENTER();
 
-	/* Set options. */
-	mm_enable_verbose(true);
-	mm_enable_warning(true);
+	/* Set configuration options. */
+	const char *cfg_file_name = "mmem.json";
+	if (ac > 1)
+		cfg_file_name = av[1];
+	mm_cfg_load(cfg_file_name);
 
 	// Set signal handlers.
 	mm_signal_init();
