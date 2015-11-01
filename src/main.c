@@ -22,6 +22,7 @@
 #include "core/core.h"
 
 #include "base/bitset.h"
+#include "base/daemon.h"
 #include "base/json.h"
 #include "base/event/event.h"
 #include "base/log/error.h"
@@ -42,6 +43,8 @@
 
 static struct mm_net_server *mm_ucmd_server;
 static struct mm_net_server *mm_icmd_server;
+
+static bool mm_daemonize = false;
 
 static void
 mm_term_handler(int signo __mm_unused__)
@@ -202,14 +205,15 @@ mm_cfg_load(const char *name)
 		if (token == MM_JSON_END_OBJECT)
 			break;
 
-		if (mm_json_reader_string_equals(&reader, "verbose")) {
+		if (mm_json_reader_string_equals(&reader, "daemon")) {
 			token = mm_cfg_next(fd, name, &reader);
-			if (token == MM_JSON_TRUE)
-				mm_enable_verbose(true);
+			mm_daemonize = (token == MM_JSON_TRUE);
+		} else if (mm_json_reader_string_equals(&reader, "verbose")) {
+			token = mm_cfg_next(fd, name, &reader);
+			mm_enable_verbose(token == MM_JSON_TRUE);
 		} else  if (mm_json_reader_string_equals(&reader, "warning")) {
 			token = mm_cfg_next(fd, name, &reader);
-			if (token == MM_JSON_TRUE)
-				mm_enable_warning(true);
+			mm_enable_warning(token == MM_JSON_TRUE);
 		} else {
 			mm_cfg_skip(fd, name, &reader);
 		}
@@ -225,22 +229,29 @@ main(int ac, char *av[])
 {
 	ENTER();
 
-	/* Set configuration options. */
+	// Set configuration options.
 	const char *cfg_file_name = "mmem.json";
 	if (ac > 1)
 		cfg_file_name = av[1];
 	mm_cfg_load(cfg_file_name);
 
-	// Set signal handlers.
-	mm_signal_init();
-
 	// Initialize subsystems.
 	mm_core_init();
 
-	/* Initialize servers. */
+	// Daemonize if needed.
+	if (mm_daemonize) {
+		mm_daemon_start();
+		mm_daemon_stdio(NULL, "mmem.log");
+		mm_daemon_notify();
+	}
+
+	// Set signal handlers.
+	mm_signal_init();
+
+	// Initialize servers.
 	mm_server_init();
 
-	/* Execute main loop. */
+	// Execute the main loop.
 	mm_core_start();
 
 	// Terminate subsystems.
