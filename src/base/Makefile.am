@@ -14,6 +14,7 @@ libmmbase_a_SOURCES = \
 	combiner.c combiner.h \
 	daemon.c daemon.h \
 	hash.c hash.h \
+	hashmap.c hashmap.h \
 	json.c json.h \
 	list.h \
 	lock.c lock.h \
