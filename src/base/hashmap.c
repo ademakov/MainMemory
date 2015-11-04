@@ -1,5 +1,5 @@
 /*
- * base/hashmap.h - Basic hash table.
+ * base/hashmap.c - Basic hash table.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *

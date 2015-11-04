@@ -25,7 +25,7 @@
 
 typedef enum mm_json_token {
 
-	/* Internal token of initial reader state. */
+	/* Internal token indicating initial reader state. */
 	MM_JSON_INITIAL = 0,
 
 	/* Input data is incomplete. */
