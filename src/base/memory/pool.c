@@ -314,7 +314,7 @@ mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 		// Get an item form the shared free list.
 		struct mm_slink *head = mm_stack_atomic_load_head(&pool->free_list);
 		if (head != NULL) {
-			for (uint32_t b = 0; ; b = mm_backoff(b)) {
+			for (uint32_t b = 0; ; b = mm_thread_backoff(b)) {
 				// Prevent ABA-problem.
 				mm_memory_store(cdata->item_guard, head);
 
@@ -430,7 +430,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 			mm_memory_fence();
 
 			struct mm_slink *old_head = mm_stack_atomic_load_head(&pool->free_list);
-			for (uint32_t b = 0; ; b = mm_backoff(b)) {
+			for (uint32_t b = 0; ; b = mm_thread_backoff(b)) {
 				tail->next = old_head;
 				struct mm_slink *cur_head
 					= mm_stack_atomic_cas_head(&pool->free_list, old_head, head);
