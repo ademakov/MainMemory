@@ -146,4 +146,16 @@ mm_region_alloc(struct mm_region *reg, size_t size)
 	return mm_region_finish(reg);
 }
 
+static inline void * __attribute__((nonnull(1)))
+mm_region_memdup(struct mm_region *reg, const void *ptr, size_t size)
+{
+	return memcpy(mm_region_alloc(reg, size), ptr, size);
+}
+
+static inline char * __attribute__((nonnull(1)))
+mm_region_strdup(struct mm_region *reg, const char *ptr)
+{
+	return mm_region_memdup(reg, ptr, strlen(ptr) + 1);
+}
+
 #endif /* BASE_MEMORY_REGION_H */
