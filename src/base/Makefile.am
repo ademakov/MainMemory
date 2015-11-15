@@ -5,6 +5,7 @@ AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 
 libmmbase_a_SOURCES = \
+	args.c args.h \
 	base.c base.h \
 	bitops.h \
 	bitset.c bitset.h \
