@@ -40,6 +40,10 @@ static const char *mm_args_name;
 
 static struct mm_hashmap mm_args_table;
 
+/**********************************************************************
+ * Argument table.
+ **********************************************************************/
+
 static const char *mm_args_empty = "";
 
 static const char *
@@ -65,6 +69,7 @@ mm_args_free_entry(struct mm_hashmap *map __mm_unused__, struct mm_hashmap_entry
 {
 	struct mm_args_entry *aent = containerof(hent, struct mm_args_entry, entry);
 	mm_args_free_value(aent->value);
+	mm_global_free(aent->entry.key);
 	mm_global_free(aent);
 }
 
