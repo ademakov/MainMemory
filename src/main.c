@@ -21,6 +21,8 @@
 
 #include "core/core.h"
 
+#include "base/args.h"
+#include "base/base.h"
 #include "base/bitset.h"
 #include "base/daemon.h"
 #include "base/json.h"
@@ -188,6 +190,10 @@ mm_cfg_skip(int fd, const char *name, struct mm_json_reader *reader)
 static void
 mm_cfg_load(const char *name)
 {
+	if (name == NULL)
+		name = "mmem.json";
+	mm_brief("load config file: %s", name);
+
 	int fd = open(name, O_RDONLY);
 	if (fd < 0) {
 		mm_error(errno, "configuration file: %s", name);
@@ -224,18 +230,40 @@ mm_cfg_load(const char *name)
 	close(fd);
 }
 
+static struct mm_args_info mm_args_info_tbl[] = {
+	{ "config", 'c', MM_ARGS_PARAM_REQUIRED, "\n\t\tconfiguration file" },
+	{ "help", 'h', MM_ARGS_PARAM_NONE, "\n\t\tdisplay this help text and exit" },
+	{ "verbose", 'v', MM_ARGS_PARAM_NONE, "\n\t\tenable verbose messages" },
+	{ "version", 'V', MM_ARGS_PARAM_NONE, "\n\t\tdisplay version information and exit" },
+};
+
+static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);
+
 int
-main(int ac, char *av[])
+main(int argc, char *argv[])
 {
 	ENTER();
 
-	// Set configuration options.
-	const char *cfg_file_name = "mmem.json";
-	if (ac > 1)
-		cfg_file_name = av[1];
-	mm_cfg_load(cfg_file_name);
+	// Handle command line arguments.
+	mm_args_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
+	if (mm_args_getargc() > 0) {
+		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
+		mm_exit(EXIT_FAILURE);
+	}
+	if (mm_args_getvalue("help")) {
+		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
+		mm_exit(EXIT_SUCCESS);
+	}
+	if (mm_args_getvalue("version")) {
+		mm_brief("%s", PACKAGE_STRING);
+		mm_exit(EXIT_SUCCESS);
+	}
+
+	// Load configuration file.
+	mm_cfg_load(mm_args_getvalue("config"));
 
 	// Initialize subsystems.
+	mm_base_init();
 	mm_core_init();
 
 	// Daemonize if needed.
@@ -256,6 +284,8 @@ main(int ac, char *av[])
 
 	// Terminate subsystems.
 	mm_core_term();
+	mm_base_term();
+	mm_args_term();
 
 	LEAVE();
 	mm_log_relay();
