@@ -107,6 +107,7 @@ mm_hashmap_lookup(struct mm_hashmap *map, const char *key, uint32_t keylen)
 {
 	uint32_t hash = mm_hashmap_hash(key, keylen);
 	struct mm_stack *bucket = &map->buckets[hash % map->nbuckets];
+
 	struct mm_slink *link = mm_stack_head(bucket);
 	while (link != NULL) {
 		struct mm_hashmap_entry *entry = containerof(link, struct mm_hashmap_entry, link);
@@ -114,15 +115,17 @@ mm_hashmap_lookup(struct mm_hashmap *map, const char *key, uint32_t keylen)
 		    && entry->keylen == keylen
 		    && memcmp(entry->key, key, keylen) == 0)
 			return entry;
+		link = link->next;
 	}
+
 	return NULL;
 }
 
 void __attribute__((nonnull(1, 2)))
 mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 {
-	uint32_t hash = mm_hashmap_hash(entry->key, entry->keylen);
-	struct mm_stack *bucket = &map->buckets[hash % map->nbuckets];
+	struct mm_stack *bucket = &map->buckets[entry->hash % map->nbuckets];
+
 	mm_stack_insert(bucket, &entry->link);
 
 	if (++map->nentries > map->nbuckets * 3) {
@@ -137,8 +140,7 @@ mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 void __attribute__((nonnull(1, 2)))
 mm_hashmap_remove(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 {
-	uint32_t hash = mm_hashmap_hash(entry->key, entry->keylen);
-	struct mm_stack *bucket = &map->buckets[hash % map->nbuckets];
+	struct mm_stack *bucket = &map->buckets[entry->hash % map->nbuckets];
 
 	struct mm_slink *prev = &bucket->head;
 	for (;;) {
