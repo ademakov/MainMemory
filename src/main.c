@@ -26,6 +26,7 @@
 #include "base/bitset.h"
 #include "base/daemon.h"
 #include "base/json.h"
+#include "base/settings.h"
 #include "base/event/event.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -190,12 +191,17 @@ mm_cfg_skip(int fd, const char *name, struct mm_json_reader *reader)
 static void
 mm_cfg_load(const char *name)
 {
-	if (name == NULL)
+	bool fatal = true;
+	if (name == NULL) {
+		fatal = false;
 		name = "mmem.json";
-	mm_brief("load config file: %s", name);
+	}
 
+	mm_brief("load configuration: %s", name);
 	int fd = open(name, O_RDONLY);
 	if (fd < 0) {
+		if (fatal)
+			mm_fatal(errno, "configuration file: %s", name);
 		mm_error(errno, "configuration file: %s", name);
 		return;
 	}
@@ -245,22 +251,23 @@ main(int argc, char *argv[])
 	ENTER();
 
 	// Handle command line arguments.
+	mm_settings_init();
 	mm_args_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 	if (mm_args_getargc() > 0) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
 		mm_exit(EXIT_FAILURE);
 	}
-	if (mm_args_getvalue("help")) {
+	if (mm_settings_get("help", NULL)) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
 		mm_exit(EXIT_SUCCESS);
 	}
-	if (mm_args_getvalue("version")) {
+	if (mm_settings_get("version", NULL)) {
 		mm_brief("%s", PACKAGE_STRING);
 		mm_exit(EXIT_SUCCESS);
 	}
 
 	// Load configuration file.
-	mm_cfg_load(mm_args_getvalue("config"));
+	mm_cfg_load(mm_settings_get("config", NULL));
 
 	// Initialize subsystems.
 	mm_base_init();
@@ -285,7 +292,7 @@ main(int argc, char *argv[])
 	// Terminate subsystems.
 	mm_core_term();
 	mm_base_term();
-	mm_args_term();
+	mm_settings_term();
 
 	LEAVE();
 	mm_log_relay();

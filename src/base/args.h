@@ -46,9 +46,6 @@ struct mm_args_info
 void __attribute__((nonnull(2)))
 mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info);
 
-void
-mm_args_term(void);
-
 const char *
 mm_args_getname(void);
 
@@ -57,12 +54,6 @@ mm_args_getargc(void);
 
 char **
 mm_args_getargv(void);
-
-const char * __attribute__((nonnull(1)))
-mm_args_getvalue(const char *key);
-
-void __attribute__((nonnull(1)))
-mm_args_setvalue(const char *key, const char *value);
 
 void
 mm_args_usage(size_t ninfo, struct mm_args_info *info);

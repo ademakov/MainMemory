@@ -1,5 +1,5 @@
 /*
- * base/args.h - Command line argument handling.
+ * base/args.c - Command line argument handling.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -19,59 +19,16 @@
 
 #include "base/args.h"
 
-#include "base/hashmap.h"
+#include "base/settings.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
-#include "base/memory/alloc.h"
-#include "base/memory/memory.h"
 #include "base/util/exit.h"
-
-struct mm_args_entry
-{
-	struct mm_hashmap_entry entry;
-	const char *value;
-};
 
 static uint32_t mm_args_extc;
 static uint32_t mm_args_argc;
 static char **mm_args_argv;
 
 static const char *mm_args_name;
-
-static struct mm_hashmap mm_args_table;
-
-/**********************************************************************
- * Argument table.
- **********************************************************************/
-
-static const char *mm_args_empty = "";
-
-static const char *
-mm_args_copy_value(const char *value)
-{
-	if (value == NULL || *value == 0)
-		return mm_args_empty;
-	return mm_global_strdup(value);
-}
-
-static void
-mm_args_free_value(const char *value)
-{
-	if (unlikely(value == NULL))
-		return;
-	if (value == mm_args_empty)
-		return;
-	mm_global_free((char *) value);
-}
-
-static void
-mm_args_free_entry(struct mm_hashmap *map __mm_unused__, struct mm_hashmap_entry *hent)
-{
-	struct mm_args_entry *aent = containerof(hent, struct mm_args_entry, entry);
-	mm_args_free_value(aent->value);
-	mm_global_free(aent->entry.key);
-	mm_global_free(aent);
-}
 
 /**********************************************************************
  * Argument parsing.
@@ -140,7 +97,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 	if (arginfo->param == MM_ARGS_PARAM_NONE) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
-		mm_args_setvalue(arginfo->name, NULL);
+		mm_settings_put(arginfo->name, "");
 		return 1;
 	}
 
@@ -151,7 +108,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 		value = mm_args_argv[idx];
 	if (arginfo->param == MM_ARGS_PARAM_REQUIRED && value == NULL)
 		mm_args_error(ninfo, info);
-	mm_args_setvalue(arginfo->name, value);
+	mm_settings_put(arginfo->name, value);
 	return sep != NULL ? 1 : 2;
 }
 
@@ -173,7 +130,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 			mm_args_error(ninfo, info);
 
 		if (arginfo->param == MM_ARGS_PARAM_NONE) {
-			mm_args_setvalue(arginfo->name, NULL);
+			mm_settings_put(arginfo->name, "");
 			continue;
 		}
 
@@ -184,7 +141,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 			value = mm_args_argv[idx];
 		if (arginfo->param == MM_ARGS_PARAM_REQUIRED && value == NULL)
 			mm_args_error(ninfo, info);
-		mm_args_setvalue(arginfo->name, value);
+		mm_settings_put(arginfo->name, value);
 		return *arg ? 1 : 2;
 	}
 	return 1;
@@ -232,7 +189,6 @@ mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
 	mm_args_extc = 0;
 	mm_args_argc = argc;
 	mm_args_argv = argv;
-	mm_hashmap_prepare(&mm_args_table, &mm_global_arena);
 
 	char *slash = strrchr(argv[0], '/');
 	if (slash != NULL)
@@ -241,12 +197,6 @@ mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
 		mm_args_name = argv[0];
 
 	mm_args_parse(ninfo, info);
-}
-
-void
-mm_args_term(void)
-{
-	mm_hashmap_cleanup(&mm_args_table, mm_args_free_entry);
 }
 
 const char *
@@ -269,42 +219,6 @@ mm_args_getargv(void)
 	if (mm_args_argc == 0 || mm_args_argv == NULL)
 		mm_abort();
 	return mm_args_argv + mm_args_argc - mm_args_extc;
-}
-
-const char * __attribute__((nonnull(1)))
-mm_args_getvalue(const char *key)
-{
-	size_t len = strlen(key);
-	if (unlikely(len > UINT32_MAX))
-		return NULL;
-
-	struct mm_hashmap_entry *hent = mm_hashmap_lookup(&mm_args_table, key, len);
-	if (hent == NULL)
-		return NULL;
-
-	struct mm_args_entry *aent = containerof(hent, struct mm_args_entry, entry);
-	return aent->value;
-}
-
-void __attribute__((nonnull(1)))
-mm_args_setvalue(const char *key, const char *value)
-{
-	size_t len = strlen(key);
-	if (unlikely(len > UINT32_MAX))
-		mm_fatal(0, "too long arg name");
-
-	struct mm_hashmap_entry *hent = mm_hashmap_lookup(&mm_args_table, key, len);
-	if (hent == NULL) {
-		struct mm_args_entry *aent = mm_global_alloc(sizeof(struct mm_args_entry));
-		key = mm_global_memdup(key, len);
-		mm_hashmap_setkey(&aent->entry, key, len);
-		aent->value = mm_args_copy_value(value);
-		mm_hashmap_insert(&mm_args_table, &aent->entry);
-	} else {
-		struct mm_args_entry *aent = containerof(hent, struct mm_args_entry, entry);
-		mm_args_free_value(aent->value);
-		aent->value = mm_args_copy_value(value);
-	}
 }
 
 /**********************************************************************
