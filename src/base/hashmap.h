@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/hash.h"
 #include "base/list.h"
+#include "base/log/error.h"
 #include "base/memory/arena.h"
 
 /* Forward declarations. */
@@ -56,7 +57,7 @@ void __attribute__((nonnull(1, 2)))
 mm_hashmap_cleanup(struct mm_hashmap *map, mm_hashmap_free_entry_t free_entry);
 
 struct mm_hashmap_entry * __attribute__((nonnull(1, 2)))
-mm_hashmap_lookup(struct mm_hashmap *map, const char *key, uint32_t keylen);
+mm_hashmap_lookup(struct mm_hashmap *map, const char *key, size_t keylen);
 
 void __attribute__((nonnull(1, 2)))
 mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry);
@@ -65,8 +66,11 @@ void __attribute__((nonnull(1, 2)))
 mm_hashmap_remove(struct mm_hashmap *map, struct mm_hashmap_entry *entry);
 
 static inline void __attribute__((nonnull(1, 2)))
-mm_hashmap_setkey(struct mm_hashmap_entry *entry, const char *key, uint32_t keylen)
+mm_hashmap_setkey(struct mm_hashmap_entry *entry, const char *key, size_t keylen)
 {
+	if (unlikely(keylen > UINT32_MAX))
+		mm_fatal(0, "too long name");
+
 	entry->key = key;
 	entry->keylen = keylen;
 	entry->hash = mm_hashmap_hash(key, keylen);

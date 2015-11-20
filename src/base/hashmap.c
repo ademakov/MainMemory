@@ -103,8 +103,11 @@ mm_hashmap_cleanup(struct mm_hashmap *map, mm_hashmap_free_entry_t free_entry)
 }
 
 struct mm_hashmap_entry * __attribute__((nonnull(1, 2)))
-mm_hashmap_lookup(struct mm_hashmap *map, const char *key, uint32_t keylen)
+mm_hashmap_lookup(struct mm_hashmap *map, const char *key, size_t keylen)
 {
+	if (unlikely(keylen > UINT32_MAX))
+		return NULL;
+
 	uint32_t hash = mm_hashmap_hash(key, keylen);
 	struct mm_stack *bucket = &map->buckets[hash % map->nbuckets];
 
