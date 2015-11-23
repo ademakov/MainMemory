@@ -94,7 +94,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 	if (arginfo == NULL)
 		mm_args_error(ninfo, info);
 
-	if (arginfo->param == MM_ARGS_PARAM_NONE) {
+	if (arginfo->param == MM_ARGS_DENIED) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
 		mm_settings_put(arginfo->name, "");
@@ -106,7 +106,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 		value = sep + 1;
 	else if ((++idx + mm_args_extc) < mm_args_argc && mm_args_argv[idx][0] != '-')
 		value = mm_args_argv[idx];
-	if (arginfo->param == MM_ARGS_PARAM_REQUIRED && value == NULL)
+	if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 		mm_args_error(ninfo, info);
 	mm_settings_put(arginfo->name, value);
 	return sep != NULL ? 1 : 2;
@@ -129,7 +129,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 		if (arginfo == NULL)
 			mm_args_error(ninfo, info);
 
-		if (arginfo->param == MM_ARGS_PARAM_NONE) {
+		if (arginfo->param == MM_ARGS_DENIED) {
 			mm_settings_put(arginfo->name, "");
 			continue;
 		}
@@ -139,7 +139,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 			value = arg;
 		else if ((++idx + mm_args_extc) < mm_args_argc && mm_args_argv[idx][0] != '-')
 			value = mm_args_argv[idx];
-		if (arginfo->param == MM_ARGS_PARAM_REQUIRED && value == NULL)
+		if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 			mm_args_error(ninfo, info);
 		mm_settings_put(arginfo->name, value);
 		return *arg ? 1 : 2;
@@ -238,8 +238,8 @@ mm_args_usage(size_t ninfo, struct mm_args_info *info)
 		struct mm_args_info *p = &info[i];
 
 		const char **arg = mm_args_none;
-		if (p->param != MM_ARGS_PARAM_NONE) {
-			if (p->param == MM_ARGS_PARAM_OPTIONAL)
+		if (p->param != MM_ARGS_DENIED) {
+			if (p->param == MM_ARGS_OPTIONAL)
 				arg = mm_args_optional;
 			else
 				arg = mm_args_required;

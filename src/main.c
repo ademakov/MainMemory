@@ -237,10 +237,10 @@ mm_cfg_load(const char *name)
 }
 
 static struct mm_args_info mm_args_info_tbl[] = {
-	{ "config", 'c', MM_ARGS_PARAM_REQUIRED, "\n\t\tconfiguration file" },
-	{ "help", 'h', MM_ARGS_PARAM_NONE, "\n\t\tdisplay this help text and exit" },
-	{ "verbose", 'v', MM_ARGS_PARAM_NONE, "\n\t\tenable verbose messages" },
-	{ "version", 'V', MM_ARGS_PARAM_NONE, "\n\t\tdisplay version information and exit" },
+	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
+	{ "help", 'h', MM_ARGS_DENIED, "\n\t\tdisplay this help text and exit" },
+	{ "verbose", 'v', MM_ARGS_DENIED, "\n\t\tenable verbose messages" },
+	{ "version", 'V', MM_ARGS_DENIED, "\n\t\tdisplay version information and exit" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);
@@ -250,8 +250,9 @@ main(int argc, char *argv[])
 {
 	ENTER();
 
-	// Handle command line arguments.
 	mm_settings_init();
+
+	// Handle command line arguments.
 	mm_args_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 	if (mm_args_getargc() > 0) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);

@@ -23,9 +23,9 @@
 #include "common.h"
 
 typedef enum {
-	MM_ARGS_PARAM_NONE = 0,
-	MM_ARGS_PARAM_OPTIONAL,
-	MM_ARGS_PARAM_REQUIRED,
+	MM_ARGS_DENIED = 0,
+	MM_ARGS_OPTIONAL,
+	MM_ARGS_REQUIRED,
 } mm_args_param_t;
 
 struct mm_args_info
