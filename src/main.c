@@ -219,13 +219,16 @@ mm_cfg_load(const char *name)
 
 		if (mm_json_reader_string_equals(&reader, "daemon")) {
 			token = mm_cfg_next(fd, name, &reader);
-			mm_daemonize = (token == MM_JSON_TRUE);
+			if (token == MM_JSON_TRUE)
+				mm_settings_put("daemon", "");
 		} else if (mm_json_reader_string_equals(&reader, "verbose")) {
 			token = mm_cfg_next(fd, name, &reader);
-			mm_enable_verbose(token == MM_JSON_TRUE);
+			if (token == MM_JSON_TRUE)
+				mm_settings_put("verbose", "");
 		} else  if (mm_json_reader_string_equals(&reader, "warning")) {
 			token = mm_cfg_next(fd, name, &reader);
-			mm_enable_warning(token == MM_JSON_TRUE);
+			if (token == MM_JSON_TRUE)
+				mm_settings_put("warning", "");
 		} else {
 			mm_cfg_skip(fd, name, &reader);
 		}
@@ -237,10 +240,12 @@ mm_cfg_load(const char *name)
 }
 
 static struct mm_args_info mm_args_info_tbl[] = {
-	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
 	{ "help", 'h', MM_ARGS_DENIED, "\n\t\tdisplay this help text and exit" },
-	{ "verbose", 'v', MM_ARGS_DENIED, "\n\t\tenable verbose messages" },
 	{ "version", 'V', MM_ARGS_DENIED, "\n\t\tdisplay version information and exit" },
+	{ "verbose", 'v', MM_ARGS_DENIED, "\n\t\tenable verbose messages" },
+	{ "warning", 'w', MM_ARGS_DENIED, "\n\t\tenable warning messages" },
+	{ },
+	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);
@@ -269,6 +274,9 @@ main(int argc, char *argv[])
 
 	// Load configuration file.
 	mm_cfg_load(mm_settings_get("config", NULL));
+	mm_daemonize = (mm_settings_get("daemon", NULL) != NULL);
+	mm_enable_verbose(mm_settings_get("verbose", NULL) != NULL);
+	mm_enable_warning(mm_settings_get("warning", NULL) != NULL);
 
 	// Initialize subsystems.
 	mm_base_init();
