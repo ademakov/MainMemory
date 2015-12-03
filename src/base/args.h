@@ -23,7 +23,8 @@
 #include "common.h"
 
 typedef enum {
-	MM_ARGS_DENIED = 0,
+	MM_ARGS_TRIVIAL = 0,
+	MM_ARGS_SPECIAL,
 	MM_ARGS_OPTIONAL,
 	MM_ARGS_REQUIRED,
 } mm_args_param_t;

@@ -94,10 +94,10 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 	if (arginfo == NULL)
 		mm_args_error(ninfo, info);
 
-	if (arginfo->param == MM_ARGS_DENIED) {
+	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_SPECIAL) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
-		mm_settings_put(arginfo->name, "");
+		mm_settings_set(arginfo->name, "", true);
 		return 1;
 	}
 
@@ -108,7 +108,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 		value = mm_args_argv[idx];
 	if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 		mm_args_error(ninfo, info);
-	mm_settings_put(arginfo->name, value);
+	mm_settings_set(arginfo->name, value, true);
 	return sep != NULL ? 1 : 2;
 }
 
@@ -129,8 +129,8 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 		if (arginfo == NULL)
 			mm_args_error(ninfo, info);
 
-		if (arginfo->param == MM_ARGS_DENIED) {
-			mm_settings_put(arginfo->name, "");
+		if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_SPECIAL) {
+			mm_settings_set(arginfo->name, "", true);
 			continue;
 		}
 
@@ -141,7 +141,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 			value = mm_args_argv[idx];
 		if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 			mm_args_error(ninfo, info);
-		mm_settings_put(arginfo->name, value);
+		mm_settings_set(arginfo->name, value, true);
 		return *arg ? 1 : 2;
 	}
 	return 1;
@@ -196,6 +196,16 @@ mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
 	else
 		mm_args_name = argv[0];
 
+	for (size_t i = 0; i < ninfo; i++) {
+		struct mm_args_info *p = &info[i];
+		if (p->name != NULL && p->param != MM_ARGS_SPECIAL) {
+			if (p->param == MM_ARGS_TRIVIAL)
+				mm_settings_settype(p->name, MM_SETTINGS_TRIVIAL);
+			else
+				mm_settings_settype(p->name, MM_SETTINGS_REGULAR);
+		}
+	}
+
 	mm_args_parse(ninfo, info);
 }
 
@@ -238,7 +248,7 @@ mm_args_usage(size_t ninfo, struct mm_args_info *info)
 		struct mm_args_info *p = &info[i];
 
 		const char **arg = mm_args_none;
-		if (p->param != MM_ARGS_DENIED) {
+		if (p->param != MM_ARGS_TRIVIAL || p->param == MM_ARGS_SPECIAL) {
 			if (p->param == MM_ARGS_OPTIONAL)
 				arg = mm_args_optional;
 			else

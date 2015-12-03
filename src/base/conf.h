@@ -1,5 +1,5 @@
 /*
- * base/settings.h - MainMemory settings.
+ * base/conf.h - MainMemory configuration file handling.
  *
  * Copyright (C) 2015  Aleksey Demakov
  *
@@ -17,34 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_SETTINGS_H
-#define BASE_SETTINGS_H
-
-#include "common.h"
-
-typedef enum
-{
-	MM_SETTINGS_UNKNOWN,
-	MM_SETTINGS_TRIVIAL,
-	MM_SETTINGS_REGULAR,
-} mm_settings_type_t;
+#ifndef BASE_CONF_H
+#define BASE_CONF_H
 
 void
-mm_settings_init(void);
+mm_conf_load(const char *name);
 
-void
-mm_settings_term(void);
-
-void __attribute__((nonnull(1)))
-mm_settings_set(const char *key, const char *value, bool overwrite);
-
-const char * __attribute__((nonnull(1)))
-mm_settings_get(const char *key, const char *value);
-
-void __attribute__((nonnull(1)))
-mm_settings_settype(const char *key, mm_settings_type_t type);
-
-mm_settings_type_t __attribute__((nonnull(1)))
-mm_settings_gettype(const char *key);
-
-#endif /* BASE_SETTINGS_H */
+#endif /* BASE_CONF_H */

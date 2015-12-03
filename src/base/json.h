@@ -146,6 +146,15 @@ mm_json_reader_skip(struct mm_json_reader *reader);
  * JSON reader value handling.
  **********************************************************************/
 
+size_t __attribute__((nonnull(1)))
+mm_json_reader_string_length(struct mm_json_reader *reader);
+
+char * __attribute__((nonnull(1)))
+mm_json_reader_string_memdup(struct mm_json_reader *reader);
+
+char * __attribute__((nonnull(1)))
+mm_json_reader_string_strdup(struct mm_json_reader *reader);
+
 bool __attribute__((nonnull(1, 2)))
 mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string);
 

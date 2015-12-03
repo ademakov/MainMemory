@@ -21,6 +21,7 @@
 #define BASE_STDCALL_H
 
 #include "common.h"
+#include <fcntl.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 

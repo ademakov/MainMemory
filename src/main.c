@@ -24,8 +24,8 @@
 #include "base/args.h"
 #include "base/base.h"
 #include "base/bitset.h"
+#include "base/conf.h"
 #include "base/daemon.h"
-#include "base/json.h"
 #include "base/settings.h"
 #include "base/event/event.h"
 #include "base/log/error.h"
@@ -39,7 +39,6 @@
 
 #include "memcache/memcache.h"
 
-#include <fcntl.h>
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -150,102 +149,14 @@ mm_server_init(void)
 	LEAVE();
 }
 
-static void
-mm_cfg_read(int fd, const char *name, struct mm_json_reader *reader)
-{
-	static char buffer[1024];
-	ssize_t n = read(fd, buffer, sizeof buffer);
-	if (n < 0)
-		mm_fatal(errno, "configuration file: %s", name);
-	if (n == 0)
-		mm_fatal(0, "configuration file: %s: invalid data", name);
-	mm_json_reader_feed(reader, buffer, n);
-}
-
-static mm_json_token_t
-mm_cfg_next(int fd, const char *name, struct mm_json_reader *reader)
-{
-	for (;;) {
-		mm_json_token_t token = mm_json_reader_next(reader);
-		if (token == MM_JSON_INVALID)
-			mm_fatal(0, "configuration file: %s: invalid data", name);
-		if (token != MM_JSON_PARTIAL && token != MM_JSON_START_DOCUMENT)
-			return token;
-		mm_cfg_read(fd, name, reader);
-	}
-}
-
-static void
-mm_cfg_skip(int fd, const char *name, struct mm_json_reader *reader)
-{
-	for (;;) {
-		mm_json_token_t token = mm_json_reader_skip(reader);
-		if (token == MM_JSON_INVALID)
-			mm_fatal(0, "configuration file: %s: invalid data", name);
-		if (token != MM_JSON_PARTIAL)
-			return;
-		mm_cfg_read(fd, name, reader);
-	}
-}
-
-static void
-mm_cfg_load(const char *name)
-{
-	bool fatal = true;
-	if (name == NULL) {
-		fatal = false;
-		name = "mmem.json";
-	}
-
-	mm_brief("load configuration: %s", name);
-	int fd = open(name, O_RDONLY);
-	if (fd < 0) {
-		if (fatal)
-			mm_fatal(errno, "configuration file: %s", name);
-		mm_error(errno, "configuration file: %s", name);
-		return;
-	}
-
-	struct mm_json_reader reader;
-	mm_json_reader_prepare(&reader, &mm_global_arena);
-	mm_json_token_t token = mm_cfg_next(fd, name, &reader);
-	if (token != MM_JSON_START_OBJECT)
-		mm_fatal(0, "configuration file: %s: invalid data", name);
-
-	do {
-		token = mm_cfg_next(fd, name, &reader);
-		if (token == MM_JSON_END_OBJECT)
-			break;
-
-		if (mm_json_reader_string_equals(&reader, "daemon")) {
-			token = mm_cfg_next(fd, name, &reader);
-			if (token == MM_JSON_TRUE)
-				mm_settings_put("daemon", "");
-		} else if (mm_json_reader_string_equals(&reader, "verbose")) {
-			token = mm_cfg_next(fd, name, &reader);
-			if (token == MM_JSON_TRUE)
-				mm_settings_put("verbose", "");
-		} else  if (mm_json_reader_string_equals(&reader, "warning")) {
-			token = mm_cfg_next(fd, name, &reader);
-			if (token == MM_JSON_TRUE)
-				mm_settings_put("warning", "");
-		} else {
-			mm_cfg_skip(fd, name, &reader);
-		}
-
-	} while (token != MM_JSON_END_OBJECT);
-
-	mm_json_reader_cleanup(&reader);
-	close(fd);
-}
-
 static struct mm_args_info mm_args_info_tbl[] = {
-	{ "help", 'h', MM_ARGS_DENIED, "\n\t\tdisplay this help text and exit" },
-	{ "version", 'V', MM_ARGS_DENIED, "\n\t\tdisplay version information and exit" },
-	{ "verbose", 'v', MM_ARGS_DENIED, "\n\t\tenable verbose messages" },
-	{ "warning", 'w', MM_ARGS_DENIED, "\n\t\tenable warning messages" },
+	{ "help", 'h', MM_ARGS_SPECIAL, "\n\t\tdisplay this help text and exit" },
+	{ "version", 'V', MM_ARGS_SPECIAL, "\n\t\tdisplay version information and exit" },
+	{ "verbose", 'v', MM_ARGS_TRIVIAL, "\n\t\tenable verbose messages" },
+	{ "warning", 'w', MM_ARGS_TRIVIAL, "\n\t\tenable warning messages" },
 	{ },
 	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
+	{ "daemon", 'd', MM_ARGS_TRIVIAL, "\n\t\trun as a daemon" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);
@@ -273,8 +184,7 @@ main(int argc, char *argv[])
 	}
 
 	// Load configuration file.
-	mm_cfg_load(mm_settings_get("config", NULL));
-	mm_daemonize = (mm_settings_get("daemon", NULL) != NULL);
+	mm_conf_load(mm_settings_get("config", NULL));
 	mm_enable_verbose(mm_settings_get("verbose", NULL) != NULL);
 	mm_enable_warning(mm_settings_get("warning", NULL) != NULL);
 
@@ -283,7 +193,8 @@ main(int argc, char *argv[])
 	mm_core_init();
 
 	// Daemonize if needed.
-	if (mm_daemonize) {
+	if (mm_settings_get("daemon", NULL) != NULL) {
+		mm_daemonize = true;
 		mm_daemon_start();
 		mm_daemon_stdio(NULL, "mmem.log");
 		mm_daemon_notify();

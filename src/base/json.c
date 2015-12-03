@@ -909,6 +909,40 @@ mm_json_reader_skip(struct mm_json_reader *reader)
  * JSON reader value handling.
  **********************************************************************/
 
+size_t __attribute__((nonnull(1)))
+mm_json_reader_string_length(struct mm_json_reader *reader)
+{
+	if (reader->string.escaped)
+		return 0; // TODO
+
+	return (reader->value_end - reader->value);
+}
+
+char * __attribute__((nonnull(1)))
+mm_json_reader_string_memdup(struct mm_json_reader *reader)
+{
+	if (reader->string.escaped)
+		return NULL; // TODO
+
+	size_t length = mm_json_reader_string_length(reader);
+	char *string = mm_arena_alloc(reader->arena, length);
+	memcpy(string, reader->value, length);
+	return string;
+}
+
+char * __attribute__((nonnull(1)))
+mm_json_reader_string_strdup(struct mm_json_reader *reader)
+{
+	if (reader->string.escaped)
+		return NULL; // TODO
+
+	size_t length = mm_json_reader_string_length(reader);
+	char *string = mm_arena_alloc(reader->arena, length + 1);
+	memcpy(string, reader->value, length);
+	string[length] = 0;
+	return string;
+}
+
 bool __attribute__((nonnull(1, 2)))
 mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string)
 {

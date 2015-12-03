@@ -12,6 +12,7 @@ libmmbase_a_SOURCES = \
 	bytes.h \
 	cksum.c cksum.h \
 	clock.c clock.h \
+	conf.c conf.h \
 	combiner.c combiner.h \
 	daemon.c daemon.h \
 	hash.c hash.h \
