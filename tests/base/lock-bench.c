@@ -10,7 +10,7 @@ mm_common_lock_t g_lock = MM_COMMON_LOCK_INIT;
 size_t g_nexec = 0;
 
 void
-execute(void *arg __mm_unused__)
+execute(void *arg UNUSED)
 {
 	mm_common_lock(&g_lock);
 	delay_consumer();
@@ -19,7 +19,7 @@ execute(void *arg __mm_unused__)
 }
 
 void
-routine(void *arg __mm_unused__)
+routine(void *arg UNUSED)
 {
 	size_t i;
 	for (i = 0; i < g_consumer_data_size; i++) {
