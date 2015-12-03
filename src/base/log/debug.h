@@ -34,19 +34,16 @@
 # define DEBUG(...)	((void) 0)
 #endif
 
-void mm_abort_with_message(const char *restrict location,
-			   const char *restrict function,
-			   const char *restrict msg, ...)
-	__attribute__((format(printf, 3, 4)))
-	__attribute__((nonnull(1, 2, 3)))
-	__attribute__((noreturn));
+void NONNULL(1, 2, 3) FORMAT(3, 4) NORETURN
+mm_abort_with_message(const char *restrict location,
+		      const char *restrict function,
+		      const char *restrict msg, ...);
 
 #if ENABLE_DEBUG
-void mm_debug(const char *restrict location,
-	      const char *restrict function,
-	      const char *restrict msg, ...)
-	__attribute__((format(printf, 3, 4)))
-	__attribute__((nonnull(1, 2, 3)));
+void NONNULL(1, 2, 3) FORMAT(3, 4)
+mm_debug(const char *restrict location,
+	 const char *restrict function,
+	 const char *restrict msg, ...);
 #else
 # define mm_debug(...)	((void) 0)
 #endif

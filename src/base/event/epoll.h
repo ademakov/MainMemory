@@ -56,13 +56,13 @@ struct mm_event_epoll
 void
 mm_event_epoll_init(void);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_epoll_cleanup(struct mm_event_epoll *event_backend);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 		      struct mm_event_batch *change_events,
 		      struct mm_event_receiver *return_events,
@@ -70,10 +70,10 @@ mm_event_epoll_listen(struct mm_event_epoll *event_backend,
 
 #if MM_EVENT_NATIVE_NOTIFY
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_epoll_notify(struct mm_event_epoll *event_backend);
 
 #endif

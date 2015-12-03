@@ -22,14 +22,13 @@
 
 #include "common.h"
 
-void mm_enable_verbose(bool value);
+void
+mm_enable_verbose(bool value);
 
-void mm_verbose(const char *restrict msg, ...)
-	__attribute__((format(printf, 1, 2)))
-	__attribute__((nonnull(1)));
+void NONNULL(1) FORMAT(1, 2)
+mm_verbose(const char *restrict msg, ...);
 
-void mm_brief(const char *restrict msg, ...)
-	__attribute__((format(printf, 1, 2)))
-	__attribute__((nonnull(1)));
+void NONNULL(1) FORMAT(1, 2)
+mm_brief(const char *restrict msg, ...);
 
 #endif /* BASE_LOG_PLAIN_H */

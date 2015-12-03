@@ -24,11 +24,10 @@
 #include "base/memory/arena.h"
 #include <stdarg.h>
 
-char * mm_format(mm_arena_t arena, const char *restrict fmt, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(1, 2)));
+char * NONNULL(1, 2) FORMAT(2, 3)
+mm_format(mm_arena_t arena, const char *restrict fmt, ...);
 
-char * mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va)
-	__attribute__((nonnull(1, 2)));
+char * NONNULL(1, 2)
+mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va);
 
 #endif /* BASE_UTIL_FORMAT_H */

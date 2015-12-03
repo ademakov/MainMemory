@@ -23,15 +23,14 @@
 #include "common.h"
 #include <stdarg.h>
 
-void mm_log_str(const char *str)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_log_str(const char *str);
 
-void mm_log_fmt(const char *restrict fmt, ...)
-	__attribute__((format(printf, 1, 2)))
-	__attribute__((nonnull(1)));
+void NONNULL(1) FORMAT(1, 2)
+mm_log_fmt(const char *restrict fmt, ...);
 
-void mm_log_vfmt(const char *restrict fmt, va_list va)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_log_vfmt(const char *restrict fmt, va_list va);
 
 void mm_log_relay(void);
 

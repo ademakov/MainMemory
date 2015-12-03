@@ -36,7 +36,7 @@
  * Chunk Allocation and Reclamation.
  **********************************************************************/
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_global(size_t size)
 {
 	size += sizeof(struct mm_chunk);
@@ -46,7 +46,7 @@ mm_chunk_create_global(size_t size)
 	return chunk;
 }
 
-struct mm_chunk *__attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_common(size_t size)
 {
 	size += sizeof(struct mm_chunk);
@@ -56,7 +56,7 @@ mm_chunk_create_common(size_t size)
 	return chunk;
 }
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_regular(size_t size)
 {
 	size += sizeof(struct mm_chunk);
@@ -66,7 +66,7 @@ mm_chunk_create_regular(size_t size)
 	return chunk;
 }
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_private(size_t size)
 {
 	size += sizeof(struct mm_chunk);
@@ -76,7 +76,7 @@ mm_chunk_create_private(size_t size)
 	return chunk;
 }
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create(size_t size)
 {
 	// Prefer private space if available.
@@ -100,7 +100,7 @@ mm_chunk_create(size_t size)
 	return mm_chunk_create_global(size);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy(struct mm_chunk *chunk)
 {
 	mm_chunk_t tag = mm_chunk_gettag(chunk);
@@ -148,7 +148,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	mm_chunk_enqueue_deferred(thread, false);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy_stack(struct mm_stack *stack)
 {
 	struct mm_slink *link = mm_stack_head(stack);
@@ -159,7 +159,7 @@ mm_chunk_destroy_stack(struct mm_stack *stack)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy_queue(struct mm_queue *queue)
 {
 	struct mm_qlink *link = mm_queue_head(queue);
@@ -171,13 +171,13 @@ mm_chunk_destroy_queue(struct mm_queue *queue)
 }
 
 static void
-mm_chunk_free_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_chunk_free_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	struct mm_chunk *chunk = (struct mm_chunk *) arguments[0];
 	mm_private_free(chunk);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 {
 	if (!flush && thread->deferred_chunks_count < MM_CHUNK_FLUSH_THRESHOLD)

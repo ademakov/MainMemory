@@ -71,7 +71,7 @@ mm_net_sockaddr_len(int sa_family)
 	}
 }
 
-static int __attribute__((nonnull(1, 2)))
+static int NONNULL(1, 2)
 mm_net_set_un_addr(struct mm_net_addr *addr, const char *path)
 {
 	ENTER();
@@ -92,7 +92,7 @@ mm_net_set_un_addr(struct mm_net_addr *addr, const char *path)
 	return rc;
 }
 
-static int __attribute__((nonnull(1)))
+static int NONNULL(1)
 mm_net_set_in_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 {
 	ENTER();
@@ -121,7 +121,7 @@ leave:
 	return rc;
 }
 
-static int __attribute__((nonnull(1)))
+static int NONNULL(1)
 mm_net_set_in6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 {
 	ENTER();
@@ -155,7 +155,7 @@ leave:
  * Socket helper routines.
  **********************************************************************/
 
-static int __attribute__((nonnull(1)))
+static int NONNULL(1)
 mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 {
 	ENTER();
@@ -190,7 +190,7 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	return sock;
 }
 
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_net_remove_unix_socket(struct mm_net_addr *addr)
 {
 	ENTER();
@@ -205,7 +205,7 @@ mm_net_remove_unix_socket(struct mm_net_addr *addr)
 	LEAVE();
 }
 
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 {
 	ENTER();
@@ -283,13 +283,13 @@ mm_net_alloc_server(void)
  **********************************************************************/
 
 static void
-mm_net_reader_complete(struct mm_work *work, mm_value_t value __mm_unused__)
+mm_net_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
 {
 	mm_net_yield_reader(containerof(work, struct mm_net_socket, read_work));
 }
 
 static void
-mm_net_writer_complete(struct mm_work *work, mm_value_t value __mm_unused__)
+mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 {
 	mm_net_yield_writer(containerof(work, struct mm_net_socket, write_work));
 }
@@ -1038,9 +1038,8 @@ mm_net_term(void)
  * Network servers.
  **********************************************************************/
 
-struct mm_net_server *
-mm_net_create_unix_server(const char *name,
-			  struct mm_net_proto *proto,
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
 			  const char *path)
 {
 	ENTER();
@@ -1057,9 +1056,8 @@ mm_net_create_unix_server(const char *name,
 	return srv;
 }
 
-struct mm_net_server *
-mm_net_create_inet_server(const char *name,
-			  struct mm_net_proto *proto,
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
 			  const char *addrstr, uint16_t port)
 {
 	ENTER();
@@ -1076,9 +1074,8 @@ mm_net_create_inet_server(const char *name,
 	return srv;
 }
 
-struct mm_net_server *
-mm_net_create_inet6_server(const char *name,
-			   struct mm_net_proto *proto,
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
 			   const char *addrstr, uint16_t port)
 {
 	ENTER();
@@ -1095,7 +1092,7 @@ mm_net_create_inet6_server(const char *name,
 	return srv;
 }
 
-void
+void NONNULL(1, 2)
 mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
 {
 	ENTER();
@@ -1120,7 +1117,7 @@ mm_net_register_server(mm_value_t arg)
 	return 0;
 }
 
-void
+void NONNULL(1)
 mm_net_start_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -1154,7 +1151,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -1275,7 +1272,7 @@ leave:
 	return rc;
 }
 
-ssize_t
+ssize_t NONNULL(1, 2)
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
@@ -1330,7 +1327,7 @@ leave:
 	return n;
 }
 
-ssize_t
+ssize_t NONNULL(1, 2)
 mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 {
 	ENTER();
@@ -1385,7 +1382,7 @@ leave:
 	return n;
 }
 
-ssize_t
+ssize_t NONNULL(1, 2)
 mm_net_readv(struct mm_net_socket *sock,
 	     const struct iovec *iov, int iovcnt,
 	     ssize_t nbytes)
@@ -1442,7 +1439,7 @@ leave:
 	return n;
 }
 
-ssize_t
+ssize_t NONNULL(1, 2)
 mm_net_writev(struct mm_net_socket *sock,
 	      const struct iovec *iov, int iovcnt,
 	      ssize_t nbytes)
@@ -1499,7 +1496,7 @@ leave:
 	return n;
 }
 
-void
+void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -1518,7 +1515,7 @@ leave:
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -1538,7 +1535,7 @@ leave:
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();

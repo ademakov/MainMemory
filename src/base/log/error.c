@@ -33,7 +33,7 @@ mm_enable_warning(bool value)
 	mm_warning_enabled = value;
 }
 
-void
+void NONNULL(2) FORMAT(2, 3)
 mm_warning(int error, const char *restrict msg, ...)
 {
 	if (!mm_warning_enabled)
@@ -53,7 +53,7 @@ mm_warning(int error, const char *restrict msg, ...)
 	}
 }
 
-void
+void NONNULL(2) FORMAT(2, 3)
 mm_error(int error, const char *restrict msg, ...)
 {
 	mm_trace_prefix();
@@ -70,7 +70,7 @@ mm_error(int error, const char *restrict msg, ...)
 	}
 }
 
-void
+void NONNULL(2) FORMAT(2, 3) NORETURN
 mm_fatal(int error, const char *restrict msg, ...)
 {
 	mm_trace_prefix();

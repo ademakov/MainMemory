@@ -38,25 +38,25 @@ struct mm_bitset
 	};
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_cleanup(struct mm_bitset *set, mm_arena_t arena);
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_bitset_is_small(const struct mm_bitset *set)
 {
 	return set->size <= MM_BITSET_UNIT;
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_bitset_size(const struct mm_bitset *set)
 {
 	return set->size;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_bitset_test(const struct mm_bitset *set, size_t bit)
 {
 	ASSERT(bit < set->size);
@@ -70,7 +70,7 @@ mm_bitset_test(const struct mm_bitset *set, size_t bit)
 	}
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_bitset_set(struct mm_bitset *set, size_t bit)
 {
 	ASSERT(bit < set->size);
@@ -84,7 +84,7 @@ mm_bitset_set(struct mm_bitset *set, size_t bit)
 	}
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_bitset_flip(struct mm_bitset *set, size_t bit)
 {
 	ASSERT(bit < set->size);
@@ -98,7 +98,7 @@ mm_bitset_flip(struct mm_bitset *set, size_t bit)
 	}
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_bitset_clear(struct mm_bitset *set, size_t bit)
 {
 	ASSERT(bit < set->size);
@@ -112,31 +112,31 @@ mm_bitset_clear(struct mm_bitset *set, size_t bit)
 	}
 }
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_bitset_any(const struct mm_bitset *set);
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_bitset_all(const struct mm_bitset *set);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_bitset_find(const struct mm_bitset *set, size_t bit);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_bitset_count(const struct mm_bitset *set);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_set_all(struct mm_bitset *set);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_flip_all(struct mm_bitset *set);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_clear_all(struct mm_bitset *set);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_bitset_or(struct mm_bitset *set, const struct mm_bitset *set2);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_bitset_and(struct mm_bitset *set, const struct mm_bitset *set2);
 
 #endif /* BASE_BITSET_H */

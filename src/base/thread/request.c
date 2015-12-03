@@ -27,8 +27,7 @@
  **********************************************************************/
 
 uintptr_t
-mm_request_syscall_handler(uintptr_t context __mm_unused__,
-			   uintptr_t *arguments)
+mm_request_syscall_handler(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	uintptr_t number = arguments[0];
 	uintptr_t arg_1 = arguments[1];

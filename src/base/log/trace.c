@@ -49,9 +49,8 @@ mm_trace_set_getcontext(mm_trace_getcontext_t getcontext)
 		mm_trace_getcontext = getcontext;
 }
 
-void
-mm_trace_context_prepare(struct mm_trace_context *context,
-			 const char *restrict fmt, ...)
+void NONNULL(1, 2) FORMAT(2, 3)
+mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict fmt, ...)
 {
 	va_list va;
 	va_start(va, fmt);
@@ -62,7 +61,7 @@ mm_trace_context_prepare(struct mm_trace_context *context,
 	context->recur = 0;
 }
 
-void
+void NONNULL(1)
 mm_trace_context_cleanup(struct mm_trace_context *context)
 {
 	mm_arena_free(&mm_global_arena, context->owner);
@@ -106,7 +105,7 @@ mm_trace_leave(int level)
  * Trace Utilities.
  **********************************************************************/
 
-void
+void NONNULL(1, 2)
 mm_where(const char *restrict location, const char *function)
 {
 	mm_trace_prefix();
@@ -122,7 +121,7 @@ mm_trace_prefix(void)
 	mm_log_fmt("%s %*s", context->owner, context->level * 2, "");
 }
 
-void
+void NONNULL(2, 3, 4) FORMAT(4, 5)
 mm_trace(int level,
 	 const char *restrict location,
 	 const char *restrict function, 

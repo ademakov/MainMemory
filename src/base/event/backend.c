@@ -22,7 +22,7 @@
 #include "base/event/batch.h"
 #include "base/log/trace.h"
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_backend_prepare(struct mm_event_backend *backend)
 {
 	ENTER();
@@ -63,7 +63,7 @@ leave:
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_backend_cleanup(struct mm_event_backend *backend)
 {
 	ENTER();

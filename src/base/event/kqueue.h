@@ -50,13 +50,13 @@ struct mm_event_kqueue
 	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 		       struct mm_event_batch *change_events,
 		       struct mm_event_receiver *return_events,
@@ -64,10 +64,10 @@ mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
 
 #if MM_EVENT_NATIVE_NOTIFY
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_event_kqueue_enable_notify(struct mm_event_kqueue *event_backend);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_kqueue_notify(struct mm_event_kqueue *event_backend);
 
 #endif

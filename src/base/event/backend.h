@@ -44,10 +44,10 @@ struct mm_event_backend
 	struct mm_selfpipe selfpipe;
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_backend_prepare(struct mm_event_backend *backend);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_backend_cleanup(struct mm_event_backend *backend);
 
 /*
@@ -57,8 +57,8 @@ mm_event_backend_cleanup(struct mm_event_backend *backend);
  * this is just a stub for possible future implementation of select
  * or poll backends.
  */
-static inline bool __attribute__((nonnull(1)))
-mm_event_backend_serial(struct mm_event_backend *backend __mm_unused__)
+static inline bool NONNULL(1)
+mm_event_backend_serial(struct mm_event_backend *backend UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
 	return false;
@@ -67,7 +67,7 @@ mm_event_backend_serial(struct mm_event_backend *backend __mm_unused__)
 #endif
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_batch *changes,
 			struct mm_event_receiver *receiver,
@@ -80,7 +80,7 @@ mm_event_backend_listen(struct mm_event_backend *backend,
 #endif
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_backend_notify(struct mm_event_backend *backend)
 {
 #if MM_EVENT_NATIVE_NOTIFY
@@ -96,7 +96,7 @@ mm_event_backend_notify(struct mm_event_backend *backend)
 	mm_selfpipe_write(&backend->selfpipe);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_backend_dampen(struct mm_event_backend *backend)
 {
 #if MM_EVENT_NATIVE_NOTIFY

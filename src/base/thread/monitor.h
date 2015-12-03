@@ -29,40 +29,40 @@ struct mm_thread_monitor
 	pthread_cond_t cond;
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_prepare(struct mm_thread_monitor *monitor);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_cleanup(struct mm_thread_monitor *monitor);
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_thread_monitor_lock(struct mm_thread_monitor *monitor)
 {
 	pthread_mutex_lock(&monitor->lock);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_thread_monitor_unlock(struct mm_thread_monitor *monitor)
 {
 	pthread_mutex_unlock(&monitor->lock);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_thread_monitor_signal(struct mm_thread_monitor *monitor)
 {
 	pthread_cond_signal(&monitor->cond);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_thread_monitor_broadcast(struct mm_thread_monitor *monitor)
 {
 	pthread_cond_broadcast(&monitor->cond);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_wait(struct mm_thread_monitor *monitor);
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_thread_monitor_timedwait(struct mm_thread_monitor *monitor, mm_timeval_t realtime);
 
 #endif /* BASE_THREAD_MONITOR_H */

@@ -247,7 +247,7 @@ mc_binary_read_flush(struct mc_parser *parser)
 	return true;
 }
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mc_binary_parse(struct mc_parser *parser)
 {
 	ENTER();

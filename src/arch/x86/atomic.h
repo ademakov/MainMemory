@@ -26,7 +26,7 @@
  * Atomic types.
  **********************************************************************/
 
-#define mm_atomic_type(base) base __mm_align__(sizeof(base))
+#define mm_atomic_type(base) base ALIGN(sizeof(base))
 
 typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;

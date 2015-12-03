@@ -32,10 +32,10 @@ struct mc_parser
 	struct mc_state *state;
 };
 
-void mc_parser_start(struct mc_parser *parser, struct mc_state *state)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mc_parser_start(struct mc_parser *parser, struct mc_state *state);
 
-bool mc_parser_parse(struct mc_parser *parser)
-	__attribute__((nonnull(1)));
+bool NONNULL(1)
+mc_parser_parse(struct mc_parser *parser);
 
 #endif /* MEMCACHE_PARSER_H */

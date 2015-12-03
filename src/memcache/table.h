@@ -80,7 +80,7 @@ struct mc_tpart
 	uint64_t stamp;
 	uint64_t flush_stamp;
 
-} __mm_align_cacheline__;
+} CACHE_ALIGN;
 
 /* The table of memcache entries. */
 struct mc_table
@@ -114,8 +114,8 @@ extern struct mc_table mc_table;
  * Memcache table initialization and termination.
  **********************************************************************/
 
-void mc_table_init(const struct mm_memcache_config *config)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mc_table_init(const struct mm_memcache_config *config);
 
 void mc_table_term(void);
 
@@ -129,7 +129,7 @@ mc_table_part(uint32_t hash)
 	return &mc_table.parts[hash & mc_table.part_mask];
 }
 
-static inline uint32_t
+static inline uint32_t NONNULL(1)
 mc_table_index(struct mc_tpart *part, uint32_t hash)
 {
 	ASSERT(part == mc_table_part(hash));
@@ -145,7 +145,7 @@ mc_table_index(struct mc_tpart *part, uint32_t hash)
 	return index;
 }
 
-static inline void
+static inline void NONNULL(1)
 mc_table_lookup_lock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
@@ -155,7 +155,7 @@ mc_table_lookup_lock(struct mc_tpart *part)
 #endif
 }
 
-static inline void
+static inline void NONNULL(1)
 mc_table_lookup_unlock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
@@ -165,7 +165,7 @@ mc_table_lookup_unlock(struct mc_tpart *part)
 #endif
 }
 
-static inline void
+static inline void NONNULL(1)
 mc_table_freelist_lock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
@@ -175,7 +175,7 @@ mc_table_freelist_lock(struct mc_tpart *part)
 #endif
 }
 
-static inline void
+static inline void NONNULL(1)
 mc_table_freelist_unlock(struct mc_tpart *part)
 {
 #if ENABLE_SMP && ENABLE_MEMCACHE_LOCKING
@@ -185,23 +185,19 @@ mc_table_freelist_unlock(struct mc_tpart *part)
 #endif
 }
 
-void mc_table_buckets_resize(struct mc_tpart *part,
-			     uint32_t old_nbuckets,
-			     uint32_t new_nbuckets)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mc_table_buckets_resize(struct mc_tpart *part, uint32_t old_nbuckets, uint32_t new_nbuckets);
 
-void mc_table_entries_resize(struct mc_tpart *part,
-			     uint32_t old_nentries,
-			     uint32_t new_nentries)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mc_table_entries_resize(struct mc_tpart *part, uint32_t old_nentries, uint32_t new_nentries);
 
-bool mc_table_expand(struct mc_tpart *part, uint32_t n)
-	__attribute__((nonnull(1)));
+bool NONNULL(1)
+mc_table_expand(struct mc_tpart *part, uint32_t n);
 
-void mc_table_reserve_volume(struct mc_tpart *part)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mc_table_reserve_volume(struct mc_tpart *part);
 
-void mc_table_reserve_entries(struct mc_tpart *part)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mc_table_reserve_entries(struct mc_tpart *part);
 
 #endif /* MEMCACHE_TABLE_H */

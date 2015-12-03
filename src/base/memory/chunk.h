@@ -67,19 +67,19 @@ struct mm_chunk
 	char data[];
 };
 
-static inline mm_chunk_t __attribute__((nonnull(1)))
+static inline mm_chunk_t NONNULL(1)
 mm_chunk_base_gettag(const struct mm_chunk_base *chunk)
 {
 	return chunk->tag;
 }
 
-static inline mm_chunk_t __attribute__((nonnull(1)))
+static inline mm_chunk_t NONNULL(1)
 mm_chunk_gettag(const struct mm_chunk *chunk)
 {
 	return mm_chunk_base_gettag(&chunk->base);
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_chunk_base_getsize(const struct mm_chunk_base *chunk)
 {
 	size_t size;
@@ -94,7 +94,7 @@ mm_chunk_base_getsize(const struct mm_chunk_base *chunk)
 	return size - sizeof(struct mm_chunk);
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_chunk_getsize(const struct mm_chunk *chunk)
 {
 	return mm_chunk_base_getsize(&chunk->base);
@@ -124,31 +124,31 @@ mm_chunk_from_qlink(struct mm_qlink *link)
  * Chunk Creation and Destruction.
  **********************************************************************/
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_global(size_t size);
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_common(size_t size);
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_regular(size_t size);
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create_private(size_t size);
 
-struct mm_chunk * __attribute__((malloc))
+struct mm_chunk * MALLOC
 mm_chunk_create(size_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy(struct mm_chunk *chunk);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy_stack(struct mm_stack *stack);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_destroy_queue(struct mm_queue *queue);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush);
 
 #endif /* BASE_MEMORY_CHUNK_H */

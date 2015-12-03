@@ -139,7 +139,7 @@ mm_pool_prepare_low(struct mm_pool *pool,
 	pool->pool_name = mm_global_strdup(pool_name);
 }
 
-void
+void NONNULL(1)
 mm_pool_cleanup(struct mm_pool *pool)
 {
 	ENTER();
@@ -153,7 +153,7 @@ mm_pool_cleanup(struct mm_pool *pool)
 	LEAVE();
 }
 
-void *
+void * NONNULL(1)
 mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 {
 	uint32_t block = item_idx / pool->block_capacity;
@@ -172,7 +172,7 @@ mm_pool_idx2ptr(struct mm_pool *pool, uint32_t item_idx)
 	return item_ptr;
 }
 
-uint32_t
+uint32_t NONNULL(1, 2)
 mm_pool_ptr2idx(struct mm_pool *pool, const void *item_ptr)
 {
 	char *start = NULL;
@@ -200,7 +200,7 @@ mm_pool_ptr2idx(struct mm_pool *pool, const void *item_ptr)
 	return block * pool->block_capacity + index;
 }
 
-bool
+bool NONNULL(1)
 mm_pool_contains(struct mm_pool *pool, const void *item)
 {
 	bool rc = false;
@@ -227,7 +227,7 @@ mm_pool_contains(struct mm_pool *pool, const void *item)
  * Private single-core pools.
  **********************************************************************/
 
-void *
+void * NONNULL(1)
 mm_pool_local_alloc(struct mm_pool *pool)
 {
 	ENTER();
@@ -242,7 +242,7 @@ mm_pool_local_alloc(struct mm_pool *pool)
 	return item;
 }
 
-void
+void NONNULL(1)
 mm_pool_local_free(struct mm_pool *pool, void *item)
 {
 	ENTER();
@@ -253,7 +253,7 @@ mm_pool_local_free(struct mm_pool *pool, void *item)
 	LEAVE();
 }
 
-void
+void NONNULL(1, 2, 3)
 mm_pool_prepare(struct mm_pool *pool, const char *name,
 		const struct mm_arena *arena, uint32_t item_size)
 {
@@ -295,7 +295,7 @@ struct mm_pool_shared_cdata
 	bool cache_full;
 };
 
-void *
+void * NONNULL(2)
 mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 {
 	ENTER();
@@ -346,7 +346,7 @@ mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool)
 	return item;
 }
 
-void
+void NONNULL(2)
 mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 {
 	ENTER();
@@ -444,7 +444,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 	LEAVE();
 }
 
-void *
+void * NONNULL(1)
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
 	struct mm_thread *thread = mm_thread_selfptr();
@@ -452,7 +452,7 @@ mm_pool_shared_alloc(struct mm_pool *pool)
 	return mm_pool_shared_alloc_low(thread_id, pool);
 }
 
-void
+void NONNULL(1)
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
 	struct mm_thread *thread = mm_thread_selfptr();
@@ -462,7 +462,7 @@ mm_pool_shared_free(struct mm_pool *pool, void *item)
 
 #endif
 
-void
+void NONNULL(1, 2)
 mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_size)
 {
 	ENTER();
@@ -543,7 +543,7 @@ mm_pool_global_free(struct mm_pool *pool, void *item)
 	LEAVE();
 }
 
-void
+void NONNULL(1, 2)
 mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_size)
 {
 	ENTER();

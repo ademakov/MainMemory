@@ -145,7 +145,7 @@ mm_buffer_ensure_next(struct mm_buffer_segment *seg,
 
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_prepare(struct mm_buffer *buf)
 {
 	ENTER();
@@ -155,7 +155,7 @@ mm_buffer_prepare(struct mm_buffer *buf)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf)
 {
 	ENTER();
@@ -171,7 +171,7 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 }
 
 /* Improve space utilization of an empty buffer that was previously in use. */
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_rectify(struct mm_buffer *buf)
 {
 	ENTER();
@@ -197,7 +197,7 @@ leave:
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_demand(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
@@ -213,7 +213,7 @@ mm_buffer_demand(struct mm_buffer *buf, size_t size)
 	LEAVE();
 }
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_buffer_fill(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
@@ -245,7 +245,7 @@ leave:
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_buffer_flush(struct mm_buffer *buf, size_t size)
 {
 	ENTER();
@@ -281,7 +281,7 @@ leave:
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_buffer_read(struct mm_buffer *buf, void *ptr, size_t size)
 {
 	ENTER();
@@ -326,7 +326,7 @@ leave:
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_buffer_write(struct mm_buffer *buf, const void *ptr, size_t size)
 {
 	ENTER();
@@ -364,7 +364,7 @@ leave:
 	return (o_size - size);
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 {
 	ENTER();
@@ -394,7 +394,7 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 	LEAVE();
 }
 
-void __attribute__((format(printf, 2, 3))) __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2) FORMAT(2, 3)
 mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 {
 	va_list va;
@@ -403,7 +403,7 @@ mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...)
 	va_end(va);
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data)
 {

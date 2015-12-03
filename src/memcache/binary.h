@@ -82,7 +82,7 @@ struct mc_binary_header
 	uint64_t stamp;
 };
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mc_binary_parse(struct mc_parser *parser);
 
 #endif /* MEMCACHE_BINARY_H */

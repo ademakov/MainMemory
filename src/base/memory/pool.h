@@ -83,82 +83,82 @@ struct mm_pool
 	char *pool_name;
 };
 
-void __attribute__((nonnull(1, 2, 3)))
+void NONNULL(1, 2, 3)
 mm_pool_prepare(struct mm_pool *pool, const char *name,
 		const struct mm_arena *arena, uint32_t item_size);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_size);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_pool_cleanup(struct mm_pool *pool);
 
-void * __attribute__((nonnull(1)))
+void * NONNULL(1)
 mm_pool_idx2ptr(struct mm_pool *pool, uint32_t index);
 
-uint32_t __attribute__((nonnull(1, 2)))
+uint32_t NONNULL(1, 2)
 mm_pool_ptr2idx(struct mm_pool *pool, const void *item);
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_pool_contains(struct mm_pool *pool, const void *item);
 
-static inline void *
+static inline void * NONNULL(1)
 mm_pool_alloc(struct mm_pool *pool)
 {
 	return (pool->alloc_item)(pool);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_pool_free(struct mm_pool *pool, void *item)
 {
 	(pool->free_item)(pool, item);
 }
 
-void * __attribute__((nonnull(1)))
+void * NONNULL(1)
 mm_pool_local_alloc(struct mm_pool *pool);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_pool_local_free(struct mm_pool *pool, void *item);
 
 #if ENABLE_SMP
 
-void * __attribute__((nonnull(1)))
+void * NONNULL(1)
 mm_pool_shared_alloc(struct mm_pool *pool);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_pool_shared_free(struct mm_pool *pool, void *item);
 
-void * __attribute__((nonnull(2)))
+void * NONNULL(2)
 mm_pool_shared_alloc_low(mm_thread_t thread, struct mm_pool *pool);
 
-void __attribute__((nonnull(2)))
+void NONNULL(2)
 mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item);
 
 #else
 
-static inline void *
+static inline void * NONNULL(1)
 mm_pool_shared_alloc(struct mm_pool *pool)
 {
 	return mm_pool_local_alloc(pool);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_pool_shared_free(struct mm_pool *pool, void *item)
 {
 	mm_pool_local_free(pool, item);
 }
 
-static inline void *
-mm_pool_shared_alloc_low(mm_thread_t thread __mm_unused__, struct mm_pool *pool)
+static inline void * NONNULL(2)
+mm_pool_shared_alloc_low(mm_thread_t thread UNUSED, struct mm_pool *pool)
 {
 	return mm_pool_local_alloc(pool);
 }
 
-static inline void
-mm_pool_shared_free_low(mm_thread_t thread __mm_unused__, struct mm_pool *pool, void *item)
+static inline void NONNULL(2)
+mm_pool_shared_free_low(mm_thread_t thread UNUSED, struct mm_pool *pool, void *item)
 {
 	mm_pool_local_free(pool, item);
 }

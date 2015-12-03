@@ -31,7 +31,7 @@ mm_enable_verbose(bool value)
 	mm_verbose_enabled = value;
 }
 
-void
+void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...)
 {
 	if (!mm_verbose_enabled)
@@ -47,7 +47,7 @@ mm_verbose(const char *restrict msg, ...)
 	mm_log_str("\n");
 }
 
-void
+void NONNULL(1) FORMAT(1, 2)
 mm_brief(const char *restrict msg, ...)
 {
 	mm_trace_prefix();

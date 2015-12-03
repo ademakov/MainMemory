@@ -44,7 +44,7 @@ struct mm_args_info
 	const char *help;
 };
 
-void __attribute__((nonnull(2)))
+void NONNULL(2)
 mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info);
 
 const char *

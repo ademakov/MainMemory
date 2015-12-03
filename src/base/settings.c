@@ -36,7 +36,7 @@ static const char *mm_settings_empty = "";
 static struct mm_hashmap mm_settings_map;
 
 static void
-mm_settings_map_free(struct mm_hashmap *map __mm_unused__, struct mm_hashmap_entry *hep)
+mm_settings_map_free(struct mm_hashmap *map UNUSED, struct mm_hashmap_entry *hep)
 {
 	struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
 	mm_global_free((char *) sep->entry.key);
@@ -57,7 +57,7 @@ mm_settings_term(void)
 	mm_hashmap_cleanup(&mm_settings_map, mm_settings_map_free);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite)
 {
 	size_t len = strlen(key);
@@ -92,7 +92,7 @@ mm_settings_set(const char *key, const char *value, bool overwrite)
 	}
 }
 
-const char * __attribute__((nonnull(1)))
+const char * NONNULL(1)
 mm_settings_get(const char *key, const char *value)
 {
 	size_t len = strlen(key);
@@ -105,7 +105,7 @@ mm_settings_get(const char *key, const char *value)
 	return value;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_settings_settype(const char *key, mm_settings_type_t type)
 {
 	size_t len = strlen(key);
@@ -122,7 +122,7 @@ mm_settings_settype(const char *key, mm_settings_type_t type)
 	}
 }
 
-mm_settings_type_t __attribute__((nonnull(1)))
+mm_settings_type_t NONNULL(1)
 mm_settings_gettype(const char *key)
 {
 	size_t len = strlen(key);

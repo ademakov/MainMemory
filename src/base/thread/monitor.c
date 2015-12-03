@@ -23,7 +23,7 @@
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_prepare(struct mm_thread_monitor *monitor)
 {
 	ENTER();
@@ -38,7 +38,7 @@ mm_thread_monitor_prepare(struct mm_thread_monitor *monitor)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_cleanup(struct mm_thread_monitor *monitor)
 {
 	ENTER();
@@ -49,7 +49,7 @@ mm_thread_monitor_cleanup(struct mm_thread_monitor *monitor)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_monitor_wait(struct mm_thread_monitor *monitor)
 {
 	ENTER();
@@ -64,7 +64,7 @@ mm_thread_monitor_wait(struct mm_thread_monitor *monitor)
 	LEAVE();
 }
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_thread_monitor_timedwait(struct mm_thread_monitor *monitor, mm_timeval_t realtime)
 {
 	ENTER();

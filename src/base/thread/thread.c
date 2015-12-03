@@ -77,13 +77,13 @@ mm_thread_init()
  * Thread creation attributes.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_prepare(struct mm_thread_attr *attr)
 {
 	memset(attr, 0, sizeof *attr);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1, 2)
 mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 			 struct mm_domain *domain,
 			 mm_thread_t number)
@@ -92,56 +92,56 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 	attr->domain_number = number;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify)
 {
 	attr->notify = notify;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable)
 {
 	attr->private_space = enable;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->request_queue = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->reclaim_queue = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag)
 {
 	attr->cpu_tag = cpu_tag;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setstacksize(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->stack_size = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setguardsize(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->guard_size = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setstack(struct mm_thread_attr *attr, void *base, uint32_t size)
 {
 	attr->stack_base = base;
 	attr->stack_size = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 {
 	size_t len = 0;
@@ -269,13 +269,12 @@ mm_thread_entry(void *arg)
 }
 
 static void
-mm_thread_notify_dummy(struct mm_thread *thread __mm_unused__)
+mm_thread_notify_dummy(struct mm_thread *thread UNUSED)
 {
 }
 
-struct mm_thread * __attribute__((nonnull(2)))
-mm_thread_create(struct mm_thread_attr *attr,
-		 mm_routine_t start, mm_value_t start_arg)
+struct mm_thread * NONNULL(2)
+mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 	int rc;
@@ -354,7 +353,7 @@ mm_thread_create(struct mm_thread_attr *attr,
 
 /* Destroy a thread object. It is only safe to call this function upon
    the thread join. */
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
@@ -378,7 +377,7 @@ mm_thread_destroy(struct mm_thread *thread)
  **********************************************************************/
 
 /* Cancel a running thread. */
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_cancel(struct mm_thread *thread)
 {
 	ENTER();
@@ -391,7 +390,7 @@ mm_thread_cancel(struct mm_thread *thread)
 }
 
 /* Wait for a thread exit. */
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_join(struct mm_thread *thread)
 {
 	ENTER();

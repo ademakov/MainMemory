@@ -30,7 +30,7 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/mem/memory.h"
+#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"
@@ -294,7 +294,7 @@ mm_lock_get_thread_stat(struct mm_lock_stat_set *stat_set,
 
 	// Link the entry into list.
 	struct mm_slink *head = mm_stack_atomic_load_head(&stat_set->thread_list);
-	for (uint32_t b = 0; ; b = mm_backoff(b)) {
+	for (uint32_t b = 0; ; b = mm_thread_backoff(b)) {
 		thr_stat->link.next = head;
 		link = mm_stack_atomic_cas_head(&stat_set->thread_list, head, &thr_stat->link);
 		if (link == head)
@@ -305,7 +305,7 @@ mm_lock_get_thread_stat(struct mm_lock_stat_set *stat_set,
 	return &thr_stat->stat;
 }
 
-struct mm_lock_stat *
+struct mm_lock_stat * NONNULL(1)
 mm_lock_getstat(struct mm_lock_stat_info *info)
 {
 	// Get statistics collection pertinent to the lock in question.

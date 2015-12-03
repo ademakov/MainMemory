@@ -187,7 +187,7 @@ mm_core_post_work_req(uintptr_t context, uintptr_t *arguments)
 	LEAVE();
 }
 
-void
+void NONNULL(2)
 mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 {
 	ENTER();
@@ -231,7 +231,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 
 #endif
 
-void
+void NONNULL(2)
 mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 {
 	ENTER();
@@ -252,7 +252,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 #if ENABLE_SMP
 static void
-mm_core_run_task_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_core_run_task_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -263,7 +263,7 @@ mm_core_run_task_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
 }
 #endif
 
-void
+void NONNULL(1)
 mm_core_run_task(struct mm_task *task)
 {
 	ENTER();
@@ -334,7 +334,7 @@ mm_core_worker_execute(struct mm_work *work)
 }
 
 static void
-mm_core_worker_cleanup(uintptr_t arg __mm_unused__)
+mm_core_worker_cleanup(uintptr_t arg UNUSED)
 {
 	// Wake up the master possibly waiting for worker availability.
 	struct mm_core *core = mm_core_selfptr();
@@ -434,7 +434,7 @@ mm_core_master(mm_value_t arg)
 static mm_atomic_uint32_t mm_core_deal_count;
 #endif
 
-void
+void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 {
 	ENTER();
@@ -810,7 +810,7 @@ mm_core_thread_notify(struct mm_thread *thread)
 }
 
 static void
-mm_core_domain_notify(struct mm_domain *domain __mm_unused__)
+mm_core_domain_notify(struct mm_domain *domain UNUSED)
 {
 	mm_dispatch_notify_waiting(&mm_core_dispatch);
 }
@@ -890,7 +890,7 @@ mm_core_term(void)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_core_register_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -904,7 +904,7 @@ mm_core_register_server(struct mm_net_server *srv)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_core_set_event_affinity(const struct mm_bitset *mask)
 {
 	ENTER();

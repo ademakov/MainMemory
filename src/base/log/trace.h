@@ -36,20 +36,25 @@
 # define LEAVE()	((void) 0)
 #endif
 
-void mm_where(const char *restrict location, const char *restrict function)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_where(const char *restrict location, const char *restrict function);
 
 #if ENABLE_TRACE
-void mm_trace_prefix(void);
-void mm_trace(int level,
-	      const char *restrict location,
-	      const char *restrict function,
-	      const char *restrict msg, ...)
-	__attribute__((format(printf, 4, 5)))
-	__attribute__((nonnull(2, 3, 4)));
+
+void
+mm_trace_prefix(void);
+
+void NONNULL(2, 3, 4) FORMAT(4, 5)
+mm_trace(int level,
+	 const char *restrict location,
+	 const char *restrict function,
+	 const char *restrict msg, ...);
+
 #else
+
 #define mm_trace_prefix()	((void) 0)
 #define mm_trace(...)		((void) 0)
+
 #endif
 
 /**********************************************************************
@@ -74,13 +79,11 @@ typedef struct mm_trace_context * (*mm_trace_getcontext_t)(void);
 
 void mm_trace_set_getcontext(mm_trace_getcontext_t getcontext);
 
-void mm_trace_context_prepare(struct mm_trace_context *context,
-			      const char *restrict fmt, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2) FORMAT(2, 3)
+mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict fmt, ...);
 
-void mm_trace_context_cleanup(struct mm_trace_context *context)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_trace_context_cleanup(struct mm_trace_context *context);
 
 #endif
 

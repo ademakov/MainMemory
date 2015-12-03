@@ -54,7 +54,7 @@ struct mm_async_node
 };
 
 static void
-mm_async_response(uintptr_t context __mm_unused__,
+mm_async_response(uintptr_t context UNUSED,
 		  struct mm_requestor *rtor, uintptr_t result)
 {
 	struct mm_async_node *node = containerof(rtor, struct mm_async_node, requestor);

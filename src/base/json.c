@@ -28,7 +28,7 @@
  * JSON reader initialization and termination.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_json_reader_prepare(struct mm_json_reader *reader, mm_arena_t arena)
 {
 	memset(reader, 0, sizeof(*reader));
@@ -36,7 +36,7 @@ mm_json_reader_prepare(struct mm_json_reader *reader, mm_arena_t arena)
 	reader->arena = arena;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_json_reader_cleanup(struct mm_json_reader *reader)
 {
 	if (reader->buffer != NULL)
@@ -114,7 +114,7 @@ mm_json_reader_stack_pop(struct mm_json_reader *reader)
  * If the internal buffer contains any non-consumed data then
  * the input buffer data is appended to it.
  */
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_json_reader_save_input(struct mm_json_reader *reader, const char *input_limit)
 {
 	ASSERT(input_limit >= reader->input && input_limit <= reader->input_end);
@@ -177,7 +177,7 @@ mm_json_reader_check_size(struct mm_json_reader *reader, size_t n_min)
 	return reader->ptr;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_json_reader_feed(struct mm_json_reader *reader, const void *input, size_t input_size)
 {
 	const char *input_end = (const char *) input + input_size;
@@ -551,7 +551,7 @@ mm_json_reader_scan_number(struct mm_json_reader *reader)
 {
 	const char *cp = reader->ptr;
 	const char *ep = reader->end;
-	ASSERT(cp[0] == '-' || cp[0] >= '0' && cp[0] <= '9');
+	ASSERT(cp[0] == '-' || (cp[0] >= '0' && cp[0] <= '9'));
 
 	reader->number.fraction = false;
 	reader->number.exponent = false;
@@ -744,7 +744,7 @@ static uint8_t mm_json_text_table[][256] = {
 	},
 };
 
-mm_json_token_t __attribute__((nonnull(1)))
+mm_json_token_t NONNULL(1)
 mm_json_reader_next(struct mm_json_reader *reader)
 {
 	switch (reader->token) {
@@ -876,7 +876,7 @@ mm_json_reader_next(struct mm_json_reader *reader)
 	}
 }
 
-mm_json_token_t __attribute__((nonnull(1)))
+mm_json_token_t NONNULL(1)
 mm_json_reader_skip(struct mm_json_reader *reader)
 {
 	for (;;) {
@@ -909,7 +909,7 @@ mm_json_reader_skip(struct mm_json_reader *reader)
  * JSON reader value handling.
  **********************************************************************/
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_json_reader_string_length(struct mm_json_reader *reader)
 {
 	if (reader->string.escaped)
@@ -918,7 +918,7 @@ mm_json_reader_string_length(struct mm_json_reader *reader)
 	return (reader->value_end - reader->value);
 }
 
-char * __attribute__((nonnull(1)))
+char * NONNULL(1)
 mm_json_reader_string_memdup(struct mm_json_reader *reader)
 {
 	if (reader->string.escaped)
@@ -930,7 +930,7 @@ mm_json_reader_string_memdup(struct mm_json_reader *reader)
 	return string;
 }
 
-char * __attribute__((nonnull(1)))
+char * NONNULL(1)
 mm_json_reader_string_strdup(struct mm_json_reader *reader)
 {
 	if (reader->string.escaped)
@@ -943,7 +943,7 @@ mm_json_reader_string_strdup(struct mm_json_reader *reader)
 	return string;
 }
 
-bool __attribute__((nonnull(1, 2)))
+bool NONNULL(1, 2)
 mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string)
 {
 	if (reader->string.escaped)

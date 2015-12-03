@@ -176,31 +176,32 @@ struct mm_task
 #endif
 };
 
-void mm_task_init(void);
-void mm_task_term(void);
+void
+mm_task_init(void);
+
+void
+mm_task_term(void);
 
 /**********************************************************************
  * Task creation and destruction.
  **********************************************************************/
 
-void mm_task_attr_init(struct mm_task_attr *attr)
-	__attribute__((nonnull(1)));
-void mm_task_attr_setflags(struct mm_task_attr *attr, mm_task_flags_t flags)
-	__attribute__((nonnull(1)));
-void mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
-	__attribute__((nonnull(1)));
-void mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size)
-	__attribute__((nonnull(1)));
-void mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_task_attr_init(struct mm_task_attr *attr);
+void NONNULL(1)
+mm_task_attr_setflags(struct mm_task_attr *attr, mm_task_flags_t flags);
+void NONNULL(1)
+mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority);
+void NONNULL(1)
+mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size);
+void NONNULL(1)
+mm_task_attr_setname(struct mm_task_attr *attr, const char *name);
 
-struct mm_task * mm_task_create(const struct mm_task_attr *attr,
-				mm_routine_t start,
-				mm_value_t start_arg)
-	__attribute__((nonnull(2)));
+struct mm_task * NONNULL(2)
+mm_task_create(const struct mm_task_attr *attr, mm_routine_t start, mm_value_t start_arg);
 
-void mm_task_destroy(struct mm_task *task)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_task_destroy(struct mm_task *task);
 
 /**********************************************************************
  * Task utilities.
@@ -215,7 +216,7 @@ mm_task_selfptr(void)
 struct mm_task *
 mm_task_getptr(mm_task_t id);
 
-mm_task_t __attribute__((nonnull(1)))
+mm_task_t NONNULL(1)
 mm_task_getid(const struct mm_task *task);
 
 static inline mm_task_t
@@ -224,30 +225,33 @@ mm_task_self()
 	return mm_task_getid(mm_task_selfptr());
 }
 
-static inline const char *
+static inline const char * NONNULL(1)
 mm_task_getname(const struct mm_task *task)
 {
 	return task->name;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_task_setname(struct mm_task *task, const char *name);
 
 /**********************************************************************
  * Task execution.
  **********************************************************************/
 
-void mm_task_run(struct mm_task *task)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_task_run(struct mm_task *task);
 
-void mm_task_hoist(struct mm_task *task, mm_priority_t priority)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_task_hoist(struct mm_task *task, mm_priority_t priority);
 
-void mm_task_yield(void);
-void mm_task_block(void);
+void
+mm_task_yield(void);
 
-void mm_task_exit(mm_value_t result)
-	__attribute__((noreturn));
+void
+mm_task_block(void);
+
+void NORETURN
+mm_task_exit(mm_value_t result);
 
 /**********************************************************************
  * Task cancellation.
@@ -292,16 +296,17 @@ void mm_task_setcanceltype(int new_value, int *old_value_ptr);
 int mm_task_enter_cancel_point(void);
 void mm_task_leave_cancel_point(int);
 
-void mm_task_cancel(struct mm_task *task)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_task_cancel(struct mm_task *task);
 
 /**********************************************************************
  * Task-local dynamic memory.
  **********************************************************************/
 
-void * mm_task_alloc(size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_task_alloc(size_t size);
 
-void mm_task_free(void *ptr);
+void
+mm_task_free(void *ptr);
 
 #endif /* CORE_TASK_H */

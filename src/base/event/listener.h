@@ -112,25 +112,25 @@ struct mm_event_listener
 	/* Associated thread. */
 	struct mm_thread *thread;
 
-} __mm_align_cacheline__;
+} CACHE_ALIGN;
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend);
 
-void __attribute__((nonnull(1, 2, 3)))
+void NONNULL(1, 2, 3)
 mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
 		       struct mm_event_receiver *receiver, mm_timeout_t timeout);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
 
-static inline mm_event_listener_state_t __attribute__((nonnull(1)))
+static inline mm_event_listener_state_t NONNULL(1)
 mm_event_listener_getstate(struct mm_event_listener *listener)
 {
 	uint32_t stamp = mm_memory_load(listener->listen_stamp);
@@ -141,26 +141,26 @@ mm_event_listener_getstate(struct mm_event_listener *listener)
  * I/O events support.
  **********************************************************************/
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink,
 		      mm_event_t event)
 {
 	mm_event_batch_add(&listener->changes, event, sink);
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_listener_addflags(struct mm_event_listener *listener, unsigned int flags)
 {
 	mm_event_batch_addflags(&listener->changes, flags);
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_event_listener_hasflags(struct mm_event_listener *listener, unsigned int flags)
 {
 	return mm_event_batch_hasflags(&listener->changes, flags);
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_event_listener_detach(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	if (!sink->pending_detach) {
@@ -169,7 +169,7 @@ mm_event_listener_detach(struct mm_event_listener *listener, struct mm_event_fd 
 	}
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_event_listener_has_changes(struct mm_event_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);

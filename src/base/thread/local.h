@@ -40,16 +40,16 @@ struct mm_domain;
 
 typedef uintptr_t mm_thread_local_t;
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_init(struct mm_domain *domain);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_term(struct mm_domain *domain);
 
-mm_thread_local_t __attribute__((nonnull(1)))
+mm_thread_local_t NONNULL(1)
 mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_summary(struct mm_domain *domain);
 
 #endif /* BASE_THREAD_LOCAL_H */

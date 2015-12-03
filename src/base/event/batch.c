@@ -26,7 +26,7 @@
 #define MM_EVENT_BATCH_NEVENTS_MIN	(4u)
 #define MM_EVENT_BATCH_NEVENTS_MAX	(16u * 1024u)
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
 {
 	ENTER();
@@ -39,7 +39,7 @@ mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_cleanup(struct mm_event_batch *batch)
 {
 	ENTER();
@@ -49,7 +49,7 @@ mm_event_batch_cleanup(struct mm_event_batch *batch)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_expand(struct mm_event_batch *batch)
 {
 	ENTER();
@@ -64,7 +64,7 @@ mm_event_batch_expand(struct mm_event_batch *batch)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_batch_append(struct mm_event_batch *restrict batch,
 		      const struct mm_event_batch *restrict batch2)
 {

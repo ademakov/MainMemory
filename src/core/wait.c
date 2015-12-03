@@ -101,7 +101,7 @@ mm_wait_term(void)
 
 #define MM_WAIT_CACHE_MAX	(256)
 
-void
+void NONNULL(1)
 mm_wait_cache_prepare(struct mm_wait_cache *cache)
 {
 	ENTER();
@@ -114,8 +114,8 @@ mm_wait_cache_prepare(struct mm_wait_cache *cache)
 	LEAVE();
 }
 
-void
-mm_wait_cache_cleanup(struct mm_wait_cache *cache __mm_unused__)
+void NONNULL(1)
+mm_wait_cache_cleanup(struct mm_wait_cache *cache UNUSED)
 {
 	ENTER();
 	LEAVE();
@@ -165,7 +165,7 @@ mm_wait_add_pending(struct mm_wait_cache *cache, struct mm_wait *wait)
 	mm_stack_insert(&cache->pending, &wait->link);
 }
 
-void
+void NONNULL(1)
 mm_wait_cache_truncate(struct mm_wait_cache *cache)
 {
 	ENTER();
@@ -200,7 +200,7 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
  * Shared inter-core wait-sets with locking.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_prepare(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -211,7 +211,7 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 	LEAVE();
 }
 
-void
+void NONNULL(1, 2)
 mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 {
 	ENTER();
@@ -234,7 +234,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	LEAVE();
 }
 
-void
+void NONNULL(1, 2)
 mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_timeout_t timeout)
 {
 	ENTER();
@@ -257,7 +257,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	LEAVE();
 }
 
-void
+void NONNULL(1, 2)
 mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 {
 	ENTER();
@@ -294,7 +294,7 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
  * Private single-core wait-sets.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core)
 {
 	ENTER();
@@ -306,7 +306,7 @@ mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_wait(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -326,7 +326,7 @@ mm_waitset_local_wait(struct mm_waitset *waitset)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 {
 	ENTER();
@@ -346,7 +346,7 @@ mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_broadcast(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -380,7 +380,7 @@ mm_waitset_local_broadcast(struct mm_waitset *waitset)
  * Shared inter-core wait-set with single waiter task.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_prepare(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -391,7 +391,7 @@ mm_waitset_unique_prepare(struct mm_waitset *waitset)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_wait(struct mm_waitset *waitset)
 {
 	ENTER();
@@ -413,7 +413,7 @@ mm_waitset_unique_wait(struct mm_waitset *waitset)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 {
 	ENTER();
@@ -435,7 +435,7 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_signal(struct mm_waitset *waitset)
 {
 	ENTER();

@@ -63,7 +63,7 @@ mm_args_final_shift(uint32_t idx)
 	}
 }
 
-static void __attribute__((noreturn))
+static void NORETURN
 mm_args_error(size_t ninfo, struct mm_args_info *info)
 {
 	mm_args_usage(ninfo, info);
@@ -180,7 +180,7 @@ mm_args_parse(size_t ninfo, struct mm_args_info *info)
  * Argument handling.
  **********************************************************************/
 
-void __attribute__((nonnull(2)))
+void NONNULL(2)
 mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
 {
 	if (unlikely(argc <= 0))

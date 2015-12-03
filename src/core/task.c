@@ -69,20 +69,20 @@ mm_task_term(void)
  * Task creation attributes.
  **********************************************************************/
 
-void
+void NONNULL(1)
 mm_task_attr_init(struct mm_task_attr *attr)
 {
 	memset(attr, 0, sizeof(*attr));
 	attr->priority = MM_PRIO_WORK;
 }
 
-void
+void NONNULL(1)
 mm_task_attr_setflags(struct mm_task_attr *attr, mm_task_flags_t flags)
 {
 	attr->flags = flags;
 }
 
-void
+void NONNULL(1)
 mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
 {
 	ASSERT(priority <= MM_PRIO_LOWERMOST);
@@ -90,13 +90,13 @@ mm_task_attr_setpriority(struct mm_task_attr *attr, mm_priority_t priority)
 	attr->priority = priority;
 }
 
-void
+void NONNULL(1)
 mm_task_attr_setstacksize(struct mm_task_attr *attr, uint32_t stack_size)
 {
 	attr->stack_size = stack_size;
 }
 
-void
+void NONNULL(1)
 mm_task_attr_setname(struct mm_task_attr *attr, const char *name)
 {
 	ENTER();
@@ -350,14 +350,14 @@ mm_task_getptr(mm_task_t id)
 	return mm_pool_idx2ptr(&mm_task_pool, id);
 }
 
-mm_task_t
+mm_task_t NONNULL(1)
 mm_task_getid(const struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
 }
 
 /* Set or change the task name. */
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_task_setname(struct mm_task *task, const char *name)
 {
 	ENTER();
@@ -423,7 +423,7 @@ mm_task_switch(mm_task_state_t state)
 }
 
 /* Queue a task for execution. */
-void
+void NONNULL(1)
 mm_task_run(struct mm_task *task)
 {
 	ENTER();
@@ -442,7 +442,7 @@ mm_task_run(struct mm_task *task)
 }
 
 /* Queue a task for execution with temporary raised priority. */
-void
+void NONNULL(1)
 mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 {
 	ENTER();
@@ -607,7 +607,7 @@ mm_task_leave_cancel_point(int cp)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_task_cancel(struct mm_task *task)
 {
 	ENTER();

@@ -55,8 +55,8 @@ void mm_work_init(void);
 
 struct mm_work *mm_work_create_low(mm_core_t core);
 
-void mm_work_destroy_low(mm_core_t, struct mm_work *work)
-	__attribute__((nonnull(2)));
+void NONNULL(2)
+mm_work_destroy_low(mm_core_t, struct mm_work *work);
 
 static inline struct mm_work *
 mm_work_create(void)
@@ -76,7 +76,7 @@ mm_work_destroy(struct mm_work *work)
 
 void mm_work_complete_noop(struct mm_work *work, mm_value_t result);
 
-static inline void
+static inline void NONNULL(1, 2)
 mm_work_prepare(struct mm_work *work,
 		mm_routine_t routine,
 		mm_value_t argument,

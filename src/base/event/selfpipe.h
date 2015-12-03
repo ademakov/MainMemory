@@ -42,16 +42,16 @@ void mm_selfpipe_init(void);
  * Self-pipe instance routines.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_write(struct mm_selfpipe *selfpipe);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_drain(struct mm_selfpipe *selfpipe);
 
 #endif /* BASE_EVENT_SELFPIPE_H */

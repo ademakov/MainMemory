@@ -31,7 +31,7 @@
 /*
  * Prepare for parsing a command.
  */
-void
+void NONNULL(1, 2)
 mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 {
 	ENTER();
@@ -142,7 +142,7 @@ mc_parser_handle_option(struct mc_command *command)
 	LEAVE();
 }
 
-bool
+bool NONNULL(1)
 mc_parser_parse(struct mc_parser *parser)
 {
 	ENTER();

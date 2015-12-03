@@ -39,7 +39,7 @@
 static mm_event_hid_t mm_selfpipe_handler;
 
 static void
-mm_selfpipe_ready(mm_event_t event __mm_unused__, void *data)
+mm_selfpipe_ready(mm_event_t event UNUSED, void *data)
 {
 	ENTER();
 
@@ -69,7 +69,7 @@ mm_selfpipe_init(void)
  * Self-pipe instance.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
@@ -91,7 +91,7 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
@@ -102,7 +102,7 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_write(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
@@ -112,7 +112,7 @@ mm_selfpipe_write(struct mm_selfpipe *selfpipe)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 {
 	ENTER();

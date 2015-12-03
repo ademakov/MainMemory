@@ -35,77 +35,77 @@ struct mm_netbuf_socket
 	struct mm_buffer tbuf;
 };
 
-void mm_netbuf_prepare(struct mm_netbuf_socket *sock)
-        __attribute__((nonnull(1)));
+void NONNULL(1)
+mm_netbuf_prepare(struct mm_netbuf_socket *sock);
 
-void mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
-        __attribute__((nonnull(1)));
+void NONNULL(1)
+mm_netbuf_cleanup(struct mm_netbuf_socket *sock);
 
-ssize_t __attribute__((nonnull(1)))
+ssize_t NONNULL(1)
 mm_netbuf_fill(struct mm_netbuf_socket *sock);
 
-ssize_t __attribute__((nonnull(1)))
+ssize_t NONNULL(1)
 mm_netbuf_flush(struct mm_netbuf_socket *sock);
 
-ssize_t __attribute__((nonnull(1, 2)))
+ssize_t NONNULL(1, 2)
 mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
 
-ssize_t __attribute__((nonnull(1, 2)))
+ssize_t NONNULL(1, 2)
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size);
 
-static inline mm_thread_t
+static inline mm_thread_t NONNULL(1)
 mm_netbuf_thread(struct mm_netbuf_socket *sock)
 {
 	return mm_event_target(&sock->sock.event);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_netbuf_read_reset(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_rectify(&sock->rbuf);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_netbuf_write_reset(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_rectify(&sock->tbuf);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_netbuf_demand(struct mm_netbuf_socket *sock, size_t size)
 {
 	mm_buffer_demand(&sock->rbuf, size);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_netbuf_reduce(struct mm_netbuf_socket *sock, size_t size)
 {
 	mm_buffer_flush(&sock->rbuf, size);
 }
 
-static inline bool
+static inline bool NONNULL(1)
 mm_netbuf_read_empty(struct mm_netbuf_socket *sock)
 {
 	return mm_buffer_empty(&sock->rbuf);
 }
 
-static inline bool
+static inline bool NONNULL(1)
 mm_netbuf_read_first(struct mm_netbuf_socket *sock, struct mm_slider *cur)
 {
 	return mm_slider_first_used(cur, &sock->rbuf);
 }
 
-void __attribute__((nonnull(1, 2))) __attribute__((format(printf, 2, 3)))
+void NONNULL(1, 2) FORMAT(2, 3)
 mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...);
 
-static inline void
+static inline void NONNULL(1, 2)
 mm_netbuf_splice(struct mm_netbuf_socket *sock, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data)
 {
 	mm_buffer_splice(&sock->tbuf, data, size, release, release_data);
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_netbuf_close(struct mm_netbuf_socket *sock)
 {
 	mm_net_close(&sock->sock);

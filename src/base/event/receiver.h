@@ -44,27 +44,27 @@ struct mm_event_receiver
 	struct mm_bitset targets;
 };
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_prepare(struct mm_event_receiver *receiver,
 			  mm_thread_t nthreads,
 			  struct mm_thread *threads[]);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_receiver_start(struct mm_event_receiver *receiver)
 {
 	receiver->arrival_stamp++;
 }
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_listen(struct mm_event_receiver *receiver,
 			 mm_thread_t thread,
 			 struct mm_event_backend *backend,
 			 mm_timeout_t timeout);
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_add(struct mm_event_receiver *receiver,
 		      mm_event_t event, struct mm_event_fd *sink);
 

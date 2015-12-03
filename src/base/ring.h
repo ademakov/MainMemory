@@ -34,19 +34,19 @@
 struct mm_ring_base
 {
 	/* Consumer data. */
-	mm_atomic_uintptr_t head __mm_align_cacheline__;
+	mm_atomic_uintptr_t head CACHE_ALIGN;
 	mm_common_lock_t head_lock;
 
 	/* Producer data. */
-	mm_atomic_uintptr_t tail __mm_align_cacheline__;
+	mm_atomic_uintptr_t tail CACHE_ALIGN;
 	mm_common_lock_t tail_lock;
 
 	/* Shared data. */
-	uintptr_t mask __mm_align_cacheline__;
+	uintptr_t mask CACHE_ALIGN;
 	uintptr_t data[7]; /* User data. */
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks);
 
 /* Multi-producer task synchronization. */
@@ -123,10 +123,10 @@ struct mm_ring_spsc
 struct mm_ring_spsc *
 mm_ring_spsc_create(size_t size, uint8_t locks);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_spsc_destroy(struct mm_ring_spsc *ring);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks);
 
 /* Single-producer enqueue operation. */
@@ -214,10 +214,10 @@ struct mm_ring_mpmc
 struct mm_ring_mpmc *
 mm_ring_mpmc_create(size_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size);
 
 static inline void

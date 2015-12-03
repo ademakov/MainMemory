@@ -96,7 +96,7 @@ MM_ARENA_VTABLE(mm_private_xarena_vtable,
 	mm_private_xarena_realloc,
 	mm_private_xarena_free);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_private_space_prepare(struct mm_private_space *space, uint32_t queue_size)
 {
 	space->space = mm_mspace_create();
@@ -110,7 +110,7 @@ mm_private_space_prepare(struct mm_private_space *space, uint32_t queue_size)
 							   MM_RING_LOCKED_PUT);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_private_space_cleanup(struct mm_private_space *space)
 {
 	if (space->reclaim_queue != NULL)
@@ -118,13 +118,13 @@ mm_private_space_cleanup(struct mm_private_space *space)
 	mm_mspace_destroy(space->space);
 }
 
-bool __attribute__((nonnull(1, 2)))
+bool NONNULL(1, 2)
 mm_private_space_enqueue(struct mm_private_space *space, void *ptr)
 {
 	return mm_ring_spsc_locked_put(space->reclaim_queue, ptr);
 }
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_private_space_reclaim(struct mm_private_space *space)
 {
 	bool rc = false;
@@ -213,7 +213,7 @@ MM_ARENA_VTABLE(mm_shared_xarena_vtable,
 	mm_shared_xarena_realloc,
 	mm_shared_xarena_free);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_shared_space_prepare(struct mm_shared_space *space)
 {
 	space->space = mm_mspace_create();
@@ -222,7 +222,7 @@ mm_shared_space_prepare(struct mm_shared_space *space)
 	space->lock = (mm_common_lock_t) MM_COMMON_LOCK_INIT;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_shared_space_cleanup(struct mm_shared_space *space)
 {
 	mm_mspace_destroy(space->space);

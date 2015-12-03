@@ -36,14 +36,14 @@ struct mm_task_combiner
 struct mm_task_combiner *
 mm_task_combiner_create(const char *name, size_t size, size_t handoff);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_task_combiner_destroy(struct mm_task_combiner *combiner);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_task_combiner_prepare(struct mm_task_combiner *combiner, const char *name,
 			 size_t size, size_t handoff);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_task_combiner_execute(struct mm_task_combiner *combiner,
 			 mm_combiner_routine_t routine, uintptr_t data);
 

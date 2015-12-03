@@ -54,22 +54,22 @@ struct mm_port
 void mm_port_init(void);
 void mm_port_term(void);
 
-struct mm_port * mm_port_create(struct mm_task *task)
-	__attribute__((nonnull(1)));
+struct mm_port * NONNULL(1)
+mm_port_create(struct mm_task *task);
 
-void mm_port_destroy(struct mm_port *port)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_port_destroy(struct mm_port *port);
 
-int mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
-	__attribute__((nonnull(1, 2)));
+int NONNULL(1, 2)
+mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count);
 
-int mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
-	__attribute__((nonnull(1, 2)));
+int NONNULL(1, 2)
+mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count);
 
-void mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count);
 
-void mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count);
 
 #endif /* CORE_PORT_H */

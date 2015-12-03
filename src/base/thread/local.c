@@ -60,7 +60,7 @@ mm_thread_local_create_chunk(struct mm_domain *domain)
 	return chunk;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_init(struct mm_domain *domain)
 {
 	// Initialize lists.
@@ -74,7 +74,7 @@ mm_thread_local_init(struct mm_domain *domain)
 	mm_queue_append(&domain->per_thread_chunk_list, &chunk->link);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_term(struct mm_domain *domain)
 {
 	// Release all data info entries.
@@ -94,7 +94,7 @@ mm_thread_local_term(struct mm_domain *domain)
 	}
 }
 
-mm_thread_local_t __attribute__((nonnull(1)))
+mm_thread_local_t NONNULL(1)
 mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 {
 	ASSERT(size > 0);
@@ -163,7 +163,7 @@ mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 }
 
 /* This function is not thread-safe, and that should be okay so far. */
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_local_summary(struct mm_domain *domain)
 {
 	int nchunks = 0;

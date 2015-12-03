@@ -82,8 +82,8 @@ struct mm_lock_stat_info
 	const char *moreinfo;
 };
 
-struct mm_lock_stat *mm_lock_getstat(struct mm_lock_stat_info *info)
-	__attribute__((nonnull(1)));
+struct mm_lock_stat * NONNULL(1)
+mm_lock_getstat(struct mm_lock_stat_info *info);
 
 #endif
 

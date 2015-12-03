@@ -73,10 +73,14 @@
 #define likely(x)		__builtin_expect(!!(x), 1)
 #define unlikely(x)		__builtin_expect(!!(x), 0)
 
-#define __mm_align__(x)		__attribute__((__aligned__(x)))
-#define __mm_align_cacheline__	__mm_align__(MM_CACHELINE)
+#define ALIGN(x)		__attribute__((__aligned__(x)))
+#define CACHE_ALIGN		ALIGN(MM_CACHELINE)
 
-#define __mm_unused__		__attribute__((__unused__))
+#define NORETURN		__attribute__((__noreturn__))
+#define NONNULL(...)		__attribute__((__nonnull__(__VA_ARGS__)))
+#define FORMAT(...)		__attribute__((__format__(printf, __VA_ARGS__)))
+#define UNUSED			__attribute__((__unused__))
+#define MALLOC			__attribute__((__malloc__))
 
 /**********************************************************************
  * Compiler Memory Ordering.

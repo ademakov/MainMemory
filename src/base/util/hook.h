@@ -28,22 +28,22 @@ struct mm_queue;
 typedef void (*mm_hook_rtn0)(void);
 typedef void (*mm_hook_rtn1)(void *);
 
-void mm_hook_free(struct mm_queue *hook)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_hook_free(struct mm_queue *hook);
 
-void mm_hook_call(struct mm_queue *hook, bool free)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_hook_call(struct mm_queue *hook, bool free);
 
-void mm_hook_head_proc(struct mm_queue *hook, mm_hook_rtn0 proc)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_hook_head_proc(struct mm_queue *hook, mm_hook_rtn0 proc);
 
-void mm_hook_tail_proc(struct mm_queue *hook, mm_hook_rtn0 proc)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_hook_tail_proc(struct mm_queue *hook, mm_hook_rtn0 proc);
 
-void mm_hook_head_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_hook_head_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data);
 
-void mm_hook_tail_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_hook_tail_data_proc(struct mm_queue *hook, mm_hook_rtn1 proc, void *data);
 
 #endif /* BASE_UTIL_HOOK_H */

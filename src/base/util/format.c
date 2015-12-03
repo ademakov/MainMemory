@@ -22,7 +22,7 @@
 
 #include <stdio.h>
 
-char *
+char * NONNULL(1, 2)
 mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va)
 {
 	char dummy;
@@ -40,7 +40,7 @@ mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va)
 	return ptr;
 }
 
-char *
+char * NONNULL(1, 2) FORMAT(2, 3)
 mm_format(const struct mm_arena *arena, const char *restrict fmt, ...)
 {
 	va_list va;

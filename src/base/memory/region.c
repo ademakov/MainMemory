@@ -23,7 +23,7 @@
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_prepare(struct mm_region *reg)
 {
 	ENTER();
@@ -37,7 +37,7 @@ mm_region_prepare(struct mm_region *reg)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_cleanup(struct mm_region *reg)
 {
 	ENTER();
@@ -47,7 +47,7 @@ mm_region_cleanup(struct mm_region *reg)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_reserve(struct mm_region *reg, size_t more_size)
 {
 	ENTER();

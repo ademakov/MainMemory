@@ -99,10 +99,10 @@ mc_entry_getvalue(struct mc_entry *entry)
 	return entry->data + entry->key_len;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mc_entry_setnum(struct mc_entry *entry, uint64_t value);
 
-bool __attribute__((nonnull(1, 2)))
+bool NONNULL(1, 2)
 mc_entry_getnum(struct mc_entry *entry, uint64_t *value);
 
 #endif /* MEMCACHE_ENTRY_H */

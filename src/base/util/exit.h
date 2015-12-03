@@ -45,16 +45,17 @@ mm_exit_test(void)
  * Exit Handling.
  **********************************************************************/
 
-void mm_atexit(void (*func)(void));
+void
+mm_atexit(void (*func)(void));
 
-void mm_exit(int status)
-	__attribute__((noreturn));
+void NORETURN
+mm_exit(int status);
 
 /**********************************************************************
  * Abnormal Termination.
  **********************************************************************/
 
-void mm_abort(void)
-	__attribute__((noreturn));
+void NORETURN
+mm_abort(void);
 
 #endif /* BASE_UTIL_EXIT_H */

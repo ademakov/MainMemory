@@ -102,7 +102,7 @@ struct mm_core
 	/* Stop flag. */
 	bool stop;
 
-} __mm_align_cacheline__;
+} CACHE_ALIGN;
 
 void mm_core_init(void);
 void mm_core_term(void);
@@ -112,10 +112,10 @@ void mm_core_hook_param_start(void (*proc)(void *), void *data);
 void mm_core_hook_stop(void (*proc)(void));
 void mm_core_hook_param_stop(void (*proc)(void *), void *data);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_core_register_server(struct mm_net_server *srv);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_core_set_event_affinity(const struct mm_bitset *mask);
 
 const struct mm_bitset *
@@ -124,16 +124,16 @@ mm_core_get_event_affinity(void);
 void mm_core_start(void);
 void mm_core_stop(void);
 
-void __attribute__((nonnull(2)))
+void NONNULL(2)
 mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg);
 
-void __attribute__((nonnull(2)))
+void NONNULL(2)
 mm_core_post_work(mm_core_t core_id, struct mm_work *work);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_core_run_task(struct mm_task *task);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit);
 
 /**********************************************************************

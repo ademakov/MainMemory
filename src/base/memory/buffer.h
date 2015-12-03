@@ -69,7 +69,7 @@ struct mm_buffer_segment
 	uintptr_t release_data;
 };
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_buffer_empty(struct mm_buffer *buf)
 {
 	if (buf->head_seg == NULL)
@@ -79,7 +79,7 @@ mm_buffer_empty(struct mm_buffer *buf)
 	return (buf->tail_off == buf->head_off);
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_buffer_getsize(struct mm_buffer *buf)
 {
 	size_t size = 0;
@@ -89,7 +89,7 @@ mm_buffer_getsize(struct mm_buffer *buf)
 	return size;
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_buffer_getsize_free(struct mm_buffer *buf)
 {
 	size_t size = 0;
@@ -99,7 +99,7 @@ mm_buffer_getsize_free(struct mm_buffer *buf)
 	return size - buf->tail_off;
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_buffer_getsize_used(struct mm_buffer *buf)
 {
 	size_t size = 0;
@@ -109,41 +109,41 @@ mm_buffer_getsize_used(struct mm_buffer *buf)
 	return size - buf->head_off + buf->tail_off;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_prepare(struct mm_buffer *buf);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_rectify(struct mm_buffer *buf);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_demand(struct mm_buffer *buf, size_t size);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_buffer_fill(struct mm_buffer *buf, size_t size);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_buffer_flush(struct mm_buffer *buf, size_t size);
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_buffer_read(struct mm_buffer *buf, void *ptr, size_t size);
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_buffer_write(struct mm_buffer *buf, const void *ptr, size_t size);
 
-void __attribute__((format(printf, 2, 3))) __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2) FORMAT(2, 3)
 mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_buffer_splice(struct mm_buffer *buf, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_buffer_segment_destroy(struct mm_buffer_segment *seg);
 
 #endif /* BASE_MEMORY_BUFFER_H */

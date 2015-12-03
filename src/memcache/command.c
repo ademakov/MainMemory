@@ -814,7 +814,7 @@ mc_command_execute_ascii_touch(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_slabs(struct mc_state *state,
-			       struct mc_command *command __mm_unused__)
+			       struct mc_command *command UNUSED)
 {
 	WRITE(&state->sock, mc_result_not_implemented);
 }
@@ -851,7 +851,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_version(struct mc_state *state,
-				 struct mc_command *command __mm_unused__)
+				 struct mc_command *command UNUSED)
 {
 	ENTER();
 
@@ -878,7 +878,7 @@ mc_command_execute_ascii_verbosity(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_quit(struct mc_state *state,
-			      struct mc_command *command __mm_unused__)
+			      struct mc_command *command UNUSED)
 {
 	ENTER();
 
@@ -889,7 +889,7 @@ mc_command_execute_ascii_quit(struct mc_state *state,
 
 static void
 mc_command_execute_ascii_error(struct mc_state *state,
-			       struct mc_command *command __mm_unused__)
+			       struct mc_command *command UNUSED)
 {
 	ENTER();
 
@@ -1313,7 +1313,7 @@ mc_command_execute_binary_quit(struct mc_state *state,
 
 static void
 mc_command_execute_binary_quitq(struct mc_state *state,
-				struct mc_command *command __mm_unused__)
+				struct mc_command *command UNUSED)
 {
 	ENTER();
 
@@ -1335,7 +1335,7 @@ mc_command_execute_binary_flush(struct mc_state *state,
 }
 
 static void
-mc_command_execute_binary_flushq(struct mc_state *state __mm_unused__,
+mc_command_execute_binary_flushq(struct mc_state *state UNUSED,
 				 struct mc_command *command)
 {
 	ENTER();

@@ -21,7 +21,7 @@
 
 #include <ctype.h>
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mc_entry_setnum(struct mc_entry *entry, uint64_t value)
 {
 	char buffer[MC_ENTRY_NUM_LEN_MAX];
@@ -41,7 +41,7 @@ mc_entry_setnum(struct mc_entry *entry, uint64_t value)
 	} while (value_len);
 }
 
-bool __attribute__((nonnull(1, 2)))
+bool NONNULL(1, 2)
 mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
 {
 	if (entry->value_len == 0)

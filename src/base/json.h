@@ -123,39 +123,39 @@ struct mm_json_reader
  * JSON reader initialization and termination.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_json_reader_prepare(struct mm_json_reader *reader, mm_arena_t arena);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_json_reader_cleanup(struct mm_json_reader *reader);
 
 /**********************************************************************
  * JSON reader input handling.
  **********************************************************************/
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_json_reader_feed(struct mm_json_reader *reader, const void *input, size_t input_size);
 
-mm_json_token_t __attribute__((nonnull(1)))
+mm_json_token_t NONNULL(1)
 mm_json_reader_next(struct mm_json_reader *reader);
 
-mm_json_token_t __attribute__((nonnull(1)))
+mm_json_token_t NONNULL(1)
 mm_json_reader_skip(struct mm_json_reader *reader);
 
 /**********************************************************************
  * JSON reader value handling.
  **********************************************************************/
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_json_reader_string_length(struct mm_json_reader *reader);
 
-char * __attribute__((nonnull(1)))
+char * NONNULL(1)
 mm_json_reader_string_memdup(struct mm_json_reader *reader);
 
-char * __attribute__((nonnull(1)))
+char * NONNULL(1)
 mm_json_reader_string_strdup(struct mm_json_reader *reader);
 
-bool __attribute__((nonnull(1, 2)))
+bool NONNULL(1, 2)
 mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string);
 
 #endif /* BASE_JSON_H */

@@ -107,10 +107,8 @@ mc_table_resize(void *start, size_t old_size, size_t new_size)
 		mm_fatal(0, "mmap returned wrong address");
 }
 
-void
-mc_table_buckets_resize(struct mc_tpart *part,
-			uint32_t old_nbuckets,
-			uint32_t new_nbuckets)
+void NONNULL(1)
+mc_table_buckets_resize(struct mc_tpart *part, uint32_t old_nbuckets, uint32_t new_nbuckets)
 {
 	ENTER();
 	ASSERT(mm_is_pow2z(old_nbuckets));
@@ -128,10 +126,8 @@ mc_table_buckets_resize(struct mc_tpart *part,
 	LEAVE();
 }
 
-void
-mc_table_entries_resize(struct mc_tpart *part,
-			uint32_t old_nentries,
-			uint32_t new_nentries)
+void NONNULL(1)
+mc_table_entries_resize(struct mc_tpart *part, uint32_t old_nentries, uint32_t new_nentries)
 {
 	ENTER();
 
@@ -147,7 +143,7 @@ mc_table_entries_resize(struct mc_tpart *part,
 	LEAVE();
 }
 
-bool
+bool NONNULL(1)
 mc_table_expand(struct mc_tpart *part, uint32_t n)
 {
 	ENTER();
@@ -247,7 +243,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mc_table_reserve_volume(struct mc_tpart *part)
 {
 	if (!part->evicting && mc_table_check_volume(part, 0)) {
@@ -256,7 +252,7 @@ mc_table_reserve_volume(struct mc_tpart *part)
 	}
 }
 
-void
+void NONNULL(1)
 mc_table_reserve_entries(struct mc_tpart *part)
 {
 	if (!part->striding && mc_table_check_size(part)) {
@@ -270,7 +266,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core __mm_unused__)
+mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 

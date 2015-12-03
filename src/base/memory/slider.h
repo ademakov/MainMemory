@@ -35,9 +35,8 @@ struct mm_slider
 	struct mm_buffer *buf;
 };
 
-static inline bool __attribute__((nonnull(1, 2)))
-mm_slider_first_free(struct mm_slider *slider,
-		     struct mm_buffer *buffer)
+static inline bool NONNULL(1, 2)
+mm_slider_first_free(struct mm_slider *slider, struct mm_buffer *buffer)
 {
 	if (buffer->tail_seg == NULL)
 		return false;
@@ -49,7 +48,7 @@ mm_slider_first_free(struct mm_slider *slider,
 	return true;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_slider_next_free(struct mm_slider *slider)
 {
 	if (slider->seg->next == NULL)
@@ -61,7 +60,7 @@ mm_slider_next_free(struct mm_slider *slider)
 	return true;
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_slider_getsize_free(struct mm_slider *slider)
 {
 	size_t size = slider->end - slider->ptr;
@@ -73,7 +72,7 @@ mm_slider_getsize_free(struct mm_slider *slider)
 	return size;
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_slider_reset_used(struct mm_slider *slider)
 {
 	if (slider->seg != slider->buf->tail_seg)
@@ -82,9 +81,8 @@ mm_slider_reset_used(struct mm_slider *slider)
 		slider->end = slider->seg->data + slider->buf->tail_off;
 }
 
-static inline bool __attribute__((nonnull(1, 2)))
-mm_slider_first_used(struct mm_slider *slider,
-		     struct mm_buffer *buffer)
+static inline bool NONNULL(1, 2)
+mm_slider_first_used(struct mm_slider *slider, struct mm_buffer *buffer)
 {
 	if (buffer->head_seg == NULL)
 		return false;
@@ -96,7 +94,7 @@ mm_slider_first_used(struct mm_slider *slider,
 	return true;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_slider_next_used(struct mm_slider *slider)
 {
 	if (slider->seg == slider->buf->tail_seg)
@@ -108,14 +106,14 @@ mm_slider_next_used(struct mm_slider *slider)
 	return true;
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_slider_fill_free(struct mm_slider *slider)
 {
 	slider->buf->tail_seg = slider->seg;
 	slider->buf->tail_off = slider->ptr - slider->seg->data;
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_slider_flush_used(struct mm_slider *slider)
 {
 	while (slider->buf->head_seg != slider->seg) {
@@ -126,7 +124,7 @@ mm_slider_flush_used(struct mm_slider *slider)
 	slider->buf->head_off = slider->ptr - slider->seg->data;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_slider_empty(struct mm_slider *slider)
 {
 	struct mm_buffer *buffer = slider->buf;
@@ -143,7 +141,7 @@ mm_slider_empty(struct mm_slider *slider)
 	return false;
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_slider_getsize_used(struct mm_slider *slider)
 {
 	struct mm_buffer *buffer = slider->buf;
@@ -163,25 +161,25 @@ mm_slider_getsize_used(struct mm_slider *slider)
 	return size;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_slider_contains(struct mm_slider *slider, const char *ptr)
 {
 	return ptr >= slider->ptr && ptr < slider->end;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_slider_fforward(struct mm_slider *slider, const char *ptr);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_slider_fill(struct mm_slider *slider, size_t size);
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_slider_flush(struct mm_slider *slider, size_t size);
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_slider_read(struct mm_slider *slider, void *ptr, size_t size);
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size);
 
 #endif /* BASE_MEMORY_SLIDER_H */

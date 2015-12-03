@@ -21,7 +21,7 @@
 
 #include "base/log/trace.h"
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_slider_fforward(struct mm_slider *slider, const char *ptr)
 {
 	ENTER();
@@ -41,7 +41,7 @@ mm_slider_fforward(struct mm_slider *slider, const char *ptr)
 	LEAVE();
 }
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_slider_fill(struct mm_slider *slider, size_t size)
 {
 	ENTER();
@@ -68,7 +68,7 @@ mm_slider_fill(struct mm_slider *slider, size_t size)
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_slider_flush(struct mm_slider *slider, size_t size)
 {
 	ENTER();
@@ -95,7 +95,7 @@ mm_slider_flush(struct mm_slider *slider, size_t size)
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 {
 	ENTER();
@@ -126,7 +126,7 @@ mm_slider_read(struct mm_slider *slider, void *ptr, size_t size)
 	return (o_size - size);
 }
 
-size_t __attribute__((nonnull(1, 2)))
+size_t NONNULL(1, 2)
 mm_slider_write(struct mm_slider *slider, const void *ptr, size_t size)
 {
 	ENTER();

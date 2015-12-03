@@ -37,20 +37,20 @@ __thread struct mm_domain *__mm_domain_self = NULL;
  * Domain creation attributes.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_prepare(struct mm_domain_attr *attr)
 {
 	memset(attr, 0, sizeof *attr);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_cleanup(struct mm_domain_attr *attr)
 {
 	if (attr->threads_attr != NULL)
 		mm_global_free(attr->threads_attr);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number)
 {
 	if (attr->nthreads != number) {
@@ -62,51 +62,51 @@ mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 {
 	attr->private_space = enable;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
 			       mm_domain_notify_t notify)
 {
 	attr->domain_notify = notify;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
 			       mm_thread_notify_t notify)
 {
 	attr->thread_notify = notify;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->domain_request_queue = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->thread_request_queue = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->stack_size = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setguardsize(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->guard_size = size;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name)
 {
 	size_t len = 0;
@@ -119,7 +119,7 @@ mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name)
 	attr->name[len] = 0;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
 			 uint32_t cpu_tag)
 {
@@ -143,11 +143,11 @@ mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
  **********************************************************************/
 
 static void
-mm_domain_notify_dummy(struct mm_domain *domain __mm_unused__)
+mm_domain_notify_dummy(struct mm_domain *domain UNUSED)
 {
 }
 
-struct mm_domain * __attribute__((nonnull(2)))
+struct mm_domain * NONNULL(2)
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 {
 	ENTER();
@@ -241,7 +241,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	return domain;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_destroy(struct mm_domain *domain)
 {
 	ENTER();

@@ -61,72 +61,72 @@ void mm_future_init(void);
  * Futures with multiple waiter tasks.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_cleanup(struct mm_future *future);
 
-struct mm_future * __attribute__((nonnull(1)))
+struct mm_future * NONNULL(1)
 mm_future_create(mm_routine_t start, mm_value_t start_arg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_destroy(struct mm_future *future);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_start(struct mm_future *future, mm_core_t core);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_wait(struct mm_future *future);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout);
 
 /**********************************************************************
  * Futures with single waiter task.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_cleanup(struct mm_future *future);
 
-struct mm_future * __attribute__((nonnull(1)))
+struct mm_future * NONNULL(1)
 mm_future_unique_create(mm_routine_t start, mm_value_t start_arg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_destroy(struct mm_future *future);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_start(struct mm_future *future, mm_core_t core);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_wait(struct mm_future *future);
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout);
 
 /**********************************************************************
  * Routines common for any kind of future.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_cancel(struct mm_future *future);
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_future_is_started(struct mm_future *future)
 {
 	return mm_memory_load(future->result) != MM_RESULT_DEFERRED;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_future_is_canceled(struct mm_future *future)
 {
 	return mm_memory_load(future->result) == MM_RESULT_CANCELED;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_future_is_finished(struct mm_future *future)
 {
 	mm_value_t value = mm_memory_load(future->result);

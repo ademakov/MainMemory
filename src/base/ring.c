@@ -37,7 +37,7 @@ mm_ring_base_prepare(struct mm_ring_base *ring, size_t size)
 	ring->mask = size - 1;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks)
 {
 	if ((locks & MM_RING_LOCKED_GET) != 0)
@@ -65,13 +65,13 @@ mm_ring_spsc_create(size_t size, uint8_t locks)
 	return ring;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_spsc_destroy(struct mm_ring_spsc *ring)
 {
 	mm_global_free(ring);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks)
 {
 	mm_ring_base_prepare(&ring->base, size);
@@ -100,13 +100,13 @@ mm_ring_mpmc_create(size_t size)
 	return ring;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
 {
 	mm_global_free(ring);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 {
 	mm_ring_base_prepare(&ring->base, size);

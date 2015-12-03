@@ -158,101 +158,95 @@ struct mm_net_proto
 void mm_net_init(void);
 void mm_net_term(void);
 
-struct mm_net_server *mm_net_create_unix_server(const char *name,
-                                                struct mm_net_proto *proto,
-                                                const char *path)
-	__attribute__((nonnull(1, 2, 3)));
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
+			  const char *path);
 
-struct mm_net_server *mm_net_create_inet_server(const char *name,
-                                                struct mm_net_proto *proto,
-                                                const char *addrstr, uint16_t port)
-	__attribute__((nonnull(1, 2, 3)));
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
+			  const char *addrstr, uint16_t port);
 
-struct mm_net_server *mm_net_create_inet6_server(const char *name,
-                                                 struct mm_net_proto *proto,
-                                                 const char *addrstr, uint16_t port)
-	__attribute__((nonnull(1, 2, 3)));
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
+			   const char *addrstr, uint16_t port);
 
-void mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
-	__attribute__((nonnull(1, 2)));
+void NONNULL(1, 2)
+mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask);
 
-void mm_net_start_server(struct mm_net_server *srv)
-	__attribute__((nonnull(1)));
-void mm_net_stop_server(struct mm_net_server *srv)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_net_start_server(struct mm_net_server *srv);
+void NONNULL(1)
+mm_net_stop_server(struct mm_net_server *srv);
 
-ssize_t mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
-	__attribute__((nonnull(1, 2)));
-ssize_t mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
-	__attribute__((nonnull(1, 2)));
+ssize_t NONNULL(1, 2)
+mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
+ssize_t NONNULL(1, 2)
+mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
 
-ssize_t mm_net_readv(struct mm_net_socket *sock,
-		     const struct iovec *iov, int iovcnt,
-		     ssize_t nbytes)
-	__attribute__((nonnull(1, 2)));
-ssize_t mm_net_writev(struct mm_net_socket *sock,
-		      const struct iovec *iov, int iovcnt,
-		      ssize_t nbytes)
-	__attribute__((nonnull(1, 2)));
+ssize_t NONNULL(1, 2)
+mm_net_readv(struct mm_net_socket *sock,
+	     const struct iovec *iov, int iovcnt,
+	     ssize_t nbytes);
+ssize_t NONNULL(1, 2)
+mm_net_writev(struct mm_net_socket *sock,
+	      const struct iovec *iov, int iovcnt,
+	      ssize_t nbytes);
 
-void mm_net_spawn_reader(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_net_spawn_reader(struct mm_net_socket *sock);
+void NONNULL(1)
+mm_net_spawn_writer(struct mm_net_socket *sock);
 
-void mm_net_spawn_writer(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_net_yield_reader(struct mm_net_socket *sock);
+void NONNULL(1)
+mm_net_yield_writer(struct mm_net_socket *sock);
 
-void mm_net_yield_reader(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_net_close(struct mm_net_socket *sock);
 
-void mm_net_yield_writer(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_net_shutdown_reader(struct mm_net_socket *sock);
+void NONNULL(1)
+mm_net_shutdown_writer(struct mm_net_socket *sock);
 
-void mm_net_close(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
-
-void mm_net_shutdown_reader(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
-
-void mm_net_shutdown_writer(struct mm_net_socket *sock)
-	__attribute__((nonnull(1)));
-
-static inline bool
+static inline bool NONNULL(1)
 mm_net_is_closed(struct mm_net_socket *sock)
 {
 	return (sock->close_flags & MM_NET_CLOSED) != 0;
 }
 
-static inline bool
+static inline bool NONNULL(1)
 mm_net_is_reader_shutdown(struct mm_net_socket *sock)
 {
 	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
 }
 
-static inline bool
+static inline bool NONNULL(1)
 mm_net_is_writer_shutdown(struct mm_net_socket *sock)
 {
 	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_net_set_read_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
 	sock->read_timeout = timeout;
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
 	sock->write_timeout = timeout;
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_net_set_async_read(struct mm_net_socket *sock, bool async)
 {
 	sock->async_read = async;
 }
 
-static inline void
+static inline void NONNULL(1)
 mm_net_set_async_write(struct mm_net_socket *sock, bool async)
 {
 	sock->async_write = async;

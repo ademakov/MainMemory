@@ -93,7 +93,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_timer_prepare(struct mm_time_manager *manager, mm_arena_t arena)
 {
 	ENTER();
@@ -112,7 +112,7 @@ mm_timer_prepare(struct mm_time_manager *manager, mm_arena_t arena)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_timer_cleanup(struct mm_time_manager *manager)
 {
 	ENTER();
@@ -123,7 +123,7 @@ mm_timer_cleanup(struct mm_time_manager *manager)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_timer_tick(struct mm_time_manager *manager)
 {
 	ENTER();
@@ -142,7 +142,7 @@ mm_timer_tick(struct mm_time_manager *manager)
 	LEAVE();
 }
 
-mm_timeval_t __attribute__((nonnull(1)))
+mm_timeval_t NONNULL(1)
 mm_timer_next(struct mm_time_manager *manager)
 {
 	ENTER();
@@ -156,7 +156,7 @@ mm_timer_next(struct mm_time_manager *manager)
 	return value;
 }
 
-mm_timer_t
+mm_timer_t NONNULL(2)
 mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -206,8 +206,7 @@ mm_timer_destroy(mm_timer_t timer_id)
 }
 
 void
-mm_timer_settime(mm_timer_t timer_id, bool abstime,
-		 mm_timeval_t value, mm_timeval_t interval)
+mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timeval_t interval)
 {
 	ENTER();
 

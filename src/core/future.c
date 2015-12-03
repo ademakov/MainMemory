@@ -145,7 +145,7 @@ mm_future_finish(struct mm_work *work, mm_value_t result)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -160,7 +160,7 @@ mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_cleanup(struct mm_future *future)
 {
 	ENTER();
@@ -170,7 +170,7 @@ mm_future_cleanup(struct mm_future *future)
 	LEAVE();
 }
 
-struct mm_future * __attribute__((nonnull(1)))
+struct mm_future * NONNULL(1)
 mm_future_create(mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -182,7 +182,7 @@ mm_future_create(mm_routine_t start, mm_value_t start_arg)
 	return future;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_destroy(struct mm_future *future)
 {
 	ENTER();
@@ -193,7 +193,7 @@ mm_future_destroy(struct mm_future *future)
 	LEAVE();
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_start(struct mm_future *future, mm_core_t core)
 {
 	ENTER();
@@ -213,7 +213,7 @@ mm_future_start(struct mm_future *future, mm_core_t core)
 	return result;
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_wait(struct mm_future *future)
 {
 	ENTER();
@@ -249,7 +249,7 @@ mm_future_wait(struct mm_future *future)
 	return result;
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 {
 	ENTER();
@@ -321,7 +321,7 @@ mm_future_unique_finish(struct mm_work *work, mm_value_t result)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -335,7 +335,7 @@ mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_cleanup(struct mm_future *future)
 {
 	ENTER();
@@ -345,7 +345,7 @@ mm_future_unique_cleanup(struct mm_future *future)
 	LEAVE();
 }
 
-struct mm_future * __attribute__((nonnull(1)))
+struct mm_future * NONNULL(1)
 mm_future_unique_create(mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -357,7 +357,7 @@ mm_future_unique_create(mm_routine_t start, mm_value_t start_arg)
 	return future;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_unique_destroy(struct mm_future *future)
 {
 	ENTER();
@@ -368,7 +368,7 @@ mm_future_unique_destroy(struct mm_future *future)
 	LEAVE();
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_start(struct mm_future *future, mm_core_t core)
 {
 	ENTER();
@@ -384,7 +384,7 @@ mm_future_unique_start(struct mm_future *future, mm_core_t core)
 	return result;
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_wait(struct mm_future *future)
 {
 	ENTER();
@@ -409,7 +409,7 @@ mm_future_unique_wait(struct mm_future *future)
 	return result;
 }
 
-mm_value_t __attribute__((nonnull(1)))
+mm_value_t NONNULL(1)
 mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 {
 	ENTER();
@@ -448,7 +448,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
  * Routines common for any kind of future.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_future_cancel(struct mm_future *future)
 {
 	ENTER();

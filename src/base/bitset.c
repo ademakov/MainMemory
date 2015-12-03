@@ -26,7 +26,7 @@ mm_bitset_words(size_t size)
 	return (size + MM_BITSET_UNIT - 1) / MM_BITSET_UNIT;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size)
 {
 	set->size = size;
@@ -38,7 +38,7 @@ mm_bitset_prepare(struct mm_bitset *set, mm_arena_t arena, size_t size)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_cleanup(struct mm_bitset *set, mm_arena_t arena)
 {
 	if (mm_bitset_is_small(set)) {
@@ -48,7 +48,7 @@ mm_bitset_cleanup(struct mm_bitset *set, mm_arena_t arena)
 	}
 }
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_bitset_any(const struct mm_bitset *set)
 {
 	if (mm_bitset_is_small(set)) {
@@ -87,7 +87,7 @@ mm_bitset_all(const struct mm_bitset *set)
 	}
 }
 
-size_t __attribute__((nonnull(1)))
+size_t NONNULL(1)
 mm_bitset_find(const struct mm_bitset *set, size_t bit)
 {
 	ASSERT(bit < set->size);
@@ -125,7 +125,7 @@ mm_bitset_count(const struct mm_bitset *set)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_set_all(struct mm_bitset *set)
 {
 	if (mm_bitset_is_small(set)) {
@@ -147,7 +147,7 @@ mm_bitset_set_all(struct mm_bitset *set)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_flip_all(struct mm_bitset *set)
 {
 	if (mm_bitset_is_small(set)) {
@@ -169,7 +169,7 @@ mm_bitset_flip_all(struct mm_bitset *set)
 	}
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_bitset_clear_all(struct mm_bitset *set)
 {
 	if (mm_bitset_is_small(set)) {
@@ -182,7 +182,7 @@ mm_bitset_clear_all(struct mm_bitset *set)
 	}
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_bitset_or(struct mm_bitset *set, const struct mm_bitset *set2)
 {
 	if (mm_bitset_is_small(set)) {
@@ -213,7 +213,7 @@ mm_bitset_or(struct mm_bitset *set, const struct mm_bitset *set2)
 	}
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_bitset_and(struct mm_bitset *set, const struct mm_bitset *set2)
 {
 	if (mm_bitset_is_small(set)) {

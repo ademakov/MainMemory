@@ -45,7 +45,8 @@
  * Memory subsystem initialization.
  **********************************************************************/
 
-void mm_alloc_init(void);
+void
+mm_alloc_init(void);
 
 /**********************************************************************
  * Memory Space Allocation Routines.
@@ -55,33 +56,44 @@ typedef struct {
 	void *opaque;
 } mm_mspace_t;
 
-mm_mspace_t mm_mspace_create(void);
+mm_mspace_t
+mm_mspace_create(void);
 
-void mm_mspace_destroy(mm_mspace_t space);
+void
+mm_mspace_destroy(mm_mspace_t space);
 
-void * mm_mspace_alloc(mm_mspace_t space, size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_mspace_alloc(mm_mspace_t space, size_t size);
 
-void * mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size);
 
-void * mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size);
 
-void * mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
+void *
+mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
 
-void mm_mspace_free(mm_mspace_t space, void *ptr);
+void
+mm_mspace_free(mm_mspace_t space, void *ptr);
 
-size_t mm_mspace_getallocsize(const void *ptr);
+size_t
+mm_mspace_getallocsize(const void *ptr);
 
-void mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs);
+void
+mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs);
 
-void mm_mspace_trim(mm_mspace_t space);
+void
+mm_mspace_trim(mm_mspace_t space);
 
-size_t mm_mspace_getfootprint(mm_mspace_t space);
+size_t
+mm_mspace_getfootprint(mm_mspace_t space);
 
-size_t mm_mspace_getfootprint_limit(mm_mspace_t space);
-size_t mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
+size_t
+mm_mspace_getfootprint_limit(mm_mspace_t space);
+
+size_t
+mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
 
 /**********************************************************************
  * Global Memory Allocation Routines.
@@ -93,19 +105,22 @@ size_t mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
  * memory allocation should be done with dedicated spaces.
  */
 
-void * mm_global_alloc(size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_global_alloc(size_t size);
 
-void * mm_global_aligned_alloc(size_t align, size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_global_aligned_alloc(size_t align, size_t size);
 
-void * mm_global_calloc(size_t count, size_t size)
-	__attribute__((malloc));
+void * MALLOC
+mm_global_calloc(size_t count, size_t size);
 
-void * mm_global_realloc(void *ptr, size_t size);
+void *
+mm_global_realloc(void *ptr, size_t size);
 
-void mm_global_free(void *ptr);
+void
+mm_global_free(void *ptr);
 
-size_t mm_global_getallocsize(const void *ptr);
+size_t
+mm_global_getallocsize(const void *ptr);
 
 #endif /* BASE_MEMORY_ALLOC_H */

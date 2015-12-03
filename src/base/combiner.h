@@ -33,13 +33,13 @@ struct mm_combiner
 struct mm_combiner *
 mm_combiner_create(size_t size, size_t handoff);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_combiner_destroy(struct mm_combiner *combiner);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_combiner_prepare(struct mm_combiner *combiner, size_t size, size_t handoff);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine, uintptr_t data);
 
 #endif /* BASE_COMBINER_H */

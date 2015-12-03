@@ -49,7 +49,7 @@ static struct mm_net_server *mm_icmd_server;
 static bool mm_daemonize = false;
 
 static void
-mm_term_handler(int signo __mm_unused__)
+mm_term_handler(int signo UNUSED)
 {
 	ENTER();
 
@@ -154,7 +154,7 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	{ "version", 'V', MM_ARGS_SPECIAL, "\n\t\tdisplay version information and exit" },
 	{ "verbose", 'v', MM_ARGS_TRIVIAL, "\n\t\tenable verbose messages" },
 	{ "warning", 'w', MM_ARGS_TRIVIAL, "\n\t\tenable warning messages" },
-	{ },
+	{ NULL, 0, 0, NULL },
 	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
 	{ "daemon", 'd', MM_ARGS_TRIVIAL, "\n\t\trun as a daemon" },
 };

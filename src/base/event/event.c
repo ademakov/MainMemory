@@ -40,8 +40,7 @@ static int mm_event_hdesc_table_size;
 
 // A dummy event handler.
 static void
-mm_event_dummy(mm_event_t event __mm_unused__,
-	       void *data __mm_unused__)
+mm_event_dummy(mm_event_t event UNUSED, void *data UNUSED)
 {
 	DEBUG("hmm, dummy event handler invoked.");
 }
@@ -83,7 +82,7 @@ mm_event_register_handler(mm_event_handler_t handler)
  * I/O events support.
  **********************************************************************/
 
-bool
+bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
 		    mm_event_target_t target)
@@ -137,7 +136,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	return true;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
@@ -168,7 +167,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink, uint32_t stamp)
 {
 	ENTER();

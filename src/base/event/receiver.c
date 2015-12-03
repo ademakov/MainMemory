@@ -26,7 +26,7 @@
 #include "base/memory/memory.h"
 #include "base/thread/thread.h"
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthreads,
 			  struct mm_thread *threads[])
 {
@@ -47,7 +47,7 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthrea
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 {
 	ENTER();
@@ -63,7 +63,7 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 static void
-mm_event_receiver_handle_0_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_event_receiver_handle_0_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -75,7 +75,7 @@ mm_event_receiver_handle_0_req(uintptr_t context __mm_unused__, uintptr_t *argum
 }
 
 static void
-mm_event_receiver_handle_1_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_event_receiver_handle_1_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -93,7 +93,7 @@ mm_event_receiver_handle_1_req(uintptr_t context __mm_unused__, uintptr_t *argum
 }
 
 static void
-mm_event_receiver_handle_2_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_event_receiver_handle_2_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -114,7 +114,7 @@ mm_event_receiver_handle_2_req(uintptr_t context __mm_unused__, uintptr_t *argum
 }
 
 static void
-mm_event_receiver_handle_3_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_event_receiver_handle_3_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -138,7 +138,7 @@ mm_event_receiver_handle_3_req(uintptr_t context __mm_unused__, uintptr_t *argum
 }
 
 static void
-mm_event_receiver_handle_4_req(uintptr_t context __mm_unused__, uintptr_t *arguments)
+mm_event_receiver_handle_4_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -250,7 +250,7 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener, uint32_t stamp
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 			 struct mm_event_backend *backend, mm_timeout_t timeout)
 {
@@ -287,7 +287,7 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 		      struct mm_event_fd *sink)
 {

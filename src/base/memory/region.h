@@ -40,13 +40,13 @@ struct mm_region
 	struct mm_stack chunks;
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_prepare(struct mm_region *reg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_cleanup(struct mm_region *reg);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_region_reserve(struct mm_region *reg, size_t more_size);
 
 static inline size_t
@@ -55,31 +55,31 @@ mm_region_round_size(size_t size)
 	return mm_round_up(size, MM_REGION_ALIGN);
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_region_empty(struct mm_region *reg)
 {
 	return (reg->block_ptr == NULL);
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_region_whole(struct mm_region *reg)
 {
 	return (reg->block_ptr == reg->block_end);
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_region_getroom(struct mm_region *reg)
 {
 	return (reg->chunk_end - reg->block_end);
 }
 
-static inline size_t __attribute__((nonnull(1)))
+static inline size_t NONNULL(1)
 mm_region_getblocksize(struct mm_region *reg)
 {
 	return (reg->block_end - reg->block_ptr);
 }
 
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_getblockbase(struct mm_region *reg)
 {
 	return reg->block_ptr;
@@ -89,7 +89,7 @@ mm_region_getblockbase(struct mm_region *reg)
  * Incrementally allocate a memory block without checking if there is enough
  * memory room for it. Returns a pointer to the additional memory.
  */
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_extend_fast(struct mm_region *reg, size_t size)
 {
 	char *end = reg->block_end;
@@ -102,7 +102,7 @@ mm_region_extend_fast(struct mm_region *reg, size_t size)
  * chunk is large enough to accommodate the requested size increment.
  * Returns a pointer to the additional memory.
  */
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_extend(struct mm_region *reg, size_t size)
 {
 	if (mm_region_getroom(reg) < size)
@@ -111,7 +111,7 @@ mm_region_extend(struct mm_region *reg, size_t size)
 }
 
 /* Finalize an incrementally allocated block. */
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_finish(struct mm_region *reg)
 {
 	/* For a block with zero size force a minimal allocation. */
@@ -138,7 +138,7 @@ mm_region_finish(struct mm_region *reg)
 }
 
 /* Allocate at once a whole memory block. */
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_alloc(struct mm_region *reg, size_t size)
 {
 	ASSERT(mm_region_whole(reg));
@@ -146,13 +146,13 @@ mm_region_alloc(struct mm_region *reg, size_t size)
 	return mm_region_finish(reg);
 }
 
-static inline void * __attribute__((nonnull(1)))
+static inline void * NONNULL(1)
 mm_region_memdup(struct mm_region *reg, const void *ptr, size_t size)
 {
 	return memcpy(mm_region_alloc(reg, size), ptr, size);
 }
 
-static inline char * __attribute__((nonnull(1)))
+static inline char * NONNULL(1)
 mm_region_strdup(struct mm_region *reg, const char *ptr)
 {
 	return mm_region_memdup(reg, ptr, strlen(ptr) + 1);

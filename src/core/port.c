@@ -23,7 +23,6 @@
 
 #include "base/log/trace.h"
 #include "base/memory/alloc.h"
-#include "base/memory/pool.h"
 
 void
 mm_port_init(void)
@@ -35,7 +34,7 @@ mm_port_term(void)
 {
 }
 
-struct mm_port *
+struct mm_port * NONNULL(1)
 mm_port_create(struct mm_task *task)
 {
 	ENTER();
@@ -53,7 +52,7 @@ mm_port_create(struct mm_task *task)
 	return port;
 }
 
-void
+void NONNULL(1)
 mm_port_destroy(struct mm_port *port)
 {
 	ENTER();
@@ -65,9 +64,7 @@ mm_port_destroy(struct mm_port *port)
 }
 
 static int
-mm_port_send_internal(struct mm_port *port,
-		      uint32_t *start, uint32_t count,
-		      bool blocking)
+mm_port_send_internal(struct mm_port *port, uint32_t *start, uint32_t count, bool blocking)
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
@@ -115,10 +112,8 @@ leave:
 	return rc;
 }
 
-int
-mm_port_receive_internal(struct mm_port *port,
-			 uint32_t *start, uint32_t count,
-			 bool blocking)
+static int
+mm_port_receive_internal(struct mm_port *port, uint32_t *start, uint32_t count, bool blocking)
 {
 	ENTER();
 	ASSERT(count <= (MM_PORT_SIZE / 2));
@@ -167,7 +162,7 @@ leave:
 }
 
 
-int
+int NONNULL(1, 2)
 mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
@@ -178,7 +173,7 @@ mm_port_send(struct mm_port *port, uint32_t *start, uint32_t count)
 	return rc;
 }
 
-void
+void NONNULL(1, 2)
 mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
@@ -188,7 +183,7 @@ mm_port_send_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 	LEAVE();
 }
 
-int
+int NONNULL(1, 2)
 mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();
@@ -199,7 +194,7 @@ mm_port_receive(struct mm_port *port, uint32_t *start, uint32_t count)
 	return rc;
 }
 
-void
+void NONNULL(1, 2)
 mm_port_receive_blocking(struct mm_port *port, uint32_t *start, uint32_t count)
 {
 	ENTER();

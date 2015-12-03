@@ -22,7 +22,7 @@
 #include "arch/memory.h"
 #include "arch/spin.h"
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count)
 {
 	barrier->count = count;
@@ -30,13 +30,13 @@ mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count)
 	barrier->sense = 0;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_barrier_local_prepare(struct mm_thread_barrier_local *local)
 {
 	local->sense = 0;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_thread_barrier_wait(struct mm_thread_barrier *const barrier, struct mm_thread_barrier_local *local)
 {
 	uint32_t sense = ~local->sense;

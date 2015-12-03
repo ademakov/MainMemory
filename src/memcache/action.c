@@ -402,7 +402,7 @@ mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
 }
 
 static void
-mc_action_complete(struct mc_action *action __mm_unused__)
+mc_action_complete(struct mc_action *action UNUSED)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mm_memory_store_fence();

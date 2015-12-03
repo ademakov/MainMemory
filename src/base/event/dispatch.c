@@ -23,7 +23,7 @@
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_dispatch_prepare(struct mm_dispatch *dispatch,
 		    mm_thread_t nthreads,
 		    struct mm_thread *threads[])
@@ -66,7 +66,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 {
 	ENTER();
@@ -94,13 +94,13 @@ mm_dispatch_handle_detach(struct mm_event_listener *listener)
 	}
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_dispatch_has_urgent_changes(struct mm_event_listener *listener)
 {
 	return mm_event_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout)
 {
@@ -242,7 +242,7 @@ leave:
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
 {
 	ENTER();

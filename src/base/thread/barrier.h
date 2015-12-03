@@ -25,11 +25,11 @@
 
 struct mm_thread_barrier
 {
-	uint32_t count __mm_align_cacheline__;
+	uint32_t count CACHE_ALIGN;
 
 	mm_atomic_uint32_t value;
 
-	uint32_t sense __mm_align_cacheline__;
+	uint32_t sense CACHE_ALIGN;
 };
 
 struct mm_thread_barrier_local
@@ -37,13 +37,13 @@ struct mm_thread_barrier_local
 	uint32_t sense;
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_thread_barrier_local_prepare(struct mm_thread_barrier_local *local);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_thread_barrier_wait(struct mm_thread_barrier *barrier, struct mm_thread_barrier_local *local);
 
 #endif /* BASE_THREAD_BARRIER_H */

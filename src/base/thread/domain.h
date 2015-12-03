@@ -105,49 +105,49 @@ extern __thread struct mm_domain *__mm_domain_self;
  * Domain creation routines.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_prepare(struct mm_domain_attr *attr);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_cleanup(struct mm_domain_attr *attr);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
 			       mm_domain_notify_t notify);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
 			       mm_thread_notify_t notify);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setguardsize(struct mm_domain_attr *attr, uint32_t size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
 			 uint32_t cpu_tag);
 
-struct mm_domain * __attribute__((nonnull(2)))
+struct mm_domain * NONNULL(2)
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_destroy(struct mm_domain *domain);
 
 /**********************************************************************
@@ -177,13 +177,13 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
  * Domain control routines.
  **********************************************************************/
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_domain_notify(struct mm_domain *domain)
 {
 	(domain->notify)(domain);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_domain_join(struct mm_domain *domain);
 
 /**********************************************************************

@@ -37,7 +37,7 @@
 # include "base/clock.h"
 #endif
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread)
 {
 	ENTER();
@@ -73,7 +73,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
@@ -91,7 +91,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 	LEAVE();
 }
 
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_event_listener_signal(struct mm_event_listener *listener)
 {
 	ENTER();
@@ -109,7 +109,7 @@ mm_event_listener_signal(struct mm_event_listener *listener)
 	LEAVE();
 }
 
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_event_listener_timedwait(struct mm_event_listener *listener, uint32_t stamp,
 			    mm_timeout_t timeout)
 {
@@ -152,7 +152,7 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, uint32_t stamp,
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend)
 {
 	ENTER();
@@ -191,7 +191,7 @@ mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_bac
 	LEAVE();
 }
 
-static void __attribute__((nonnull(1)))
+static void NONNULL(1)
 mm_event_listener_finish(struct mm_event_listener *listener, uint32_t listen_stamp)
 {
 	// Bump the listen stamp.
@@ -205,7 +205,7 @@ mm_event_listener_finish(struct mm_event_listener *listener, uint32_t listen_sta
 	mm_memory_store(listener->listen_stamp, listen_stamp);
 }
 
-void __attribute__((nonnull(1, 2, 3)))
+void NONNULL(1, 2, 3)
 mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
 		       struct mm_event_receiver *receiver, mm_timeout_t timeout)
 {
@@ -240,14 +240,14 @@ mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backe
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
 	// Get the current listener state.
 	const uint32_t listen_stamp = listener->listen_stamp;
-	ASSERT((listen_stamp & MM_EVENT_LISTENER_STATE_MASK) == MM_EVENT_LISTENER_RUNNING);
+	ASSERT((listen_stamp & MM_EVENT_LISTENER_STATE) == MM_EVENT_LISTENER_RUNNING);
 
 	if (timeout != 0) {
 		// Advertise that the thread is about to sleep.

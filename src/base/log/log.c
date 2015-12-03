@@ -68,7 +68,7 @@ mm_log_chunk_size(const struct mm_log_chunk *chunk)
 	return size - (sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk));
 }
 
-void
+void NONNULL(1)
 mm_log_str(const char *str)
 {
 	size_t len = strlen(str);
@@ -96,7 +96,7 @@ mm_log_str(const char *str)
 	chunk->used += len;
 }
 
-void
+void NONNULL(1)
 mm_log_vfmt(const char *restrict fmt, va_list va)
 {
 	struct mm_log_chunk *chunk = NULL;
@@ -130,7 +130,7 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 	chunk->used += len;
 }
 
-void
+void NONNULL(1) FORMAT(1, 2)
 mm_log_fmt(const char *restrict fmt, ...)
 {
 	va_list va;

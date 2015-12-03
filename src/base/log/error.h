@@ -24,17 +24,13 @@
 
 void mm_enable_warning(bool value);
 
-void mm_warning(int error, const char *restrict msg, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(2)));
+void NONNULL(2) FORMAT(2, 3)
+mm_warning(int error, const char *restrict msg, ...);
 
-void mm_error(int error, const char *restrict msg, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(2)));
+void NONNULL(2) FORMAT(2, 3)
+mm_error(int error, const char *restrict msg, ...);
 
-void mm_fatal(int error, const char *restrict msg, ...)
-	__attribute__((format(printf, 2, 3)))
-	__attribute__((nonnull(2)))
-	__attribute__((noreturn));
+void NONNULL(2) FORMAT(2, 3) NORETURN
+mm_fatal(int error, const char *restrict msg, ...);
 
 #endif /* BASE_LOG_ERROR_H */

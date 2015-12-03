@@ -50,22 +50,22 @@ struct mm_hashmap
 
 typedef void (*mm_hashmap_free_entry_t)(struct mm_hashmap *, struct mm_hashmap_entry *);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_prepare(struct mm_hashmap *map, mm_arena_t arena);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_cleanup(struct mm_hashmap *map, mm_hashmap_free_entry_t free_entry);
 
-struct mm_hashmap_entry * __attribute__((nonnull(1, 2)))
+struct mm_hashmap_entry * NONNULL(1, 2)
 mm_hashmap_lookup(struct mm_hashmap *map, const char *key, size_t keylen);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_remove(struct mm_hashmap *map, struct mm_hashmap_entry *entry);
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_hashmap_setkey(struct mm_hashmap_entry *entry, const char *key, size_t keylen)
 {
 	if (unlikely(keylen > UINT32_MAX))

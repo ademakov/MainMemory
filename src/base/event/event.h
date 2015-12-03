@@ -134,24 +134,24 @@ struct mm_event_fd
 	struct mm_link detach_link;
 };
 
-bool __attribute__((nonnull(1)))
+bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
 		    mm_event_target_t target);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink, uint32_t stamp);
 
-static inline mm_thread_t __attribute__((nonnull(1)))
+static inline mm_thread_t NONNULL(1)
 mm_event_target(const struct mm_event_fd *sink)
 {
 	return sink->target;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_event_attached(const struct mm_event_fd *sink)
 {
 	return sink->attached;

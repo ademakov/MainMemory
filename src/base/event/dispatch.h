@@ -60,21 +60,21 @@ struct mm_dispatch
 	unsigned int serial_changes;
 };
 
-void __attribute__((nonnull(1, 3)))
+void NONNULL(1, 3)
 mm_dispatch_prepare(struct mm_dispatch *dispatch,
 		    mm_thread_t nthreads,
 		    struct mm_thread *threads[]);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_cleanup(struct mm_dispatch *dispatch);
 
-static inline struct mm_event_listener * __attribute__((nonnull(1)))
+static inline struct mm_event_listener * NONNULL(1)
 mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
 	return &dispatch->receiver.listeners[thread];
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
 	ASSERT(thread < dispatch->receiver.nlisteners);
@@ -82,10 +82,10 @@ mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 	mm_event_listener_notify(listener, &dispatch->backend);
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		   mm_timeout_t timeout);
 
@@ -93,7 +93,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
  * I/O events support.
  **********************************************************************/
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 			struct mm_event_fd *sink)
 {
@@ -108,7 +108,7 @@ mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
 			  struct mm_event_fd *sink)
 {
@@ -119,7 +119,7 @@ mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 			  struct mm_event_fd *sink)
 {
@@ -135,7 +135,7 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 #endif
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 			   struct mm_event_fd *sink)
 {
@@ -151,7 +151,7 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 #endif
 }
 
-static inline void __attribute__((nonnull(1, 2)))
+static inline void NONNULL(1, 2)
 mm_dispatch_detach(struct mm_dispatch *dispatch,
 		   struct mm_event_fd *sink)
 {

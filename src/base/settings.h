@@ -35,16 +35,16 @@ mm_settings_init(void);
 void
 mm_settings_term(void);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite);
 
-const char * __attribute__((nonnull(1)))
+const char * NONNULL(1)
 mm_settings_get(const char *key, const char *value);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_settings_settype(const char *key, mm_settings_type_t type);
 
-mm_settings_type_t __attribute__((nonnull(1)))
+mm_settings_type_t NONNULL(1)
 mm_settings_gettype(const char *key);
 
 #endif /* BASE_SETTINGS_H */

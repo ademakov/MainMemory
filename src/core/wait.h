@@ -65,59 +65,61 @@ void mm_wait_term(void);
  * Per-core wait entry cache initialization and cleanup.
  **********************************************************************/
 
-void mm_wait_cache_prepare(struct mm_wait_cache *cache)
-	__attribute__((nonnull(1)));
-void mm_wait_cache_cleanup(struct mm_wait_cache *cache)
-	__attribute__((nonnull(1)));
-void mm_wait_cache_truncate(struct mm_wait_cache *cache)
-	__attribute__((nonnull(1)));
+void NONNULL(1)
+mm_wait_cache_prepare(struct mm_wait_cache *cache);
+
+void NONNULL(1)
+mm_wait_cache_cleanup(struct mm_wait_cache *cache);
+
+void NONNULL(1)
+mm_wait_cache_truncate(struct mm_wait_cache *cache);
 
 /**********************************************************************
  * Shared inter-core wait-sets with locking.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_prepare(struct mm_waitset *waitset);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_timeout_t timeout);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock);
 
 /**********************************************************************
  * Private single-core wait-sets.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_wait(struct mm_waitset *waitset);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_local_broadcast(struct mm_waitset *waitset);
 
 /**********************************************************************
  * Shared inter-core wait-set with single waiter task.
  **********************************************************************/
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_prepare(struct mm_waitset *waitset);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_wait(struct mm_waitset *waitset);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_waitset_unique_signal(struct mm_waitset *waitset);
 
 #endif /* CORE_WAIT_H */

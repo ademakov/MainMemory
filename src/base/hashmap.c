@@ -75,7 +75,7 @@ mm_hashmap_rehash(struct mm_hashmap *map, uint32_t nbuckets)
 	map->nbuckets = nbuckets;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_prepare(struct mm_hashmap *map, mm_arena_t arena)
 {
 	uint32_t nbuckets = mm_hashmap_nbuckets[0];
@@ -86,7 +86,7 @@ mm_hashmap_prepare(struct mm_hashmap *map, mm_arena_t arena)
 	map->nentries = 0;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_cleanup(struct mm_hashmap *map, mm_hashmap_free_entry_t free_entry)
 {
 	for (uint32_t i = 0; i < map->nbuckets; i++) {
@@ -102,7 +102,7 @@ mm_hashmap_cleanup(struct mm_hashmap *map, mm_hashmap_free_entry_t free_entry)
 	mm_arena_free(map->arena, map->buckets);
 }
 
-struct mm_hashmap_entry * __attribute__((nonnull(1, 2)))
+struct mm_hashmap_entry * NONNULL(1, 2)
 mm_hashmap_lookup(struct mm_hashmap *map, const char *key, size_t keylen)
 {
 	if (unlikely(keylen > UINT32_MAX))
@@ -124,7 +124,7 @@ mm_hashmap_lookup(struct mm_hashmap *map, const char *key, size_t keylen)
 	return NULL;
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 {
 	struct mm_stack *bucket = &map->buckets[entry->hash % map->nbuckets];
@@ -140,7 +140,7 @@ mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 	}
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_hashmap_remove(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 {
 	struct mm_stack *bucket = &map->buckets[entry->hash % map->nbuckets];

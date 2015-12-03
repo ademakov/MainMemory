@@ -60,7 +60,7 @@ mm_combiner_create(size_t size, size_t handoff)
 	return combiner;
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_combiner_destroy(struct mm_combiner *combiner)
 {
 	ENTER();
@@ -70,7 +70,7 @@ mm_combiner_destroy(struct mm_combiner *combiner)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_combiner_prepare(struct mm_combiner *combiner, size_t size, size_t handoff)
 {
 	ENTER();
@@ -87,7 +87,7 @@ mm_combiner_prepare(struct mm_combiner *combiner, size_t size, size_t handoff)
 	LEAVE();
 }
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine, uintptr_t data)
 {
 	ENTER();

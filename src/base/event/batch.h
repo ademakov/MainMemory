@@ -35,32 +35,32 @@ struct mm_event_batch
 	struct mm_event *events;
 };
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_cleanup(struct mm_event_batch *batch);
 
-void __attribute__((nonnull(1)))
+void NONNULL(1)
 mm_event_batch_expand(struct mm_event_batch *batch);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_event_batch_append(struct mm_event_batch *restrict batch,
 		      const struct mm_event_batch *restrict batch2);
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_batch_addflags(struct mm_event_batch *batch, unsigned int flags)
 {
 	batch->flags |= flags;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_event_batch_hasflags(struct mm_event_batch *batch, unsigned int flags)
 {
 	return (batch->flags & flags) != 0;
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_batch_add(struct mm_event_batch *batch, mm_event_t event,
 		   struct mm_event_fd *ev_fd)
 {
@@ -72,14 +72,14 @@ mm_event_batch_add(struct mm_event_batch *batch, mm_event_t event,
 	batch->nevents++;
 }
 
-static inline void __attribute__((nonnull(1)))
+static inline void NONNULL(1)
 mm_event_batch_clear(struct mm_event_batch *batch)
 {
 	batch->flags = 0;
 	batch->nevents = 0;
 }
 
-static inline bool __attribute__((nonnull(1)))
+static inline bool NONNULL(1)
 mm_event_batch_empty(struct mm_event_batch *batch)
 {
 	return (batch->nevents == 0);

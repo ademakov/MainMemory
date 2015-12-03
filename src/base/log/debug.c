@@ -23,7 +23,7 @@
 #include "base/log/trace.h"
 #include "base/util/exit.h"
 
-void
+void NONNULL(1, 2, 3) FORMAT(3, 4) NORETURN
 mm_abort_with_message(const char *restrict location,
 		      const char *restrict function,
 		      const char *restrict msg, ...)
@@ -40,7 +40,7 @@ mm_abort_with_message(const char *restrict location,
 
 #if ENABLE_DEBUG
 
-void
+void NONNULL(1, 2, 3) FORMAT(3, 4)
 mm_debug(const char *restrict location,
 	 const char *restrict function,
 	 const char *restrict msg, ...)

@@ -23,21 +23,21 @@
 
 #define MM_NETBUF_MAXIOV	64
 
-void
+void NONNULL(1)
 mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_prepare(&sock->rbuf);
 	mm_buffer_prepare(&sock->tbuf);
 }
 
-void
+void NONNULL(1)
 mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_cleanup(&sock->rbuf);
 	mm_buffer_cleanup(&sock->tbuf);
 }
 
-ssize_t __attribute__((nonnull(1)))
+ssize_t NONNULL(1)
 mm_netbuf_fill(struct mm_netbuf_socket *sock)
 {
 	ENTER();
@@ -87,7 +87,7 @@ leave:
 	return n;
 }
 
-ssize_t __attribute__((nonnull(1)))
+ssize_t NONNULL(1)
 mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
@@ -137,19 +137,19 @@ leave:
 	return n;
 }
 
-ssize_t __attribute__((nonnull(1, 2)))
+ssize_t NONNULL(1, 2)
 mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes)
 {
 	return mm_buffer_read(&sock->rbuf, buffer, nbytes);
 }
 
-ssize_t __attribute__((nonnull(1, 2)))
+ssize_t NONNULL(1, 2)
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
 {
 	return mm_buffer_write(&sock->tbuf, data, size);
 }
 
-void __attribute__((nonnull(1, 2))) __attribute__((format(printf, 2, 3)))
+void NONNULL(1, 2) FORMAT(2, 3)
 mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...)
 {
 	va_list va;
