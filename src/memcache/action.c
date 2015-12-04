@@ -187,7 +187,7 @@ static void
 mc_action_alloc_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
 	size_t size = entry->key_len + entry->value_len;
-	entry->data = mm_mspace_alloc(part->data_space, size);
+	entry->data = mm_private_space_alloc(&part->data_space, size);
 	if (unlikely(entry->data == NULL))
 		mm_fatal(errno, "error allocating %zu bytes of memory", size);
 }
@@ -196,7 +196,7 @@ static void
 mc_action_free_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
 	if (likely(entry->data != NULL)) {
-		mm_mspace_free(part->data_space, entry->data);
+		mm_private_space_free(&part->data_space, entry->data);
 		entry->data = NULL;
 	}
 }

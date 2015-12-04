@@ -288,7 +288,8 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 	part->nentries_free = 0;
 	part->nentries_void = 0;
 
-	part->data_space = mm_mspace_create();
+	mm_private_space_prepare(&part->data_space, 0);
+
 	part->volume = 0;
 
 	mm_waitset_prepare(&part->waitset);
@@ -418,7 +419,7 @@ mc_table_term(void)
 	// Free the table entries.
 	for (mm_core_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
-		mm_mspace_destroy(part->data_space);
+		mm_private_space_cleanup(&part->data_space);
 	}
 
 	// Free the table partitions.
