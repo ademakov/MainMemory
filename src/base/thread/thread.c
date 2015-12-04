@@ -24,6 +24,7 @@
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/plain.h"
+#include "base/memory/global.h"
 #include "base/thread/domain.h"
 
 #include <sched.h>

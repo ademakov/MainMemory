@@ -22,7 +22,7 @@
 #include "core/task.h"
 
 #include "base/log/trace.h"
-#include "base/memory/alloc.h"
+#include "base/memory/global.h"
 
 void
 mm_port_init(void)

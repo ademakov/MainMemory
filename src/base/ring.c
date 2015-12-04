@@ -20,7 +20,7 @@
 #include "base/ring.h"
 #include "base/bitops.h"
 #include "base/log/debug.h"
-#include "base/memory/alloc.h"
+#include "base/memory/global.h"
 
 /**********************************************************************
  * Common Ring Buffer Header.

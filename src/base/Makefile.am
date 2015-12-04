@@ -41,10 +41,11 @@ libmmbase_a_SOURCES = \
 	log/plain.c log/plain.h \
 	log/trace.c log/trace.h \
 	memory/alloc.c memory/alloc.h \
-	memory/arena.h memory/arena.c \
+	memory/arena.h \
 	memory/buffer.c memory/buffer.h \
 	memory/chunk.c memory/chunk.h \
 	memory/cstack.c memory/cstack.h \
+	memory/global.c memory/global.h \
 	memory/malloc.c memory/malloc.h \
 	memory/memory.c memory/memory.h \
 	memory/pool.c memory/pool.h \

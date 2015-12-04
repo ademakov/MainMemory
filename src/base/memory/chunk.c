@@ -22,6 +22,7 @@
 #include "base/base.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
+#include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/backoff.h"
 #include "base/thread/domain.h"

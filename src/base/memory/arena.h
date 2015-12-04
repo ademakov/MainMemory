@@ -90,16 +90,4 @@ mm_arena_strdup(mm_arena_t arena, const char *ptr)
 	return mm_arena_memdup(arena, ptr, strlen(ptr) + 1);
 }
 
-/**********************************************************************
- * Global Memory Arena.
- **********************************************************************/
-
-/*
- * The global memory allocation routines should only be used to create
- * key global data structures during system bootstrap. After bootstrap
- * memory allocation should be done with dedicated spaces.
- */
-
-extern const struct mm_arena mm_global_arena;
-
 #endif /* BASE_MEMORY_ARENA_H */

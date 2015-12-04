@@ -95,32 +95,4 @@ mm_mspace_getfootprint_limit(mm_mspace_t space);
 size_t
 mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
 
-/**********************************************************************
- * Global Memory Allocation Routines.
- **********************************************************************/
-
-/*
- * The global memory allocation routines should only be used to create
- * key global data structures during system bootstrap. After bootstrap
- * memory allocation should be done with dedicated spaces.
- */
-
-void * MALLOC
-mm_global_alloc(size_t size);
-
-void * MALLOC
-mm_global_aligned_alloc(size_t align, size_t size);
-
-void * MALLOC
-mm_global_calloc(size_t count, size_t size);
-
-void *
-mm_global_realloc(void *ptr, size_t size);
-
-void
-mm_global_free(void *ptr);
-
-size_t
-mm_global_getallocsize(const void *ptr);
-
 #endif /* BASE_MEMORY_ALLOC_H */

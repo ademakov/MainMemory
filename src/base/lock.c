@@ -30,7 +30,7 @@
 #include "base/log/log.h"
 #include "base/log/plain.h"
 #include "base/log/trace.h"
-#include "base/memory/memory.h"
+#include "base/memory/global.h"
 #include "base/thread/domain.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"

@@ -32,6 +32,7 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/memory/alloc.h"
+#include "base/memory/global.h"
 #include "base/memory/pool.h"
 #include "base/util/exit.h"
 #include "base/util/format.h"

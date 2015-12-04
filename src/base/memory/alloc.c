@@ -19,8 +19,8 @@
 
 #include "base/memory/alloc.h"
 
-#include "base/lock.h"
 #include "base/log/error.h"
+#include "base/memory/global.h"
 #include "base/memory/malloc.h"
 #include "base/util/libcall.h"
 
@@ -151,72 +151,4 @@ size_t
 mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size)
 {
 	return mspace_set_footprint_limit(space.opaque, size);
-}
-
-/**********************************************************************
- * Global memory allocation routines.
- **********************************************************************/
-
-static mm_lock_t mm_global_alloc_lock = MM_LOCK_INIT;
-
-void *
-mm_global_alloc(size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlmalloc(size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_global_aligned_alloc(size_t align, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlmemalign(align, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void *
-mm_global_calloc(size_t count, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	void *ptr = dlcalloc(count, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", count * size);
-	return ptr;
-}
-
-void *
-mm_global_realloc(void *ptr, size_t size)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	ptr = dlrealloc(ptr, size);
-	mm_global_unlock(&mm_global_alloc_lock);
-
-	if (unlikely(ptr == NULL))
-		mm_fatal(errno, "error allocating %zu bytes of memory", size);
-	return ptr;
-}
-
-void
-mm_global_free(void *ptr)
-{
-	mm_global_lock(&mm_global_alloc_lock);
-	dlfree(ptr);
-	mm_global_unlock(&mm_global_alloc_lock);
-}
-
-size_t
-mm_global_getallocsize(const void *ptr)
-{
-	return dlmalloc_usable_size(ptr);
 }

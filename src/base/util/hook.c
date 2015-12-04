@@ -21,7 +21,7 @@
 
 #include "base/list.h"
 #include "base/log/trace.h"
-#include "base/memory/alloc.h"
+#include "base/memory/global.h"
 
 struct mm_hook_link0
 {
