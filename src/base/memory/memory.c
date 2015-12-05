@@ -24,7 +24,7 @@
  * Common Memory Space.
  **********************************************************************/
 
-struct mm_shared_space mm_common_space = {  .space = { NULL } };
+struct mm_shared_space mm_common_space = { .space = { NULL } };
 
 static void
 mm_common_space_init(void)
@@ -77,7 +77,7 @@ mm_regular_space_term(void)
 void
 mm_memory_init(void)
 {
-	mm_alloc_init();
+	mm_space_init();
 	mm_common_space_init();
 	mm_regular_space_init();
 }
@@ -92,4 +92,3 @@ mm_memory_term(void)
 	mm_regular_space_term();
 	mm_common_space_term();
 }
-

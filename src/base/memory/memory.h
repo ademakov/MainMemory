@@ -21,7 +21,6 @@
 #define BASE_MEMORY_MEMORY_H
 
 #include "common.h"
-#include "base/memory/alloc.h"
 #include "base/memory/arena.h"
 #include "base/memory/space.h"
 #include "base/thread/thread.h"
@@ -35,13 +34,13 @@ extern struct mm_shared_space mm_common_space;
 static inline bool
 mm_common_space_ready(void)
 {
-	return (mm_common_space.xarena.vtable != NULL);
+	return mm_shared_space_ready(&mm_common_space);
 }
 
 static inline void
 mm_common_space_reset(void)
 {
-	mm_common_space.xarena.vtable = NULL;
+	mm_shared_space_reset(&mm_common_space);
 }
 
 static inline void *

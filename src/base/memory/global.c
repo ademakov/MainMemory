@@ -18,10 +18,11 @@
  */
 
 #include "base/memory/global.h"
-#include "base/memory/malloc.h"
 
 #include "base/lock.h"
 #include "base/log/error.h"
+#include "base/memory/malloc.h"
+#include "base/util/libcall.h"
 
 /**********************************************************************
  * Basic global memory allocation routines.
@@ -123,3 +124,36 @@ MM_ARENA_VTABLE(mm_global_arena_vtable,
 	mm_global_arena_free);
 
 const struct mm_arena mm_global_arena = { .vtable = &mm_global_arena_vtable };
+
+/**********************************************************************
+ * Stubs for LIBC Memory Allocation Routines.
+ **********************************************************************/
+
+void *
+malloc(size_t size)
+{
+	mm_libcall("malloc");
+	return mm_global_alloc(size);
+}
+
+void *
+calloc(size_t count, size_t size)
+{
+	mm_libcall("calloc");
+	return mm_global_calloc(count, size);
+}
+
+void *
+realloc(void *ptr, size_t size)
+{
+	mm_libcall("realloc");
+	return mm_global_realloc(ptr, size);
+}
+
+void
+free(void *ptr)
+{
+	// This is called too often by sprintf, suppress it for now.
+	//mm_libcall("free");
+	mm_global_free(ptr);
+}

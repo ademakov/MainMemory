@@ -20,8 +20,6 @@
 #ifndef BASE_MEMORY_ALLOC_H
 #define BASE_MEMORY_ALLOC_H
 
-#include "common.h"
-
 /* DLMalloc alignment. */
 #define MM_ALLOC_ALIGNMENT	(8)
 #define MM_ALLOC_ALIGNMENT_BITS	(3)
@@ -40,59 +38,5 @@
 #  define MM_ALLOC_OVERHEAD	(16)
 # endif
 #endif
-
-/**********************************************************************
- * Memory subsystem initialization.
- **********************************************************************/
-
-void
-mm_alloc_init(void);
-
-/**********************************************************************
- * Memory Space Allocation Routines.
- **********************************************************************/
-
-typedef struct {
-	void *opaque;
-} mm_mspace_t;
-
-mm_mspace_t
-mm_mspace_create(void);
-
-void
-mm_mspace_destroy(mm_mspace_t space);
-
-void * MALLOC
-mm_mspace_alloc(mm_mspace_t space, size_t size);
-
-void * MALLOC
-mm_mspace_aligned_alloc(mm_mspace_t space, size_t align, size_t size);
-
-void * MALLOC
-mm_mspace_calloc(mm_mspace_t space, size_t count, size_t size);
-
-void *
-mm_mspace_realloc(mm_mspace_t space, void *ptr, size_t size);
-
-void
-mm_mspace_free(mm_mspace_t space, void *ptr);
-
-size_t
-mm_mspace_getallocsize(const void *ptr);
-
-void
-mm_mspace_bulk_free(mm_mspace_t space, void **ptrs, size_t nptrs);
-
-void
-mm_mspace_trim(mm_mspace_t space);
-
-size_t
-mm_mspace_getfootprint(mm_mspace_t space);
-
-size_t
-mm_mspace_getfootprint_limit(mm_mspace_t space);
-
-size_t
-mm_mspace_setfootprint_limit(mm_mspace_t space, size_t size);
 
 #endif /* BASE_MEMORY_ALLOC_H */

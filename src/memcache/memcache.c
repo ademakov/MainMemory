@@ -32,7 +32,6 @@
 #include "base/list.h"
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/memory/alloc.h"
 #include "base/memory/chunk.h"
 #include "base/memory/pool.h"
 

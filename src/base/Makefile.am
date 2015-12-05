@@ -40,7 +40,7 @@ libmmbase_a_SOURCES = \
 	log/log.c log/log.h \
 	log/plain.c log/plain.h \
 	log/trace.c log/trace.h \
-	memory/alloc.c memory/alloc.h \
+	memory/alloc.h \
 	memory/arena.h \
 	memory/buffer.c memory/buffer.h \
 	memory/chunk.c memory/chunk.h \

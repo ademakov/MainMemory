@@ -22,7 +22,6 @@
 
 #include "base/log/error.h"
 #include "base/log/trace.h"
-#include "base/memory/alloc.h"
 #include "base/memory/pool.h"
 
 // The memory pool for futures.
