@@ -13,7 +13,7 @@ arch_sources = \
 if ARCH_X86
 arch_sources += \
 	arch/x86/asm.h arch/x86/atomic.h arch/x86/basic.h \
-	arch/x86/cstack-init.c arch/x86/cstack-switch.S \
+	arch/x86/cstack.c arch/x86/cstack-switch.S \
 	arch/x86/fence.h arch/x86/lock.h arch/x86/spin.h \
 	arch/x86/syscall.h
 endif
@@ -21,7 +21,7 @@ endif
 if ARCH_X86_64
 arch_sources += \
 	arch/x86-64/asm.h arch/x86-64/atomic.h arch/x86-64/basic.h \
-	arch/x86-64/cstack-init.c arch/x86-64/cstack-switch.S \
+	arch/x86-64/cstack.c arch/x86-64/cstack-switch.S \
 	arch/x86-64/fence.h arch/x86-64/lock.h arch/x86-64/spin.h \
 	arch/x86-64/syscall.h
 endif

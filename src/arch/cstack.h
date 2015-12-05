@@ -20,7 +20,7 @@
 #ifndef ARCH_CSTACK_H
 #define ARCH_CSTACK_H
 
-#include "config.h"
+#include "common.h"
 
 #include <stddef.h>
 
@@ -38,10 +38,10 @@ typedef ucontext_t mm_cstack_t;
 typedef void * mm_cstack_t;
 #endif
 
-void __attribute__((nonnull(1, 2)))
-mm_cstack_init(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size);
+void NONNULL(1, 2)
+mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size);
 
-void __attribute__((nonnull(1, 2)))
+void NONNULL(1, 2)
 mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx);
 
 #endif /* ARCH_CSTACK_H */

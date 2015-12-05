@@ -296,8 +296,8 @@ mm_task_create(const struct mm_task_attr *attr,
 
 		// Setup the task entry point on the stack and queue
 		// it for execution.
-		mm_cstack_init(&task->stack_ctx, mm_task_entry,
-			       task->stack_base, total_size);
+		mm_cstack_prepare(&task->stack_ctx, mm_task_entry,
+				  task->stack_base, total_size);
 		mm_task_run(task);
 	}
 

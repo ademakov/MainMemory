@@ -22,7 +22,7 @@
 #include "base/log/error.h"
 
 void
-mm_cstack_init(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
+mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
 {
 	if (unlikely(getcontext(ctx) < 0))
 		mm_fatal(errno, "getcontext");
