@@ -41,7 +41,7 @@
 static mm_event_hid_t mm_event_epoll_notify_handler;
 
 static void
-mm_event_epoll_handle_notify(mm_event_t event __mm_unused__, void *data)
+mm_event_epoll_handle_notify(mm_event_t event UNUSED, void *data)
 {
 	ENTER();
 
