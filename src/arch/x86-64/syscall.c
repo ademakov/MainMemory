@@ -21,13 +21,12 @@
 
 #include <errno.h>
 
-#ifdef __APPLE__
-
-intptr_t
+void
 mm_syscall_error(uintptr_t result)
 {
+#if __linux__
+	errno = -result;
+#else
 	errno = result;
-	return -1;
-}
-
 #endif
+}
