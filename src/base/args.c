@@ -24,6 +24,8 @@
 #include "base/log/log.h"
 #include "base/util/exit.h"
 
+#include <stdlib.h>
+
 static uint32_t mm_args_extc;
 static uint32_t mm_args_argc;
 static char **mm_args_argv;
