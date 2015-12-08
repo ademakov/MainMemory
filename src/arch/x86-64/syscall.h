@@ -117,8 +117,7 @@ mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
 	__asm__ __volatile__("syscall\n\t"
 			     "setc %1"
 			     : "=a"(result), "=c"(error)
-			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
-			       "r"(r5)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4), "r"(r5)
 			     : "cc", "memory", "r11");
 	return mm_syscall_result(result, error);
 }
@@ -136,8 +135,7 @@ mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 	__asm__ __volatile__("syscall\n\t"
 			     "setc %1"
 			     : "=a"(result), "=c"(error)
-			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
-			       "r"(r5), "r"(r6)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4), "r"(r5), "r"(r6)
 			     : "cc", "memory", "r11");
 	return mm_syscall_result(result, error);
 }
@@ -170,6 +168,7 @@ static inline intptr_t
 mm_syscall_1(int n, uintptr_t a1)
 {
 	uintptr_t result;
+
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
 			     : "0"(n), "D"(a1)
@@ -224,8 +223,7 @@ mm_syscall_5(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4,
 	register uintptr_t r5 __asm__("r8") = a5;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
-			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
-			       "r"(r5)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4), "r"(r5)
 			     : "cc", "memory", "rcx", "r11");
 	return mm_syscall_result(result);
 }
@@ -241,8 +239,7 @@ mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 	register uintptr_t r6 __asm__("r9") = a6;
 	__asm__ __volatile__("syscall"
 			     : "=a"(result)
-			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4),
-			       "r"(r5), "r"(r6)
+			     : "0"(n), "D"(a1), "S"(a2), "d"(a3), "r"(r4), "r"(r5), "r"(r6)
 			     : "cc", "memory", "rcx", "r11");
 	return mm_syscall_result(result);
 }
