@@ -38,12 +38,12 @@ static uint32_t mm_hashmap_nbuckets[] = {
 	2435031871u, 3652547849u,
 };
 
-static size_t mm_hashmap_nnbuckets = sizeof(mm_hashmap_nbuckets) / sizeof(mm_hashmap_nbuckets[0]);
+static int32_t mm_hashmap_nnbuckets = sizeof(mm_hashmap_nbuckets) / sizeof(mm_hashmap_nbuckets[0]);
 
-static ssize_t
+static int32_t
 mm_hashmap_nbuckets_index(uint32_t nbuckets)
 {
-	for (size_t i = 0; i < mm_hashmap_nnbuckets; i++)
+	for (int32_t i = 0; i < mm_hashmap_nnbuckets; i++)
 		if (mm_hashmap_nbuckets[i] == nbuckets)
 			return i;
 	return -1;
@@ -132,10 +132,10 @@ mm_hashmap_insert(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 	mm_stack_insert(bucket, &entry->link);
 
 	if (++map->nentries > map->nbuckets * 3) {
-		ssize_t nbi = mm_hashmap_nbuckets_index(map->nbuckets);
+		int32_t nbi = mm_hashmap_nbuckets_index(map->nbuckets);
 		if (nbi < 0)
 			ABORT();
-		if ((size_t) (nbi + 1) < mm_hashmap_nnbuckets)
+		if ((nbi + 1) < mm_hashmap_nnbuckets)
 			mm_hashmap_rehash(map, mm_hashmap_nbuckets[nbi + 1]);
 	}
 }
@@ -157,7 +157,7 @@ mm_hashmap_remove(struct mm_hashmap *map, struct mm_hashmap_entry *entry)
 	}
 
 	if (--map->nentries < map->nbuckets) {
-		ssize_t nbi = mm_hashmap_nbuckets_index(map->nbuckets);
+		int32_t nbi = mm_hashmap_nbuckets_index(map->nbuckets);
 		if (nbi < 0)
 			ABORT();
 		if (nbi > 0)
