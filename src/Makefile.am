@@ -17,7 +17,7 @@ arch_sources += \
 	arch/x86/asm.h arch/x86/atomic.h arch/x86/basic.h \
 	arch/x86/cstack.c arch/x86/cstack-switch.S \
 	arch/x86/fence.h arch/x86/lock.h arch/x86/spin.h \
-	arch/x86/syscall.h
+	arch/x86/syscall.h arch/x86/syscall.c
 endif
 
 if ARCH_X86_64
