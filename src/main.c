@@ -24,6 +24,7 @@
 #include "base/args.h"
 #include "base/base.h"
 #include "base/bitset.h"
+#include "base/exit.h"
 #include "base/conf.h"
 #include "base/daemon.h"
 #include "base/settings.h"
@@ -33,7 +34,6 @@
 #include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/memory/global.h"
-#include "base/util/exit.h"
 
 #include "net/net.h"
 
@@ -172,15 +172,15 @@ main(int argc, char *argv[])
 	mm_args_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 	if (mm_args_getargc() > 0) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
-		mm_exit(EXIT_FAILURE);
+		mm_exit(MM_EXIT_USAGE);
 	}
 	if (mm_settings_get("help", NULL)) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
-		mm_exit(EXIT_SUCCESS);
+		mm_exit(MM_EXIT_SUCCESS);
 	}
 	if (mm_settings_get("version", NULL)) {
 		mm_brief("%s", PACKAGE_STRING);
-		mm_exit(EXIT_SUCCESS);
+		mm_exit(MM_EXIT_SUCCESS);
 	}
 
 	// Load configuration file.
@@ -217,5 +217,5 @@ main(int argc, char *argv[])
 	LEAVE();
 	mm_log_relay();
 	mm_log_flush();
-	return EXIT_SUCCESS;
+	return MM_EXIT_SUCCESS;
 }

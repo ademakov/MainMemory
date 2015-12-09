@@ -27,7 +27,6 @@
 #include "base/thread/backoff.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
-#include "base/util/exit.h"
 
 #define MM_CHUNK_FLUSH_THRESHOLD	(64)
 #define MM_CHUNK_ERROR_THRESHOLD	(512)

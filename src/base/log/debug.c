@@ -18,10 +18,10 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
+#include "base/exit.h"
 #include "base/log/debug.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
-#include "base/util/exit.h"
 
 void NONNULL(1, 2, 3) FORMAT(3, 4) NORETURN
 mm_abort_with_message(const char *restrict location,

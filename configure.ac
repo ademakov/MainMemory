@@ -57,7 +57,7 @@ AC_SEARCH_LIBS([pthread_create], [pthread],
         [], [AC_MSG_ERROR(Cannot find pthread library)])
 
 dnl Checks for header files.
-AC_CHECK_HEADERS([stdlib.h unistd.h ucontext.h])
+AC_CHECK_HEADERS([stdlib.h sysexits.h unistd.h ucontext.h])
 AC_CHECK_HEADERS([mach/semaphore.h mach/thread_policy.h])
 AC_CHECK_HEADERS([pthread.h pthread_np.h sched.h])
 AC_CHECK_HEADERS([sys/param.h sys/cpuset.h], [], [], [[

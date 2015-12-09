@@ -1,7 +1,7 @@
 /*
- * base/util/exit.c - MainMemory exit handling.
+ * base/exit.h - MainMemory exit handling.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,56 +17,65 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/util/exit.h"
-#include "base/list.h"
-#include "base/log/log.h"
-#include "base/util/hook.h"
+#ifndef BASE_EXIT_H
+#define BASE_EXIT_H
+
+#include "common.h"
+#include "arch/memory.h"
 
 #include <stdlib.h>
-#include <unistd.h>
+#if HAVE_SYSEXITS_H
+# include <sysexits.h>
+#endif
+
+#define MM_EXIT_SUCCESS		EXIT_SUCCESS
+#define MM_EXIT_FAILURE		EXIT_FAILURE
+
+#ifdef EX_USAGE
+# define MM_EXIT_USAGE		EX_USAGE
+#else
+# define MM_EXIT_USAGE		(EXIT_FAILURE + 1)
+#endif
+
+#ifdef EX_CONFIG
+# define MM_EXIT_CONFIG		EX_CONFIG
+#else
+# define MM_EXIT_CONFIG		(EXIT_FAILURE + 2)
+#endif
 
 /**********************************************************************
  * Exit Signal Handling.
  **********************************************************************/
 
-int mm_exit_flag = 0;
+extern int mm_exit_flag;
+
+static inline void
+mm_exit_set(void)
+{
+	mm_memory_store(mm_exit_flag, 1);
+}
+
+static inline bool
+mm_exit_test(void)
+{
+	return mm_memory_load(mm_exit_flag) != 0;
+}
 
 /**********************************************************************
  * Exit Handling.
  **********************************************************************/
 
-static struct mm_queue MM_QUEUE_INIT(mm_exit_hook);
-
 void
-mm_atexit(void (*func)(void))
-{
-	mm_hook_head_proc(&mm_exit_hook, func);
-}
+mm_atexit(void (*func)(void));
 
-static void
-mm_do_atexit(void)
-{
-	mm_hook_call(&mm_exit_hook, true);
-	mm_log_relay();
-	mm_log_flush();
-}
-
-void
-mm_exit(int status)
-{
-	mm_log_str("exiting...\n");
-	mm_do_atexit();
-	exit(status);
-}
+void NORETURN
+mm_exit(int status);
 
 /**********************************************************************
- * Abnormal Exit Handling.
+ * Abnormal Termination.
  **********************************************************************/
 
-void
-mm_abort(void)
-{
-	mm_log_str("\naborting...\n");
-	mm_do_atexit();
-	abort();
-}
+void NORETURN
+mm_abort(void);
+
+#endif /* BASE_EXIT_H */

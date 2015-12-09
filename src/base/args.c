@@ -19,10 +19,10 @@
 
 #include "base/args.h"
 
+#include "base/exit.h"
 #include "base/settings.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
-#include "base/util/exit.h"
 
 #include <stdlib.h>
 
@@ -69,7 +69,7 @@ static void NORETURN
 mm_args_error(size_t ninfo, struct mm_args_info *info)
 {
 	mm_args_usage(ninfo, info);
-	mm_exit(EXIT_FAILURE);
+	mm_exit(MM_EXIT_USAGE);
 }
 
 static uint32_t

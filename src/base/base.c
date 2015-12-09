@@ -20,6 +20,7 @@
 #include "base/base.h"
 #include "base/cksum.h"
 #include "base/clock.h"
+#include "base/exit.h"
 #include "base/topology.h"
 #include "base/event/event.h"
 #include "base/log/debug.h"
@@ -28,7 +29,6 @@
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
-#include "base/util/exit.h"
 
 #include <unistd.h>
 

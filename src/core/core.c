@@ -25,6 +25,7 @@
 
 #include "base/base.h"
 #include "base/bitset.h"
+#include "base/exit.h"
 #include "base/event/dispatch.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
@@ -35,7 +36,6 @@
 #include "base/thread/domain.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"
-#include "base/util/exit.h"
 #include "base/util/hook.h"
 
 #include "net/net.h"

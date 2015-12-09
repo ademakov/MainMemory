@@ -24,6 +24,7 @@
 #include "core/task.h"
 #include "core/timer.h"
 
+#include "base/exit.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
@@ -33,7 +34,6 @@
 #include "base/log/trace.h"
 #include "base/memory/global.h"
 #include "base/memory/pool.h"
-#include "base/util/exit.h"
 #include "base/util/format.h"
 
 #include <string.h>

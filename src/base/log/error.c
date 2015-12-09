@@ -17,10 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "base/exit.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
-#include "base/util/exit.h"
 
 #include <stdarg.h>
 #include <stdlib.h>
@@ -86,5 +86,5 @@ mm_fatal(int error, const char *restrict msg, ...)
 		mm_log_str("\n");
 	}
 
-	mm_exit(EXIT_FAILURE);
+	mm_exit(MM_EXIT_FAILURE);
 }

@@ -19,10 +19,10 @@
 
 #include "base/daemon.h"
 
+#include "base/exit.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/log.h"
-#include "base/util/exit.h"
 
 #include <fcntl.h>
 #include <stdlib.h>
@@ -57,7 +57,7 @@ mm_daemon_start(void)
 			if (n > 0)
 				break;
 			if (n == 0 || errno != EINTR) {
-				status = EXIT_FAILURE;
+				status = MM_EXIT_FAILURE;
 				break;
 			}
 		}
@@ -65,12 +65,12 @@ mm_daemon_start(void)
 		// Close the pipe read end.
 		close(mm_daemon_pipe[0]);
 
-		if (status != EXIT_SUCCESS) {
+		if (status != MM_EXIT_SUCCESS) {
 			mm_error(0, "failed to spawn a daemon process.");
 			mm_exit(status);
 		}
 
-		exit(EXIT_SUCCESS);
+		exit(MM_EXIT_SUCCESS);
 	}
 
 	// Close the pipe read end.
@@ -87,7 +87,7 @@ mm_daemon_start(void)
 	if (pid < 0)
 		mm_fatal(errno, "fork()");
 	if (pid > 0)
-		exit(EXIT_FAILURE);
+		exit(MM_EXIT_FAILURE);
 }
 
 void
@@ -124,7 +124,7 @@ mm_daemon_notify(void)
 	ASSERT(mm_daemon_pipe[1] >= 0);
 
 	// Send the success notification.
-	char status = EXIT_SUCCESS;
+	char status = MM_EXIT_SUCCESS;
 	for (;;) {
 		ssize_t n = write(mm_daemon_pipe[1], &status, sizeof status);
 		if (n > 0)

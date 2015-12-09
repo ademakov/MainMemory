@@ -15,6 +15,7 @@ libmmbase_a_SOURCES = \
 	conf.c conf.h \
 	combiner.c combiner.h \
 	daemon.c daemon.h \
+	exit.c exit.h \
 	hash.c hash.h \
 	hashmap.c hashmap.h \
 	json.c json.h \
@@ -59,7 +60,6 @@ libmmbase_a_SOURCES = \
 	thread/monitor.c thread/monitor.h \
 	thread/request.c thread/request.h \
 	thread/thread.c thread/thread.h \
-	util/exit.c util/exit.h \
 	util/format.c util/format.h \
 	util/hook.c util/hook.h \
 	util/libcall.c util/libcall.h
