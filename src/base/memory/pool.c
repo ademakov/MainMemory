@@ -20,6 +20,7 @@
 #include "base/memory/pool.h"
 
 #include "base/base.h"
+#include "base/format.h"
 #include "base/log/debug.h"
 #include "base/log/error.h"
 #include "base/log/plain.h"
@@ -27,7 +28,6 @@
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
-#include "base/util/format.h"
 
 #define MM_POOL_BLOCK_SIZE	(0x2000)
 

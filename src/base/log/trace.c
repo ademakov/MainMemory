@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include "base/format.h"
 #include "base/log/trace.h"
 #include "base/log/debug.h"
 #include "base/log/log.h"
 #include "base/memory/global.h"
 #include "base/thread/thread.h"
-#include "base/util/format.h"
 
 /**********************************************************************
  * Trace Context.

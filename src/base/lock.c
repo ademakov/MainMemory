@@ -25,6 +25,7 @@
 
 #if ENABLE_LOCK_STATS
 
+#include "base/format.h"
 #include "base/hash.h"
 #include "base/list.h"
 #include "base/log/log.h"
@@ -34,8 +35,6 @@
 #include "base/thread/domain.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"
-
-#include "base/util/format.h"
 
 #define MM_LOCK_STAT_TABLE_SIZE		509
 

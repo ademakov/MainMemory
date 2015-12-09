@@ -1,5 +1,5 @@
 /*
- * base/util/format.h - MainMemory string format utility.
+ * base/format.c - MainMemory string format utility.
  *
  * Copyright (C) 2012-2014  Aleksey Demakov
  *
@@ -17,17 +17,36 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_UTIL_FORMAT_H
-#define	BASE_UTIL_FORMAT_H
+#include "base/format.h"
 
-#include "common.h"
-#include "base/memory/arena.h"
-#include <stdarg.h>
+#include "base/log/error.h"
 
-char * NONNULL(1, 2) FORMAT(2, 3)
-mm_format(mm_arena_t arena, const char *restrict fmt, ...);
+#include <stdio.h>
 
 char * NONNULL(1, 2)
-mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va);
+mm_vformat(mm_arena_t arena, const char *restrict fmt, va_list va)
+{
+	char dummy;
+	va_list va2;
+	va_copy(va2, va);
+	int len = vsnprintf(&dummy, sizeof dummy, fmt, va2);
+	va_end(va2);
 
-#endif /* BASE_UTIL_FORMAT_H */
+	if (unlikely(len < 0))
+		mm_fatal(errno, "invalid format string");
+
+	char *ptr = mm_arena_alloc(arena, ++len);
+	vsnprintf(ptr, len, fmt, va);
+
+	return ptr;
+}
+
+char * NONNULL(1, 2) FORMAT(2, 3)
+mm_format(const struct mm_arena *arena, const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	char *ptr = mm_vformat(arena, fmt, va);
+	va_end(va);
+	return ptr;
+}
