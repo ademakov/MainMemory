@@ -38,6 +38,13 @@
 #include "arch/syscall.h"
 #include <sys/syscall.h>
 
+#if defined(SYS_socketcall) && !defined(SYS_accept)
+# include <linux/net.h>
+# define LINUX_SOCKETCALL	1
+#else
+# undef LINUX_SOCKETCALL
+#endif
+
 static inline ssize_t
 mm_read(int fd, void *buf, size_t cnt)
 {
@@ -71,11 +78,16 @@ mm_close(int fd)
 static inline int
 mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len)
 {
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { sock, (uintptr_t) addr, (uintptr_t) addr_len };
+	return mm_syscall_2(SYS_socketcall, SYS_ACCEPT, (uintptr_t) args);
+#else
 	return mm_syscall_3(MM_SYSCALL_N(SYS_accept), sock, (uintptr_t) addr,
 			    (uintptr_t) addr_len);
+#endif
 }
 
-#else
+#else /* !ENABLE_INLINE_SYSCALLS */
 
 #include <unistd.h>
 
@@ -86,6 +98,6 @@ mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len
 #define mm_close	close
 #define mm_accept	accept
 
-#endif
+#endif /* !ENABLE_INLINE_SYSCALLS */
 
 #endif /* BASE_STDCALL_H */
