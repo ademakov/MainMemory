@@ -1,40 +1,9 @@
 
-SUBDIRS = base memcache
+SUBDIRS = arch base memcache
 
 AM_CFLAGS = -Wall -Wextra
 
 bin_PROGRAMS = mmem
-
-noinst_LIBRARIES = libmmarch.a
-
-arch_sources = \
-	arch/atomic.h arch/basic.h arch/cstack.h \
-	arch/lock.h arch/memory.h arch/spin.h \
-	arch/syscall.h
-
-if ARCH_X86
-arch_sources += \
-	arch/x86/asm.h arch/x86/atomic.h arch/x86/basic.h \
-	arch/x86/cstack.c arch/x86/cstack-switch.S \
-	arch/x86/fence.h arch/x86/lock.h arch/x86/spin.h \
-	arch/x86/syscall.h arch/x86/syscall.c
-endif
-
-if ARCH_X86_64
-arch_sources += \
-	arch/x86-64/asm.h arch/x86-64/atomic.h arch/x86-64/basic.h \
-	arch/x86-64/cstack.c arch/x86-64/cstack-switch.S \
-	arch/x86-64/fence.h arch/x86-64/lock.h arch/x86-64/spin.h \
-	arch/x86-64/syscall.h arch/x86-64/syscall.c
-endif
-
-if ARCH_GENERIC
-arch_sources += \
-	arch/generic/atomic.h arch/generic/basic.h \
-	arch/generic/cstack.c \
-	arch/generic/lock.h arch/generic/spin.h \
-	arch/generic/syscall.h
-endif
 
 core_sources = \
 	core/async.c core/async.h \
@@ -53,10 +22,8 @@ net_sources = \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h
 
-libmmarch_a_SOURCES = $(arch_sources)
-
 mmem_SOURCES = \
 	$(core_sources) $(net_sources) \
 	common.h main.c
 
-mmem_LDADD = memcache/libmemcache.a base/libmmbase.a libmmarch.a
+mmem_LDADD = memcache/libmemcache.a base/libmmbase.a arch/libmmarch.a
