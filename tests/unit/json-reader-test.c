@@ -2,6 +2,7 @@
 #include <stdlib.h>
 
 #include "base/json.h"
+#include "base/memory/global.h"
 
 static int fail = 0;
 

@@ -3,6 +3,7 @@
 
 #include "common.h"
 #include "base/bitset.h"
+#include "base/memory/global.h"
 
 #define test(v, e)						\
 	do {							\
