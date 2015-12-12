@@ -19,7 +19,7 @@
 
 #include "memcache/entry.h"
 
-#include <ctype.h>
+#include "base/scan.h"
 
 void NONNULL(1)
 mc_entry_setnum(struct mc_entry *entry, uint64_t value)
@@ -44,25 +44,10 @@ mc_entry_setnum(struct mc_entry *entry, uint64_t value)
 bool NONNULL(1, 2)
 mc_entry_getnum(struct mc_entry *entry, uint64_t *value)
 {
-	if (entry->value_len == 0)
-		return false;
+	const char *p = mc_entry_getvalue(entry);
+	const char *e = p + entry->value_len;
 
-	char *p = mc_entry_getvalue(entry);
-	char *e = p + entry->value_len;
-
-	uint64_t v = 0;
-	while (p < e) {
-		int c = *p++;
-		if (!isdigit(c))
-			return false;
-
-		uint64_t vv = v * 10 + c - '0';
-		if (unlikely(vv < v))
-			return false;
-
-		v = vv;
-	}
-
-	*value = v;
-	return true;
+	int error = 0;
+	p = mm_scan_u64(value, &error, p, e);
+	return error == 0 && p == e;
 }
