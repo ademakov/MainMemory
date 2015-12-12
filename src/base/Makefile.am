@@ -23,6 +23,7 @@ libmmbase_a_SOURCES = \
 	list.h \
 	lock.c lock.h \
 	ring.c ring.h \
+	scan.c scan.h \
 	settings.c settings.h \
 	stdcall.h \
 	timeq.c timeq.h \
