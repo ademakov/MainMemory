@@ -39,7 +39,16 @@ void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite);
 
 const char * NONNULL(1)
-mm_settings_get(const char *key, const char *value);
+mm_settings_get(const char *key, const char *def);
+
+bool NONNULL(1)
+mm_settings_get_bool(const char *key, const char *def);
+
+uint32_t NONNULL(1)
+mm_settings_get_uint32(const char *key, const char *def);
+
+uint64_t NONNULL(1)
+mm_settings_get_uint64(const char *key, const char *def);
 
 void NONNULL(1)
 mm_settings_settype(const char *key, mm_settings_type_t type);

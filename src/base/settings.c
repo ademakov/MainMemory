@@ -20,6 +20,7 @@
 #include "base/settings.h"
 
 #include "base/hashmap.h"
+#include "base/scan.h"
 #include "base/log/error.h"
 #include "base/memory/global.h"
 
@@ -92,16 +93,61 @@ mm_settings_set(const char *key, const char *value, bool overwrite)
 }
 
 const char * NONNULL(1)
-mm_settings_get(const char *key, const char *value)
+mm_settings_get(const char *key, const char *def)
 {
 	size_t len = strlen(key);
 	struct mm_hashmap_entry *hep = mm_hashmap_lookup(&mm_settings_map, key, len);
 	if (hep != NULL) {
 		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
 		if (sep->value != NULL)
-			value = sep->value;
+			return sep->value;
 	}
-	return value;
+	return def;
+}
+
+bool NONNULL(1)
+mm_settings_getbool(const char *key, const char *def)
+{
+	bool val = false;
+	const char *str = mm_settings_get(key, def);
+	if (str != NULL) {
+		int err = 0;
+		const char *end = str + strlen(str);
+		str = mm_scan_bool(&val, &err, str, end);
+		if (err || str != end)
+			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
+	}
+	return val;
+}
+
+uint32_t NONNULL(1)
+mm_settings_get_uint32(const char *key, const char *def)
+{
+	uint32_t val = 0;
+	const char *str = mm_settings_get(key, def);
+	if (str != NULL) {
+		int err = 0;
+		const char *end = str + strlen(str);
+		str = mm_scan_n32(&val, &err, str, end);
+		if (err || str != end)
+			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
+	}
+	return val;
+}
+
+uint64_t NONNULL(1)
+mm_settings_get_uint64(const char *key, const char *def)
+{
+	uint64_t val = 0;
+	const char *str = mm_settings_get(key, def);
+	if (str != NULL) {
+		int err = 0;
+		const char *end = str + strlen(str);
+		str = mm_scan_n64(&val, &err, str, end);
+		if (err || str != end)
+			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
+	}
+	return val;
 }
 
 void NONNULL(1)

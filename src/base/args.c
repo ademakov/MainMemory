@@ -99,7 +99,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_SPECIAL) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
-		mm_settings_set(arginfo->name, "", true);
+		mm_settings_set(arginfo->name, "true", true);
 		return 1;
 	}
 

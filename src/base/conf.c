@@ -102,7 +102,7 @@ mm_conf_load(const char *name)
 		} else {
 			token = mm_conf_next(fd, name, &reader);
 			if (token == MM_JSON_TRUE) {
-				mm_settings_set(key, "", false);
+				mm_settings_set(key, "true", false);
 			} else if (token == MM_JSON_STRING && type != MM_SETTINGS_TRIVIAL) {
 				char *value = mm_json_reader_string_strdup(&reader);
 				mm_settings_set(key, value, false);
