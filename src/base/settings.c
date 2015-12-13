@@ -112,9 +112,8 @@ mm_settings_getbool(const char *key, const char *def)
 	const char *str = mm_settings_get(key, def);
 	if (str != NULL) {
 		int err = 0;
-		const char *end = str + strlen(str);
-		str = mm_scan_bool(&val, &err, str, end);
-		if (err || str != end)
+		str = mm_scan_bool(&val, &err, str, NULL);
+		if (err || *str)
 			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
 	}
 	return val;
@@ -127,9 +126,8 @@ mm_settings_get_uint32(const char *key, const char *def)
 	const char *str = mm_settings_get(key, def);
 	if (str != NULL) {
 		int err = 0;
-		const char *end = str + strlen(str);
-		str = mm_scan_n32(&val, &err, str, end);
-		if (err || str != end)
+		str = mm_scan_n32(&val, &err, str, NULL);
+		if (err || *str)
 			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
 	}
 	return val;
@@ -142,9 +140,8 @@ mm_settings_get_uint64(const char *key, const char *def)
 	const char *str = mm_settings_get(key, def);
 	if (str != NULL) {
 		int err = 0;
-		const char *end = str + strlen(str);
-		str = mm_scan_n64(&val, &err, str, end);
-		if (err || str != end)
+		str = mm_scan_n64(&val, &err, str, NULL);
+		if (err || *str)
 			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
 	}
 	return val;

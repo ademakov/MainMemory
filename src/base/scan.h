@@ -40,51 +40,51 @@ mm_scan_skip_space(const char *sp, const char *ep)
  * Integer value scanning routines.
  **********************************************************************/
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_u32(uint32_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_u64(uint64_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_x32(uint32_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_x64(uint64_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_n32(uint32_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_n64(uint64_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_d32(int32_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_d64(int64_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_i32(int32_t *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_i64(int64_t *vp, int *xp, const char *sp, const char *ep);
 
 /**********************************************************************
  * Floating point value scanning routines.
  **********************************************************************/
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_float(float *vp, int *xp, const char *sp, const char *ep);
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_double(double *vp, int *xp, const char *sp, const char *ep);
 
 /**********************************************************************
  * Human-readable value scanning routines.
  **********************************************************************/
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_bool(bool *vp, int *xp, const char *sp, const char *ep);
 
 #endif /* BASE_SCAN_H */
