@@ -57,6 +57,12 @@ mm_scan_digit(const char *sp, const char *ep)
  * Integer value scanning routines.
  **********************************************************************/
 
+#define MM_SCAN_START()							\
+	do {								\
+		if (ep == NULL)						\
+			ep = sp + strlen(sp);				\
+	} while (0)
+
 #define MM_SCAN_DIGITS(S, b, n, m, off)					\
 	do {								\
 		const uint##n##_t t = ((uint##n##_t) m) / b;		\
@@ -143,63 +149,73 @@ mm_scan_digit(const char *sp, const char *ep)
 		}							\
 	} while(0)
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_u32(uint32_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DIGITS(+, 10, 32, UINT32_MAX, 0);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_u64(uint64_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DIGITS(+, 10, 64, UINT64_MAX, 0);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_x32(uint32_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DIGITS(+, 16, 32, UINT32_MAX, 0);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_x64(uint64_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DIGITS(+, 16, 64, UINT64_MAX, 0);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_n32(uint32_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_NATURAL(32, UINT32_MAX);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_n64(uint64_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_NATURAL(64, UINT64_MAX);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_d32(int32_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DECIMAL(32, INT32_MIN, INT32_MAX);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_d64(int64_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_DECIMAL(64, INT64_MIN, INT64_MAX);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_i32(int32_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_INTEGER(32, INT32_MIN, INT32_MAX, UINT32_MAX);
 }
 
 const char * NONNULL(1, 3, 4)
 mm_scan_i64(int64_t *vp, int *xp, const char *sp, const char *ep)
 {
+	MM_SCAN_START();
 	MM_SCAN_INTEGER(64, INT64_MIN, INT64_MAX, UINT64_MAX);
 }
 
@@ -207,14 +223,16 @@ mm_scan_i64(int64_t *vp, int *xp, const char *sp, const char *ep)
  * Floating point value scanning routines.
  **********************************************************************/
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_float(float *vp, int *xp, const char *sp, const char *ep)
 {
 	int dummy;
 	if (xp == NULL)
 		xp = &dummy;
 
-	if (unlikely(sp >= ep)) {
+	if (ep == NULL)
+		ep = sp + strlen(sp);
+	else if (unlikely(sp >= ep)) {
 		*xp = EINVAL;
 		return sp;
 	}
@@ -228,14 +246,16 @@ mm_scan_float(float *vp, int *xp, const char *sp, const char *ep)
 	return sp;
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_double(double *vp, int *xp, const char *sp, const char *ep)
 {
 	int dummy;
 	if (xp == NULL)
 		xp = &dummy;
 
-	if (unlikely(sp >= ep)) {
+	if (ep == NULL)
+		ep = sp + strlen(sp);
+	else if (unlikely(sp >= ep)) {
 		*xp = EINVAL;
 		return sp;
 	}
@@ -259,14 +279,16 @@ mm_scan_double(double *vp, int *xp, const char *sp, const char *ep)
 #define Cx3(a, b, c)	(U(a) | (U(b) << 8) | (U(c) << 16) | 0x202020)
 #define Cx4(a, b, c, d)	(U(a) | (U(b) << 8) | (U(c) << 16) | (U(d) << 24) | 0x20202020)
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_bool(bool *vp, int *xp, const char *sp, const char *ep)
 {
 	int dummy;
 	if (xp == NULL)
 		xp = &dummy;
 
-	if (unlikely(sp >= ep)) {
+	if (ep == NULL)
+		ep = sp + strlen(sp);
+	else if (unlikely(sp >= ep)) {
 		*xp = EINVAL;
 		return sp;
 	}
