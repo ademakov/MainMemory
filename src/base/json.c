@@ -19,6 +19,7 @@
 
 #include "base/json.h"
 
+#include "base/scan.h"
 #include "base/log/debug.h"
 #include "base/memory/memory.h"
 
@@ -910,20 +911,14 @@ mm_json_reader_skip(struct mm_json_reader *reader)
  **********************************************************************/
 
 size_t NONNULL(1)
-mm_json_reader_string_length(struct mm_json_reader *reader)
+mm_json_reader_length(struct mm_json_reader *reader)
 {
-	if (reader->string.escaped)
-		return 0; // TODO
-
 	return (reader->value_end - reader->value);
 }
 
 char * NONNULL(1)
-mm_json_reader_string_memdup(struct mm_json_reader *reader)
+mm_json_reader_memdup(struct mm_json_reader *reader)
 {
-	if (reader->string.escaped)
-		return NULL; // TODO
-
 	size_t length = mm_json_reader_string_length(reader);
 	char *string = mm_arena_alloc(reader->arena, length);
 	memcpy(string, reader->value, length);
@@ -931,11 +926,8 @@ mm_json_reader_string_memdup(struct mm_json_reader *reader)
 }
 
 char * NONNULL(1)
-mm_json_reader_string_strdup(struct mm_json_reader *reader)
+mm_json_reader_strdup(struct mm_json_reader *reader)
 {
-	if (reader->string.escaped)
-		return NULL; // TODO
-
 	size_t length = mm_json_reader_string_length(reader);
 	char *string = mm_arena_alloc(reader->arena, length + 1);
 	memcpy(string, reader->value, length);
@@ -943,9 +935,40 @@ mm_json_reader_string_strdup(struct mm_json_reader *reader)
 	return string;
 }
 
+size_t NONNULL(1)
+mm_json_reader_string_length(struct mm_json_reader *reader)
+{
+	ASSERT(reader->token == MM_JSON_STRING);
+	if (reader->string.escaped)
+		return 0; // TODO
+
+	return mm_json_reader_length(reader);
+}
+
+char * NONNULL(1)
+mm_json_reader_string_memdup(struct mm_json_reader *reader)
+{
+	ASSERT(reader->token == MM_JSON_STRING);
+	if (reader->string.escaped)
+		return NULL; // TODO
+
+	return mm_json_reader_memdup(reader);
+}
+
+char * NONNULL(1)
+mm_json_reader_string_strdup(struct mm_json_reader *reader)
+{
+	ASSERT(reader->token == MM_JSON_STRING);
+	if (reader->string.escaped)
+		return NULL; // TODO
+
+	return mm_json_reader_strdup(reader);
+}
+
 bool NONNULL(1, 2)
 mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string)
 {
+	ASSERT(reader->token == MM_JSON_STRING);
 	if (reader->string.escaped)
 		return false; // TODO
 
@@ -954,4 +977,28 @@ mm_json_reader_string_equals(struct mm_json_reader *reader, const char *string)
 		return false;
 
 	return memcmp(reader->value, string, length) == 0;
+}
+
+int32_t NONNULL(1)
+mm_json_reader_number_int32(struct mm_json_reader *reader)
+{
+	ASSERT(reader->token == MM_JSON_NUMBER);
+	int error = 0;
+	int32_t value = 0;
+	mm_scan_d32(&value, &error, reader->buffer, reader->buffer_end);
+	if (error)
+		errno = error;
+	return value;
+}
+
+int64_t NONNULL(1)
+mm_json_reader_number_int64(struct mm_json_reader *reader)
+{
+	ASSERT(reader->token == MM_JSON_NUMBER);
+	int error = 0;
+	int64_t value = 0;
+	mm_scan_d64(&value, &error, reader->buffer, reader->buffer_end);
+	if (error)
+		errno = error;
+	return value;
 }

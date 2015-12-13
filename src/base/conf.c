@@ -107,6 +107,10 @@ mm_conf_load(const char *name)
 				char *value = mm_json_reader_string_strdup(&reader);
 				mm_settings_set(key, value, false);
 				mm_arena_free(reader.arena, value);
+			} else if (token == MM_JSON_NUMBER && type != MM_SETTINGS_TRIVIAL) {
+				char *value = mm_json_reader_strdup(&reader);
+				mm_settings_set(key, value, false);
+				mm_arena_free(reader.arena, value);
 			} else if (token != MM_JSON_FALSE) {
 				mm_fatal(0, "configuration file '%s' has invalid '%s' value",
 					 name, key);
