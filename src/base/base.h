@@ -35,7 +35,7 @@ struct mm_base_params
 	mm_routine_t thread_routine;
 };
 
-extern int mm_ncpus;
+extern uint16_t mm_ncpus;
 extern struct mm_domain *mm_regular_domain;
 
 void

@@ -22,7 +22,7 @@
 
 #include "common.h"
 
-int
+uint16_t
 mm_topology_getncpus(void);
 
 #endif /* BASE_TOPOLOGY_H */

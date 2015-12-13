@@ -28,7 +28,7 @@
 
 #define MM_DEFAULT_NCPUS	1
 
-int
+uint16_t
 mm_topology_getncpus(void)
 {
 #if ENABLE_SMP

@@ -69,7 +69,7 @@ mm_signal(int signo, void (*handler)(int))
 	sigemptyset(&sa.sa_mask);
 	sa.sa_flags = SA_RESTART;
 	if (sigaction(signo, &sa, NULL) == -1) {
-		mm_fatal(errno, "Failed sigaction() call");
+		mm_fatal(errno, "failed sigaction() call");
 	}
 
 	LEAVE();
@@ -157,6 +157,7 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	{ NULL, 0, 0, NULL },
 	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
 	{ "daemon", 'd', MM_ARGS_TRIVIAL, "\n\t\trun as a daemon" },
+	{ "thread-number", 't', MM_ARGS_REQUIRED, "\n\t\tnumber of threads" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);

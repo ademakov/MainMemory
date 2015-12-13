@@ -21,6 +21,7 @@
 #include "base/cksum.h"
 #include "base/clock.h"
 #include "base/exit.h"
+#include "base/settings.h"
 #include "base/topology.h"
 #include "base/event/event.h"
 #include "base/log/debug.h"
@@ -32,7 +33,7 @@
 
 #include <unistd.h>
 
-int mm_ncpus = 0;
+uint16_t mm_ncpus = 0;
 struct mm_domain *mm_regular_domain = NULL;
 
 void
@@ -42,7 +43,9 @@ mm_base_init(void)
 
 	// Determine machine topology.
 	mm_ncpus = mm_topology_getncpus();
-	ASSERT(mm_ncpus > 0);
+	uint32_t nthreads = mm_settings_get_uint32("thread-number", NULL);
+	if (nthreads != 0 && nthreads <= UINT16_MAX)
+		mm_ncpus = nthreads;
 
 	// Initialize basic subsystems.
 	mm_memory_init();
