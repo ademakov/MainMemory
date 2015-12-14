@@ -143,7 +143,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	DEBUG("handle sink %p, fd %d, target %u, event %d",
 	      sink, sink->fd, mm_event_target(sink), event);
 	ASSERT(event != MM_EVENT_ATTACH && event != MM_EVENT_DETACH);
-	ASSERT(mm_event_target(sink) == mm_thread_self());
+	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
 
 	mm_event_hid_t id = sink->handler;
 	ASSERT(id < mm_event_hdesc_table_size);
