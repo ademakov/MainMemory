@@ -40,9 +40,6 @@ struct mm_net_server;
 struct mm_task;
 struct mm_work;
 
-#define MM_CORE_SCHED_RING_SIZE		(1024)
-#define MM_CORE_INBOX_RING_SIZE		(1024)
-
 /* Virtual core state. */
 struct mm_core
 {
@@ -57,6 +54,9 @@ struct mm_core
 
 	/* List of tasks that have finished. */
 	struct mm_list dead;
+
+	/* Queue of blocked tasks. */
+	struct mm_list block;
 
 	/* List of asynchronous operations. */
 	struct mm_list async;
@@ -137,7 +137,7 @@ void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit);
 
 /**********************************************************************
- * Core Information.
+ * Core information.
  **********************************************************************/
 
 extern mm_core_t mm_core_num;
@@ -200,5 +200,15 @@ mm_core_getrealtime(struct mm_core *core)
 {
 	return mm_timer_getrealclocktime(&core->time_manager);
 }
+
+/**********************************************************************
+ * Core diagnostics and statistics.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_core_print_tasks(struct mm_core *core);
+
+void
+mm_core_stats(void);
 
 #endif /* CORE_CORE_H */

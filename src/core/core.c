@@ -67,10 +67,22 @@ struct mm_dispatch mm_core_dispatch;
  * Yield routine for backoff on busy waiting.
  **********************************************************************/
 
+#if ENABLE_TASK_LOCATION
+static void
+mm_core_relax(void)
+{
+	mm_task_yield();
+}
+#endif
+
 static void
 mm_core_enable_yield(struct mm_core *core)
 {
+#if ENABLE_TASK_LOCATION
+	mm_thread_setrelax(core->thread, mm_core_relax);
+#else
 	mm_thread_setrelax(core->thread, mm_task_yield);
+#endif
 }
 
 static void
@@ -417,6 +429,8 @@ mm_core_master(mm_value_t arg)
 		// Wait for work at the back end of the idle queue.
 		// So any idle worker would take work before the master.
 		mm_core_idle(core, true);
+
+		mm_core_print_tasks(core);
 	}
 
 	LEAVE();
@@ -548,6 +562,30 @@ mm_core_dealer(mm_value_t arg)
 
 	LEAVE();
 	return 0;
+}
+
+/**********************************************************************
+ * Core diagnostics and statistics.
+ **********************************************************************/
+
+static void
+mm_core_print_task_list(struct mm_list *list)
+{
+	struct mm_link *link = &list->base;
+	while (!mm_list_is_tail(list, link)) {
+		link = link->next;
+		struct mm_task *task = containerof(link, struct mm_task, queue);
+		mm_task_print_status(task);
+	}
+}
+
+void NONNULL(1)
+mm_core_print_tasks(struct mm_core *core)
+{
+	mm_brief("Tasks on core %d:", mm_core_getid(core));
+	for (int i = 0; i < MM_RUNQ_BINS; i++)
+		mm_core_print_task_list(&core->runq.bins[i]);
+	mm_core_print_task_list(&core->block);
 }
 
 void
@@ -744,6 +782,7 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	mm_runq_prepare(&core->runq);
 	mm_list_prepare(&core->idle);
 	mm_list_prepare(&core->dead);
+	mm_list_prepare(&core->block);
 	mm_list_prepare(&core->async);
 	mm_queue_prepare(&core->workq);
 

@@ -26,6 +26,7 @@
 #include "core/core.h"
 #include "core/value.h"
 
+#define ENABLE_TASK_LOCATION	1
 #define ENABLE_TASK_IO_FLAGS	0
 
 /* Maximal task name length (including terminating zero). */
@@ -170,6 +171,11 @@ struct mm_task
 	/* The task name. */
 	char name[MM_TASK_NAME_SIZE];
 
+#if ENABLE_TASK_LOCATION
+	const char *location;
+	const char *function;
+#endif
+
 #if ENABLE_TRACE
 	/* Thread trace context. */
 	struct mm_trace_context trace;
@@ -234,6 +240,9 @@ mm_task_getname(const struct mm_task *task)
 void NONNULL(1, 2)
 mm_task_setname(struct mm_task *task, const char *name);
 
+void NONNULL(1)
+mm_task_print_status(const struct mm_task *task);
+
 /**********************************************************************
  * Task execution.
  **********************************************************************/
@@ -244,11 +253,26 @@ mm_task_run(struct mm_task *task);
 void NONNULL(1)
 mm_task_hoist(struct mm_task *task, mm_priority_t priority);
 
+#if ENABLE_TASK_LOCATION
+
+# define mm_task_yield() mm_task_yield_at(__LOCATION__, __FUNCTION__)
+# define mm_task_block() mm_task_block_at(__LOCATION__, __FUNCTION__)
+
+void NONNULL(1, 2)
+mm_task_yield_at(const char *location, const char *function);
+
+void NONNULL(1, 2)
+mm_task_block_at(const char *location, const char *function);
+
+#else /* !ENABLE_TASK_LOCATION */
+
 void
 mm_task_yield(void);
 
 void
 mm_task_block(void);
+
+#endif /* !ENABLE_TASK_LOCATION */
 
 void NORETURN
 mm_task_exit(mm_value_t result);

@@ -218,7 +218,6 @@ mm_task_attr_getstacksize(const struct mm_task_attr *attr)
 static void
 mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 {
-	task->state = MM_TASK_BLOCKED;
 	task->result = MM_RESULT_NOTREADY;
 
 	if (unlikely(attr == NULL)) {	
@@ -235,12 +234,16 @@ mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 	}
 
 	task->priority = task->original_priority;
+
+#if ENABLE_TASK_LOCATION
+	task->location = "<not set yet>";
+	task->function = "<not set yet>";
+#endif
 }
 
 /* Create a new task. */
 struct mm_task *
-mm_task_create(const struct mm_task_attr *attr,
-	       mm_routine_t start, mm_value_t start_arg)
+mm_task_create(const struct mm_task_attr *attr, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 	struct mm_task *task = NULL;
@@ -283,6 +286,14 @@ mm_task_create(const struct mm_task_attr *attr,
 	mm_task_set_attr(task, attr);
 	task->start = start;
 	task->start_arg = start_arg;
+
+	// Add it to the blocked task list.
+	if (core != NULL) {
+		task->state = MM_TASK_BLOCKED;
+		mm_list_append(&core->block, &task->queue);
+	} else {
+		task->state = MM_TASK_INVALID;
+	}
 
 	if (stack_size) {
 		// Determine combined stack and guard page size.
@@ -359,8 +370,6 @@ mm_task_getid(const struct mm_task *task)
 void NONNULL(1, 2)
 mm_task_setname(struct mm_task *task, const char *name)
 {
-	ENTER();
-
 	size_t len = 0;
 	if (likely(name != NULL)) {
 		len = strlen(name);
@@ -370,8 +379,18 @@ mm_task_setname(struct mm_task *task, const char *name)
 		memcpy(task->name, name, len);
 	}
 	task->name[len] = 0;
+}
 
-	LEAVE();
+void NONNULL(1)
+mm_task_print_status(const struct mm_task *task)
+{
+	static char *state[] = { "blocked", "pending", "running", "invalid" };
+	mm_log_fmt("%s: %s", task->name, state[task->state]);
+#if ENABLE_TASK_LOCATION
+	if (task->state == MM_TASK_BLOCKED || task->state == MM_TASK_PENDING)
+		mm_log_fmt(" at %s(%s)", task->function, task->location);
+#endif
+	mm_log_fmt("\n");
 }
 
 /**********************************************************************
@@ -395,7 +414,10 @@ mm_task_switch(mm_task_state_t state)
 	} else {
 		// Reset the priority that could have been temporary raised.
 		old_task->priority = old_task->original_priority;
-		if (state == MM_TASK_PENDING) {
+		if (state == MM_TASK_BLOCKED) {
+			// Add it to the blocked task list.
+			mm_list_append(&core->block, &old_task->queue);
+		} else {
 			// Add it to the run queue.
 			mm_runq_put(&core->runq, old_task);
 		}
@@ -433,6 +455,9 @@ mm_task_run(struct mm_task *task)
 	ASSERT(task->priority < MM_PRIO_BOOT);
 
 	if (task->state == MM_TASK_BLOCKED) {
+		// Remove it from the blocked task list.
+		mm_list_delete(&task->queue);
+		// Add it to the run queue.
 		task->state = MM_TASK_PENDING;
 		mm_runq_put(&task->core->runq, task);
 	}
@@ -451,22 +476,59 @@ mm_task_hoist(struct mm_task *task, mm_priority_t priority)
 	ASSERT(task->core == mm_core_selfptr());
 	ASSERT(task->priority < MM_PRIO_BOOT);
 
-	if (task->priority > priority) {
-		if (task->state == MM_TASK_PENDING) {
-			task->state = MM_TASK_BLOCKED;
+	if (task->state == MM_TASK_BLOCKED
+	    || (task->state == MM_TASK_PENDING && task->priority > priority)) {
+
+		if (task->state == MM_TASK_BLOCKED) {
+			// Remove it from the blocked task list.
+			mm_list_delete(&task->queue);
+			task->state = MM_TASK_PENDING;
+		} else {
+			// Remove it from the run queue.
 			mm_runq_delete(&task->core->runq, task);
 		}
 
-		task->priority = priority;
-	}
+		if (task->priority > priority)
+			task->priority = priority;
 
-	if (task->state == MM_TASK_BLOCKED) {
-		task->state = MM_TASK_PENDING;
+		// Add it to the run queue with raised priority.
 		mm_runq_put(&task->core->runq, task);
 	}
 
 	LEAVE();
 }
+
+#if ENABLE_TASK_LOCATION
+
+void NONNULL(1, 2)
+mm_task_yield_at(const char *location, const char *function)
+{
+	ENTER();
+
+	struct mm_task *task = mm_task_selfptr();
+	task->location = location;
+	task->function = function;
+
+	mm_task_switch(MM_TASK_PENDING);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_task_block_at(const char *location, const char *function)
+{
+	ENTER();
+
+	struct mm_task *task = mm_task_selfptr();
+	task->location = location;
+	task->function = function;
+
+	mm_task_switch(MM_TASK_BLOCKED);
+
+	LEAVE();
+}
+
+#else
 
 void
 mm_task_yield(void)
@@ -487,6 +549,8 @@ mm_task_block(void)
 
 	LEAVE();
 }
+
+#endif
 
 /* Finish the current task. */
 void
