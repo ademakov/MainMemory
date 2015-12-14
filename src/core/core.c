@@ -214,14 +214,12 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	} else if (core == NULL) {
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
-		mm_domain_send_1(domain, mm_core_post_work_req,
-				(uintptr_t) work);
+		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
 		//mm_domain_notify(domain);
 	} else {
 		// Submit it to the thread request queue.
 		struct mm_thread *thread = core->thread;
-		mm_thread_send_1(thread, mm_core_post_work_req,
-				(uintptr_t) work);
+		mm_thread_send_1(thread, mm_core_post_work_req, (uintptr_t) work);
 		mm_thread_notify(thread);
 	}
 
@@ -582,7 +580,8 @@ mm_core_print_task_list(struct mm_list *list)
 void NONNULL(1)
 mm_core_print_tasks(struct mm_core *core)
 {
-	mm_brief("Tasks on core %d:", mm_core_getid(core));
+	mm_brief("tasks on core %d (#idle=%u, #work=%u)",
+		 mm_core_getid(core), core->nidle, core->nwork);
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_core_print_task_list(&core->runq.bins[i]);
 	mm_core_print_task_list(&core->block);
@@ -880,9 +879,9 @@ mm_core_init(void)
 	// Find the number of CPU cores.
 	mm_core_num = mm_ncpus;
 	if (mm_core_num == 1)
-		mm_brief("Running on 1 core.");
+		mm_brief("running on 1 core.");
 	else
-		mm_brief("Running on %d cores.", mm_core_num);
+		mm_brief("running on %d cores.", mm_core_num);
 
 	mm_event_init();
 	mm_net_init();
