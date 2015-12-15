@@ -72,7 +72,7 @@ void NONNULL(1)
 mm_task_attr_init(struct mm_task_attr *attr)
 {
 	memset(attr, 0, sizeof(*attr));
-	attr->priority = MM_PRIO_WORK;
+	attr->priority = MM_PRIO_WORKER;
 }
 
 void NONNULL(1)
@@ -222,7 +222,7 @@ mm_task_set_attr(struct mm_task *task, const struct mm_task_attr *attr)
 
 	if (unlikely(attr == NULL)) {	
 		task->flags = 0;
-		task->original_priority = MM_PRIO_WORK;
+		task->original_priority = MM_PRIO_WORKER;
 		strcpy(task->name, "unnamed");
 	} else {
 		task->flags = attr->flags;

@@ -48,14 +48,11 @@ typedef int8_t			mm_priority_t;
 /* Basic task priorities. */
 #define MM_PRIO_BOOT		MM_PRIO_LOWERMOST
 #define MM_PRIO_IDLE		MM_PRIO_UPPER(MM_PRIO_BOOT, 1)
-#define MM_PRIO_WORK		MM_PRIO_UPPER(MM_PRIO_IDLE, 1)
-#define MM_PRIO_CORE		MM_PRIO_UPPER(MM_PRIO_WORK, 10)
 
 /* Specific task priorities. */
 #define MM_PRIO_DEALER		MM_PRIO_IDLE
-#define MM_PRIO_WORKER		MM_PRIO_WORK
-#define MM_PRIO_MASTER		MM_PRIO_CORE
-#define MM_PRIO_SYSTEM		MM_PRIO_UPPER(MM_PRIO_CORE, 1)
+#define MM_PRIO_MASTER		MM_PRIO_UPPER(MM_PRIO_DEALER, 1)
+#define MM_PRIO_WORKER		MM_PRIO_UPPER(MM_PRIO_MASTER, 1)
 
 /* Task state values. */
 typedef enum {
