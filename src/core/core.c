@@ -401,8 +401,13 @@ mm_core_master(mm_value_t arg)
 	ENTER();
 
 	struct mm_core *core = (struct mm_core *) arg;
+	bool verbose = mm_get_verbose_enabled();
 
 	while (!mm_memory_load(core->stop)) {
+
+		// Inform about the status of all tasks.
+		if (verbose && mm_core_has_work(core))
+			mm_core_print_tasks(core);
 
 		// Check to see if there are enough workers.
 		if (core->nworkers >= core->nworkers_max) {
@@ -415,20 +420,21 @@ mm_core_master(mm_value_t arg)
 			// Take the first available work item.
 			struct mm_work *work = mm_core_get_work(core);
 
-			// Start a new worker to handle the work.
+			// Make a new worker task to handle it.
 			struct mm_task_attr attr;
 			mm_task_attr_init(&attr);
 			mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
 			mm_task_attr_setname(&attr, "worker");
 			mm_task_create(&attr, mm_core_worker, (mm_value_t) work);
 			core->nworkers++;
+
+			// Run the worker task.
+			mm_task_yield();
+		} else {
+			// Wait for work at the back end of the idle queue.
+			// So any idle worker would take work before the master.
+			mm_core_idle(core, true);
 		}
-
-		// Wait for work at the back end of the idle queue.
-		// So any idle worker would take work before the master.
-		mm_core_idle(core, true);
-
-		mm_core_print_tasks(core);
 	}
 
 	LEAVE();
@@ -580,7 +586,7 @@ mm_core_print_task_list(struct mm_list *list)
 void NONNULL(1)
 mm_core_print_tasks(struct mm_core *core)
 {
-	mm_brief("tasks on core %d (#idle=%u, #work=%u)",
+	mm_brief("tasks on core %d (#idle=%u, #work=%u):",
 		 mm_core_getid(core), core->nidle, core->nwork);
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_core_print_task_list(&core->runq.bins[i]);
