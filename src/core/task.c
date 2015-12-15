@@ -385,7 +385,7 @@ void NONNULL(1)
 mm_task_print_status(const struct mm_task *task)
 {
 	static char *state[] = { "blocked", "pending", "running", "invalid" };
-	mm_log_fmt("%s %s", task->name, state[task->state]);
+	mm_log_fmt("  %s %s", task->name, state[task->state]);
 #if ENABLE_TASK_LOCATION
 	if (task->state == MM_TASK_BLOCKED || task->state == MM_TASK_PENDING)
 		mm_log_fmt(" at %s(%s)", task->function, task->location);
