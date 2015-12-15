@@ -36,15 +36,31 @@
 uint16_t mm_ncpus = 0;
 struct mm_domain *mm_regular_domain = NULL;
 
+static bool
+mm_base_validate_nthreads(uint32_t n)
+{
+#if ENABLE_SMP
+	return n <= UINT16_MAX;
+#else
+	return n == 1;
+#endif
+}
+
 void
 mm_base_init(void)
 {
 	ENTER();
 
-	// Determine machine topology.
-	mm_ncpus = mm_topology_getncpus();
-	uint32_t nthreads = mm_settings_get_uint32("thread-number", NULL);
-	if (nthreads != 0 && nthreads <= UINT16_MAX)
+	uint32_t nthreads = mm_settings_get_uint32("thread-number", "0");
+	if (nthreads != 0 && !mm_base_validate_nthreads(nthreads)) {
+		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
+		nthreads = 0;
+	}
+
+	// Determine the machine topology.
+	if (nthreads == 0)
+		mm_ncpus = mm_topology_getncpus();
+	else
 		mm_ncpus = nthreads;
 
 	// Initialize basic subsystems.
