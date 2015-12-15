@@ -1,12 +1,9 @@
 
 ASAP:
-* improve smp performance
-** avoid long memcache locks or non-blocking memcache table
-* polish & optimize
-** optimize event dispatch
-** try to beautify netbuf interface
-* configuration file parsing
-* command line argument parsing
+* improve buffer management and try to beautify netbuf interface
+* optimize event dispatch
+* minimize memcache locks or non-blocking memcache table
+* add more config options
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
 ;;; against stock memcache.
@@ -17,7 +14,6 @@ Essentials:
 * resolve socket close issues: time wait
 * disk I/O threads
 * syslog
-* daemonize
 * statistics
 * global lock counters
 * UDP servers
