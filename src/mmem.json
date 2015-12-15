@@ -1,5 +1,6 @@
 {
 	"daemon" : false,
 	"verbose" : true,
-	"warning" : true
+	"warning" : true,
+	"thread-number" : 4
 }
