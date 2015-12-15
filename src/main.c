@@ -186,8 +186,8 @@ main(int argc, char *argv[])
 
 	// Load configuration file.
 	mm_conf_load(mm_settings_get("config", NULL));
-	mm_enable_verbose(mm_settings_get("verbose", NULL) != NULL);
-	mm_enable_warning(mm_settings_get("warning", NULL) != NULL);
+	mm_set_verbose_enabled(mm_settings_get("verbose", NULL) != NULL);
+	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 
 	// Initialize subsystems.
 	mm_base_init();

@@ -28,9 +28,15 @@
 static bool mm_warning_enabled = false;
 
 void
-mm_enable_warning(bool value)
+mm_set_warning_enabled(bool value)
 {
 	mm_warning_enabled = value;
+}
+
+bool
+mm_get_warning_enabled(void)
+{
+	return mm_warning_enabled;
 }
 
 void NONNULL(2) FORMAT(2, 3)

@@ -22,7 +22,11 @@
 
 #include "common.h"
 
-void mm_enable_warning(bool value);
+void
+mm_set_warning_enabled(bool value);
+
+bool
+mm_get_warning_enabled(void);
 
 void NONNULL(2) FORMAT(2, 3)
 mm_warning(int error, const char *restrict msg, ...);

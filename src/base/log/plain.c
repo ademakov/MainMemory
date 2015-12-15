@@ -26,9 +26,15 @@
 static bool mm_verbose_enabled = false;
 
 void
-mm_enable_verbose(bool value)
+mm_set_verbose_enabled(bool value)
 {
 	mm_verbose_enabled = value;
+}
+
+bool
+mm_get_verbose_enabled(void)
+{
+	return mm_verbose_enabled;
 }
 
 void NONNULL(1) FORMAT(1, 2)

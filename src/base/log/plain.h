@@ -23,7 +23,10 @@
 #include "common.h"
 
 void
-mm_enable_verbose(bool value);
+mm_set_verbose_enabled(bool value);
+
+bool
+mm_get_verbose_enabled(void);
 
 void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...);
