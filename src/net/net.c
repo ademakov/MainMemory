@@ -305,7 +305,7 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 	if (!(srv->proto->flags & MM_NET_OUTBOUND))
 		output = MM_EVENT_ONESHOT;
 	if (srv->proto->finish != NULL)
-		target = MM_EVENT_TARGET_HANDY;
+		target = MM_EVENT_TARGET_AGILE;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
 			    input, output, target);
 

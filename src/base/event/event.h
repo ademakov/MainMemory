@@ -50,7 +50,7 @@ typedef enum {
 typedef enum {
 	MM_EVENT_TARGET_LOOSE,
 	MM_EVENT_TARGET_BOUND,
-	MM_EVENT_TARGET_HANDY,
+	MM_EVENT_TARGET_AGILE,
 } mm_event_target_t;
 
 /* Event details. */
