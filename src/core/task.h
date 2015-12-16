@@ -26,7 +26,7 @@
 #include "core/core.h"
 #include "core/value.h"
 
-#define ENABLE_TASK_LOCATION	1
+#define ENABLE_TASK_LOCATION	0
 #define ENABLE_TASK_IO_FLAGS	0
 
 /* Maximal task name length (including terminating zero). */
