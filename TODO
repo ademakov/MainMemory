@@ -1,7 +1,8 @@
 
 ASAP:
-* improve buffer management and try to beautify netbuf interface
+* increase concurrency
 * optimize event dispatch
+* optimize buffer management and beautify netbuf interface
 * minimize memcache locks or non-blocking memcache table
 * add more config options
 
