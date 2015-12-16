@@ -30,18 +30,25 @@ Essentials:
 ** refcount? capabilities? some form of SMR?
 
 Larger items:
-* HTTP module
+* NUMA support:
+** NUMA-aware memory allocation
+** NUMA-aware synchronization
+** NUMA-aware work scheduling
+* memory management:
+** https://github.com/cksystemsgroup/scalloc
+** slab allocator (to base object pools on)
+** buddy allocator (for chunks and slabs)
 * persistence
 * replication
+* HTTP module
+* redis protocol
+* arm aarch64 port
 * extension language
-
-Enhancements:
-* DNS resolver
 * AF_PACKET and/or DPDK-based net I/O
+
+Low priority enhancements:
+* DNS resolver
 * background workers
-* proper future cancellation
-** let tasks to be canceled across cores
-** let catch task termination with setjmp/longjmp or libunwind mechanism
 * fs event notification
 * core and task local storage (tls)
 * exit idle workers pending for too long
@@ -55,18 +62,12 @@ Enhancements:
 * shrink pools on low demand
 * shrink memcache table on low demand
 * generic work stealing
-* NUMA support:
-** NUMA-aware memory allocation
-** NUMA-aware synchronization
-** NUMA-aware work scheduling
+* proper future cancellation
+** let tasks to be canceled across cores
+** let catch task termination with setjmp/longjmp or libunwind mechanism
 * improve ports:
 ** non-blocking
 ** allow sending other types
 ** function call marshal/dispatch mechanism on top of that
 * try to detect clock adjustments and reset realtime timers accordingly
-* memory management:
-** slab allocator (to base object pools on)
-** buddy allocator (for chunks and slabs)
-** garbage collection
 * failure trace records
-* arm port
