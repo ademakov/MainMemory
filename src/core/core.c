@@ -446,11 +446,7 @@ mm_core_master(mm_value_t arg)
  **********************************************************************/
 
 // Dealer loop sleep time - 10 seconds
-#define MM_DEALER_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
-
-#if ENABLE_DEALER_STATS
-static mm_atomic_uint32_t mm_core_deal_count;
-#endif
+#define MM_CORE_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
 
 void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
@@ -463,7 +459,7 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 
 	while (mm_thread_receive(thread, &request)) {
 		mm_request_execute(number, &request);
-		core->request_count++;
+		core->thread_request_count++;
 	}
 
 #if ENABLE_SMP
@@ -472,7 +468,7 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 	uint32_t count = 0;
 	while (count < domain_limit && mm_domain_receive(domain, &request)) {
 		mm_request_execute(number, &request);
-		core->request_count++;
+		core->domain_request_count++;
 		count++;
 	}
 #else
@@ -502,10 +498,6 @@ mm_core_deal(struct mm_core *core, struct mm_thread *thread)
 	mm_private_space_trim(mm_thread_getspace(thread));
 #endif
 
-#if ENABLE_DEALER_STATS
-	mm_atomic_uint32_inc(&mm_core_deal_count);
-#endif
-
 	LEAVE();
 }
 
@@ -518,7 +510,7 @@ mm_core_halt(struct mm_core *core)
 	mm_timeval_t wake_time = mm_timer_next(&core->time_manager);
 	if (wake_time != MM_TIMEVAL_MAX) {
 		// Calculate the timeout.
-		mm_timeout_t timeout = MM_DEALER_HALT_TIMEOUT;
+		mm_timeout_t timeout = MM_CORE_HALT_TIMEOUT;
 		mm_timeval_t time = mm_core_gettime(core);
 		if (wake_time < (time + timeout)) {
 			if (wake_time > time)
@@ -528,8 +520,7 @@ mm_core_halt(struct mm_core *core)
 		}
 
 		// Halt the core waiting for incoming events.
-		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
-				   timeout);
+		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);
@@ -539,8 +530,7 @@ mm_core_halt(struct mm_core *core)
 
 	} else {
 		// Halt the core waiting for incoming events.
-		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
-				   MM_DEALER_HALT_TIMEOUT);
+		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), MM_CORE_HALT_TIMEOUT);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);
@@ -557,11 +547,21 @@ mm_core_dealer(mm_value_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 
 	while (!mm_memory_load(core->stop)) {
+
+		// Count the loop cycles.
+		core->loop_count++;
+
+		// Handle incoming requests
 		mm_core_deal(core, core->thread);
 
-		mm_core_disable_yield(core);
+		// Enter the state that forbids task switches.
+		core->state = MM_CORE_WAITING;
+
+		// Halt waiting for incoming requests.
 		mm_core_halt(core);
-		mm_core_enable_yield(core);
+
+		// Restore normal running state.
+		core->state = MM_CORE_RUNNING;
 	}
 
 	LEAVE();
@@ -596,10 +596,24 @@ mm_core_print_tasks(struct mm_core *core)
 void
 mm_core_stats(void)
 {
-#if ENABLE_DEALER_STATS
-	uint32_t deal = mm_memory_load(mm_core_deal_count);
-	mm_verbose("core stats: deal = %u", deal);
+	mm_core_t n = mm_core_getnum();
+	for (mm_core_t i = 0; i < n; i++) {
+		struct mm_core *core = mm_core_getptr(i);
+		mm_verbose("core %d: cycles=%llu, cswitches=%llu/%llu/%llu,"
+			   " requests=%llu/%llu, workers=%lu", i,
+			   (unsigned long long) core->loop_count,
+			   (unsigned long long) core->cswitch_count,
+			   (unsigned long long) core->cswitch_denied_in_waiting_state,
+			   (unsigned long long) core->cswitch_denied_in_cswitch_state,
+			   (unsigned long long) core->thread_request_count,
+#if ENABLE_SMP
+			   (unsigned long long) core->domain_request_count,
+#else
+			   (unsigned long long) 0,
 #endif
+			   (unsigned long) core->nworkers);
+	}
+
 	mm_event_stats();
 	mm_lock_stats();
 }
@@ -760,7 +774,9 @@ mm_core_boot(mm_value_t arg)
 	mm_core_enable_yield(core);
 
 	// Run the other tasks while there are any.
+	core->state = MM_CORE_RUNNING;
 	mm_task_yield();
+	core->state = MM_CORE_INVALID;
 
 	// Disable yielding to other tasks.
 	mm_core_disable_yield(core);
@@ -793,13 +809,21 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 
 	mm_wait_cache_prepare(&core->wait_cache);
 
-	core->cswitch_count = 0;
-	core->request_count = 0;
+	core->state = MM_CORE_INVALID;
 
 	core->nwork = 0;
 	core->nidle = 0;
 	core->nworkers = 0;
 	core->nworkers_max = nworkers_max;
+
+	core->cswitch_count = 0;
+	core->cswitch_denied_in_cswitch_state = 0;
+	core->cswitch_denied_in_waiting_state = 0;
+
+	core->thread_request_count = 0;
+#if ENABLE_SMP
+	core->domain_request_count = 0;
+#endif
 
 	core->master = NULL;
 	core->dealer = NULL;

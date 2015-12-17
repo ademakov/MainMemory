@@ -40,6 +40,14 @@ struct mm_net_server;
 struct mm_task;
 struct mm_work;
 
+typedef enum
+{
+	MM_CORE_INVALID = -1,
+	MM_CORE_RUNNING,
+	MM_CORE_CSWITCH,
+	MM_CORE_WAITING,
+} mm_core_state_t;
+
 /* Virtual core state. */
 struct mm_core
 {
@@ -64,18 +72,28 @@ struct mm_core
 	/* Queue of pending work items. */
 	struct mm_queue workq;
 
-	/* The counter of task context switches. */
-	uint64_t cswitch_count;
-	/* The counter of thread requests. */
-	uint64_t request_count;
+	/* The core status. */
+	mm_core_state_t state;
 
 	/* The number of items in the work queue. */
 	uint32_t nwork;
 
 	/* Current and maximum number of worker tasks. */
-	uint32_t nidle;
-	uint32_t nworkers;
-	uint32_t nworkers_max;
+	mm_task_t nidle;
+	mm_task_t nworkers;
+	mm_task_t nworkers_max;
+
+	/* The counter of task context switches. */
+	uint64_t loop_count;
+	uint64_t cswitch_count;
+	uint64_t cswitch_denied_in_cswitch_state;
+	uint64_t cswitch_denied_in_waiting_state;
+
+	/* The counter of thread requests. */
+	uint64_t thread_request_count;
+#if ENABLE_SMP
+	uint64_t domain_request_count;
+#endif
 
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;

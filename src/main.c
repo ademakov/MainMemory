@@ -209,6 +209,7 @@ main(int argc, char *argv[])
 
 	// Execute the main loop.
 	mm_core_start();
+	mm_core_stats();
 
 	// Terminate subsystems.
 	mm_core_term();

@@ -288,7 +288,7 @@ mm_task_create(const struct mm_task_attr *attr, mm_routine_t start, mm_value_t s
 	task->start_arg = start_arg;
 
 	// Add it to the blocked task list.
-	if (core != NULL) {
+	if (core != NULL && stack_size) {
 		task->state = MM_TASK_BLOCKED;
 		mm_list_append(&core->block, &task->queue);
 	} else {
@@ -403,6 +403,15 @@ mm_task_switch(mm_task_state_t state)
 {
 	struct mm_core *core = mm_core_selfptr();
 
+	// Bail out if the core is not in the normal running state.
+	if (unlikely(core->state != MM_CORE_RUNNING)) {
+		if (core->state == MM_CORE_CSWITCH)
+			core->cswitch_denied_in_cswitch_state++;
+		else
+			core->cswitch_denied_in_waiting_state++;
+		return;
+	}
+
 	// Move the currently running task to a new state.
 	struct mm_task *old_task = core->task;
 	ASSERT(old_task->state == MM_TASK_RUNNING);
@@ -423,20 +432,27 @@ mm_task_switch(mm_task_state_t state)
 		}
 	}
 
+	// Enter the state that forbids a recursive task switch.
+	core->state = MM_CORE_CSWITCH;
+
 	// Execute requests associated with the core.
 	mm_core_execute_requests(core, 1);
+
+	// Restore normal running state.
+	core->state = MM_CORE_RUNNING;
 
 	// Get the next task from the run queue.  As long as this function
 	// is called there is at least a boot task in the run queue.  So
 	// there should never be a NULL value returned.
 	struct mm_task *new_task = mm_runq_get(&core->runq);
-
 	new_task->state = MM_TASK_RUNNING;
 	core->task = new_task;
 
+	// Count the context switch.
+	core->cswitch_count++;
+
 	// Switch to the new task relinquishing CPU control for a while.
 	mm_cstack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
-	core->cswitch_count++;
 
 	// Resume the task unless it has been canceled and it agrees to be
 	// canceled asynchronously. In that case it quits here.
