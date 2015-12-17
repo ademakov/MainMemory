@@ -449,14 +449,13 @@ mm_core_master(mm_value_t arg)
 #define MM_CORE_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
 
 void NONNULL(1)
-mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
+mm_core_execute_requests(struct mm_core *core)
 {
 	ENTER();
 	struct mm_request_data request;
 
 	struct mm_thread *const thread = core->thread;
 	const mm_thread_t number = mm_thread_getnumber(thread);
-
 	while (mm_thread_receive(thread, &request)) {
 		mm_request_execute(number, &request);
 		core->thread_request_count++;
@@ -464,38 +463,28 @@ mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit)
 
 #if ENABLE_SMP
 	struct mm_domain *const domain = mm_thread_getdomain(thread);
-
-	uint32_t count = 0;
-	while (count < domain_limit && mm_domain_receive(domain, &request)) {
+	while (mm_runq_empty_above(&core->runq, MM_PRIO_IDLE)
+	       && mm_domain_receive(domain, &request)) {
 		mm_request_execute(number, &request);
 		core->domain_request_count++;
-		count++;
 	}
-#else
-	(void) domain_limit;
 #endif
 
 	LEAVE();
 }
 
 static void
-mm_core_deal(struct mm_core *core, struct mm_thread *thread)
+mm_core_trim(struct mm_core *core)
 {
 	ENTER();
 
-	// Execute requests associated with the core.
-	mm_core_execute_requests(core, UINT32_MAX);
-
-	// Run the queued tasks if any.
-	mm_task_yield();
-
 	// Cleanup the temporary data.
 	mm_wait_cache_truncate(&core->wait_cache);
-	mm_chunk_enqueue_deferred(thread, true);
+	mm_chunk_enqueue_deferred(core->thread, true);
 
 #if ENABLE_SMP
 	// Trim private memory space.
-	mm_private_space_trim(mm_thread_getspace(thread));
+	mm_private_space_trim(mm_thread_getspace(core->thread));
 #endif
 
 	LEAVE();
@@ -551,15 +540,16 @@ mm_core_dealer(mm_value_t arg)
 		// Count the loop cycles.
 		core->loop_count++;
 
-		// Handle incoming requests
-		mm_core_deal(core, core->thread);
+		// Run the queued tasks if any.
+		mm_task_yield();
+
+		// Release excessive resources allocated by tasks.
+		mm_core_trim(core);
 
 		// Enter the state that forbids task switches.
 		core->state = MM_CORE_WAITING;
-
 		// Halt waiting for incoming requests.
 		mm_core_halt(core);
-
 		// Restore normal running state.
 		core->state = MM_CORE_RUNNING;
 	}

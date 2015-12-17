@@ -160,7 +160,7 @@ void NONNULL(1)
 mm_core_run_task(struct mm_task *task);
 
 void NONNULL(1)
-mm_core_execute_requests(struct mm_core *core, uint32_t domain_limit);
+mm_core_execute_requests(struct mm_core *core);
 
 /**********************************************************************
  * Core information.

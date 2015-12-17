@@ -434,10 +434,8 @@ mm_task_switch(mm_task_state_t state)
 
 	// Enter the state that forbids a recursive task switch.
 	core->state = MM_CORE_CSWITCH;
-
 	// Execute requests associated with the core.
-	mm_core_execute_requests(core, 1);
-
+	mm_core_execute_requests(core);
 	// Restore normal running state.
 	core->state = MM_CORE_RUNNING;
 
