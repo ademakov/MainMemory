@@ -33,12 +33,9 @@ struct mm_event_receiver
 	/* The thread that currently owns the receiver. */
 	mm_thread_t control_thread;
 
-	/* A counter to detect event sink detach feasibility. */
-	uint32_t arrival_stamp;
-
 	/* Event listeners. */
-	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
+	struct mm_event_listener *listeners;
 
 	/* Target threads that have received events. */
 	struct mm_bitset targets;
@@ -51,12 +48,6 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver,
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
-
-static inline void NONNULL(1)
-mm_event_receiver_start(struct mm_event_receiver *receiver)
-{
-	receiver->arrival_stamp++;
-}
 
 void NONNULL(1, 3)
 mm_event_receiver_listen(struct mm_event_receiver *receiver,

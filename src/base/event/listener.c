@@ -46,10 +46,10 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 	listener->notify_stamp = 0;
 
 	listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
-	listener->changes_stamp = 0;
+	listener->publish_stamp = 0;
 
-	listener->arrival_stamp = 0;
-	listener->handle_stamp = 0;
+	listener->forward_stamp = 0;
+	listener->delivery_stamp = 0;
 
 	mm_list_prepare(&listener->detach_list);
 

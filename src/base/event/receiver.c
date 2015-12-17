@@ -32,8 +32,6 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthrea
 {
 	ENTER();
 
-	receiver->arrival_stamp = 0;
-
 	// Allocate listener info.
 	receiver->nlisteners = nthreads;
 	receiver->listeners = mm_common_calloc(nthreads,
@@ -63,18 +61,6 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 static void
-mm_event_receiver_handle_0_req(uintptr_t context UNUSED, uintptr_t *arguments)
-{
-	ENTER();
-
-	// Update private event stamp.
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	listener->handle_stamp = arguments[1];
-
-	LEAVE();
-}
-
-static void
 mm_event_receiver_handle_1_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
@@ -87,7 +73,7 @@ mm_event_receiver_handle_1_req(uintptr_t context UNUSED, uintptr_t *arguments)
 
 	// Update private event stamp.
 	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[2];
-	listener->handle_stamp = arguments[3];
+	listener->delivery_stamp += 1;
 
 	LEAVE();
 }
@@ -108,7 +94,7 @@ mm_event_receiver_handle_2_req(uintptr_t context UNUSED, uintptr_t *arguments)
 
 	// Update private event stamp.
 	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[3];
-	listener->handle_stamp = arguments[4];
+	listener->delivery_stamp += 2;
 
 	LEAVE();
 }
@@ -132,7 +118,7 @@ mm_event_receiver_handle_3_req(uintptr_t context UNUSED, uintptr_t *arguments)
 
 	// Update private event stamp.
 	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[4];
-	listener->handle_stamp = arguments[5];
+	listener->delivery_stamp += 3;
 
 	LEAVE();
 }
@@ -157,6 +143,10 @@ mm_event_receiver_handle_4_req(uintptr_t context UNUSED, uintptr_t *arguments)
 	mm_event_handle(sink_3, event_3);
 	mm_event_handle(sink_4, event_4);
 
+	// Update private event stamp.
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[5];
+	listener->delivery_stamp += 4;
+
 	LEAVE();
 }
 
@@ -166,8 +156,9 @@ mm_event_receiver_batch_add(struct mm_event_listener *listener, mm_event_t event
 {
 	ENTER();
 
+	// Flush the buffer if it is full.
 	if (listener->nevents == 4) {
-		mm_thread_send_5(listener->thread,
+		mm_thread_send_6(listener->thread,
 				 mm_event_receiver_handle_4_req,
 				 (uintptr_t) listener->events[0].ev_fd,
 				 (uintptr_t) listener->events[1].ev_fd,
@@ -176,45 +167,48 @@ mm_event_receiver_batch_add(struct mm_event_listener *listener, mm_event_t event
 				 listener->events[0].event |
 				 (listener->events[1].event << 8) |
 				 (listener->events[2].event << 16) |
-				 (listener->events[3].event << 24));
+				 (listener->events[3].event << 24),
+				 (uintptr_t) listener);
 		listener->nevents = 0;
 	}
 
+	// Add the event to the buffer.
 	unsigned int n = listener->nevents++;
 	listener->events[n].event = event;
 	listener->events[n].ev_fd = sink;
+
+	// Account for the event.
+	listener->forward_stamp++;
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_batch_flush(struct mm_event_listener *listener, uint32_t stamp)
+mm_event_receiver_batch_flush(struct mm_event_listener *listener)
 {
 	ENTER();
 
 	switch (listener->nevents) {
 	case 1:
-		mm_thread_send_4(listener->thread,
+		mm_thread_send_3(listener->thread,
 				 mm_event_receiver_handle_1_req,
 				 (uintptr_t) listener->events[0].ev_fd,
 				 listener->events[0].event,
-				 (uintptr_t) listener,
-				 stamp);
+				 (uintptr_t) listener);
 		listener->nevents = 0;
 		break;
 	case 2:
-		mm_thread_send_5(listener->thread,
+		mm_thread_send_4(listener->thread,
 				 mm_event_receiver_handle_2_req,
 				 (uintptr_t) listener->events[0].ev_fd,
 				 (uintptr_t) listener->events[1].ev_fd,
 				 listener->events[0].event |
 				 (listener->events[1].event << 8),
-				 (uintptr_t) listener,
-				 stamp);
+				 (uintptr_t) listener);
 		listener->nevents = 0;
 		break;
 	case 3:
-		mm_thread_send_6(listener->thread,
+		mm_thread_send_5(listener->thread,
 				 mm_event_receiver_handle_3_req,
 				 (uintptr_t) listener->events[0].ev_fd,
 				 (uintptr_t) listener->events[1].ev_fd,
@@ -222,12 +216,11 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener, uint32_t stamp
 				 listener->events[0].event |
 				 (listener->events[1].event << 8) |
 				 (listener->events[2].event << 16),
-				 (uintptr_t) listener,
-				 stamp);
+				 (uintptr_t) listener);
 		listener->nevents = 0;
 		break;
 	case 4:
-		mm_thread_send_5(listener->thread,
+		mm_thread_send_6(listener->thread,
 				 mm_event_receiver_handle_4_req,
 				 (uintptr_t) listener->events[0].ev_fd,
 				 (uintptr_t) listener->events[1].ev_fd,
@@ -236,11 +229,8 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener, uint32_t stamp
 				 listener->events[0].event |
 				 (listener->events[1].event << 8) |
 				 (listener->events[2].event << 16) |
-				 (listener->events[3].event << 24));
-		mm_thread_send_2(listener->thread,
-				 mm_event_receiver_handle_0_req,
-				 (uintptr_t) listener,
-				 stamp);
+				 (listener->events[3].event << 24),
+				 (uintptr_t) listener);
 		listener->nevents = 0;
 		break;
 	default:
@@ -264,16 +254,13 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	struct mm_event_listener *listener = &receiver->listeners[thread];
 	mm_event_listener_poll(listener, backend, receiver, timeout);
 
-	// Update private event stamp.
-	listener->handle_stamp = listener->arrival_stamp;
-
 	// Forward incoming events that belong to other threads.
 	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
 	while (target != MM_THREAD_NONE) {
 		struct mm_event_listener *target_listener = &receiver->listeners[target];
 
 		// Forward incoming events.
-		mm_event_receiver_batch_flush(target_listener, receiver->arrival_stamp);
+		mm_event_receiver_batch_flush(target_listener);
 
 		// Wake up the target thread if it is sleeping.
 		mm_event_listener_notify(target_listener, backend);
@@ -296,50 +283,36 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 
 	receiver->got_events = true;
 
+	// Update the arrival stamp. This disables detachment of the event sink
+	// until the event jumps through all the hoops and the dispatch stamp
+	// is updated accordingly.
+	sink->arrival_stamp++;
+
 	if (sink->loose_target) {
-		// Handle the event.
+		// Handle the event immediately.
 		mm_event_handle(sink, event);
 
-	} else if (sink->bound_target) {
-		// If the event sink belongs to the control thread then
-		// handle it immediately, otherwise store it for later
-		// delivery to the target thread.
+	} else {
 		mm_thread_t target = sink->target;
+
+		// If the event sink is detached then attach it to the control
+		// thread.
+		if (!sink->bound_target && target != receiver->control_thread) {
+			mm_memory_load_fence();
+			uint32_t dispatch_stamp = mm_memory_load(sink->dispatch_stamp);
+			if (dispatch_stamp == sink->arrival_stamp) {
+				target = receiver->control_thread;
+				sink->target = target;
+			}
+		}
+
+		// If the event sink belongs to the control thread then handle
+		// it immediately, otherwise store it for later delivery to
+		// the target thread.
 		if (target == receiver->control_thread) {
 			mm_event_handle(sink, event);
 		} else {
 			struct mm_event_listener *listener = &receiver->listeners[target];
-			mm_event_receiver_batch_add(listener, event, sink);
-			mm_bitset_set(&receiver->targets, target);
-		}
-
-	} else {
-		mm_thread_t target = sink->target;
-		mm_memory_load_fence();
-
-		// If the event sink is detached then attach it to the
-		// control thread.
-		if (target != receiver->control_thread) {
-			uint32_t detach_stamp = mm_memory_load(sink->detach_stamp);
-			if (detach_stamp == sink->arrival_stamp) {
-				sink->target = receiver->control_thread;
-				target = receiver->control_thread;
-			}
-		}
-
-		// Update the arrival stamp. This disables detachment of
-		// the event sink until the received event jumps through
-		// all the hoops and the detach stamp is updated accordingly.
-		struct mm_event_listener *listener = &receiver->listeners[target];
-		listener->arrival_stamp = receiver->arrival_stamp;
-		sink->arrival_stamp = receiver->arrival_stamp;
-
-		// If the event sink belongs to the control thread then
-		// handle it immediately, otherwise store it for later
-		// delivery to the target thread.
-		if (target == receiver->control_thread) {
-			mm_event_handle(sink, event);
-		} else {
 			mm_event_receiver_batch_add(listener, event, sink);
 			mm_bitset_set(&receiver->targets, target);
 		}

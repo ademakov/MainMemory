@@ -84,12 +84,12 @@ struct mm_event_listener
 	mm_event_listener_changes_t changes_state;
 
 	/* A counter to ensure visibility of change events. */
-	uint32_t changes_stamp;
+	uint32_t publish_stamp;
 
-	/* The last received event stamp (to detect detach feasibility). */
-	uint32_t arrival_stamp;
-	/* The last handled event stamp (to detect detach feasibility). */
-	uint32_t handle_stamp;
+	/* The event forward stamp. */
+	uint32_t forward_stamp;
+	/* The event handling stamp. */
+	uint32_t delivery_stamp;
 
 	/* Listener's event sinks waiting to be detached. */
 	struct mm_list detach_list;

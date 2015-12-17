@@ -49,6 +49,8 @@ struct mm_dispatch
 
 	/* A common store for published change events. */
 	struct mm_event_batch changes;
+	/* Counters to ensure visibility of change events. */
+	uint32_t publish_stamp;
 
 	/* A common store for incoming events filled by the control thread. */
 	struct mm_event_receiver receiver;
@@ -86,16 +88,14 @@ void NONNULL(1)
 mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
 
 void NONNULL(1)
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
-		   mm_timeout_t timeout);
+mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
 
 /**********************************************************************
  * I/O events support.
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
-mm_dispatch_register_fd(struct mm_dispatch *dispatch,
-			struct mm_event_fd *sink)
+mm_dispatch_register_fd(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	if (thread == MM_THREAD_NONE) {
@@ -109,8 +109,7 @@ mm_dispatch_register_fd(struct mm_dispatch *dispatch,
 }
 
 static inline void NONNULL(1, 2)
-mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
-			  struct mm_event_fd *sink)
+mm_dispatch_unregister_fd(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
@@ -120,8 +119,7 @@ mm_dispatch_unregister_fd(struct mm_dispatch *dispatch,
 }
 
 static inline void NONNULL(1, 2)
-mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
-			  struct mm_event_fd *sink)
+mm_dispatch_trigger_input(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
@@ -136,8 +134,7 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch,
 }
 
 static inline void NONNULL(1, 2)
-mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
-			   struct mm_event_fd *sink)
+mm_dispatch_trigger_output(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
 #if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
@@ -152,8 +149,7 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch,
 }
 
 static inline void NONNULL(1, 2)
-mm_dispatch_detach(struct mm_dispatch *dispatch,
-		   struct mm_event_fd *sink)
+mm_dispatch_detach(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());

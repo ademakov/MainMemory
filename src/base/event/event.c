@@ -129,7 +129,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	sink->oneshot_input_trigger = 0;
 	sink->oneshot_output_trigger = 0;
 
-	sink->detach_stamp = 0;
+	sink->dispatch_stamp = 0;
 	sink->attached = 0;
 	sink->pending_detach = 0;
 
@@ -153,8 +153,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	// the received event. If it is in the state of pending detach
 	// then quit this state.
 	if (!sink->attached) {
-		DEBUG("attach %d to %d, stamp %u", sink->fd,
-		      mm_thread_self(), sink->detach_stamp);
+		DEBUG("attach sink %d to %d", sink->fd, mm_thread_self());
 		(hd->handler)(MM_EVENT_ATTACH, sink);
 		sink->attached = 1;
 	} else if (sink->pending_detach) {
@@ -164,15 +163,17 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 
 	(hd->handler)(event, sink);
 
+	mm_memory_store_fence();
+	mm_memory_store(sink->dispatch_stamp, sink->dispatch_stamp + 1);
+
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink, uint32_t stamp)
+mm_event_detach(struct mm_event_fd *sink)
 {
 	ENTER();
-	DEBUG("detach sink %p, fd %d, target %u, stamp %u\n",
-	      sink, sink->fd, mm_event_target(sink), stamp);
+	DEBUG("detach sink %d from %u\n", sink->fd, mm_event_target(sink));
 	ASSERT(mm_event_target(sink) == mm_thread_self());
 
 	mm_event_hid_t id = sink->handler;
@@ -186,9 +187,6 @@ mm_event_detach(struct mm_event_fd *sink, uint32_t stamp)
 	ASSERT(sink->attached);
 	(hd->handler)(MM_EVENT_DETACH, sink);
 	sink->attached = 0;
-
-	mm_memory_store_fence();
-	mm_memory_store(sink->detach_stamp, stamp);
 
 	LEAVE();
 }

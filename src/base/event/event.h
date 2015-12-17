@@ -124,11 +124,11 @@ struct mm_event_fd
 
 	/* The stamp set by the owner thread to tell if it is eligible
 	   to transfer the sink ownership to another thread. */
-	uint32_t detach_stamp;
+	uint32_t dispatch_stamp;
 
 	/* Flags used by the owner thread. */
-	unsigned attached : 1;
-	unsigned pending_detach : 1;
+	uint8_t attached;
+	uint8_t pending_detach;
 
 	/* Pending detach list link. */
 	struct mm_link detach_link;
@@ -143,7 +143,7 @@ void NONNULL(1)
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
 
 void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink, uint32_t stamp);
+mm_event_detach(struct mm_event_fd *sink);
 
 static inline mm_thread_t NONNULL(1)
 mm_event_target(const struct mm_event_fd *sink)

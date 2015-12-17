@@ -43,6 +43,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 
 	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
+	dispatch->publish_stamp = 0;
 
 	// Allocate pending event batches.
 	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);
@@ -88,9 +89,8 @@ mm_dispatch_handle_detach(struct mm_event_listener *listener)
 {
 	while (!mm_list_empty(&listener->detach_list)) {
 		struct mm_link *link = mm_list_head(&listener->detach_list);
-		struct mm_event_fd *sink
-			= containerof(link, struct mm_event_fd, detach_link);
-		mm_event_detach(sink, listener->handle_stamp);
+		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, detach_link);
+		mm_event_detach(sink);
 	}
 }
 
@@ -101,12 +101,10 @@ mm_dispatch_has_urgent_changes(struct mm_event_listener *listener)
 }
 
 void NONNULL(1)
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
-		   mm_timeout_t timeout)
+mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
 {
 	ENTER();
 	ASSERT(thread < dispatch->receiver.nlisteners);
-	struct mm_event_receiver *receiver = &dispatch->receiver;
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 
 	// Handle the change events.
@@ -114,14 +112,13 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 	mm_thread_t control_thread = dispatch->control_thread;
 	if (control_thread == MM_THREAD_NONE) {
 
-		// About to become a control thread check to see if there
-		// are any unhandled events forwarded by a previous control
-		// thread. If this is so then bail out in order to handle
-		// them. This is to preserve event arrival order.
-		if (listener->arrival_stamp != listener->handle_stamp) {
-			DEBUG("arrival stamp %d, handle_stamp %d",
-			      listener->arrival_stamp,
-			      listener->handle_stamp);
+		// About to become a control thread check to see if there are
+		// any events forwarded by a previous control thread that have
+		// not been handled yet. If this is so then bail out in order
+		// to handle them. This is to preserve the event arrival order.
+		if (listener->forward_stamp != listener->delivery_stamp) {
+			DEBUG("forward stamp %d, delivery stamp %d",
+			      listener->forward_stamp, listener->delivery_stamp);
 			mm_regular_unlock(&dispatch->lock);
 			goto leave;
 		}
@@ -142,9 +139,8 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_event_batch_append(&listener->changes, &dispatch->changes);
 		// Forget just captured events.
 		mm_event_batch_clear(&dispatch->changes);
-
-		// Setup the event receiver for the next poll cycle.
-		mm_event_receiver_start(receiver);
+		// Start the next publish/capture round.
+		dispatch->publish_stamp++;
 
 		mm_regular_unlock(&dispatch->lock);
 
@@ -158,11 +154,11 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		// Publish the private change events.
 		mm_event_batch_append(&dispatch->changes, &listener->changes);
 
-		// The published events might be missed by the current
+		// The changes just published might be missed by the current
 		// control thread. So the publisher must force another
 		// dispatch cycle.
 		listener->changes_state = MM_EVENT_LISTENER_CHANGES_PUBLISHED;
-		listener->changes_stamp = receiver->arrival_stamp;
+		listener->publish_stamp = dispatch->publish_stamp;
 
 		mm_regular_unlock(&dispatch->lock);
 
@@ -181,8 +177,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread,
 		mm_regular_unlock(&dispatch->lock);
 
 		if (listener->changes_state != MM_EVENT_LISTENER_CHANGES_PRIVATE) {
-			uint32_t stamp = mm_memory_load(receiver->arrival_stamp);
-			if (listener->changes_stamp != stamp) {
+			if (listener->publish_stamp != dispatch->publish_stamp) {
 				// At this point the change events published by this
 				// thread must have been captured by a control thread.
 				listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
