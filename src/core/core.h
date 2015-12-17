@@ -122,6 +122,10 @@ struct mm_core
 
 } CACHE_ALIGN;
 
+/**********************************************************************
+ * Core subsystem initialization and termination.
+ **********************************************************************/
+
 void mm_core_init(void);
 void mm_core_term(void);
 
@@ -141,6 +145,10 @@ mm_core_get_event_affinity(void);
 
 void mm_core_start(void);
 void mm_core_stop(void);
+
+/**********************************************************************
+ * Core task execution.
+ **********************************************************************/
 
 void NONNULL(2)
 mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg);

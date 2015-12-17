@@ -39,7 +39,7 @@
 static struct mm_pool mm_task_pool;
 
 /**********************************************************************
- * Global task data initialization and termination.
+ * Task subsystem initialization and termination.
  **********************************************************************/
 
 void

@@ -179,6 +179,10 @@ struct mm_task
 #endif
 };
 
+/**********************************************************************
+ * Task subsystem initialization and termination.
+ **********************************************************************/
+
 void
 mm_task_init(void);
 
