@@ -1,7 +1,7 @@
 /*
  * core/runq.c - MainMemory task run queue.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013,2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,12 +18,12 @@
  */
 
 #include "core/runq.h"
-#include "core/task.h"
 
+#include "core/task.h"
 #include "base/bitops.h"
 #include "base/log/trace.h"
 
-void
+void NONNULL(1)
 mm_runq_prepare(struct mm_runq *runq)
 {
 	ENTER();
@@ -37,28 +37,25 @@ mm_runq_prepare(struct mm_runq *runq)
 	LEAVE();
 }
 
-struct mm_task *
+struct mm_task * NONNULL(1)
 mm_runq_get(struct mm_runq *runq)
 {
-	struct mm_task *task = NULL;
-	if (likely(runq->bmap)) {
-		int priority = mm_ctz(runq->bmap);
-		ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
-		ASSERT(!mm_list_empty(&runq->bins[priority]));
+	ASSERT(runq->bmap != 0);
 
-		struct mm_link *link = mm_list_remove_head(&runq->bins[priority]);
-		task = containerof(link, struct mm_task, queue);
-		ASSERT(priority == task->priority);
+	int priority = mm_ctz(runq->bmap);
+	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
+	ASSERT(!mm_list_empty(&runq->bins[priority]));
 
-		if (mm_list_empty(&runq->bins[priority])) {
-			runq->bmap &= ~(1 << priority);
-		}
-	}
+	struct mm_link *link = mm_list_remove_head(&runq->bins[priority]);
+	struct mm_task *task = task = containerof(link, struct mm_task, queue);
+	if (mm_list_empty(&runq->bins[priority]))
+		runq->bmap &= ~(1 << priority);
+	ASSERT(priority == task->priority);
 
 	return task;
 }
 
-void
+void NONNULL(1, 2)
 mm_runq_put(struct mm_runq *runq, struct mm_task *task)
 {
 	int priority = task->priority;
@@ -68,14 +65,14 @@ mm_runq_put(struct mm_runq *runq, struct mm_task *task)
 	mm_list_append(&runq->bins[priority], &task->queue);
 }
 
-void
+void NONNULL(1, 2)
 mm_runq_delete(struct mm_runq *runq, struct mm_task *task)
 {
 	int priority = task->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
+	ASSERT(!mm_list_empty(&runq->bins[priority]));
 
 	mm_list_delete(&task->queue);
-	if (mm_list_empty(&runq->bins[priority])) {
+	if (mm_list_empty(&runq->bins[priority]))
 		runq->bmap &= ~(1 << priority);
-	}
 }

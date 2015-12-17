@@ -1,7 +1,7 @@
 /*
  * core/runq.h - MainMemory task run queue.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013,2015  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,10 +40,30 @@ struct mm_runq
 	struct mm_list bins[MM_RUNQ_BINS];
 };
 
-void mm_runq_prepare(struct mm_runq *runq);
+void NONNULL(1)
+mm_runq_prepare(struct mm_runq *runq);
 
-struct mm_task *mm_runq_get(struct mm_runq *runq);
-void mm_runq_put(struct mm_runq *runq, struct mm_task *task);
-void mm_runq_delete(struct mm_runq *runq, struct mm_task *task);
+/* Check to see if there are no pending tasks with given priorities. */
+static inline bool NONNULL(1)
+mm_runq_empty(struct mm_runq *runq, uint32_t mask)
+{
+	return (runq->bmap & mask) == 0;
+}
+
+/* Check to see if there are no pending tasks with priorities above the given one. */
+static inline bool NONNULL(1)
+mm_runq_empty_above(struct mm_runq *runq, int prio)
+{
+	return mm_runq_empty(runq, (1u << prio) - 1);
+}
+
+struct mm_task * NONNULL(1)
+mm_runq_get(struct mm_runq *runq);
+
+void NONNULL(1, 2)
+mm_runq_put(struct mm_runq *runq, struct mm_task *task);
+
+void NONNULL(1, 2)
+mm_runq_delete(struct mm_runq *runq, struct mm_task *task);
 
 #endif /* CORE_RUNQ_H */
