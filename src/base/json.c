@@ -919,7 +919,7 @@ mm_json_reader_length(struct mm_json_reader *reader)
 char * NONNULL(1)
 mm_json_reader_memdup(struct mm_json_reader *reader)
 {
-	size_t length = mm_json_reader_string_length(reader);
+	size_t length = mm_json_reader_length(reader);
 	char *string = mm_arena_alloc(reader->arena, length);
 	memcpy(string, reader->value, length);
 	return string;
@@ -928,7 +928,7 @@ mm_json_reader_memdup(struct mm_json_reader *reader)
 char * NONNULL(1)
 mm_json_reader_strdup(struct mm_json_reader *reader)
 {
-	size_t length = mm_json_reader_string_length(reader);
+	size_t length = mm_json_reader_length(reader);
 	char *string = mm_arena_alloc(reader->arena, length + 1);
 	memcpy(string, reader->value, length);
 	string[length] = 0;
