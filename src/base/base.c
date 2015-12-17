@@ -119,12 +119,6 @@ mm_base_loop(struct mm_base_params *params)
 	mm_log_relay();
 	while (!mm_exit_test()) {
 		size_t logged = mm_log_flush();
-
-		mm_event_stats();
-		mm_lock_stats();
-		mm_log_relay();
-		mm_log_flush();
-
 		usleep(logged ? 30000 : 3000000);
 	}
 
