@@ -118,29 +118,60 @@ mm_event_epoll_add_event(struct mm_event_epoll *event_backend,
 
 	int rc;
 	struct epoll_event ee;
-	ee.events = 0;
 	ee.data.ptr = ev_fd;
 
 	switch (change_event->event) {
 	case MM_EVENT_REGISTER:
-		if (ev_fd->regular_input)
+		ee.events = 0;
+		if (ev_fd->regular_input || ev_fd->oneshot_input)
 			ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
-		if (ev_fd->regular_output)
-			ee.events |= EPOLLOUT | EPOLLET;
+		if (ev_fd->regular_output || ev_fd->oneshot_output)
+			ee.events |= EPOLLOUT | EPOLLET | EPOLLRDHUP;
 
-		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD,
-				  ev_fd->fd, &ee);
+		if (ev_fd->oneshot_input)
+			ev_fd->oneshot_input_trigger = 1;
+		if (ev_fd->oneshot_output)
+			ev_fd->oneshot_output_trigger = 1;
+
+		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_ADD, ev_fd->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 		break;
 
 	case MM_EVENT_UNREGISTER:
-		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_DEL,
-				  ev_fd->fd, &ee);
+		rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_DEL, ev_fd->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
 		mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, ev_fd);
+		break;
+
+	case MM_EVENT_INPUT:
+		if (ev_fd->oneshot_input && !ev_fd->oneshot_input_trigger) {
+			ev_fd->oneshot_input_trigger = 1;
+
+			ee.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+			if (ev_fd->regular_output || ev_fd->oneshot_output_trigger)
+				ee.events |= EPOLLOUT;
+
+			rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD, ev_fd->fd, &ee);
+			if (unlikely(rc < 0))
+				mm_error(errno, "epoll_ctl");
+		}
+		break;
+
+	case MM_EVENT_OUTPUT:
+		if (ev_fd->oneshot_output && !ev_fd->oneshot_output_trigger) {
+			ev_fd->oneshot_output_trigger = 1;
+
+			ee.events = EPOLLOUT | EPOLLET | EPOLLRDHUP;
+			if (ev_fd->regular_input || ev_fd->oneshot_input_trigger)
+				ee.events |= EPOLLIN;
+
+			rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD, ev_fd->fd, &ee);
+			if (unlikely(rc < 0))
+				mm_error(errno, "epoll_ctl");
+		}
 		break;
 
 	default:
@@ -157,12 +188,46 @@ mm_event_epoll_get_events(struct mm_event_epoll *event_backend,
 		struct epoll_event *event = &event_backend->events[i];
 		struct mm_event_fd *ev_fd = event->data.ptr;
 
-		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0)
+		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			mm_event_receiver_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
-		else if ((event->events & EPOLLIN) != 0)
+
+		} else if ((event->events & EPOLLIN) != 0) {
+			if (ev_fd->oneshot_input) {
+				ev_fd->oneshot_input_trigger = 0;
+
+				struct epoll_event ee;
+				ee.data.ptr = ev_fd;
+				ee.events = EPOLLET | EPOLLRDHUP;
+				if (ev_fd->regular_output || ev_fd->oneshot_output_trigger)
+					ee.events |= EPOLLOUT;
+
+				rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
+						  ev_fd->fd, &ee);
+				if (unlikely(rc < 0))
+					mm_error(errno, "epoll_ctl");
+			}
+
 			mm_event_receiver_add(return_events, MM_EVENT_INPUT, ev_fd);
-		if ((event->events & EPOLLOUT) != 0)
+		}
+
+		if ((event->events & EPOLLOUT) != 0) {
+			if (ev_fd->oneshot_output) {
+				ev_fd->oneshot_output_trigger = 0;
+
+				struct epoll_event ee;
+				ee.data.ptr = ev_fd;
+				ee.events = EPOLLET | EPOLLRDHUP;
+				if (ev_fd->regular_input || ev_fd->oneshot_input_trigger)
+					ee.events |= EPOLLIN;
+
+				rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
+						  ev_fd->fd, &ee);
+				if (unlikely(rc < 0))
+					mm_error(errno, "epoll_ctl");
+			}
+
 			mm_event_receiver_add(return_events, MM_EVENT_OUTPUT, ev_fd);
+		}
 	}
 }
 
@@ -268,7 +333,7 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend)
 	// Set it up for non-blocking I/O.
 	mm_set_nonblocking(fd);
 
-	// Initialize the corrponding event sink.
+	// Initialize the corresponding event sink.
 	mm_event_prepare_fd(&event_backend->notify_fd, fd,
 			    mm_event_epoll_notify_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED,

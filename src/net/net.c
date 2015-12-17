@@ -582,11 +582,9 @@ mm_net_reset_read_ready(struct mm_net_socket *sock)
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_READ_READY;
-#if MM_ONESHOT_HANDLERS
 	bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
 	if (oneshot)
 		mm_dispatch_trigger_input(&mm_core_dispatch, &sock->event);
-#endif
 
 	LEAVE();
 }
@@ -598,11 +596,9 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_WRITE_READY;
-#if MM_ONESHOT_HANDLERS
 	bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
 	if (oneshot)
 		mm_dispatch_trigger_output(&mm_core_dispatch, &sock->event);
-#endif
 
 	LEAVE();
 }

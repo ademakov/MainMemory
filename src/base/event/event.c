@@ -101,11 +101,9 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	if (input_mode == MM_EVENT_IGNORED) {
 		sink->regular_input = false;
 		sink->oneshot_input = false;
-#if MM_ONESHOT_HANDLERS
 	} else if (input_mode == MM_EVENT_ONESHOT) {
 		sink->regular_input = false;
 		sink->oneshot_input = true;
-#endif
 	} else {
 		sink->regular_input = true;
 		sink->oneshot_input = false;
@@ -114,11 +112,9 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	if (output_mode == MM_EVENT_IGNORED) {
 		sink->regular_output = false;
 		sink->oneshot_output = false;
-#if MM_ONESHOT_HANDLERS
 	} else if (output_mode == MM_EVENT_ONESHOT) {
 		sink->regular_output = false;
 		sink->oneshot_output = true;
-#endif
 	} else {
 		sink->regular_output = true;
 		sink->oneshot_output = false;

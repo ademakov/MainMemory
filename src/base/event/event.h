@@ -23,12 +23,6 @@
 #include "common.h"
 #include "base/list.h"
 
-#if defined(HAVE_SYS_EPOLL_H)
-# undef MM_ONESHOT_HANDLERS
-#else
-# define MM_ONESHOT_HANDLERS	1
-#endif
-
 /* Event types. */
 typedef enum {
 	MM_EVENT_INPUT,

@@ -121,31 +121,21 @@ mm_dispatch_unregister_fd(struct mm_dispatch *dispatch, struct mm_event_fd *sink
 static inline void NONNULL(1, 2)
 mm_dispatch_trigger_input(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
-#if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_INPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
-#else
-	(void) dispatch;
-	(void) sink;
-#endif
 }
 
 static inline void NONNULL(1, 2)
 mm_dispatch_trigger_output(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
 {
-#if MM_ONESHOT_HANDLERS
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_OUTPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
-#else
-	(void) dispatch;
-	(void) sink;
-#endif
 }
 
 static inline void NONNULL(1, 2)
