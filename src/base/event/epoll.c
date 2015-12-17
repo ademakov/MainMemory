@@ -201,8 +201,8 @@ mm_event_epoll_get_events(struct mm_event_epoll *event_backend,
 				if (ev_fd->regular_output || ev_fd->oneshot_output_trigger)
 					ee.events |= EPOLLOUT;
 
-				rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
-						  ev_fd->fd, &ee);
+				int rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
+						      ev_fd->fd, &ee);
 				if (unlikely(rc < 0))
 					mm_error(errno, "epoll_ctl");
 			}
@@ -220,8 +220,8 @@ mm_event_epoll_get_events(struct mm_event_epoll *event_backend,
 				if (ev_fd->regular_input || ev_fd->oneshot_input_trigger)
 					ee.events |= EPOLLIN;
 
-				rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
-						  ev_fd->fd, &ee);
+				int rc = mm_epoll_ctl(event_backend->event_fd, EPOLL_CTL_MOD,
+						      ev_fd->fd, &ee);
 				if (unlikely(rc < 0))
 					mm_error(errno, "epoll_ctl");
 			}
