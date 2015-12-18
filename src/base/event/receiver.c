@@ -40,6 +40,8 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthrea
 
 	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
 
+	receiver->nevents = 0;
+
 	LEAVE();
 }
 
@@ -59,49 +61,60 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 static void
-mm_event_receiver_handle_1_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_handle_1_req(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[2];
 	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
 	mm_event_t event_1 = arguments[1];
+
+	if (listener == NULL)
+		sink_1->target = context;
 
 	// Handle events.
 	mm_event_handle(sink_1, event_1);
 
 	// Update private event stamp.
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[2];
-	listener->delivery_stamp += 1;
+	if (listener != NULL)
+		listener->delivery_stamp += 1;
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_handle_2_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_handle_2_req(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[3];
 	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
 	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
 	mm_event_t event_1 = arguments[2] & 0xff;
 	mm_event_t event_2 = (arguments[2] >> 8) & 0xff;
+
+	if (listener == NULL) {
+		sink_1->target = context;
+		sink_2->target = context;
+	}
 
 	// Handle events.
 	mm_event_handle(sink_1, event_1);
 	mm_event_handle(sink_2, event_2);
 
 	// Update private event stamp.
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[3];
-	listener->delivery_stamp += 2;
+	if (listener != NULL)
+		listener->delivery_stamp += 2;
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_handle_3_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_handle_3_req(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[4];
 	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
 	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
 	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
@@ -109,23 +122,30 @@ mm_event_receiver_handle_3_req(uintptr_t context UNUSED, uintptr_t *arguments)
 	mm_event_t event_2 = (arguments[3] >> 8) & 0xff;
 	mm_event_t event_3 = (arguments[3] >> 16) & 0xff;
 
+	if (listener == NULL) {
+		sink_1->target = context;
+		sink_2->target = context;
+		sink_3->target = context;
+	}
+
 	// Handle events.
 	mm_event_handle(sink_1, event_1);
 	mm_event_handle(sink_2, event_2);
 	mm_event_handle(sink_3, event_3);
 
 	// Update private event stamp.
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[4];
-	listener->delivery_stamp += 3;
+	if (listener != NULL)
+		listener->delivery_stamp += 3;
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_handle_4_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_handle_4_req(uintptr_t context, uintptr_t *arguments)
 {
 	ENTER();
 
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[5];
 	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
 	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
 	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
@@ -135,6 +155,13 @@ mm_event_receiver_handle_4_req(uintptr_t context UNUSED, uintptr_t *arguments)
 	mm_event_t event_3 = (arguments[4] >> 16) & 0xff;
 	mm_event_t event_4 = (arguments[4] >> 24) & 0xff;
 
+	if (listener == NULL) {
+		sink_1->target = context;
+		sink_2->target = context;
+		sink_3->target = context;
+		sink_4->target = context;
+	}
+
 	// Handle events.
 	mm_event_handle(sink_1, event_1);
 	mm_event_handle(sink_2, event_2);
@@ -142,15 +169,15 @@ mm_event_receiver_handle_4_req(uintptr_t context UNUSED, uintptr_t *arguments)
 	mm_event_handle(sink_4, event_4);
 
 	// Update private event stamp.
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[5];
-	listener->delivery_stamp += 4;
+	if (listener != NULL)
+		listener->delivery_stamp += 4;
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_batch_add(struct mm_event_listener *listener, mm_event_t event,
-			    struct mm_event_fd *sink)
+mm_event_receiver_forward(struct mm_event_listener *listener,
+			  mm_event_t event, struct mm_event_fd *sink)
 {
 	ENTER();
 
@@ -182,7 +209,37 @@ mm_event_receiver_batch_add(struct mm_event_listener *listener, mm_event_t event
 }
 
 static void
-mm_event_receiver_batch_flush(struct mm_event_listener *listener)
+mm_event_receiver_publish(struct mm_event_receiver *reciever,
+			  mm_event_t event, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	// Flush the buffer if it is full.
+	if (reciever->nevents == 4) {
+		mm_domain_send_6(mm_regular_domain,
+				 mm_event_receiver_handle_4_req,
+				 (uintptr_t) reciever->events[0].ev_fd,
+				 (uintptr_t) reciever->events[1].ev_fd,
+				 (uintptr_t) reciever->events[2].ev_fd,
+				 (uintptr_t) reciever->events[3].ev_fd,
+				 reciever->events[0].event |
+				 (reciever->events[1].event << 8) |
+				 (reciever->events[2].event << 16) |
+				 (reciever->events[3].event << 24),
+				 (uintptr_t) NULL);
+		reciever->nevents = 0;
+	}
+
+	// Add the event to the buffer.
+	unsigned int n = reciever->nevents++;
+	reciever->events[n].event = event;
+	reciever->events[n].ev_fd = sink;
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_forward_flush(struct mm_event_listener *listener)
 {
 	ENTER();
 
@@ -193,7 +250,6 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener)
 				 (uintptr_t) listener->events[0].ev_fd,
 				 listener->events[0].event,
 				 (uintptr_t) listener);
-		listener->nevents = 0;
 		break;
 	case 2:
 		mm_thread_send_4(listener->thread,
@@ -203,7 +259,6 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener)
 				 listener->events[0].event |
 				 (listener->events[1].event << 8),
 				 (uintptr_t) listener);
-		listener->nevents = 0;
 		break;
 	case 3:
 		mm_thread_send_5(listener->thread,
@@ -215,7 +270,6 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener)
 				 (listener->events[1].event << 8) |
 				 (listener->events[2].event << 16),
 				 (uintptr_t) listener);
-		listener->nevents = 0;
 		break;
 	case 4:
 		mm_thread_send_6(listener->thread,
@@ -229,11 +283,67 @@ mm_event_receiver_batch_flush(struct mm_event_listener *listener)
 				 (listener->events[2].event << 16) |
 				 (listener->events[3].event << 24),
 				 (uintptr_t) listener);
-		listener->nevents = 0;
 		break;
 	default:
 		ABORT();
 	}
+
+	listener->nevents = 0;
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish_flush(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
+	switch (receiver->nevents) {
+	case 1:
+		mm_domain_send_3(mm_regular_domain,
+				 mm_event_receiver_handle_1_req,
+				 (uintptr_t) receiver->events[0].ev_fd,
+				 receiver->events[0].event,
+				 (uintptr_t) NULL);
+		break;
+	case 2:
+		mm_domain_send_4(mm_regular_domain,
+				 mm_event_receiver_handle_2_req,
+				 (uintptr_t) receiver->events[0].ev_fd,
+				 (uintptr_t) receiver->events[1].ev_fd,
+				 receiver->events[0].event |
+				 (receiver->events[1].event << 8),
+				 (uintptr_t) NULL);
+		break;
+	case 3:
+		mm_domain_send_5(mm_regular_domain,
+				 mm_event_receiver_handle_3_req,
+				 (uintptr_t) receiver->events[0].ev_fd,
+				 (uintptr_t) receiver->events[1].ev_fd,
+				 (uintptr_t) receiver->events[2].ev_fd,
+				 receiver->events[0].event |
+				 (receiver->events[1].event << 8) |
+				 (receiver->events[2].event << 16),
+				 (uintptr_t) NULL);
+		break;
+	case 4:
+		mm_domain_send_6(mm_regular_domain,
+				 mm_event_receiver_handle_4_req,
+				 (uintptr_t) receiver->events[0].ev_fd,
+				 (uintptr_t) receiver->events[1].ev_fd,
+				 (uintptr_t) receiver->events[2].ev_fd,
+				 (uintptr_t) receiver->events[3].ev_fd,
+				 receiver->events[0].event |
+				 (receiver->events[1].event << 8) |
+				 (receiver->events[2].event << 16) |
+				 (receiver->events[3].event << 24),
+				 (uintptr_t) NULL);
+		break;
+	default:
+		ABORT();
+	}
+
+	receiver->nevents = 0;
 
 	LEAVE();
 }
@@ -252,13 +362,17 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	struct mm_event_listener *listener = &receiver->listeners[thread];
 	mm_event_listener_poll(listener, backend, receiver, timeout);
 
+	// Flush published events.
+	if (receiver->nevents)
+		mm_event_receiver_publish_flush(receiver);
+
 	// Forward incoming events that belong to other threads.
 	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
 	while (target != MM_THREAD_NONE) {
 		struct mm_event_listener *target_listener = &receiver->listeners[target];
 
-		// Forward incoming events.
-		mm_event_receiver_batch_flush(target_listener);
+		// Flush forwarded events.
+		mm_event_receiver_forward_flush(target_listener);
 
 		// Wake up the target thread if it is sleeping.
 		mm_event_listener_notify(target_listener, backend);
@@ -295,8 +409,8 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 			mm_memory_load_fence();
 			uint8_t attached = mm_memory_load(sink->attached);
 			if (dispatch_stamp == sink->arrival_stamp && !attached) {
-				target = receiver->control_thread;
-				sink->target = target;
+				sink->target = MM_THREAD_NONE;
+				target = MM_THREAD_NONE;
 			}
 		}
 
@@ -310,10 +424,12 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 		// the target thread.
 		if (target == receiver->control_thread) {
 			mm_event_handle(sink, event);
-		} else {
+		} else if (target != MM_THREAD_NONE) {
 			struct mm_event_listener *listener = &receiver->listeners[target];
-			mm_event_receiver_batch_add(listener, event, sink);
+			mm_event_receiver_forward(listener, event, sink);
 			mm_bitset_set(&receiver->targets, target);
+		} else {
+			mm_event_receiver_publish(receiver, event, sink);
 		}
 	}
 

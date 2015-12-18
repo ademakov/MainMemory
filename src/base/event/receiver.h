@@ -39,6 +39,10 @@ struct mm_event_receiver
 
 	/* Target threads that have received events. */
 	struct mm_bitset targets;
+
+	/* Recievers's incoming events temporary store. */
+	struct mm_event events[4];
+	unsigned int nevents;
 };
 
 void NONNULL(1, 3)
