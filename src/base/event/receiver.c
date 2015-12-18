@@ -34,13 +34,11 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthrea
 
 	// Allocate listener info.
 	receiver->nlisteners = nthreads;
-	receiver->listeners = mm_common_calloc(nthreads,
-					       sizeof(struct mm_event_listener));
+	receiver->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
 	for (mm_thread_t i = 0; i < nthreads; i++)
 		mm_event_listener_prepare(&receiver->listeners[i], threads[i]);
 
-	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena,
-			  nthreads);
+	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
 
 	LEAVE();
 }
@@ -283,11 +281,6 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 
 	receiver->got_events = true;
 
-	// Update the arrival stamp. This disables detachment of the event sink
-	// until the event jumps through all the hoops and the dispatch stamp
-	// is updated accordingly.
-	sink->arrival_stamp++;
-
 	if (sink->loose_target) {
 		// Handle the event immediately.
 		mm_event_handle(sink, event);
@@ -298,13 +291,19 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 		// If the event sink is detached then attach it to the control
 		// thread.
 		if (!sink->bound_target && target != receiver->control_thread) {
-			mm_memory_load_fence();
 			uint32_t dispatch_stamp = mm_memory_load(sink->dispatch_stamp);
-			if (dispatch_stamp == sink->arrival_stamp) {
+			mm_memory_load_fence();
+			uint8_t attached = mm_memory_load(sink->attached);
+			if (dispatch_stamp == sink->arrival_stamp && !attached) {
 				target = receiver->control_thread;
 				sink->target = target;
 			}
 		}
+
+		// Update the arrival stamp. This disables the event sink
+		// stealing until the event jumps through all the hoops and
+		// the dispatch stamp is updated accordingly.
+		sink->arrival_stamp++;
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
