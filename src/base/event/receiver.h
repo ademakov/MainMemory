@@ -63,4 +63,8 @@ void NONNULL(1, 3)
 mm_event_receiver_add(struct mm_event_receiver *receiver,
 		      mm_event_t event, struct mm_event_fd *sink);
 
+void NONNULL(1, 2)
+mm_even_receiver_notify_waiting(struct mm_event_receiver *receiver,
+				struct mm_event_backend *backend);
+
 #endif /* BASE_EVENT_RECEIVER_H */

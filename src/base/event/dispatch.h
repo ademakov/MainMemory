@@ -49,7 +49,7 @@ struct mm_dispatch
 
 	/* A common store for published change events. */
 	struct mm_event_batch changes;
-	/* Counters to ensure visibility of change events. */
+	/* A counter to ensure visibility of change events. */
 	uint32_t publish_stamp;
 
 	/* A common store for incoming events filled by the control thread. */
@@ -84,8 +84,11 @@ mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 	mm_event_listener_notify(listener, &dispatch->backend);
 }
 
-void NONNULL(1)
-mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
+static inline void NONNULL(1)
+mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
+{
+	mm_even_receiver_notify_waiting(&dispatch->receiver, &dispatch->backend);
+}
 
 void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
