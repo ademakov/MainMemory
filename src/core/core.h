@@ -81,6 +81,7 @@ struct mm_core
 	/* Current and maximum number of worker tasks. */
 	mm_task_t nidle;
 	mm_task_t nworkers;
+	mm_task_t nworkers_min;
 	mm_task_t nworkers_max;
 
 	/* The counter of task context switches. */

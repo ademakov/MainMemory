@@ -42,7 +42,8 @@
 
 #include <stdio.h>
 
-#define MM_DEFAULT_WORKERS	256
+#define MM_NWORKERS_MIN		2
+#define MM_NWORKERS_MAX		256
 
 #if ENABLE_SMP
 # define MM_CORE_IS_PRIMARY(core)	(core == mm_core_set)
@@ -396,6 +397,12 @@ mm_core_worker(mm_value_t arg)
  **********************************************************************/
 
 static mm_value_t
+mm_core_nowork(mm_value_t arg)
+{
+	return arg;
+}
+
+static mm_value_t
 mm_core_master(mm_value_t arg)
 {
 	ENTER();
@@ -403,10 +410,14 @@ mm_core_master(mm_value_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 	bool verbose = mm_get_verbose_enabled();
 
+	// Force creation of the minimal number of workers.
+	while (core->nwork < core->nworkers_min)
+		mm_core_post(mm_core_getid(core), mm_core_nowork, 0);
+
 	while (!mm_memory_load(core->stop)) {
 
 		// Inform about the status of all tasks.
-		if (verbose && mm_core_has_work(core))
+		if (verbose && core->nworkers > core->nworkers_min && mm_core_has_work(core))
 			mm_core_print_tasks(core);
 
 		// Check to see if there are enough workers.
@@ -427,9 +438,6 @@ mm_core_master(mm_value_t arg)
 			mm_task_attr_setname(&attr, "worker");
 			mm_task_create(&attr, mm_core_worker, (mm_value_t) work);
 			core->nworkers++;
-
-			// Run the worker task.
-			mm_task_yield();
 		} else {
 			// Wait for work at the back end of the idle queue.
 			// So any idle worker would take work before the master.
@@ -786,7 +794,7 @@ mm_core_boot(mm_value_t arg)
 }
 
 static void
-mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
+mm_core_init_single(struct mm_core *core)
 {
 	ENTER();
 
@@ -804,7 +812,8 @@ mm_core_init_single(struct mm_core *core, uint32_t nworkers_max)
 	core->nwork = 0;
 	core->nidle = 0;
 	core->nworkers = 0;
-	core->nworkers_max = nworkers_max;
+	core->nworkers_min = MM_NWORKERS_MIN;
+	core->nworkers_max = MM_NWORKERS_MAX;
 
 	core->cswitch_count = 0;
 	core->cswitch_denied_in_cswitch_state = 0;
@@ -873,7 +882,6 @@ mm_core_domain_notify(struct mm_domain *domain UNUSED)
 	mm_dispatch_notify_waiting(&mm_core_dispatch);
 }
 
-
 #if ENABLE_TRACE
 
 static struct mm_trace_context *
@@ -918,7 +926,7 @@ mm_core_init(void)
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
 	for (mm_core_t i = 0; i < mm_core_num; i++)
-		mm_core_init_single(&mm_core_set[i], MM_DEFAULT_WORKERS);
+		mm_core_init_single(&mm_core_set[i]);
 
 	mm_bitset_prepare(&mm_core_event_affinity, &mm_common_space.xarena, mm_core_num);
 
