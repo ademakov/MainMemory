@@ -84,16 +84,6 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 	LEAVE();
 }
 
-static void
-mm_dispatch_handle_detach(struct mm_event_listener *listener)
-{
-	while (!mm_list_empty(&listener->detach_list)) {
-		struct mm_link *link = mm_list_head(&listener->detach_list);
-		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, detach_link);
-		mm_event_detach(sink);
-	}
-}
-
 static inline bool NONNULL(1)
 mm_dispatch_has_urgent_changes(struct mm_event_listener *listener)
 {
@@ -226,9 +216,6 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		mm_event_batch_clear(&listener->changes);
 
 	} else {
-		// Finalize the detach requests.
-		mm_dispatch_handle_detach(listener);
-
 		// Wait for forwarded events or timeout expiration.
 		mm_event_listener_wait(listener, timeout);
 	}

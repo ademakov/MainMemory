@@ -141,13 +141,4 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch, struct mm_event_fd *sin
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 }
 
-static inline void NONNULL(1, 2)
-mm_dispatch_detach(struct mm_dispatch *dispatch, struct mm_event_fd *sink)
-{
-	mm_thread_t thread = mm_event_target(sink);
-	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_event_listener_detach(listener, sink);
-}
-
 #endif /* BASE_EVENT_DISPATCH_H */

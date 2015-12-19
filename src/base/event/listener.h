@@ -91,9 +91,6 @@ struct mm_event_listener
 	/* The event handling stamp. */
 	uint32_t delivery_stamp;
 
-	/* Listener's event sinks waiting to be detached. */
-	struct mm_list detach_list;
-
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
@@ -158,15 +155,6 @@ static inline bool NONNULL(1)
 mm_event_listener_hasflags(struct mm_event_listener *listener, unsigned int flags)
 {
 	return mm_event_batch_hasflags(&listener->changes, flags);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_detach(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	if (!sink->pending_detach) {
-		sink->pending_detach = 1;
-		mm_list_insert(&listener->detach_list, &sink->detach_link);
-	}
 }
 
 static inline bool NONNULL(1)

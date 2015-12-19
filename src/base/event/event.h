@@ -111,21 +111,17 @@ struct mm_event_fd
 	/* The stamp set the poller thread. */
 	uint32_t arrival_stamp;
 
+	/* The stamp set by the owner thread to tell if it is eligible
+	   to transfer the sink ownership to another thread. */
+	uint32_t dispatch_stamp;
+
 	/* Flags used by the poller thread. */
 	unsigned changed : 1;
 	unsigned oneshot_input_trigger : 1;
 	unsigned oneshot_output_trigger : 1;
 
-	/* The stamp set by the owner thread to tell if it is eligible
-	   to transfer the sink ownership to another thread. */
-	uint32_t dispatch_stamp;
-
 	/* Flags used by the owner thread. */
 	uint8_t attached;
-	uint8_t pending_detach;
-
-	/* Pending detach list link. */
-	struct mm_link detach_link;
 };
 
 bool NONNULL(1)

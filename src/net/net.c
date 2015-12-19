@@ -617,9 +617,8 @@ mm_net_dispatch_finish(struct mm_net_socket *sock)
 	}
 
 #if ENABLE_SMP
-	if (sock->server->proto->finish != NULL
-	    && (sock->server->proto->finish)(sock))
-		mm_dispatch_detach(&mm_core_dispatch, &sock->event);
+	if (sock->server->proto->finish != NULL && (sock->server->proto->finish)(sock))
+		mm_event_detach(&sock->event);
 #endif
 
 leave:

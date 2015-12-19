@@ -121,13 +121,13 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	}
 
 	sink->arrival_stamp = 0;
+	sink->dispatch_stamp = 0;
+
 	sink->changed = 0;
 	sink->oneshot_input_trigger = 0;
 	sink->oneshot_output_trigger = 0;
 
-	sink->dispatch_stamp = 0;
 	sink->attached = 0;
-	sink->pending_detach = 0;
 
 	return true;
 }
@@ -157,9 +157,6 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 		mm_memory_store(sink->attached, 1);
 		mm_memory_store_fence();
 
-	} else if (sink->pending_detach) {
-		mm_list_delete(&sink->detach_link);
-		sink->pending_detach = 0;
 	}
 
 	// Invoke the required event handler.
@@ -182,11 +179,6 @@ mm_event_detach(struct mm_event_fd *sink)
 	mm_event_hid_t id = sink->handler;
 	ASSERT(id < mm_event_hdesc_table_size);
 	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-
-	// Finish with pending detach state.
-	ASSERT(sink->pending_detach);
-	mm_list_delete(&sink->detach_link);
-	sink->pending_detach = 0;
 
 	// Invoke the detach handler.
 	ASSERT(sink->attached);

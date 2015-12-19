@@ -51,8 +51,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 	listener->forward_stamp = 0;
 	listener->delivery_stamp = 0;
 
-	mm_list_prepare(&listener->detach_list);
-
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
 #elif ENABLE_MACH_SEMAPHORE
