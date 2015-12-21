@@ -355,6 +355,7 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	ENTER();
 
 	receiver->got_events = false;
+	receiver->published_events = false;
 	receiver->control_thread = thread;
 	mm_bitset_clear_all(&receiver->targets);
 
@@ -363,8 +364,9 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	mm_event_listener_poll(listener, backend, receiver, timeout);
 
 	// Flush published events.
-	if (receiver->nevents) {
-		mm_event_receiver_publish_flush(receiver);
+	if (receiver->published_events) {
+		if (receiver->nevents)
+			mm_event_receiver_publish_flush(receiver);
 		mm_even_receiver_notify_waiting(receiver, backend);
 	}
 
@@ -432,6 +434,7 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 			mm_bitset_set(&receiver->targets, target);
 		} else {
 			mm_event_receiver_publish(receiver, event, sink);
+			receiver->published_events = true;
 		}
 	}
 

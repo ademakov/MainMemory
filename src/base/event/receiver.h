@@ -29,6 +29,8 @@ struct mm_event_receiver
 {
 	/* The flag indicating that some events were received. */
 	bool got_events;
+	/* The flag indicating that some events were published in the domain request queue. */
+	bool published_events;
 
 	/* The thread that currently owns the receiver. */
 	mm_thread_t control_thread;
