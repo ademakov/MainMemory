@@ -433,6 +433,10 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 			mm_event_receiver_forward(listener, event, sink);
 			mm_bitset_set(&receiver->targets, target);
 		} else {
+			// TODO: BUG!!! If this is done more than once for
+			// a single sink then there might be a big problem.
+			// This must be resolved before any production use.
+			// Therefore this is just a temporary stub !!!
 			mm_event_receiver_publish(receiver, event, sink);
 			receiver->published_events = true;
 		}
