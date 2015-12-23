@@ -175,14 +175,7 @@ mm_event_detach(struct mm_event_fd *sink)
 	ENTER();
 	DEBUG("detach sink %d from %u\n", sink->fd, mm_event_target(sink));
 	ASSERT(mm_event_target(sink) == mm_thread_self());
-
-	mm_event_hid_t id = sink->handler;
-	ASSERT(id < mm_event_hdesc_table_size);
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-
-	// Invoke the detach handler.
 	ASSERT(sink->attached);
-	(hd->handler)(MM_EVENT_DETACH, sink);
 
 	// Mark the sink as detached.
 	mm_memory_store_fence();

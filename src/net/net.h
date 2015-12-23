@@ -147,9 +147,8 @@ struct mm_net_proto
 	void (*prepare)(struct mm_net_socket *sock);
 	void (*cleanup)(struct mm_net_socket *sock);
 
-	bool (*finish)(struct mm_net_socket *sock);
 	void (*attach)(struct mm_net_socket *sock);
-	void (*detach)(struct mm_net_socket *sock);
+	bool (*detach)(struct mm_net_socket *sock);
 
 	void (*reader)(struct mm_net_socket *sock);
 	void (*writer)(struct mm_net_socket *sock);

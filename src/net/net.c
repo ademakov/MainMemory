@@ -304,7 +304,7 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 		input = MM_EVENT_ONESHOT;
 	if (!(srv->proto->flags & MM_NET_OUTBOUND))
 		output = MM_EVENT_ONESHOT;
-	if (srv->proto->finish != NULL)
+	if (srv->proto->detach != NULL)
 		target = MM_EVENT_TARGET_AGILE;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
 			    input, output, target);
@@ -617,7 +617,7 @@ mm_net_dispatch_finish(struct mm_net_socket *sock)
 	}
 
 #if ENABLE_SMP
-	if (sock->server->proto->finish != NULL && (sock->server->proto->finish)(sock))
+	if (sock->server->proto->detach != NULL && (sock->server->proto->detach)(sock))
 		mm_event_detach(&sock->event);
 #endif
 
@@ -651,11 +651,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 	case MM_EVENT_ATTACH:
 		if (sock->server->proto->attach != NULL)
 			(sock->server->proto->attach)(sock);
-		break;
-
-	case MM_EVENT_DETACH:
-		if (sock->server->proto->detach != NULL)
-			(sock->server->proto->detach)(sock);
 		break;
 
 	case MM_EVENT_UNREGISTER:
