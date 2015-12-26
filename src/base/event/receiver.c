@@ -390,7 +390,7 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 	LEAVE();
 }
 
-void NONNULL(1, 3)
+static void NONNULL(1, 3)
 mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 		      struct mm_event_fd *sink)
 {
@@ -441,6 +441,60 @@ mm_event_receiver_add(struct mm_event_receiver *receiver, mm_event_t event,
 			receiver->published_events = true;
 		}
 	}
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	sink->oneshot_input_trigger = 0;
+	mm_event_receiver_add(receiver, MM_EVENT_INPUT, sink);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	sink->oneshot_input_trigger = 0;
+	mm_event_receiver_add(receiver, MM_EVENT_INPUT_ERROR, sink);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	sink->oneshot_output_trigger = 0;
+	mm_event_receiver_add(receiver, MM_EVENT_OUTPUT, sink);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	sink->oneshot_output_trigger = 0;
+	mm_event_receiver_add(receiver, MM_EVENT_OUTPUT_ERROR, sink);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	mm_event_receiver_add(receiver, MM_EVENT_UNREGISTER, sink);
 
 	LEAVE();
 }

@@ -61,9 +61,16 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver,
 			 struct mm_event_backend *backend,
 			 mm_timeout_t timeout);
 
-void NONNULL(1, 3)
-mm_event_receiver_add(struct mm_event_receiver *receiver,
-		      mm_event_t event, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 
 void NONNULL(1, 2)
 mm_even_receiver_notify_waiting(struct mm_event_receiver *receiver,

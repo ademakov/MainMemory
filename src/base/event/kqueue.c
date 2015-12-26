@@ -63,92 +63,92 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 			  struct mm_event *change_event)
 {
 	int nevents = event_backend->nevents;
-	struct mm_event_fd *ev_fd = change_event->ev_fd;
+	struct mm_event_fd *sink = change_event->ev_fd;
 
 	switch (change_event->event) {
 	case MM_EVENT_REGISTER:
-		if (ev_fd->regular_input || ev_fd->oneshot_input) {
+		if (sink->regular_input || sink->oneshot_input) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
 
 			int flags;
-			if (ev_fd->oneshot_input) {
+			if (sink->oneshot_input) {
 				flags = EV_ADD | EV_ONESHOT;
-				ev_fd->oneshot_input_trigger = 1;
+				sink->oneshot_input_trigger = 1;
 			} else {
 				flags = EV_ADD | EV_CLEAR;
 			}
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_READ, flags, 0, 0, ev_fd);
+			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
 		}
-		if (ev_fd->regular_output || ev_fd->oneshot_output) {
+		if (sink->regular_output || sink->oneshot_output) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
 
 			int flags;
-			if (ev_fd->oneshot_output) {
+			if (sink->oneshot_output) {
 				flags = EV_ADD | EV_ONESHOT;
-				ev_fd->oneshot_output_trigger = 1;
+				sink->oneshot_output_trigger = 1;
 			} else {
 				flags = EV_ADD | EV_CLEAR;
 			}
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, flags, 0, 0, ev_fd);
+			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
 		}
 		break;
 
 	case MM_EVENT_UNREGISTER:
-		if (ev_fd->regular_input || ev_fd->oneshot_input_trigger) {
+		if (sink->regular_input || sink->oneshot_input_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+			EV_SET(kp, sink->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
-		if (ev_fd->regular_output || ev_fd->oneshot_output_trigger) {
+		if (sink->regular_output || sink->oneshot_output_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 		break;
 
 	case MM_EVENT_INPUT:
-		if (ev_fd->oneshot_input && !ev_fd->oneshot_input_trigger) {
+		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
-			ev_fd->oneshot_input_trigger = 1;
+			sink->oneshot_input_trigger = 1;
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
-			       0, 0, ev_fd);
+			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
+			       0, 0, sink);
 		}
 		break;
 
 	case MM_EVENT_OUTPUT:
-		if (ev_fd->oneshot_output && !ev_fd->oneshot_output_trigger) {
+		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
-			if (unlikely(ev_fd->changed))
+			if (unlikely(sink->changed))
 				return false;
-			ev_fd->oneshot_output_trigger = 1;
+			sink->oneshot_output_trigger = 1;
 
 			struct kevent *kp = &event_backend->events[nevents++];
-			EV_SET(kp, ev_fd->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
-			       0, 0, ev_fd);
+			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
+			       0, 0, sink);
 		}
 		break;
 
@@ -158,7 +158,7 @@ mm_event_kqueue_add_event(struct mm_event_kqueue *event_backend,
 
 	if (event_backend->nevents != nevents) {
 		event_backend->nevents = nevents;
-		ev_fd->changed = 1;
+		sink->changed = 1;
 	}
 
 	return true;
@@ -175,24 +175,20 @@ mm_event_kqueue_get_incoming_events(struct mm_event_kqueue *event_backend,
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event");
 
-			struct mm_event_fd *ev_fd = event->udata;
-			ev_fd->oneshot_input_trigger = 0;
-
+			struct mm_event_fd *sink = event->udata;
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_receiver_add(return_events, MM_EVENT_INPUT_ERROR, ev_fd);
+				mm_event_receiver_input_error(return_events, sink);
 			else
-				mm_event_receiver_add(return_events, MM_EVENT_INPUT, ev_fd);
+				mm_event_receiver_input(return_events, sink);
 
 		} else if (event->filter == EVFILT_WRITE) {
 			DEBUG("write event");
 
-			struct mm_event_fd *ev_fd = event->udata;
-			ev_fd->oneshot_output_trigger = 0;
-
+			struct mm_event_fd *sink = event->udata;
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT_ERROR, ev_fd);
+				mm_event_receiver_output_error(return_events, sink);
 			else
-				mm_event_receiver_add(return_events, MM_EVENT_OUTPUT, ev_fd);
+				mm_event_receiver_output(return_events, sink);
 
 		} else if (event->filter == EVFILT_USER) {
 			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
@@ -215,7 +211,7 @@ mm_event_kqueue_postprocess_changes(struct mm_event_batch *change_events,
 
 			// Store the pertinent event.
 			if (event->event == MM_EVENT_UNREGISTER)
-				mm_event_receiver_add(return_events, MM_EVENT_UNREGISTER, sink);
+				mm_event_receiver_unregister(return_events, sink);
 		}
 	} else {
 		for (unsigned int i = first; i < last; i++) {
@@ -255,14 +251,18 @@ mm_event_kqueue_poll(struct mm_event_kqueue *event_backend, mm_timeout_t timeout
 	ENTER();
 	DEBUG("poll: changes: %d, timeout: %lu", event_backend->nevents, (unsigned long) timeout);
 
-	// Calculate the event wait timeout.
 	struct timespec ts;
-	ts.tv_sec = timeout / 1000000;
-	ts.tv_nsec = (timeout % 1000000) * 1000;
+	if (timeout) {
+		// Calculate the event wait timeout.
+		ts.tv_sec = timeout / 1000000;
+		ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	// Publish the log before a possible sleep.
-	if (timeout)
+		// Publish the log before a possible sleep.
 		mm_log_relay();
+	} else {
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
+	}
 
 	// Poll the system for events.
 	int n = mm_kevent(event_backend->event_fd,
