@@ -85,13 +85,6 @@ mc_state_cleanup(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-bool
-mc_state_finish(struct mm_net_socket *sock)
-{
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	return state->command_head == NULL;
-}
-
 void
 mc_state_attach(struct mm_net_socket *sock)
 {
@@ -103,13 +96,18 @@ mc_state_attach(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-void
+bool
 mc_state_detach(struct mm_net_socket *sock)
 {
+	bool rc = false;
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	mm_netbuf_cleanup(&state->sock);
+	if (state->command_head == NULL) {
+		mm_netbuf_cleanup(&state->sock);
+		rc = true;
+	}
 
 	LEAVE();
+	return rc;
 }
