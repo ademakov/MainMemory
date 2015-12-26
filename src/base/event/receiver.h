@@ -43,8 +43,8 @@ struct mm_event_receiver
 	struct mm_bitset targets;
 
 	/* Recievers's incoming events temporary store. */
-	struct mm_event events[4];
-	unsigned int nevents;
+	struct mm_event_fd *sinks[4];
+	unsigned int nsinks;
 };
 
 void NONNULL(1, 3)

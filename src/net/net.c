@@ -297,17 +297,17 @@ static void
 mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
 {
 	// Prepare the event data.
-	mm_event_mode_t input = MM_EVENT_REGULAR;
-	mm_event_mode_t output = MM_EVENT_REGULAR;
-	mm_event_target_t target = MM_EVENT_TARGET_BOUND;
+	mm_event_occurrence_t input = MM_EVENT_REGULAR;
+	mm_event_occurrence_t output = MM_EVENT_REGULAR;
+	mm_event_affinity_t affinity = MM_EVENT_BOUND;
 	if (!(srv->proto->flags & MM_NET_INBOUND))
 		input = MM_EVENT_ONESHOT;
 	if (!(srv->proto->flags & MM_NET_OUTBOUND))
 		output = MM_EVENT_ONESHOT;
 	if (srv->proto->detach != NULL)
-		target = MM_EVENT_TARGET_AGILE;
+		affinity = MM_EVENT_AGILE;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
-			    input, output, target);
+			    input, output, affinity);
 
 	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock,
 			mm_net_reader_complete);
@@ -1133,8 +1133,7 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED,
-			    MM_EVENT_TARGET_BOUND);
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
 	mm_core_post(srv_core, mm_net_register_server, (mm_value_t) srv);
 
 	LEAVE();

@@ -84,8 +84,8 @@ mm_event_register_handler(mm_event_handler_t handler)
 
 bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
-		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
-		    mm_event_target_t target)
+		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
+		    mm_event_affinity_t target)
 {
 	ASSERT(fd >= 0);
 	ASSERT(handler > 0);
@@ -95,8 +95,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	sink->target = MM_THREAD_NONE;
 	sink->handler = handler;
 
-	sink->loose_target = (target == MM_EVENT_TARGET_LOOSE);
-	sink->bound_target = (target == MM_EVENT_TARGET_BOUND);
+	sink->loose_target = (target == MM_EVENT_LOOSE);
+	sink->bound_target = (target == MM_EVENT_BOUND);
 
 	if (input_mode == MM_EVENT_IGNORED) {
 		sink->regular_input = false;
@@ -120,6 +120,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		sink->oneshot_output = false;
 	}
 
+	sink->state = MM_EVENT_INITIAL;
+	sink->io.state = 0;
 	sink->arrival_stamp = 0;
 	sink->dispatch_stamp = 0;
 
@@ -132,7 +134,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	return true;
 }
 
-void NONNULL(1)
+static void NONNULL(1)
 mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
@@ -156,7 +158,6 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 		// Mark the sink as attached.
 		mm_memory_store(sink->attached, 1);
 		mm_memory_store_fence();
-
 	}
 
 	// Invoke the required event handler.
@@ -180,6 +181,52 @@ mm_event_detach(struct mm_event_fd *sink)
 	// Mark the sink as detached.
 	mm_memory_store_fence();
 	mm_memory_store(sink->attached, 0);
+
+	LEAVE();
+}
+
+static mm_event_t NONNULL(1)
+mm_event_pull(struct mm_event_fd *sink)
+{
+	mm_event_iostate_t io = mm_memory_load(sink->io);
+	if (io.state != 0) {
+		if (io.input.state != 0) {
+			if (io.input.error) {
+				sink->io.input.error = 0;
+				return MM_EVENT_INPUT_ERROR;
+			} else {
+				sink->io.input.ready = 0;
+				return MM_EVENT_INPUT;
+			}
+		} else {
+			if (io.output.error) {
+				sink->io.output.error = 0;
+				return MM_EVENT_OUTPUT_ERROR;
+			} else {
+				sink->io.output.ready = 0;
+				return MM_EVENT_OUTPUT;
+			}
+		}
+	}
+
+	if (mm_memory_load(sink->state) == MM_EVENT_UNREGISTERED)
+		return MM_EVENT_UNREGISTER;
+
+	return MM_EVENT_NONE;
+}
+
+void NONNULL(1)
+mm_event_convey(struct mm_event_fd *sink)
+{
+	ENTER();
+
+	mm_event_t event = mm_event_pull(sink);
+	while (event != MM_EVENT_NONE) {
+		mm_event_handle(sink, event);
+		if (event == MM_EVENT_UNREGISTER)
+			break;
+		event = mm_event_pull(sink);
+	}
 
 	LEAVE();
 }

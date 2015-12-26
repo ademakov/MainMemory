@@ -64,7 +64,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 
 	mm_event_batch_prepare(&listener->changes, 256);
 
-	listener->nevents = 0;
+	listener->nsinks = 0;
 
 	listener->thread = thread;
 
@@ -177,8 +177,7 @@ mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_bac
 			// a wrong listener being waken (if another listener
 			// becomes polling). So listeners should be prepared
 			// to get spurious wake up notifications.
-			mm_event_listener_state_t state
-				= listen_stamp & MM_EVENT_LISTENER_STATE;
+			mm_event_listener_state_t state = listen_stamp & MM_EVENT_LISTENER_STATE;
 			if (state == MM_EVENT_LISTENER_WAITING)
 				mm_event_listener_signal(listener);
 			else if (state == MM_EVENT_LISTENER_POLLING)

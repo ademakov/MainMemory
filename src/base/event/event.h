@@ -25,7 +25,7 @@
 
 /* Event types. */
 typedef enum {
-	MM_EVENT_NONE,
+	MM_EVENT_NONE = -1,
 	MM_EVENT_INPUT,
 	MM_EVENT_OUTPUT,
 	MM_EVENT_ATTACH,
@@ -36,16 +36,22 @@ typedef enum {
 } mm_event_t;
 
 typedef enum {
+	MM_EVENT_INITIAL,
+	MM_EVENT_REGISTERED,
+	MM_EVENT_UNREGISTERED,
+} mm_event_sink_state_t;
+
+typedef enum {
 	MM_EVENT_IGNORED,
 	MM_EVENT_REGULAR,
 	MM_EVENT_ONESHOT,
-} mm_event_mode_t;
+} mm_event_occurrence_t;
 
 typedef enum {
-	MM_EVENT_TARGET_LOOSE,
-	MM_EVENT_TARGET_BOUND,
-	MM_EVENT_TARGET_AGILE,
-} mm_event_target_t;
+	MM_EVENT_LOOSE,
+	MM_EVENT_BOUND,
+	MM_EVENT_AGILE,
+} mm_event_affinity_t;
 
 /* Event details. */
 struct mm_event
@@ -88,6 +94,26 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
  * I/O events support.
  **********************************************************************/
 
+typedef union {
+	uint32_t state;
+	struct {
+		union {
+			uint16_t state;
+			struct {
+				uint8_t ready;
+				uint8_t error;
+			};
+		} input;
+		union {
+			uint16_t state;
+			struct {
+				uint8_t ready;
+				uint8_t error;
+			};
+		} output;
+	};
+} mm_event_iostate_t;
+
 /* Event sink. */
 struct mm_event_fd
 {
@@ -108,6 +134,12 @@ struct mm_event_fd
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
 
+	/* The event sink state. */
+	mm_event_sink_state_t state;
+
+	/* The event sink I/O state. */
+	mm_event_iostate_t io;
+
 	/* The stamp set the poller thread. */
 	uint32_t arrival_stamp;
 
@@ -126,14 +158,14 @@ struct mm_event_fd
 
 bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
-		    mm_event_mode_t input_mode, mm_event_mode_t output_mode,
-		    mm_event_target_t target);
-
-void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
+		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
+		    mm_event_affinity_t target);
 
 void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_convey(struct mm_event_fd *sink);
 
 static inline mm_thread_t NONNULL(1)
 mm_event_target(const struct mm_event_fd *sink)
