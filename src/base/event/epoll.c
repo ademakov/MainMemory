@@ -189,7 +189,7 @@ mm_event_epoll_get_events(struct mm_event_epoll *event_backend,
 		struct mm_event_fd *sink = event->data.ptr;
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			mm_event_receiver_add(return_events, MM_EVENT_INPUT_ERROR, sink);
+			mm_event_receiver_input_error(return_events, sink);
 
 		} else if ((event->events & EPOLLIN) != 0) {
 			if (sink->oneshot_input) {
