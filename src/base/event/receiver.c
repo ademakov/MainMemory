@@ -345,19 +345,14 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 		// If the event sink is detached then attach it to the control
 		// thread.
 		if (!sink->bound_target && target != receiver->control_thread) {
-			uint32_t dispatch_stamp = mm_memory_load(sink->dispatch_stamp);
+			uint32_t iostate = mm_memory_load(sink->io.state);
 			mm_memory_load_fence();
 			uint8_t attached = mm_memory_load(sink->attached);
-			if (dispatch_stamp == sink->arrival_stamp && !attached) {
+			if (!iostate && !attached && sink->state != MM_EVENT_UNREGISTERED) {
 				sink->target = MM_THREAD_NONE;
 				target = MM_THREAD_NONE;
 			}
 		}
-
-		// Update the arrival stamp. This disables the event sink
-		// stealing until the event jumps through all the hoops and
-		// the dispatch stamp is updated accordingly.
-		sink->arrival_stamp++;
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to

@@ -122,8 +122,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 
 	sink->state = MM_EVENT_INITIAL;
 	sink->io.state = 0;
-	sink->arrival_stamp = 0;
-	sink->dispatch_stamp = 0;
 
 	sink->changed = 0;
 	sink->oneshot_input_trigger = 0;
@@ -132,57 +130,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	sink->attached = 0;
 
 	return true;
-}
-
-static void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-	ENTER();
-	DEBUG("handle sink %p, fd %d, target %u, event %d",
-	      sink, sink->fd, mm_event_target(sink), event);
-	ASSERT(event != MM_EVENT_ATTACH && event != MM_EVENT_DETACH);
-	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
-
-	mm_event_hid_t id = sink->handler;
-	ASSERT(id < mm_event_hdesc_table_size);
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-
-	// If the event sink is detached then attach it before handling
-	// the received event. If it is in the state of pending detach
-	// then cancel this state.
-	if (!sink->attached) {
-		// Invoke the detach handler.
-		DEBUG("attach sink %d to %d", sink->fd, mm_thread_self());
-		(hd->handler)(MM_EVENT_ATTACH, sink);
-
-		// Mark the sink as attached.
-		mm_memory_store(sink->attached, 1);
-		mm_memory_store_fence();
-	}
-
-	// Invoke the required event handler.
-	(hd->handler)(event, sink);
-
-	// Update the dispatch stamp. This enables the event sink stealing
-	// if no more events arrived concurrently.
-	mm_memory_store(sink->dispatch_stamp, sink->dispatch_stamp + 1);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink)
-{
-	ENTER();
-	DEBUG("detach sink %d from %u\n", sink->fd, mm_event_target(sink));
-	ASSERT(mm_event_target(sink) == mm_thread_self());
-	ASSERT(sink->attached);
-
-	// Mark the sink as detached.
-	mm_memory_store_fence();
-	mm_memory_store(sink->attached, 0);
-
-	LEAVE();
 }
 
 static mm_event_t NONNULL(1)
@@ -219,14 +166,49 @@ void NONNULL(1)
 mm_event_convey(struct mm_event_fd *sink)
 {
 	ENTER();
+	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
 
+	mm_event_hid_t id = sink->handler;
+	ASSERT(id < mm_event_hdesc_table_size);
+	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
+
+	// If the event sink is detached then attach it before handling
+	// any received event.
+	if (!sink->attached) {
+		// Mark the sink as attached.
+		mm_memory_store(sink->attached, 1);
+		mm_memory_store_fence();
+
+		// Invoke the detach handler.
+		DEBUG("attach sink %d to %d", sink->fd, mm_thread_self());
+		(hd->handler)(MM_EVENT_ATTACH, sink);
+	}
+
+	// Handle any received events.
 	mm_event_t event = mm_event_pull(sink);
 	while (event != MM_EVENT_NONE) {
-		mm_event_handle(sink, event);
+		// Invoke the required event handler.
+		(hd->handler)(event, sink);
 		if (event == MM_EVENT_UNREGISTER)
 			break;
+
 		event = mm_event_pull(sink);
 	}
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_detach(struct mm_event_fd *sink)
+{
+	ENTER();
+	DEBUG("detach sink %d from %u\n", sink->fd, mm_event_target(sink));
+	ASSERT(mm_event_target(sink) == mm_thread_self());
+	ASSERT(sink->attached);
+
+	// Mark the sink as detached.
+	mm_memory_store_fence();
+	mm_memory_store(sink->attached, 0);
 
 	LEAVE();
 }

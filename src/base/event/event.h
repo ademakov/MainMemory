@@ -140,13 +140,6 @@ struct mm_event_fd
 	/* The event sink I/O state. */
 	mm_event_iostate_t io;
 
-	/* The stamp set the poller thread. */
-	uint32_t arrival_stamp;
-
-	/* The stamp set by the owner thread to tell if it is eligible
-	   to transfer the sink ownership to another thread. */
-	uint32_t dispatch_stamp;
-
 	/* Flags used by the poller thread. */
 	unsigned changed : 1;
 	unsigned oneshot_input_trigger : 1;
@@ -162,10 +155,10 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		    mm_event_affinity_t target);
 
 void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink);
+mm_event_convey(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_convey(struct mm_event_fd *sink);
+mm_event_detach(struct mm_event_fd *sink);
 
 static inline mm_thread_t NONNULL(1)
 mm_event_target(const struct mm_event_fd *sink)
