@@ -74,10 +74,6 @@ mm_event_receiver_handle_1_req(uintptr_t context, uintptr_t *arguments)
 	// Handle events.
 	mm_event_convey(sink_1);
 
-	// Update private event stamp.
-	if (listener != NULL)
-		listener->delivery_stamp += 1;
-
 	LEAVE();
 }
 
@@ -98,10 +94,6 @@ mm_event_receiver_handle_2_req(uintptr_t context, uintptr_t *arguments)
 	// Handle events.
 	mm_event_convey(sink_1);
 	mm_event_convey(sink_2);
-
-	// Update private event stamp.
-	if (listener != NULL)
-		listener->delivery_stamp += 2;
 
 	LEAVE();
 }
@@ -126,10 +118,6 @@ mm_event_receiver_handle_3_req(uintptr_t context, uintptr_t *arguments)
 	mm_event_convey(sink_1);
 	mm_event_convey(sink_2);
 	mm_event_convey(sink_3);
-
-	// Update private event stamp.
-	if (listener != NULL)
-		listener->delivery_stamp += 3;
 
 	LEAVE();
 }
@@ -158,10 +146,6 @@ mm_event_receiver_handle_4_req(uintptr_t context, uintptr_t *arguments)
 	mm_event_convey(sink_3);
 	mm_event_convey(sink_4);
 
-	// Update private event stamp.
-	if (listener != NULL)
-		listener->delivery_stamp += 4;
-
 	LEAVE();
 }
 
@@ -184,9 +168,6 @@ mm_event_receiver_forward(struct mm_event_listener *listener, struct mm_event_fd
 
 	// Add the sink to the buffer.
 	listener->sinks[listener->nsinks++] = sink;
-
-	// Account for the event.
-	listener->forward_stamp++;
 
 	LEAVE();
 }

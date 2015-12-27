@@ -102,17 +102,6 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 	mm_thread_t control_thread = dispatch->control_thread;
 	if (control_thread == MM_THREAD_NONE) {
 
-		// About to become a control thread check to see if there are
-		// any events forwarded by a previous control thread that have
-		// not been handled yet. If this is so then bail out in order
-		// to handle them. This is to preserve the event arrival order.
-		if (listener->forward_stamp != listener->delivery_stamp) {
-			DEBUG("forward stamp %d, delivery stamp %d",
-			      listener->forward_stamp, listener->delivery_stamp);
-			mm_regular_unlock(&dispatch->lock);
-			goto leave;
-		}
-
 #if ENABLE_DEBUG
 		if (dispatch->last_control_thread != thread) {
 			DEBUG("switch control thread %d -> %d",
@@ -220,6 +209,5 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		mm_event_listener_wait(listener, timeout);
 	}
 
-leave:
 	LEAVE();
 }

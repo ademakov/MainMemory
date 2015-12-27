@@ -86,11 +86,6 @@ struct mm_event_listener
 	/* A counter to ensure visibility of change events. */
 	uint32_t publish_stamp;
 
-	/* The event forward stamp. */
-	uint32_t forward_stamp;
-	/* The event handling stamp. */
-	uint32_t delivery_stamp;
-
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
