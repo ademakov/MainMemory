@@ -216,7 +216,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
 		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
-		//mm_domain_notify(domain);
+		mm_domain_notify(domain);
 	} else {
 		// Submit it to the thread request queue.
 		struct mm_thread *thread = core->thread;
