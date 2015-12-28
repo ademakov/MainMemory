@@ -95,23 +95,23 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
  **********************************************************************/
 
 typedef union {
-	uint32_t state;
 	struct {
 		union {
-			uint16_t state;
 			struct {
 				uint8_t ready;
 				uint8_t error;
 			};
+			uint16_t state;
 		} input;
 		union {
-			uint16_t state;
 			struct {
 				uint8_t ready;
 				uint8_t error;
 			};
+			uint16_t state;
 		} output;
 	};
+	uint32_t state;
 } mm_event_iostate_t;
 
 /* Event sink. */

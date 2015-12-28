@@ -425,7 +425,10 @@ mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *
 {
 	ENTER();
 
-	static mm_event_iostate_t iostate = { .input.ready = 1 };
+	static const mm_event_iostate_t iostate = {{
+		.input = { .error = 0, .ready = 1, },
+		.output = { .error = 0, .ready = 0, },
+	}};
 
 	sink->io.input.ready = 1;
 	sink->oneshot_input_trigger = 0;
@@ -439,7 +442,10 @@ mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_even
 {
 	ENTER();
 
-	static mm_event_iostate_t iostate = { .input.error = 1 };
+	static const mm_event_iostate_t iostate = {{
+		.input = { .error = 1, .ready = 0, },
+		.output = { .error = 0, .ready = 0, },
+	}};
 
 	sink->io.input.error = 1;
 	sink->oneshot_input_trigger = 0;
@@ -453,7 +459,10 @@ mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd 
 {
 	ENTER();
 
-	static mm_event_iostate_t iostate = { .output.ready = 1 };
+	static const mm_event_iostate_t iostate = {{
+		.input = { .error = 0, .ready = 0, },
+		.output = { .error = 0, .ready = 1, },
+	}};
 
 	sink->io.output.ready = 1;
 	sink->oneshot_output_trigger = 0;
@@ -467,7 +476,10 @@ mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_eve
 {
 	ENTER();
 
-	static mm_event_iostate_t iostate = { .output.error = 1 };
+	static const mm_event_iostate_t iostate = {{
+		.input = { .error = 0, .ready = 0, },
+		.output = { .error = 1, .ready = 0, },
+	}};
 
 	sink->io.output.error = 1;
 	sink->oneshot_output_trigger = 0;
