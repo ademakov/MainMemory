@@ -61,15 +61,11 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 static void
-mm_event_receiver_handle_1_req(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_forward_1(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[1];
-
-	if (listener == NULL)
-		sink_1->target = context;
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
 
 	// Handle events.
 	mm_event_convey(sink_1);
@@ -78,18 +74,12 @@ mm_event_receiver_handle_1_req(uintptr_t context, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_handle_2_req(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_forward_2(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[2];
-
-	if (listener == NULL) {
-		sink_1->target = context;
-		sink_2->target = context;
-	}
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
 
 	// Handle events.
 	mm_event_convey(sink_1);
@@ -99,20 +89,13 @@ mm_event_receiver_handle_2_req(uintptr_t context, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_handle_3_req(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_forward_3(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[2];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[3];
-
-	if (listener == NULL) {
-		sink_1->target = context;
-		sink_2->target = context;
-		sink_3->target = context;
-	}
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
 
 	// Handle events.
 	mm_event_convey(sink_1);
@@ -123,24 +106,90 @@ mm_event_receiver_handle_3_req(uintptr_t context, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_handle_4_req(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[2];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[3];
-	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[4];
-
-	if (listener == NULL) {
-		sink_1->target = context;
-		sink_2->target = context;
-		sink_3->target = context;
-		sink_4->target = context;
-	}
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
+	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[3];
 
 	// Handle events.
+	mm_event_convey(sink_1);
+	mm_event_convey(sink_2);
+	mm_event_convey(sink_3);
+	mm_event_convey(sink_4);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish_1(uintptr_t context, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+
+	// Handle events.
+	sink_1->target = context;
+	mm_event_convey(sink_1);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish_2(uintptr_t context, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+
+	// Handle events.
+	sink_1->target = context;
+	sink_2->target = context;
+	mm_event_convey(sink_1);
+	mm_event_convey(sink_2);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish_3(uintptr_t context, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
+
+	// Handle events.
+	sink_1->target = context;
+	sink_2->target = context;
+	sink_3->target = context;
+	mm_event_convey(sink_1);
+	mm_event_convey(sink_2);
+	mm_event_convey(sink_3);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish_4(uintptr_t context, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
+	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
+	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
+	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[3];
+
+	// Handle events.
+	sink_1->target = context;
+	sink_2->target = context;
+	sink_3->target = context;
+	sink_4->target = context;
 	mm_event_convey(sink_1);
 	mm_event_convey(sink_2);
 	mm_event_convey(sink_3);
@@ -156,9 +205,8 @@ mm_event_receiver_forward(struct mm_event_listener *listener, struct mm_event_fd
 
 	// Flush the buffer if it is full.
 	if (listener->nsinks == 4) {
-		mm_thread_send_5(listener->thread,
-				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) listener,
+		mm_thread_send_4(listener->thread,
+				 mm_event_receiver_forward_4,
 				 (uintptr_t) listener->sinks[0],
 				 (uintptr_t) listener->sinks[1],
 				 (uintptr_t) listener->sinks[2],
@@ -179,9 +227,8 @@ mm_event_receiver_publish(struct mm_event_receiver *reciever, struct mm_event_fd
 
 	// Flush the buffer if it is full.
 	if (reciever->nsinks == 4) {
-		mm_domain_send_5(mm_regular_domain,
-				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) NULL,
+		mm_domain_send_4(mm_regular_domain,
+				 mm_event_receiver_publish_4,
 				 (uintptr_t) reciever->sinks[0],
 				 (uintptr_t) reciever->sinks[1],
 				 (uintptr_t) reciever->sinks[2],
@@ -202,30 +249,26 @@ mm_event_receiver_forward_flush(struct mm_event_listener *listener)
 
 	switch (listener->nsinks) {
 	case 1:
-		mm_thread_send_2(listener->thread,
-				 mm_event_receiver_handle_1_req,
-				 (uintptr_t) listener,
+		mm_thread_send_1(listener->thread,
+				 mm_event_receiver_forward_1,
 				 (uintptr_t) listener->sinks[0]);
 		break;
 	case 2:
-		mm_thread_send_3(listener->thread,
-				 mm_event_receiver_handle_2_req,
-				 (uintptr_t) listener,
+		mm_thread_send_2(listener->thread,
+				 mm_event_receiver_forward_2,
 				 (uintptr_t) listener->sinks[0],
 				 (uintptr_t) listener->sinks[1]);
 		break;
 	case 3:
-		mm_thread_send_4(listener->thread,
-				 mm_event_receiver_handle_3_req,
-				 (uintptr_t) listener,
+		mm_thread_send_3(listener->thread,
+				 mm_event_receiver_forward_3,
 				 (uintptr_t) listener->sinks[0],
 				 (uintptr_t) listener->sinks[1],
 				 (uintptr_t) listener->sinks[2]);
 		break;
 	case 4:
-		mm_thread_send_5(listener->thread,
-				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) listener,
+		mm_thread_send_4(listener->thread,
+				 mm_event_receiver_forward_4,
 				 (uintptr_t) listener->sinks[0],
 				 (uintptr_t) listener->sinks[1],
 				 (uintptr_t) listener->sinks[2],
@@ -247,30 +290,26 @@ mm_event_receiver_publish_flush(struct mm_event_receiver *receiver)
 
 	switch (receiver->nsinks) {
 	case 1:
-		mm_domain_send_2(mm_regular_domain,
-				 mm_event_receiver_handle_1_req,
-				 (uintptr_t) NULL,
+		mm_domain_send_1(mm_regular_domain,
+				 mm_event_receiver_publish_1,
 				 (uintptr_t) receiver->sinks[0]);
 		break;
 	case 2:
-		mm_domain_send_3(mm_regular_domain,
-				 mm_event_receiver_handle_2_req,
-				 (uintptr_t) NULL,
+		mm_domain_send_2(mm_regular_domain,
+				 mm_event_receiver_publish_2,
 				 (uintptr_t) receiver->sinks[0],
 				 (uintptr_t) receiver->sinks[1]);
 		break;
 	case 3:
-		mm_domain_send_4(mm_regular_domain,
-				 mm_event_receiver_handle_3_req,
-				 (uintptr_t) NULL,
+		mm_domain_send_3(mm_regular_domain,
+				 mm_event_receiver_publish_3,
 				 (uintptr_t) receiver->sinks[0],
 				 (uintptr_t) receiver->sinks[1],
 				 (uintptr_t) receiver->sinks[2]);
 		break;
 	case 4:
-		mm_domain_send_5(mm_regular_domain,
-				 mm_event_receiver_handle_4_req,
-				 (uintptr_t) NULL,
+		mm_domain_send_4(mm_regular_domain,
+				 mm_event_receiver_publish_4,
 				 (uintptr_t) receiver->sinks[0],
 				 (uintptr_t) receiver->sinks[1],
 				 (uintptr_t) receiver->sinks[2],
@@ -328,7 +367,8 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 }
 
 static void NONNULL(1, 2)
-mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd *sink,
+			 uint32_t expected_iostate)
 {
 	ENTER();
 	ASSERT(receiver->control_thread == mm_thread_self());
@@ -348,7 +388,9 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			uint32_t iostate = mm_memory_load(sink->io.state);
 			mm_memory_load_fence();
 			uint8_t attached = mm_memory_load(sink->attached);
-			if (!iostate && !attached && sink->state != MM_EVENT_UNREGISTERED) {
+			if (!attached
+			    && iostate == expected_iostate
+			    && sink->state != MM_EVENT_UNREGISTERED) {
 				sink->target = MM_THREAD_NONE;
 				target = MM_THREAD_NONE;
 			}
@@ -383,9 +425,11 @@ mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *
 {
 	ENTER();
 
+	static mm_event_iostate_t iostate = { .input.ready = 1 };
+
 	sink->io.input.ready = 1;
 	sink->oneshot_input_trigger = 0;
-	mm_event_receiver_handle(receiver, sink);
+	mm_event_receiver_handle(receiver, sink, iostate.state);
 
 	LEAVE();
 }
@@ -395,9 +439,11 @@ mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_even
 {
 	ENTER();
 
+	static mm_event_iostate_t iostate = { .input.error = 1 };
+
 	sink->io.input.error = 1;
 	sink->oneshot_input_trigger = 0;
-	mm_event_receiver_handle(receiver, sink);
+	mm_event_receiver_handle(receiver, sink, iostate.state);
 
 	LEAVE();
 }
@@ -407,9 +453,11 @@ mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd 
 {
 	ENTER();
 
+	static mm_event_iostate_t iostate = { .output.ready = 1 };
+
 	sink->io.output.ready = 1;
 	sink->oneshot_output_trigger = 0;
-	mm_event_receiver_handle(receiver, sink);
+	mm_event_receiver_handle(receiver, sink, iostate.state);
 
 	LEAVE();
 }
@@ -419,9 +467,11 @@ mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_eve
 {
 	ENTER();
 
+	static mm_event_iostate_t iostate = { .output.error = 1 };
+
 	sink->io.output.error = 1;
 	sink->oneshot_output_trigger = 0;
-	mm_event_receiver_handle(receiver, sink);
+	mm_event_receiver_handle(receiver, sink, iostate.state);
 
 	LEAVE();
 }
@@ -432,7 +482,7 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 	ENTER();
 
 	sink->state = MM_EVENT_UNREGISTERED;
-	mm_event_receiver_handle(receiver, sink);
+	mm_event_receiver_handle(receiver, sink, 0);
 
 	LEAVE();
 }
