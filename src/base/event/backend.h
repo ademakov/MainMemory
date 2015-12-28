@@ -44,11 +44,24 @@ struct mm_event_backend
 	struct mm_selfpipe selfpipe;
 };
 
+struct mm_event_backend_storage
+{
+	/* System-specific events storage. */
+#if HAVE_SYS_EPOLL_H
+	struct mm_event_epoll_storage storage;
+#elif HAVE_SYS_EVENT_H
+	struct mm_event_kqueue_storage storage;
+#endif
+};
+
 void NONNULL(1)
 mm_event_backend_prepare(struct mm_event_backend *backend);
 
 void NONNULL(1)
 mm_event_backend_cleanup(struct mm_event_backend *backend);
+
+void NONNULL(1)
+mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
 
 /*
  * Tell if the backend requires all change events to be serialized.
@@ -67,16 +80,17 @@ mm_event_backend_serial(struct mm_event_backend *backend UNUSED)
 #endif
 }
 
-static inline void NONNULL(1, 2)
+static inline void NONNULL(1, 2, 3)
 mm_event_backend_listen(struct mm_event_backend *backend,
+			struct mm_event_backend_storage *storage,
 			struct mm_event_batch *changes,
 			struct mm_event_receiver *receiver,
 			mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&backend->backend, changes, receiver, timeout);
+	mm_event_epoll_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_listen(&backend->backend, changes, receiver, timeout);
+	mm_event_kqueue_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
 #endif
 }
 

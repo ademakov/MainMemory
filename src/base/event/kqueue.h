@@ -37,12 +37,16 @@
 struct mm_event_batch;
 struct mm_event_receiver;
 
-/* Data for kqueue support. */
+/* Common data for kqueue support. */
 struct mm_event_kqueue
 {
 	/* The kqueue file descriptor. */
 	int event_fd;
+};
 
+/* Per-listener data for kqueue support. */
+struct mm_event_kqueue_storage
+{
 	/* The kevent list size. */
 	int nevents;
 
@@ -51,24 +55,28 @@ struct mm_event_kqueue
 };
 
 void NONNULL(1)
-mm_event_kqueue_prepare(struct mm_event_kqueue *event_backend);
+mm_event_kqueue_prepare(struct mm_event_kqueue *backend);
 
 void NONNULL(1)
-mm_event_kqueue_cleanup(struct mm_event_kqueue *event_backend);
+mm_event_kqueue_cleanup(struct mm_event_kqueue *backend);
 
-void NONNULL(1, 2)
-mm_event_kqueue_listen(struct mm_event_kqueue *event_backend,
-		       struct mm_event_batch *change_events,
-		       struct mm_event_receiver *return_events,
+void NONNULL(1)
+mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
+
+void NONNULL(1, 2, 3)
+mm_event_kqueue_listen(struct mm_event_kqueue *backend,
+		       struct mm_event_kqueue_storage *storage,
+		       struct mm_event_batch *changes,
+		       struct mm_event_receiver *receiver,
 		       mm_timeout_t timeout);
 
 #if MM_EVENT_NATIVE_NOTIFY
 
 bool NONNULL(1)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *event_backend);
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend);
 
 void NONNULL(1)
-mm_event_kqueue_notify(struct mm_event_kqueue *event_backend);
+mm_event_kqueue_notify(struct mm_event_kqueue *backend);
 
 #endif
 

@@ -36,11 +36,10 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 
 	// Try to use native system notify mechanism.
 #if MM_EVENT_NATIVE_NOTIFY
-	backend->native_notify
 # if HAVE_SYS_EPOLL_H
-		= mm_event_epoll_enable_notify(&backend->backend);
+	backend->native_notify = mm_event_epoll_enable_notify(&backend->backend);
 # elif HAVE_SYS_EVENT_H
-		= mm_event_kqueue_enable_notify(&backend->backend);
+	backend->native_notify = mm_event_kqueue_enable_notify(&backend->backend);
 # endif
 	if (backend->native_notify)
 		goto leave;
@@ -52,9 +51,10 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 	// Register the self-pipe.
 	struct mm_event_batch changes;
 	mm_event_batch_prepare(&changes, 1);
-	mm_event_batch_add(&changes, MM_EVENT_REGISTER,
-			   &backend->selfpipe.event_fd);
-	mm_event_backend_listen(backend, &changes, NULL, 0);
+	struct mm_event_backend_storage storage;
+	mm_event_backend_storage_prepare(&storage);
+	mm_event_batch_add(&changes, MM_EVENT_REGISTER, &backend->selfpipe.event_fd);
+	mm_event_backend_listen(backend, &storage, &changes, NULL, 0);
 	mm_event_batch_cleanup(&changes);
 
 #if MM_EVENT_NATIVE_NOTIFY
@@ -81,6 +81,20 @@ mm_event_backend_cleanup(struct mm_event_backend *backend)
 	mm_event_epoll_cleanup(&backend->backend);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_cleanup(&backend->backend);
+#endif
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage)
+{
+	ENTER();
+
+#if HAVE_SYS_EPOLL_H
+	// Nothing to do.
+#elif HAVE_SYS_EVENT_H
+	mm_event_kqueue_storage_prepare(&storage->storage);
 #endif
 
 	LEAVE();

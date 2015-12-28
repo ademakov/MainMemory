@@ -49,17 +49,14 @@ struct mm_event_receiver
 
 void NONNULL(1, 3)
 mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t nthreads,
-			  struct mm_thread *threads[]);
+			  mm_thread_t nthreads, struct mm_thread *threads[]);
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
-void NONNULL(1, 3)
-mm_event_receiver_listen(struct mm_event_receiver *receiver,
-			 mm_thread_t thread,
-			 struct mm_event_backend *backend,
-			 mm_timeout_t timeout);
+void NONNULL(1, 2)
+mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_backend *backend,
+			 mm_thread_t thread, mm_timeout_t timeout);
 
 void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);

@@ -45,11 +45,11 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	mm_event_batch_prepare(&dispatch->changes, 1024);
 	dispatch->publish_stamp = 0;
 
-	// Allocate pending event batches.
-	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);
-
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
+
+	// Allocate pending event batches.
+	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);
 
 	// Determine event flags that require change event serialization.
 	if (mm_event_backend_serial(&dispatch->backend)) {
@@ -189,8 +189,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		}
 
 		// Wait for incoming events or timeout expiration.
-		mm_event_receiver_listen(&dispatch->receiver, thread,
-					 &dispatch->backend, timeout);
+		mm_event_receiver_listen(&dispatch->receiver, &dispatch->backend, thread, timeout);
 
 #if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->receiver.got_events)

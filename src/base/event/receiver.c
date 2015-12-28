@@ -27,8 +27,8 @@
 #include "base/thread/thread.h"
 
 void NONNULL(1, 3)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, mm_thread_t nthreads,
-			  struct mm_thread *threads[])
+mm_event_receiver_prepare(struct mm_event_receiver *receiver,
+			  mm_thread_t nthreads, struct mm_thread *threads[])
 {
 	ENTER();
 
@@ -324,9 +324,9 @@ mm_event_receiver_publish_flush(struct mm_event_receiver *receiver)
 	LEAVE();
 }
 
-void NONNULL(1, 3)
-mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
-			 struct mm_event_backend *backend, mm_timeout_t timeout)
+void NONNULL(1, 2)
+mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_backend *backend,
+			 mm_thread_t thread, mm_timeout_t timeout)
 {
 	ENTER();
 

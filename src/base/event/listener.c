@@ -59,6 +59,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 	mm_thread_monitor_prepare(&listener->monitor);
 #endif
 
+	mm_event_backend_storage_prepare(&listener->storage);
 	mm_event_batch_prepare(&listener->changes, 256);
 
 	listener->nsinks = 0;
@@ -226,7 +227,8 @@ mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backe
 	}
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(backend, &listener->changes, receiver, timeout);
+	mm_event_backend_listen(backend, &listener->storage, &listener->changes, receiver,
+				timeout);
 
 	// Advertise the start of another working cycle.
 	mm_event_listener_finish(listener, listen_stamp);

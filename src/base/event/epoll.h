@@ -38,7 +38,7 @@
 struct mm_event_batch;
 struct mm_event_receiver;
 
-/* Data for epoll support. */
+/* Common data for epoll support. */
 struct mm_event_epoll
 {
 	/* The epoll file descriptor. */
@@ -48,7 +48,11 @@ struct mm_event_epoll
 	/* The eventfd descriptor used for notification. */
 	struct mm_event_fd notify_fd;
 #endif
+};
 
+/* Per-listener data for epoll support. */
+struct mm_event_epoll_storage
+{
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
 };
@@ -57,24 +61,25 @@ void
 mm_event_epoll_init(void);
 
 void NONNULL(1)
-mm_event_epoll_prepare(struct mm_event_epoll *event_backend);
+mm_event_epoll_prepare(struct mm_event_epoll *backend);
 
 void NONNULL(1)
-mm_event_epoll_cleanup(struct mm_event_epoll *event_backend);
+mm_event_epoll_cleanup(struct mm_event_epoll *backend);
 
-void NONNULL(1, 2)
-mm_event_epoll_listen(struct mm_event_epoll *event_backend,
-		      struct mm_event_batch *change_events,
-		      struct mm_event_receiver *return_events,
+void NONNULL(1, 2, 3)
+mm_event_epoll_listen(struct mm_event_epoll *backend,
+		      struct mm_event_epoll_storage *storage,
+		      struct mm_event_batch *changes,
+		      struct mm_event_receiver *receiver,
 		      mm_timeout_t timeout);
 
 #if MM_EVENT_NATIVE_NOTIFY
 
 bool NONNULL(1)
-mm_event_epoll_enable_notify(struct mm_event_epoll *event_backend);
+mm_event_epoll_enable_notify(struct mm_event_epoll *backend);
 
 void NONNULL(1)
-mm_event_epoll_notify(struct mm_event_epoll *event_backend);
+mm_event_epoll_notify(struct mm_event_epoll *backend);
 
 #endif
 

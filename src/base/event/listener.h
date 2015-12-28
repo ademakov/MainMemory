@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/lock.h"
 #include "base/event/batch.h"
+#include "base/event/backend.h"
 #include "base/event/event.h"
 
 #if HAVE_LINUX_FUTEX_H
@@ -40,7 +41,6 @@
 #endif
 
 /* Forward declarations. */
-struct mm_event_backend;
 struct mm_event_receiver;
 struct mm_thread;
 
@@ -51,14 +51,12 @@ typedef enum
 	MM_EVENT_LISTENER_RUNNING = 0,
 	MM_EVENT_LISTENER_POLLING = 1,
 	MM_EVENT_LISTENER_WAITING = 2,
-
 } mm_event_listener_state_t;
 
 typedef enum
 {
 	MM_EVENT_LISTENER_CHANGES_PRIVATE,
 	MM_EVENT_LISTENER_CHANGES_PUBLISHED,
-
 } mm_event_listener_changes_t;
 
 struct mm_event_listener
@@ -93,6 +91,9 @@ struct mm_event_listener
 #else
 	struct mm_thread_monitor monitor;
 #endif
+
+	/* Listner's event storage. */
+	struct mm_event_backend_storage storage;
 
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
