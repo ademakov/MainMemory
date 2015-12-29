@@ -327,6 +327,7 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver,
 						     sizeof(struct mm_event_receiver_fwdbuf));
 	for (mm_thread_t i = 0; i < nthreads; i++)
 		mm_event_receiver_fwdbuf_prepare(&receiver->forward_buffers[i]);
+
 	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
 
 	// Prepare publish buffer.
@@ -344,6 +345,8 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
 		mm_event_listener_cleanup(&receiver->listeners[i]);
 	mm_common_free(receiver->listeners);
+
+	mm_common_free(receiver->forward_buffers);
 
 	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
 
