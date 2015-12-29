@@ -25,6 +25,23 @@
 #include "base/event/event.h"
 #include "base/event/listener.h"
 
+#define MM_EVENT_RECEIVER_FWDBUF_SIZE	4
+#define MM_EVENT_RECEIVER_PUBBUF_SIZE	4
+
+/* Event sink forward buffer. */
+struct mm_event_receiver_fwdbuf
+{
+	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_FWDBUF_SIZE];
+	unsigned int nsinks;
+};
+
+/* Event sink publish buffer. */
+struct mm_event_receiver_pubbuf
+{
+	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_PUBBUF_SIZE];
+	unsigned int nsinks;
+};
+
 struct mm_event_receiver
 {
 	/* The flag indicating that some events were received. */
@@ -42,9 +59,11 @@ struct mm_event_receiver
 	/* Target threads that have received events. */
 	struct mm_bitset targets;
 
-	/* Recievers's incoming events temporary store. */
-	struct mm_event_fd *sinks[4];
-	unsigned int nsinks;
+	/* Per-thread temporary store for sinks of received events. */
+	struct mm_event_receiver_fwdbuf *forward_buffers;
+
+	/* Per-domain temporary store for sinks of received events. */
+	struct mm_event_receiver_pubbuf publish_buffer;
 };
 
 void NONNULL(1, 3)

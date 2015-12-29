@@ -62,8 +62,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 	mm_event_backend_storage_prepare(&listener->storage);
 	mm_event_batch_prepare(&listener->changes, 256);
 
-	listener->nsinks = 0;
-
 	listener->thread = thread;
 
 	LEAVE();

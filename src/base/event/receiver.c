@@ -26,39 +26,9 @@
 #include "base/memory/memory.h"
 #include "base/thread/thread.h"
 
-void NONNULL(1, 3)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t nthreads, struct mm_thread *threads[])
-{
-	ENTER();
-
-	// Allocate listener info.
-	receiver->nlisteners = nthreads;
-	receiver->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < nthreads; i++)
-		mm_event_listener_prepare(&receiver->listeners[i], threads[i]);
-
-	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
-
-	receiver->nsinks = 0;
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
-{
-	ENTER();
-
-	// Release listener info.
-	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
-		mm_event_listener_cleanup(&receiver->listeners[i]);
-	mm_common_free(receiver->listeners);
-
-	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
-
-	LEAVE();
-}
+/**********************************************************************
+ * Event forward request handlers.
+ **********************************************************************/
 
 static void
 mm_event_receiver_forward_1(uintptr_t context UNUSED, uintptr_t *arguments)
@@ -123,6 +93,10 @@ mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Event publish request handlers.
+ **********************************************************************/
 
 static void
 mm_event_receiver_publish_1(uintptr_t context, uintptr_t *arguments)
@@ -198,128 +172,180 @@ mm_event_receiver_publish_4(uintptr_t context, uintptr_t *arguments)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Event forwarding.
+ **********************************************************************/
+
 static void
-mm_event_receiver_forward(struct mm_event_listener *listener, struct mm_event_fd *sink)
+mm_event_receiver_fwdbuf_prepare(struct mm_event_receiver_fwdbuf *buffer)
 {
-	ENTER();
-
-	// Flush the buffer if it is full.
-	if (listener->nsinks == 4) {
-		mm_thread_send_4(listener->thread,
-				 mm_event_receiver_forward_4,
-				 (uintptr_t) listener->sinks[0],
-				 (uintptr_t) listener->sinks[1],
-				 (uintptr_t) listener->sinks[2],
-				 (uintptr_t) listener->sinks[3]);
-		listener->nsinks = 0;
-	}
-
-	// Add the sink to the buffer.
-	listener->sinks[listener->nsinks++] = sink;
-
-	LEAVE();
+	buffer->nsinks = 0;
 }
 
 static void
-mm_event_receiver_publish(struct mm_event_receiver *reciever, struct mm_event_fd *sink)
+mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer)
 {
 	ENTER();
 
-	// Flush the buffer if it is full.
-	if (reciever->nsinks == 4) {
-		mm_domain_send_4(mm_regular_domain,
-				 mm_event_receiver_publish_4,
-				 (uintptr_t) reciever->sinks[0],
-				 (uintptr_t) reciever->sinks[1],
-				 (uintptr_t) reciever->sinks[2],
-				 (uintptr_t) reciever->sinks[3]);
-		reciever->nsinks = 0;
-	}
-
-	// Add the sink to the buffer.
-	reciever->sinks[reciever->nsinks++] = sink;
-
-	LEAVE();
-}
-
-static void
-mm_event_receiver_forward_flush(struct mm_event_listener *listener)
-{
-	ENTER();
-
-	switch (listener->nsinks) {
+	switch (buffer->nsinks) {
+	case 0:
+		break;
 	case 1:
-		mm_thread_send_1(listener->thread,
-				 mm_event_receiver_forward_1,
-				 (uintptr_t) listener->sinks[0]);
+		buffer->nsinks = 0;
+		mm_thread_send_1(thread, mm_event_receiver_forward_1,
+				 (uintptr_t) buffer->sinks[0]);
 		break;
 	case 2:
-		mm_thread_send_2(listener->thread,
-				 mm_event_receiver_forward_2,
-				 (uintptr_t) listener->sinks[0],
-				 (uintptr_t) listener->sinks[1]);
+		buffer->nsinks = 0;
+		mm_thread_send_2(thread, mm_event_receiver_forward_2,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1]);
 		break;
 	case 3:
-		mm_thread_send_3(listener->thread,
-				 mm_event_receiver_forward_3,
-				 (uintptr_t) listener->sinks[0],
-				 (uintptr_t) listener->sinks[1],
-				 (uintptr_t) listener->sinks[2]);
+		buffer->nsinks = 0;
+		mm_thread_send_3(thread, mm_event_receiver_forward_3,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2]);
 		break;
 	case 4:
-		mm_thread_send_4(listener->thread,
-				 mm_event_receiver_forward_4,
-				 (uintptr_t) listener->sinks[0],
-				 (uintptr_t) listener->sinks[1],
-				 (uintptr_t) listener->sinks[2],
-				 (uintptr_t) listener->sinks[3]);
+		buffer->nsinks = 0;
+		mm_thread_send_4(thread, mm_event_receiver_forward_4,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2],
+				 (uintptr_t) buffer->sinks[3]);
 		break;
 	default:
 		ABORT();
 	}
 
-	listener->nsinks = 0;
-
 	LEAVE();
 }
 
 static void
-mm_event_receiver_publish_flush(struct mm_event_receiver *receiver)
+mm_event_receiver_forward(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer,
+			  struct mm_event_fd *sink)
 {
 	ENTER();
 
-	switch (receiver->nsinks) {
+	// Flush the buffer if it is full.
+	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE)
+		mm_event_receiver_forward_flush(thread, buffer);
+
+	// Add the sink to the buffer.
+	buffer->sinks[buffer->nsinks++] = sink;
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Event publishing.
+ **********************************************************************/
+
+static void
+mm_event_receiver_pubbuf_prepare(struct mm_event_receiver_pubbuf *buffer)
+{
+	buffer->nsinks = 0;
+}
+
+static void
+mm_event_receiver_publish_flush(struct mm_domain *domain, struct mm_event_receiver_pubbuf *buffer)
+{
+	ENTER();
+
+	switch (buffer->nsinks) {
+	case 0:
+		break;
 	case 1:
-		mm_domain_send_1(mm_regular_domain,
-				 mm_event_receiver_publish_1,
-				 (uintptr_t) receiver->sinks[0]);
+		buffer->nsinks = 0;
+		mm_domain_send_1(domain, mm_event_receiver_publish_1,
+				 (uintptr_t) buffer->sinks[0]);
 		break;
 	case 2:
-		mm_domain_send_2(mm_regular_domain,
-				 mm_event_receiver_publish_2,
-				 (uintptr_t) receiver->sinks[0],
-				 (uintptr_t) receiver->sinks[1]);
+		buffer->nsinks = 0;
+		mm_domain_send_2(domain, mm_event_receiver_publish_2,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1]);
 		break;
 	case 3:
-		mm_domain_send_3(mm_regular_domain,
-				 mm_event_receiver_publish_3,
-				 (uintptr_t) receiver->sinks[0],
-				 (uintptr_t) receiver->sinks[1],
-				 (uintptr_t) receiver->sinks[2]);
+		buffer->nsinks = 0;
+		mm_domain_send_3(domain, mm_event_receiver_publish_3,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2]);
 		break;
 	case 4:
-		mm_domain_send_4(mm_regular_domain,
-				 mm_event_receiver_publish_4,
-				 (uintptr_t) receiver->sinks[0],
-				 (uintptr_t) receiver->sinks[1],
-				 (uintptr_t) receiver->sinks[2],
-				 (uintptr_t) receiver->sinks[3]);
+		buffer->nsinks = 0;
+		mm_domain_send_4(domain, mm_event_receiver_publish_4,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2],
+				 (uintptr_t) buffer->sinks[3]);
 		break;
 	default:
 		ABORT();
 	}
 
-	receiver->nsinks = 0;
+	LEAVE();
+}
+
+static void
+mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pubbuf *buffer,
+			  struct mm_event_fd *sink)
+{
+	ENTER();
+
+	// Flush the buffer if it is full.
+	if (buffer->nsinks == MM_EVENT_RECEIVER_PUBBUF_SIZE)
+		mm_event_receiver_publish_flush(domain, buffer);
+
+	// Add the sink to the buffer.
+	buffer->sinks[buffer->nsinks++] = sink;
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Event receiver.
+ **********************************************************************/
+
+void NONNULL(1, 3)
+mm_event_receiver_prepare(struct mm_event_receiver *receiver,
+			  mm_thread_t nthreads, struct mm_thread *threads[])
+{
+	ENTER();
+
+	// Prepare listener info.
+	receiver->nlisteners = nthreads;
+	receiver->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_event_listener_prepare(&receiver->listeners[i], threads[i]);
+
+	// Prepare forward buffers.
+	receiver->forward_buffers = mm_common_calloc(nthreads,
+						     sizeof(struct mm_event_receiver_fwdbuf));
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_event_receiver_fwdbuf_prepare(&receiver->forward_buffers[i]);
+	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
+
+	// Prepare publish buffer.
+	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
+	// Release listener info.
+	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
+		mm_event_listener_cleanup(&receiver->listeners[i]);
+	mm_common_free(receiver->listeners);
+
+	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
 
 	LEAVE();
 }
@@ -341,8 +367,7 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_bac
 
 	// Flush published events.
 	if (receiver->published_events) {
-		if (receiver->nsinks)
-			mm_event_receiver_publish_flush(receiver);
+		mm_event_receiver_publish_flush(mm_regular_domain, &receiver->publish_buffer);
 		mm_even_receiver_notify_waiting(receiver, backend);
 	}
 
@@ -352,7 +377,8 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_bac
 		struct mm_event_listener *target_listener = &receiver->listeners[target];
 
 		// Flush forwarded events.
-		mm_event_receiver_forward_flush(target_listener);
+		mm_event_receiver_forward_flush(target_listener->thread,
+						&receiver->forward_buffers[target]);
 
 		// Wake up the target thread if it is sleeping.
 		mm_event_listener_notify(target_listener, backend);
@@ -404,7 +430,8 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 
 		} else if (target != MM_THREAD_NONE) {
 			struct mm_event_listener *listener = &receiver->listeners[target];
-			mm_event_receiver_forward(listener, sink);
+			mm_event_receiver_forward(listener->thread,
+						  &receiver->forward_buffers[target], sink);
 			mm_bitset_set(&receiver->targets, target);
 
 		} else {
@@ -412,7 +439,8 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			// a single sink then there might be a big problem.
 			// This must be resolved before any production use.
 			// Therefore this is just a temporary stub !!!
-			mm_event_receiver_publish(receiver, sink);
+			mm_event_receiver_publish(mm_regular_domain,
+						  &receiver->publish_buffer, sink);
 			receiver->published_events = true;
 		}
 	}
