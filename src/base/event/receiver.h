@@ -50,8 +50,8 @@ struct mm_event_receiver
 	/* The flag indicating that some events were published in the domain request queue. */
 	bool published_events;
 
-	/* The thread that currently owns the receiver. */
-	mm_thread_t control_thread;
+	/* The thread that owns the receiver. */
+	mm_thread_t thread;
 
 	/* The top-level event dispatch data. */
 	struct mm_dispatch *dispatch;
@@ -67,14 +67,16 @@ struct mm_event_receiver
 };
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch);
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch,
+			  mm_thread_t thread);
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
 void NONNULL(1)
-mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
-			 mm_timeout_t timeout);
+mm_event_receiver_start(struct mm_event_receiver *receiver);
+void NONNULL(1)
+mm_event_receiver_finish(struct mm_event_receiver *receiver);
 
 void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);

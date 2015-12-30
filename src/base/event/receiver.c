@@ -20,7 +20,6 @@
 #include "base/event/receiver.h"
 
 #include "base/base.h"
-#include "base/event/batch.h"
 #include "base/event/dispatch.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
@@ -312,11 +311,13 @@ mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pub
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch)
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch,
+			  mm_thread_t thread)
 {
 	ENTER();
 
-	// Remember the top-level owner.
+	// Remember the owners.
+	receiver->thread = thread;
 	receiver->dispatch = dispatch;
 
 	// Prepare forward buffers.
@@ -346,20 +347,23 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 void NONNULL(1)
-mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
-			 mm_timeout_t timeout)
+mm_event_receiver_start(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
 	receiver->got_events = false;
 	receiver->published_events = false;
-	receiver->control_thread = thread;
 	mm_bitset_clear_all(&receiver->targets);
 
-	// Poll for incoming events or wait for timeout expiration.
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_receiver_finish(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
 	struct mm_dispatch *dispatch = receiver->dispatch;
-	struct mm_event_listener *listener = &dispatch->listeners[thread];
-	mm_event_listener_poll(listener, &dispatch->backend, receiver, timeout);
 
 	// Flush published events.
 	if (receiver->published_events) {
@@ -367,17 +371,13 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
 		mm_dispatch_notify_waiting(dispatch);
 	}
 
-	// Forward incoming events that belong to other threads.
+	// Flush forwarded events.
 	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
 	while (target != MM_THREAD_NONE) {
-		struct mm_event_listener *target_listener = &dispatch->listeners[target];
-
-		// Flush forwarded events.
-		mm_event_receiver_forward_flush(target_listener->thread,
+		struct mm_event_listener *listener = &dispatch->listeners[target];
+		mm_event_receiver_forward_flush(listener->thread,
 						&receiver->forward_buffers[target]);
-
-		// Wake up the target thread if it is sleeping.
-		mm_event_listener_notify(target_listener, &dispatch->backend);
+		mm_event_listener_notify(listener, &dispatch->backend);
 
 		if (++target < mm_bitset_size(&receiver->targets))
 			target = mm_bitset_find(&receiver->targets, target);
@@ -406,7 +406,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 
 		// If the event sink is detached then attach it to the control
 		// thread.
-		if (!sink->bound_target && target != receiver->control_thread) {
+		if (!sink->bound_target && target != receiver->thread) {
 			uint32_t iostate = mm_memory_load(sink->io.state);
 			mm_memory_load_fence();
 			uint8_t attached = mm_memory_load(sink->attached);
@@ -421,7 +421,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
-		if (target == receiver->control_thread) {
+		if (target == receiver->thread) {
 			mm_event_convey(sink);
 
 		} else if (target != MM_THREAD_NONE) {

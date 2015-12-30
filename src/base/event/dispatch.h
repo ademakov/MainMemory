@@ -53,15 +53,12 @@ struct mm_dispatch
 	/* A counter to ensure visibility of change events. */
 	uint32_t publish_stamp;
 
+	/* A system-specific event backend. */
+	struct mm_event_backend backend;
+
 	/* Event listeners. */
 	mm_thread_t nlisteners;
 	struct mm_event_listener *listeners;
-
-	/* A common store for incoming events filled by the control thread. */
-	struct mm_event_receiver receiver;
-
-	/* A system-specific event backend. */
-	struct mm_event_backend backend;
 
 	/* The event batch flags that require serialization. */
 	unsigned int serial_changes;

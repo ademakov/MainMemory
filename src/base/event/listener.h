@@ -21,10 +21,9 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
-#include "base/lock.h"
 #include "base/event/batch.h"
 #include "base/event/backend.h"
-#include "base/event/event.h"
+#include "base/event/receiver.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -41,7 +40,7 @@
 #endif
 
 /* Forward declarations. */
-struct mm_event_receiver;
+struct mm_dispatch;
 struct mm_thread;
 
 #define MM_EVENT_LISTENER_STATE		((uint32_t) 3)
@@ -92,7 +91,10 @@ struct mm_event_listener
 	struct mm_thread_monitor monitor;
 #endif
 
-	/* Listner's event storage. */
+	/* Listener's helper to receive events. */
+	struct mm_event_receiver receiver;
+
+	/* Listener's private event storage. */
 	struct mm_event_backend_storage storage;
 
 	/* Listener's private change events store. */
@@ -103,8 +105,9 @@ struct mm_event_listener
 
 } CACHE_ALIGN;
 
-void NONNULL(1, 2)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread);
+void NONNULL(1, 2, 3)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch *dispatch,
+			  struct mm_thread *thread);
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
@@ -112,9 +115,9 @@ mm_event_listener_cleanup(struct mm_event_listener *listener);
 void NONNULL(1, 2)
 mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend);
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2)
 mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
-		       struct mm_event_receiver *receiver, mm_timeout_t timeout);
+		       mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);

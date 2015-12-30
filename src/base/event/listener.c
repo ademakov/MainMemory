@@ -37,8 +37,9 @@
 # include "base/clock.h"
 #endif
 
-void NONNULL(1, 2)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *thread)
+void NONNULL(1, 2, 3)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch *dispatch,
+			  struct mm_thread *thread)
 {
 	ENTER();
 
@@ -58,6 +59,10 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_thread *
 #else
 	mm_thread_monitor_prepare(&listener->monitor);
 #endif
+
+	// Initialize the receiver.
+	mm_thread_t thread_number = listener - dispatch->listeners;
+	mm_event_receiver_prepare(&listener->receiver, dispatch, thread_number);
 
 	mm_event_backend_storage_prepare(&listener->storage);
 	mm_event_batch_prepare(&listener->changes, 256);
@@ -198,11 +203,14 @@ mm_event_listener_finish(struct mm_event_listener *listener, uint32_t listen_sta
 	mm_memory_store(listener->listen_stamp, listen_stamp);
 }
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2)
 mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
-		       struct mm_event_receiver *receiver, mm_timeout_t timeout)
+		       mm_timeout_t timeout)
 {
 	ENTER();
+
+	// Prepare to receive events.
+	mm_event_receiver_start(&listener->receiver);
 
 	// Get the current listener state.
 	const uint32_t listen_stamp = listener->listen_stamp;
@@ -225,11 +233,14 @@ mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backe
 	}
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(backend, &listener->storage, &listener->changes, receiver,
-				timeout);
+	mm_event_backend_listen(backend, &listener->storage, &listener->changes,
+				&listener->receiver, timeout);
 
 	// Advertise the start of another working cycle.
 	mm_event_listener_finish(listener, listen_stamp);
+
+	// Flush received events.
+	mm_event_receiver_finish(&listener->receiver);
 
 	LEAVE();
 }

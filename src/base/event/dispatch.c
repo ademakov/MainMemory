@@ -41,12 +41,6 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	dispatch->busywait = 0;
 #endif
 
-	// Prepare listener info.
-	dispatch->nlisteners = nthreads;
-	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < nthreads; i++)
-		mm_event_listener_prepare(&dispatch->listeners[i], threads[i]);
-
 	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
 	dispatch->publish_stamp = 0;
@@ -54,8 +48,11 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
 
-	// Allocate pending event batches.
-	mm_event_receiver_prepare(&dispatch->receiver, dispatch);
+	// Prepare listener info.
+	dispatch->nlisteners = nthreads;
+	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, threads[i]);
 
 	// Determine event flags that require change event serialization.
 	if (mm_event_backend_serial(&dispatch->backend)) {
@@ -78,10 +75,7 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 {
 	ENTER();
 
-	// Release pending event batches.
-	mm_event_receiver_cleanup(&dispatch->receiver);
-
-	// Release space for change events.
+	// Release the space for changes.
 	mm_event_batch_cleanup(&dispatch->changes);
 
 	// Release system-specific resources.
@@ -200,7 +194,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		}
 
 		// Wait for incoming events or timeout expiration.
-		mm_event_receiver_listen(&dispatch->receiver, thread, timeout);
+		mm_event_listener_poll(listener, &dispatch->backend, timeout);
 
 #if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->receiver.got_events)
