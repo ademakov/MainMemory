@@ -691,6 +691,7 @@ mm_core_boot_init(struct mm_core *core)
 		mm_thread_local_summary(domain);
 
 		mm_dispatch_prepare(&mm_core_dispatch,
+				    domain,
 				    domain->nthreads,
 				    domain->threads);
 

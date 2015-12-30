@@ -19,11 +19,11 @@
 
 #include "base/event/receiver.h"
 
-#include "base/base.h"
 #include "base/event/dispatch.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
+#include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
 /**********************************************************************
@@ -367,7 +367,7 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 
 	// Flush published events.
 	if (receiver->published_events) {
-		mm_event_receiver_publish_flush(mm_regular_domain, &receiver->publish_buffer);
+		mm_event_receiver_publish_flush(dispatch->domain, &receiver->publish_buffer);
 		mm_dispatch_notify_waiting(dispatch);
 	}
 
@@ -436,7 +436,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			// a single sink then there might be a big problem.
 			// This must be resolved before any production use.
 			// Therefore this is just a temporary stub !!!
-			mm_event_receiver_publish(mm_regular_domain,
+			mm_event_receiver_publish(receiver->dispatch->domain,
 						  &receiver->publish_buffer, sink);
 			receiver->published_events = true;
 		}

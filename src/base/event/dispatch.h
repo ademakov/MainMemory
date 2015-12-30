@@ -34,6 +34,9 @@
 
 struct mm_dispatch
 {
+	/* The thread domain associated with the dispatcher. */
+	struct mm_domain *domain;
+
 	/* A lock that protects the change events. */
 	mm_regular_lock_t lock;
 
@@ -64,8 +67,9 @@ struct mm_dispatch
 	unsigned int serial_changes;
 };
 
-void NONNULL(1, 3)
+void NONNULL(1, 2, 4)
 mm_dispatch_prepare(struct mm_dispatch *dispatch,
+		    struct mm_domain *domain,
 		    mm_thread_t nthreads,
 		    struct mm_thread *threads[]);
 

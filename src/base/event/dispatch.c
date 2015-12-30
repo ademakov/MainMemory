@@ -23,13 +23,16 @@
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 
-void NONNULL(1, 3)
+void NONNULL(1, 2, 4)
 mm_dispatch_prepare(struct mm_dispatch *dispatch,
+		    struct mm_domain *domain,
 		    mm_thread_t nthreads,
 		    struct mm_thread *threads[])
 {
 	ENTER();
 	ASSERT(nthreads > 0);
+
+	dispatch->domain = domain;
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
@@ -41,7 +44,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	dispatch->busywait = 0;
 #endif
 
-	// Initialize space for change events.
+	// Initialize the space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
 	dispatch->publish_stamp = 0;
 
