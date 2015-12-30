@@ -21,6 +21,7 @@
 
 #include "base/base.h"
 #include "base/event/batch.h"
+#include "base/event/dispatch.h"
 #include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
@@ -310,25 +311,21 @@ mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pub
  * Event receiver.
  **********************************************************************/
 
-void NONNULL(1, 3)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t nthreads, struct mm_thread *threads[])
+void NONNULL(1, 2)
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch)
 {
 	ENTER();
 
-	// Prepare listener info.
-	receiver->nlisteners = nthreads;
-	receiver->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < nthreads; i++)
-		mm_event_listener_prepare(&receiver->listeners[i], threads[i]);
+	// Remember the top-level owner.
+	receiver->dispatch = dispatch;
 
 	// Prepare forward buffers.
-	receiver->forward_buffers = mm_common_calloc(nthreads,
+	receiver->forward_buffers = mm_common_calloc(dispatch->nlisteners,
 						     sizeof(struct mm_event_receiver_fwdbuf));
-	for (mm_thread_t i = 0; i < nthreads; i++)
+	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_receiver_fwdbuf_prepare(&receiver->forward_buffers[i]);
 
-	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, nthreads);
+	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, dispatch->nlisteners);
 
 	// Prepare publish buffer.
 	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
@@ -341,11 +338,6 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
-	// Release listener info.
-	for (mm_thread_t i = 0; i < receiver->nlisteners; i++)
-		mm_event_listener_cleanup(&receiver->listeners[i]);
-	mm_common_free(receiver->listeners);
-
 	mm_common_free(receiver->forward_buffers);
 
 	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
@@ -353,9 +345,9 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_backend *backend,
-			 mm_thread_t thread, mm_timeout_t timeout)
+void NONNULL(1)
+mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
+			 mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -365,26 +357,27 @@ mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_bac
 	mm_bitset_clear_all(&receiver->targets);
 
 	// Poll for incoming events or wait for timeout expiration.
-	struct mm_event_listener *listener = &receiver->listeners[thread];
-	mm_event_listener_poll(listener, backend, receiver, timeout);
+	struct mm_dispatch *dispatch = receiver->dispatch;
+	struct mm_event_listener *listener = &dispatch->listeners[thread];
+	mm_event_listener_poll(listener, &dispatch->backend, receiver, timeout);
 
 	// Flush published events.
 	if (receiver->published_events) {
 		mm_event_receiver_publish_flush(mm_regular_domain, &receiver->publish_buffer);
-		mm_even_receiver_notify_waiting(receiver, backend);
+		mm_dispatch_notify_waiting(dispatch);
 	}
 
 	// Forward incoming events that belong to other threads.
 	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
 	while (target != MM_THREAD_NONE) {
-		struct mm_event_listener *target_listener = &receiver->listeners[target];
+		struct mm_event_listener *target_listener = &dispatch->listeners[target];
 
 		// Flush forwarded events.
 		mm_event_receiver_forward_flush(target_listener->thread,
 						&receiver->forward_buffers[target]);
 
 		// Wake up the target thread if it is sleeping.
-		mm_event_listener_notify(target_listener, backend);
+		mm_event_listener_notify(target_listener, &dispatch->backend);
 
 		if (++target < mm_bitset_size(&receiver->targets))
 			target = mm_bitset_find(&receiver->targets, target);
@@ -432,7 +425,8 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_event_convey(sink);
 
 		} else if (target != MM_THREAD_NONE) {
-			struct mm_event_listener *listener = &receiver->listeners[target];
+			struct mm_dispatch *dispatch = receiver->dispatch;
+			struct mm_event_listener *listener = &dispatch->listeners[target];
 			mm_event_receiver_forward(listener->thread,
 						  &receiver->forward_buffers[target], sink);
 			mm_bitset_set(&receiver->targets, target);
@@ -526,24 +520,6 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 
 	sink->state = MM_EVENT_UNREGISTERED;
 	mm_event_receiver_handle(receiver, sink, 0);
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_even_receiver_notify_waiting(struct mm_event_receiver *receiver,
-				struct mm_event_backend *backend)
-{
-	ENTER();
-
-	mm_thread_t n = receiver->nlisteners;
-	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_event_listener *listener = &receiver->listeners[i];
-		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
-			mm_event_listener_notify(listener, backend);
-			break;
-		}
-	}
 
 	LEAVE();
 }

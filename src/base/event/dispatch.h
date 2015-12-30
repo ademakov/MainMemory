@@ -25,6 +25,7 @@
 #include "base/event/backend.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/event/receiver.h"
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
@@ -52,6 +53,10 @@ struct mm_dispatch
 	/* A counter to ensure visibility of change events. */
 	uint32_t publish_stamp;
 
+	/* Event listeners. */
+	mm_thread_t nlisteners;
+	struct mm_event_listener *listeners;
+
 	/* A common store for incoming events filled by the control thread. */
 	struct mm_event_receiver receiver;
 
@@ -73,7 +78,8 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch);
 static inline struct mm_event_listener * NONNULL(1)
 mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
-	return &dispatch->receiver.listeners[thread];
+	ASSERT(thread < dispatch->nlisteners);
+	return &dispatch->listeners[thread];
 }
 
 static inline void NONNULL(1)
@@ -84,14 +90,11 @@ mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 	mm_event_listener_notify(listener, &dispatch->backend);
 }
 
-static inline void NONNULL(1)
-mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
-{
-	mm_even_receiver_notify_waiting(&dispatch->receiver, &dispatch->backend);
-}
-
 void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
+
+void NONNULL(1)
+mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
 
 /**********************************************************************
  * I/O events support.

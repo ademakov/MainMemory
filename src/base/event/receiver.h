@@ -22,8 +22,9 @@
 
 #include "common.h"
 #include "base/bitset.h"
-#include "base/event/event.h"
-#include "base/event/listener.h"
+
+/* Forward declarations. */
+struct mm_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	4
 #define MM_EVENT_RECEIVER_PUBBUF_SIZE	4
@@ -52,9 +53,8 @@ struct mm_event_receiver
 	/* The thread that currently owns the receiver. */
 	mm_thread_t control_thread;
 
-	/* Event listeners. */
-	mm_thread_t nlisteners;
-	struct mm_event_listener *listeners;
+	/* The top-level event dispatch data. */
+	struct mm_dispatch *dispatch;
 
 	/* Target threads that have received events. */
 	struct mm_bitset targets;
@@ -66,16 +66,15 @@ struct mm_event_receiver
 	struct mm_event_receiver_pubbuf publish_buffer;
 };
 
-void NONNULL(1, 3)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver,
-			  mm_thread_t nthreads, struct mm_thread *threads[]);
+void NONNULL(1, 2)
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
-void NONNULL(1, 2)
-mm_event_receiver_listen(struct mm_event_receiver *receiver, struct mm_event_backend *backend,
-			 mm_thread_t thread, mm_timeout_t timeout);
+void NONNULL(1)
+mm_event_receiver_listen(struct mm_event_receiver *receiver, mm_thread_t thread,
+			 mm_timeout_t timeout);
 
 void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
@@ -87,9 +86,5 @@ void NONNULL(1, 2)
 mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-
-void NONNULL(1, 2)
-mm_even_receiver_notify_waiting(struct mm_event_receiver *receiver,
-				struct mm_event_backend *backend);
 
 #endif /* BASE_EVENT_RECEIVER_H */

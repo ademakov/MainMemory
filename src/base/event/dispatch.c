@@ -41,6 +41,12 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	dispatch->busywait = 0;
 #endif
 
+	// Prepare listener info.
+	dispatch->nlisteners = nthreads;
+	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_event_listener_prepare(&dispatch->listeners[i], threads[i]);
+
 	// Initialize space for change events.
 	mm_event_batch_prepare(&dispatch->changes, 1024);
 	dispatch->publish_stamp = 0;
@@ -49,7 +55,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	mm_event_backend_prepare(&dispatch->backend);
 
 	// Allocate pending event batches.
-	mm_event_receiver_prepare(&dispatch->receiver, nthreads, threads);
+	mm_event_receiver_prepare(&dispatch->receiver, dispatch);
 
 	// Determine event flags that require change event serialization.
 	if (mm_event_backend_serial(&dispatch->backend)) {
@@ -80,6 +86,11 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 
 	// Release system-specific resources.
 	mm_event_backend_cleanup(&dispatch->backend);
+
+	// Release listener info.
+	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
+		mm_event_listener_cleanup(&dispatch->listeners[i]);
+	mm_common_free(dispatch->listeners);
 
 	LEAVE();
 }
@@ -189,7 +200,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		}
 
 		// Wait for incoming events or timeout expiration.
-		mm_event_receiver_listen(&dispatch->receiver, &dispatch->backend, thread, timeout);
+		mm_event_receiver_listen(&dispatch->receiver, thread, timeout);
 
 #if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->receiver.got_events)
@@ -206,6 +217,23 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 	} else {
 		// Wait for forwarded events or timeout expiration.
 		mm_event_listener_wait(listener, timeout);
+	}
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
+{
+	ENTER();
+
+	mm_thread_t n = dispatch->nlisteners;
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_event_listener *listener = &dispatch->listeners[i];
+		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
+			mm_event_listener_notify(listener, &dispatch->backend);
+			break;
+		}
 	}
 
 	LEAVE();
