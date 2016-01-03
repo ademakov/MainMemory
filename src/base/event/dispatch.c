@@ -197,7 +197,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 		}
 
 		// Wait for incoming events or timeout expiration.
-		mm_event_listener_poll(listener, &dispatch->backend, timeout);
+		mm_event_listener_poll(listener, timeout);
 
 #if ENABLE_DISPATCH_BUSYWAIT
 		if (dispatch->receiver.got_events)
@@ -228,7 +228,7 @@ mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &dispatch->listeners[i];
 		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
-			mm_event_listener_notify(listener, &dispatch->backend);
+			mm_event_listener_notify(listener);
 			break;
 		}
 	}

@@ -88,7 +88,7 @@ mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
 	ASSERT(thread < dispatch->receiver.nlisteners);
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_event_listener_notify(listener, &dispatch->backend);
+	mm_event_listener_notify(listener);
 }
 
 void NONNULL(1)

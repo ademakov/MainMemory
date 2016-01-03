@@ -100,6 +100,9 @@ struct mm_event_listener
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
 
+	/* The top-level event dispatch data. */
+	struct mm_dispatch *dispatch;
+
 	/* Associated thread. */
 	struct mm_thread *thread;
 
@@ -112,12 +115,11 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
 
-void NONNULL(1, 2)
-mm_event_listener_notify(struct mm_event_listener *listener, struct mm_event_backend *backend);
+void NONNULL(1)
+mm_event_listener_notify(struct mm_event_listener *listener);
 
-void NONNULL(1, 2)
-mm_event_listener_poll(struct mm_event_listener *listener, struct mm_event_backend *backend,
-		       mm_timeout_t timeout);
+void NONNULL(1)
+mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
