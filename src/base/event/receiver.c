@@ -393,7 +393,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			 uint32_t expected_iostate)
 {
 	ENTER();
-	ASSERT(receiver->control_thread == mm_thread_self());
+	ASSERT(receiver->thread == mm_thread_self());
 
 	receiver->got_events = true;
 
