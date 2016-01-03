@@ -648,22 +648,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		mm_net_set_write_ready(sock, MM_NET_WRITE_READY);
 		break;
 
-	case MM_EVENT_ATTACH:
-		if (sock->server->proto->attach != NULL)
-			(sock->server->proto->attach)(sock);
-		break;
-
-	case MM_EVENT_UNREGISTER:
-		// At this time there are no and will not be any I/O messages
-		// related to this socket in the event processing pipeline.
-		// But there still may be active reader/writer tasks or pending
-		// work items for this socket. So relying on the FIFO order of
-		// the work queue submit a work item that might safely cleanup
-		// the socket being the last one that refers to it.
-		mm_core_post_work(mm_event_target(&sock->event),
-				  &sock->cleanup_work);
-		break;
-
 	case MM_EVENT_INPUT_ERROR:
 		// Mark the socket as having a read error.
 		mm_net_set_read_ready(sock, MM_NET_READ_ERROR);
@@ -672,6 +656,21 @@ mm_net_socket_handler(mm_event_t event, void *data)
 	case MM_EVENT_OUTPUT_ERROR:
 		// Mark the socket as having a write error.
 		mm_net_set_write_ready(sock, MM_NET_WRITE_ERROR);
+		break;
+
+	case MM_EVENT_ATTACH:
+		if (sock->server->proto->attach != NULL)
+			(sock->server->proto->attach)(sock);
+		break;
+
+	case MM_EVENT_CLEANUP:
+		// At this time there are no and will not be any I/O messages
+		// related to this socket in the event processing pipeline.
+		// But there still may be active reader/writer tasks or pending
+		// work items for this socket. So relying on the FIFO order of
+		// the work queue submit a work item that might safely cleanup
+		// the socket being the last one that refers to it.
+		mm_core_post_work(mm_event_target(&sock->event), &sock->cleanup_work);
 		break;
 
 	default:

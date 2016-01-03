@@ -28,11 +28,10 @@ typedef enum {
 	MM_EVENT_NONE = -1,
 	MM_EVENT_INPUT,
 	MM_EVENT_OUTPUT,
-	MM_EVENT_ATTACH,
-	MM_EVENT_REGISTER,
-	MM_EVENT_UNREGISTER,
 	MM_EVENT_INPUT_ERROR,
 	MM_EVENT_OUTPUT_ERROR,
+	MM_EVENT_ATTACH,
+	MM_EVENT_CLEANUP,
 } mm_event_t;
 
 typedef enum {
@@ -52,13 +51,6 @@ typedef enum {
 	MM_EVENT_BOUND,
 	MM_EVENT_AGILE,
 } mm_event_affinity_t;
-
-/* Event details. */
-struct mm_event
-{
-	mm_event_t event;
-	struct mm_event_fd *ev_fd;
-};
 
 /**********************************************************************
  * Event subsystem initialization.

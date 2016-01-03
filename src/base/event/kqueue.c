@@ -59,12 +59,13 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
 #endif
 
 static bool
-mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage, struct mm_event *change)
+mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
+			   struct mm_event_change *change)
 {
 	int nevents = storage->nevents;
-	struct mm_event_fd *sink = change->ev_fd;
+	struct mm_event_fd *sink = change->sink;
 
-	switch (change->event) {
+	switch (change->kind) {
 	case MM_EVENT_REGISTER:
 		if (sink->regular_input || sink->oneshot_input) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
@@ -123,7 +124,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage, struct mm_ev
 		}
 		break;
 
-	case MM_EVENT_INPUT:
+	case MM_EVENT_TRIGGER_INPUT:
 		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
@@ -132,12 +133,11 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage, struct mm_ev
 			sink->oneshot_input_trigger = 1;
 
 			struct kevent *kp = &storage->events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT,
-			       0, 0, sink);
+			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
 		}
 		break;
 
-	case MM_EVENT_OUTPUT:
+	case MM_EVENT_TRIGGER_OUTPUT:
 		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
 			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
 				return false;
@@ -146,8 +146,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage, struct mm_ev
 			sink->oneshot_output_trigger = 1;
 
 			struct kevent *kp = &storage->events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT,
-			       0, 0, sink);
+			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
 		}
 		break;
 
@@ -202,20 +201,20 @@ mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
 {
 	if (receiver != NULL) {
 		for (unsigned int i = first; i < last; i++) {
-			struct mm_event *event = &changes->events[i];
-			struct mm_event_fd *sink = event->ev_fd;
+			struct mm_event_change *change = &changes->changes[i];
+			struct mm_event_fd *sink = change->sink;
 
 			// Reset the change flag.
 			sink->changed = 0;
 
 			// Store the pertinent event.
-			if (event->event == MM_EVENT_UNREGISTER)
+			if (change->kind == MM_EVENT_UNREGISTER)
 				mm_event_receiver_unregister(receiver, sink);
 		}
 	} else {
 		for (unsigned int i = first; i < last; i++) {
-			struct mm_event *event = &changes->events[i];
-			struct mm_event_fd *sink = event->ev_fd;
+			struct mm_event_change *change = &changes->changes[i];
+			struct mm_event_fd *sink = change->sink;
 
 			// Reset the change flag.
 			sink->changed = 0;
@@ -327,9 +326,9 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 
 	// Make event changes.
 	unsigned int first = 0, next = 0;
-	while (next < changes->nevents) {
-		struct mm_event *event = &changes->events[next];
-		if (likely(mm_event_kqueue_add_change(storage, event))) {
+	while (next < changes->nchanges) {
+		struct mm_event_change *change = &changes->changes[next];
+		if (likely(mm_event_kqueue_add_change(storage, change))) {
 			// Proceed with more change events if any.
 			next++;
 		} else {
@@ -357,7 +356,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 	}
 
 	// Store unregister events.
-	mm_event_kqueue_postprocess_changes(changes, receiver, first, changes->nevents);
+	mm_event_kqueue_postprocess_changes(changes, receiver, first, changes->nchanges);
 
 	LEAVE();
 }

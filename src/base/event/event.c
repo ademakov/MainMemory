@@ -157,7 +157,7 @@ mm_event_pull(struct mm_event_fd *sink)
 	}
 
 	if (mm_memory_load(sink->state) == MM_EVENT_UNREGISTERED)
-		return MM_EVENT_UNREGISTER;
+		return MM_EVENT_CLEANUP;
 
 	return MM_EVENT_NONE;
 }
@@ -189,7 +189,7 @@ mm_event_convey(struct mm_event_fd *sink)
 	while (event != MM_EVENT_NONE) {
 		// Invoke the required event handler.
 		(hd->handler)(event, sink);
-		if (event == MM_EVENT_UNREGISTER)
+		if (event == MM_EVENT_CLEANUP)
 			break;
 
 		event = mm_event_pull(sink);

@@ -137,7 +137,7 @@ mm_event_listener_getstate(struct mm_event_listener *listener)
 
 static inline void NONNULL(1, 2)
 mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink,
-		      mm_event_t event)
+		      mm_event_change_t event)
 {
 	mm_event_batch_add(&listener->changes, event, sink);
 }

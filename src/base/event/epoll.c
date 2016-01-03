@@ -108,16 +108,16 @@ mm_event_epoll_init(void)
 }
 
 static void
-mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event *change,
+mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change *change,
 			  struct mm_event_receiver *receiver)
 {
-	struct mm_event_fd *sink = change->ev_fd;
+	struct mm_event_fd *sink = change->sink;
 
 	int rc;
 	struct epoll_event ee;
 	ee.data.ptr = sink;
 
-	switch (change->event) {
+	switch (change->kind) {
 	case MM_EVENT_REGISTER:
 		ee.events = 0;
 		if (sink->regular_input || sink->oneshot_input)
@@ -143,7 +143,7 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event *chang
 		mm_event_receiver_unregister(receiver, sink);
 		break;
 
-	case MM_EVENT_INPUT:
+	case MM_EVENT_TRIGGER_INPUT:
 		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
 			sink->oneshot_input_trigger = 1;
 
@@ -157,7 +157,7 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event *chang
 		}
 		break;
 
-	case MM_EVENT_OUTPUT:
+	case MM_EVENT_TRIGGER_OUTPUT:
 		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
 			sink->oneshot_output_trigger = 1;
 
@@ -294,8 +294,8 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 	ENTER();
 
 	// Make event changes.
-	for (unsigned int i = 0; i < changes->nevents; i++) {
-		struct mm_event *change = &changes->events[i];
+	for (unsigned int i = 0; i < changes->nchanges; i++) {
+		struct mm_event_change *change = &changes->changes[i];
 		mm_event_epoll_add_change(backend, change, receiver);
 	}
 

@@ -23,8 +23,8 @@
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 
-#define MM_EVENT_BATCH_NEVENTS_MIN	(4u)
-#define MM_EVENT_BATCH_NEVENTS_MAX	(16u * 1024u)
+#define MM_EVENT_NCHANGES_MIN	(4u)
+#define MM_EVENT_NCHANGES_MAX	(16u * 1024u)
 
 void NONNULL(1)
 mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
@@ -32,9 +32,9 @@ mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
 	ENTER();
 
 	batch->flags = 0;
-	batch->nevents = 0;
-	batch->nevents_max = max(size, MM_EVENT_BATCH_NEVENTS_MIN);
-	batch->events = mm_common_alloc(batch->nevents_max * sizeof(struct mm_event));
+	batch->nchanges = 0;
+	batch->nchanges_max = max(size, MM_EVENT_NCHANGES_MIN);
+	batch->changes = mm_common_alloc(batch->nchanges_max * sizeof(struct mm_event_change));
 
 	LEAVE();
 }
@@ -44,7 +44,7 @@ mm_event_batch_cleanup(struct mm_event_batch *batch)
 {
 	ENTER();
 
-	mm_common_free(batch->events);
+	mm_common_free(batch->changes);
 
 	LEAVE();
 }
@@ -54,12 +54,12 @@ mm_event_batch_expand(struct mm_event_batch *batch)
 {
 	ENTER();
 
-	if (unlikely(batch->nevents_max == MM_EVENT_BATCH_NEVENTS_MAX))
-		mm_fatal(0, "too many events");
+	if (unlikely(batch->nchanges_max == MM_EVENT_NCHANGES_MAX))
+		mm_fatal(0, "too many event change entries");
 
-	batch->nevents_max *= 2;
-	batch->events = mm_common_realloc(batch->events,
-					  batch->nevents_max * sizeof(struct mm_event));
+	batch->nchanges_max *= 2;
+	batch->changes = mm_common_realloc(batch->changes,
+					   batch->nchanges_max * sizeof(struct mm_event_change));
 
 	LEAVE();
 }
@@ -72,9 +72,9 @@ mm_event_batch_append(struct mm_event_batch *restrict batch,
 
 	mm_event_batch_addflags(batch, batch2->flags);
 
-	for (unsigned int i = 0; i < batch2->nevents; i++) {
-		struct mm_event *event = &batch2->events[i];
-		mm_event_batch_add(batch, event->event, event->ev_fd);
+	for (unsigned int i = 0; i < batch2->nchanges; i++) {
+		struct mm_event_change *change = &batch2->changes[i];
+		mm_event_batch_add(batch, change->kind, change->sink);
 	}
 
 	LEAVE();

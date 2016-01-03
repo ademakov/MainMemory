@@ -86,7 +86,7 @@ mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
 static inline void NONNULL(1)
 mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
 {
-	ASSERT(thread < dispatch->receiver.nlisteners);
+	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 	mm_event_listener_notify(listener);
 }
@@ -131,7 +131,7 @@ mm_dispatch_trigger_input(struct mm_dispatch *dispatch, struct mm_event_fd *sink
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_event_listener_add(listener, sink, MM_EVENT_INPUT);
+	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_INPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 }
 
@@ -141,7 +141,7 @@ mm_dispatch_trigger_output(struct mm_dispatch *dispatch, struct mm_event_fd *sin
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
-	mm_event_listener_add(listener, sink, MM_EVENT_OUTPUT);
+	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 }
 
