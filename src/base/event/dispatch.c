@@ -102,7 +102,7 @@ void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(thread < dispatch->receiver.nlisteners);
+	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 
 	// Handle the change events.
