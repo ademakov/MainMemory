@@ -67,7 +67,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch
 	mm_event_backend_storage_prepare(&listener->storage);
 	mm_event_batch_prepare(&listener->changes, 256);
 
-	listener->dispatch = dispatch;
 	listener->thread = thread;
 
 	LEAVE();
@@ -183,7 +182,7 @@ mm_event_listener_notify(struct mm_event_listener *listener)
 			if (state == MM_EVENT_LISTENER_WAITING)
 				mm_event_listener_signal(listener);
 			else if (state == MM_EVENT_LISTENER_POLLING)
-				mm_event_backend_notify(&listener->dispatch->backend);
+				mm_event_backend_notify(&listener->receiver.dispatch->backend);
 		}
 	}
 
@@ -218,7 +217,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 
 	if (timeout != 0) {
 		// Cleanup stale event notifications.
-		mm_event_backend_dampen(&listener->dispatch->backend);
+		mm_event_backend_dampen(&listener->receiver.dispatch->backend);
 
 		// Advertise that the thread is about to sleep.
 		uint32_t poll_stamp = listen_stamp | MM_EVENT_LISTENER_POLLING;
@@ -233,7 +232,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	}
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&listener->dispatch->backend, &listener->storage,
+	mm_event_backend_listen(&listener->receiver.dispatch->backend, &listener->storage,
 				&listener->changes, &listener->receiver, timeout);
 
 	// Advertise the start of another working cycle.

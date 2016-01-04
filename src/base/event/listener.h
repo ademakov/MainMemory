@@ -100,9 +100,6 @@ struct mm_event_listener
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
 
-	/* The top-level event dispatch data. */
-	struct mm_dispatch *dispatch;
-
 	/* Associated thread. */
 	struct mm_thread *thread;
 
