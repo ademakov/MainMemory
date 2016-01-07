@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/bitset.h"
+#include "base/list.h"
 
 /* Forward declarations. */
 struct mm_dispatch;
@@ -45,25 +46,32 @@ struct mm_event_receiver_pubbuf
 
 struct mm_event_receiver
 {
+	/* A local snapshot of the event sink reclamation epoch. */
+	uint32_t reclaim_epoch;
+	bool reclaim_active;
+
+	/* The thread that owns the receiver. */
+	mm_thread_t thread;
+
 	/* The flag indicating that some events were received. */
 	bool got_events;
 	/* The flag indicating that some events were published in the domain request queue. */
 	bool published_events;
 
-	/* The thread that owns the receiver. */
-	mm_thread_t thread;
-
 	/* The top-level event dispatch data. */
 	struct mm_dispatch *dispatch;
 
 	/* Target threads that have received events. */
-	struct mm_bitset targets;
+	struct mm_bitset forward_targets;
 
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
 
 	/* Per-domain temporary store for sinks of received events. */
 	struct mm_event_receiver_pubbuf publish_buffer;
+
+	/* Event sinks with delayed reclamation. */
+	struct mm_stack reclaim_queue[2];
 };
 
 void NONNULL(1, 2)
@@ -72,6 +80,9 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
+
+void NONNULL(1)
+mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver);
 
 void NONNULL(1)
 mm_event_receiver_start(struct mm_event_receiver *receiver);

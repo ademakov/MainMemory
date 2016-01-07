@@ -32,6 +32,8 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	ENTER();
 	ASSERT(nthreads > 0);
 
+	dispatch->reclaim_epoch = 0;
+
 	dispatch->domain = domain;
 
 	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
@@ -234,4 +236,58 @@ mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
 	}
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Reclamation epoch maintenance.
+ **********************************************************************/
+
+static void
+mm_dispatch_observe_req(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	ENTER();
+
+	mm_event_receiver_observe_epoch((struct mm_event_receiver *) arguments[0]);
+
+	LEAVE();
+}
+
+static bool
+mm_dispatch_check_epoch(struct mm_dispatch *dispatch, uint32_t epoch)
+{
+	mm_thread_t n = dispatch->nlisteners;
+	struct mm_event_listener *listeners = dispatch->listeners;
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_event_listener *listener = &listeners[i];
+		struct mm_event_receiver *receiver = &listener->receiver;
+		uint32_t local = mm_memory_load(receiver->reclaim_epoch);
+		if (local == epoch)
+			continue;
+
+		mm_memory_load_fence();
+		bool active = mm_memory_load(receiver->reclaim_active);
+		if (active) {
+			mm_thread_send_1(listener->thread, mm_dispatch_observe_req,
+					 (uintptr_t) receiver);
+			return false;
+		}
+	}
+	return true;
+}
+
+bool NONNULL(1)
+mm_dispatch_advance_epoch(struct mm_dispatch *dispatch)
+{
+	ENTER();
+
+	uint32_t epoch = mm_memory_load(dispatch->reclaim_epoch);
+	bool rc = mm_dispatch_check_epoch(dispatch, epoch);
+	if (rc) {
+		mm_memory_fence(); // TODO: load_store fence
+		mm_memory_store(dispatch->reclaim_epoch, epoch + 1);
+		DEBUG("advance epoch");
+	}
+
+	LEAVE();
+	return rc;
 }

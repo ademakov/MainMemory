@@ -34,6 +34,9 @@
 
 struct mm_dispatch
 {
+	/* The event sink reclamation epoch. */
+	uint32_t reclaim_epoch;
+
 	/* The thread domain associated with the dispatcher. */
 	struct mm_domain *domain;
 
@@ -96,6 +99,13 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 
 void NONNULL(1)
 mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
+
+/**********************************************************************
+ * Reclamation epoch maintenance.
+ **********************************************************************/
+
+bool NONNULL(1)
+mm_dispatch_advance_epoch(struct mm_dispatch *dispatch);
 
 /**********************************************************************
  * I/O events support.

@@ -664,6 +664,9 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		break;
 
 	case MM_EVENT_CLEANUP:
+		break;
+
+	case MM_EVENT_RECLAIM:
 		// At this time there are no and will not be any I/O messages
 		// related to this socket in the event processing pipeline.
 		// But there still may be active reader/writer tasks or pending

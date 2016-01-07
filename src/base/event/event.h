@@ -32,13 +32,8 @@ typedef enum {
 	MM_EVENT_OUTPUT_ERROR,
 	MM_EVENT_ATTACH,
 	MM_EVENT_CLEANUP,
+	MM_EVENT_RECLAIM,
 } mm_event_t;
-
-typedef enum {
-	MM_EVENT_INITIAL,
-	MM_EVENT_REGISTERED,
-	MM_EVENT_UNREGISTERED,
-} mm_event_sink_state_t;
 
 typedef enum {
 	MM_EVENT_IGNORED,
@@ -126,11 +121,11 @@ struct mm_event_fd
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
 
-	/* The event sink state. */
-	mm_event_sink_state_t state;
-
 	/* The event sink I/O state. */
 	mm_event_iostate_t io;
+
+	/* The unregister state. */
+	mm_event_t unregister_phase;
 
 	/* Flags used by the poller thread. */
 	unsigned changed : 1;
@@ -139,6 +134,9 @@ struct mm_event_fd
 
 	/* Flags used by the owner thread. */
 	uint8_t attached;
+
+	/* Reclaim queue link. */
+	struct mm_slink reclaim_link;
 };
 
 bool NONNULL(1)

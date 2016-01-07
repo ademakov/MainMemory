@@ -120,8 +120,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		sink->oneshot_output = false;
 	}
 
-	sink->state = MM_EVENT_INITIAL;
 	sink->io.state = 0;
+	sink->unregister_phase = MM_EVENT_NONE;
 
 	sink->changed = 0;
 	sink->oneshot_input_trigger = 0;
@@ -155,11 +155,7 @@ mm_event_pull(struct mm_event_fd *sink)
 			}
 		}
 	}
-
-	if (mm_memory_load(sink->state) == MM_EVENT_UNREGISTERED)
-		return MM_EVENT_CLEANUP;
-
-	return MM_EVENT_NONE;
+	return sink->unregister_phase;
 }
 
 void NONNULL(1)
@@ -189,9 +185,8 @@ mm_event_convey(struct mm_event_fd *sink)
 	while (event != MM_EVENT_NONE) {
 		// Invoke the required event handler.
 		(hd->handler)(event, sink);
-		if (event == MM_EVENT_CLEANUP)
+		if (event == MM_EVENT_CLEANUP || event == MM_EVENT_RECLAIM)
 			break;
-
 		event = mm_event_pull(sink);
 	}
 

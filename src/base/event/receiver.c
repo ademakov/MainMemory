@@ -307,6 +307,51 @@ mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pub
 }
 
 /**********************************************************************
+ * Event sink reclamation.
+ **********************************************************************/
+
+static bool
+mm_event_receiver_reclaim_queue_empty(struct mm_event_receiver *receiver)
+{
+	return (mm_stack_empty(&receiver->reclaim_queue[0])
+		&& mm_stack_empty(&receiver->reclaim_queue[1]));
+}
+
+static void
+mm_event_receiver_reclaim_queue_insert(struct mm_event_receiver *receiver,
+				       struct mm_event_fd *sink)
+{
+	uint32_t epoch = receiver->reclaim_epoch;
+	struct mm_stack *stack = &receiver->reclaim_queue[epoch & 1];
+	mm_stack_insert(stack, &sink->reclaim_link);
+}
+
+static void
+mm_event_receiver_reclaim_epoch(struct mm_event_receiver *receiver, uint32_t epoch)
+{
+	struct mm_stack *stack = &receiver->reclaim_queue[epoch & 1];
+	while (!mm_stack_empty(stack)) {
+		struct mm_slink *link = mm_stack_remove(stack);
+		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
+		ASSERT(sink->unregister_phase == MM_EVENT_CLEANUP);
+		sink->unregister_phase = MM_EVENT_RECLAIM;
+		mm_event_convey(sink);
+	}
+}
+
+void NONNULL(1)
+mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
+{
+	uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
+	if (receiver->reclaim_epoch != epoch) {
+		ASSERT((receiver->reclaim_epoch + 1) == epoch);
+		mm_memory_store(receiver->reclaim_epoch, epoch);
+		mm_event_receiver_reclaim_epoch(receiver, epoch);
+		mm_dispatch_advance_epoch(receiver->dispatch);
+	}
+}
+
+/**********************************************************************
  * Event receiver.
  **********************************************************************/
 
@@ -315,6 +360,12 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch
 			  mm_thread_t thread)
 {
 	ENTER();
+
+	// Initialize the reclamation data.
+	receiver->reclaim_active = false;
+	receiver->reclaim_epoch = dispatch->reclaim_epoch;
+	mm_stack_prepare(&receiver->reclaim_queue[0]);
+	mm_stack_prepare(&receiver->reclaim_queue[1]);
 
 	// Remember the owners.
 	receiver->thread = thread;
@@ -325,8 +376,8 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch
 						     sizeof(struct mm_event_receiver_fwdbuf));
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_receiver_fwdbuf_prepare(&receiver->forward_buffers[i]);
-
-	mm_bitset_prepare(&receiver->targets, &mm_common_space.xarena, dispatch->nlisteners);
+	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
+			  dispatch->nlisteners);
 
 	// Prepare publish buffer.
 	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
@@ -339,9 +390,9 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
+	// Release forward buffers.
 	mm_common_free(receiver->forward_buffers);
-
-	mm_bitset_cleanup(&receiver->targets, &mm_common_space.xarena);
+	mm_bitset_cleanup(&receiver->forward_targets, &mm_common_space.xarena);
 
 	LEAVE();
 }
@@ -351,9 +402,19 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
+	// Initialize flags that indicate event arrival.
 	receiver->got_events = false;
 	receiver->published_events = false;
-	mm_bitset_clear_all(&receiver->targets);
+	mm_bitset_clear_all(&receiver->forward_targets);
+
+	// Start a reclamation-critical section.
+	if (!receiver->reclaim_active) {
+		mm_memory_store(receiver->reclaim_active, true);
+		mm_memory_store_fence();
+		// Catch up with the current reclamation epoch.
+		uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
+		mm_memory_store(receiver->reclaim_epoch, epoch);
+	}
 
 	LEAVE();
 }
@@ -372,17 +433,26 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 	}
 
 	// Flush forwarded events.
-	mm_thread_t target = mm_bitset_find(&receiver->targets, 0);
+	mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
 	while (target != MM_THREAD_NONE) {
 		struct mm_event_listener *listener = &dispatch->listeners[target];
 		mm_event_receiver_forward_flush(listener->thread,
 						&receiver->forward_buffers[target]);
 		mm_event_listener_notify(listener);
 
-		if (++target < mm_bitset_size(&receiver->targets))
-			target = mm_bitset_find(&receiver->targets, target);
+		if (++target < mm_bitset_size(&receiver->forward_targets))
+			target = mm_bitset_find(&receiver->forward_targets, target);
 		else
 			target = MM_THREAD_NONE;
+	}
+
+	// Advance the reclamation epoch.
+	mm_event_receiver_observe_epoch(receiver);
+
+	// Finish a reclamation-critical section.
+	if (mm_event_receiver_reclaim_queue_empty(receiver)) {
+		mm_memory_store_fence();
+		mm_memory_store(receiver->reclaim_active, false);
 	}
 
 	LEAVE();
@@ -412,7 +482,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			uint8_t attached = mm_memory_load(sink->attached);
 			if (!attached
 			    && iostate == expected_iostate
-			    && sink->state != MM_EVENT_UNREGISTERED) {
+			    && sink->unregister_phase == MM_EVENT_NONE) {
 				sink->target = MM_THREAD_NONE;
 				target = MM_THREAD_NONE;
 			}
@@ -429,7 +499,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			struct mm_event_listener *listener = &dispatch->listeners[target];
 			mm_event_receiver_forward(listener->thread,
 						  &receiver->forward_buffers[target], sink);
-			mm_bitset_set(&receiver->targets, target);
+			mm_bitset_set(&receiver->forward_targets, target);
 
 		} else {
 			// TODO: BUG!!! If this is done more than once for
@@ -518,7 +588,8 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 {
 	ENTER();
 
-	sink->state = MM_EVENT_UNREGISTERED;
+	sink->unregister_phase = MM_EVENT_CLEANUP;
+	mm_event_receiver_reclaim_queue_insert(receiver, sink);
 	mm_event_receiver_handle(receiver, sink, 0);
 
 	LEAVE();
