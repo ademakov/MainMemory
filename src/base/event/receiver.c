@@ -483,8 +483,12 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			if (!attached
 			    && iostate == expected_iostate
 			    && sink->unregister_phase == MM_EVENT_NONE) {
-				sink->target = MM_THREAD_NONE;
-				target = MM_THREAD_NONE;
+#if 0
+				// Forbid this for now.
+				target = sink->target = MM_THREAD_NONE;
+#else
+				target = sink->target = receiver->thread;
+#endif
 			}
 		}
 
@@ -502,6 +506,8 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_bitset_set(&receiver->forward_targets, target);
 
 		} else {
+#if 0
+			// Forbid this for now.
 			// TODO: BUG!!! If this is done more than once for
 			// a single sink then there might be a big problem.
 			// This must be resolved before any production use.
@@ -509,6 +515,9 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_event_receiver_publish(receiver->dispatch->domain,
 						  &receiver->publish_buffer, sink);
 			receiver->published_events = true;
+#else
+			ABORT();
+#endif
 		}
 	}
 
