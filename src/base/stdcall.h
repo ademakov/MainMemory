@@ -87,6 +87,17 @@ mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len
 #endif
 }
 
+static inline int
+mm_shutdown(int sock, int how)
+{
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { sock, how };
+	return mm_syscall_2(SYS_socketcall, SYS_SHUTDOWN, (uintptr_t) args);
+#else
+	return mm_syscall_2(MM_SYSCALL_N(SYS_shutdown), sock, how);
+#endif
+}
+
 #else /* !ENABLE_INLINE_SYSCALLS */
 
 #include <unistd.h>
@@ -97,6 +108,7 @@ mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len
 #define mm_writev	writev
 #define mm_close	close
 #define mm_accept	accept
+#define mm_shutdown	shutdown
 
 #endif /* !ENABLE_INLINE_SYSCALLS */
 

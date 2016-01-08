@@ -1503,8 +1503,7 @@ mm_net_shutdown_reader(struct mm_net_socket *sock)
 	// Mark the socket as having the reader part closed.
 	sock->close_flags |= MM_NET_READER_SHUTDOWN;
 
-	// TODO: async this
-	if (shutdown(sock->event.fd, SHUT_RD) < 0)
+	if (mm_shutdown(sock->event.fd, SHUT_RD) < 0)
 		mm_warning(errno, "shutdown");
 
 leave:
@@ -1523,8 +1522,7 @@ mm_net_shutdown_writer(struct mm_net_socket *sock)
 	// Mark the socket as having the writer part closed.
 	sock->close_flags |= MM_NET_WRITER_SHUTDOWN;
 
-	// TODO: async this
-	if (shutdown(sock->event.fd, SHUT_WR) < 0)
+	if (mm_shutdown(sock->event.fd, SHUT_WR) < 0)
 		mm_warning(errno, "shutdown");
 
 leave:
