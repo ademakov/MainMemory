@@ -56,11 +56,6 @@ mc_state_prepare(struct mm_net_socket *sock)
 	state->error = false;
 	state->trash = false;
 
-#if 0 && ENABLE_SMP
-	mm_net_set_async_read(sock, true);
-	mm_net_set_async_write(sock, true);
-#endif
-
 	LEAVE();
 }
 

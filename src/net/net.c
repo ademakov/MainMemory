@@ -320,8 +320,6 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *
 	sock->close_flags = 0;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
-	sock->async_read = false;
-	sock->async_write = false;
 	sock->reader = NULL;
 	sock->writer = NULL;
 	sock->server = srv;
@@ -1288,10 +1286,7 @@ retry:
 	}
 
 	// Try to read (nonblocking).
-	if (sock->async_read)
-		n = mm_async_read(sock->event.fd, buffer, nbytes);
-	else
-		n = mm_read(sock->event.fd, buffer, nbytes);
+	n = mm_read(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_read_ready(sock);
@@ -1343,10 +1338,7 @@ retry:
 	}
 
 	// Try to write (nonblocking).
-	if (sock->async_write)
-		n = mm_async_write(sock->event.fd, buffer, nbytes);
-	else
-		n = mm_write(sock->event.fd, buffer, nbytes);
+	n = mm_write(sock->event.fd, buffer, nbytes);
 	if (n > 0) {
 		if ((size_t) n < nbytes) {
 			mm_net_reset_write_ready(sock);
@@ -1400,10 +1392,7 @@ retry:
 	}
 
 	// Try to read (nonblocking).
-	if (sock->async_read)
-		n = mm_async_readv(sock->event.fd, iov, iovcnt);
-	else
-		n = mm_readv(sock->event.fd, iov, iovcnt);
+	n = mm_readv(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_read_ready(sock);
@@ -1457,10 +1446,7 @@ retry:
 	}
 
 	// Try to write (nonblocking).
-	if (sock->async_write)
-		n = mm_async_writev(sock->event.fd, iov, iovcnt);
-	else
-		n = mm_writev(sock->event.fd, iov, iovcnt);
+	n = mm_writev(sock->event.fd, iov, iovcnt);
 	if (n > 0) {
 		if (n < nbytes) {
 			mm_net_reset_write_ready(sock);

@@ -118,8 +118,6 @@ struct mm_net_socket
 	/* Socket flags. */
 	uint8_t flags;
 	uint8_t close_flags;
-	bool async_read;
-	bool async_write;
 
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
@@ -237,18 +235,6 @@ static inline void NONNULL(1)
 mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
 	sock->write_timeout = timeout;
-}
-
-static inline void NONNULL(1)
-mm_net_set_async_read(struct mm_net_socket *sock, bool async)
-{
-	sock->async_read = async;
-}
-
-static inline void NONNULL(1)
-mm_net_set_async_write(struct mm_net_socket *sock, bool async)
-{
-	sock->async_write = async;
 }
 
 #endif /* NET_NET_H */
