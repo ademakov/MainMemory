@@ -52,12 +52,6 @@ typedef enum
 	MM_EVENT_LISTENER_WAITING = 2,
 } mm_event_listener_state_t;
 
-typedef enum
-{
-	MM_EVENT_LISTENER_CHANGES_PRIVATE,
-	MM_EVENT_LISTENER_CHANGES_PUBLISHED,
-} mm_event_listener_changes_t;
-
 struct mm_event_listener
 {
 	/*
@@ -76,12 +70,6 @@ struct mm_event_listener
 	 * to detect a pending notification.
 	 */
 	uint32_t notify_stamp;
-
-	/* The state of pending changes. */
-	mm_event_listener_changes_t changes_state;
-
-	/* A counter to ensure visibility of change events. */
-	uint32_t publish_stamp;
 
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
@@ -102,6 +90,9 @@ struct mm_event_listener
 
 	/* Associated thread. */
 	struct mm_thread *thread;
+
+	/* Counter for busy waiting. */
+	uint16_t busywait;
 
 } CACHE_ALIGN;
 
@@ -155,6 +146,12 @@ static inline bool NONNULL(1)
 mm_event_listener_has_changes(struct mm_event_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);
+}
+
+static inline bool NONNULL(1)
+mm_event_listener_has_urgent_changes(struct mm_event_listener *listener)
+{
+	return mm_event_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */

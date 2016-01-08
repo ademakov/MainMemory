@@ -46,8 +46,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch
 	listener->listen_stamp = 0;
 	listener->notify_stamp = 0;
 
-	listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
-	listener->publish_stamp = 0;
+	listener->busywait = 0;
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
@@ -218,9 +217,6 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	if (timeout != 0) {
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(&listener->receiver.dispatch->backend);
-
-		// Advance reclamation epoch.
-		mm_dispatch_advance_epoch(listener->receiver.dispatch);
 
 		// Advertise that the thread is about to sleep.
 		uint32_t poll_stamp = listen_stamp | MM_EVENT_LISTENER_POLLING;

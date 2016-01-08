@@ -30,44 +30,26 @@
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
 
-#define ENABLE_DISPATCH_BUSYWAIT	0
-
 struct mm_dispatch
 {
-	/* The event sink reclamation epoch. */
-	uint32_t reclaim_epoch;
-
 	/* The thread domain associated with the dispatcher. */
 	struct mm_domain *domain;
 
-	/* A lock that protects the change events. */
-	mm_regular_lock_t lock;
+	/* Event listeners. */
+	struct mm_event_listener *listeners;
+	mm_thread_t nlisteners;
 
 	/* A thread elected to conduct the next event poll. */
-	mm_thread_t control_thread;
-#if ENABLE_DEBUG
-	mm_thread_t last_control_thread;
-#endif
+	mm_thread_t poller_thread;
 
-#if ENABLE_DISPATCH_BUSYWAIT
-	/* Counter for event busy waiting. */
-	uint16_t busywait;
-#endif
+	/* A lock that protects the poller thread election. */
+	mm_regular_lock_t poller_lock;
 
-	/* A common store for published change events. */
-	struct mm_event_batch changes;
-	/* A counter to ensure visibility of change events. */
-	uint32_t publish_stamp;
+	/* The event sink reclamation epoch. */
+	uint32_t reclaim_epoch;
 
 	/* A system-specific event backend. */
 	struct mm_event_backend backend;
-
-	/* Event listeners. */
-	mm_thread_t nlisteners;
-	struct mm_event_listener *listeners;
-
-	/* The event batch flags that require serialization. */
-	unsigned int serial_changes;
 };
 
 void NONNULL(1, 2, 4)

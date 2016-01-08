@@ -23,6 +23,9 @@
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 
+static uint16_t mm_poller_busywait = 2;
+static uint16_t mm_events_busywait = 4;
+
 void NONNULL(1, 2, 4)
 mm_dispatch_prepare(struct mm_dispatch *dispatch,
 		    struct mm_domain *domain,
@@ -32,26 +35,8 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	ENTER();
 	ASSERT(nthreads > 0);
 
-	dispatch->reclaim_epoch = 0;
-
+	// Store associated domain.
 	dispatch->domain = domain;
-
-	dispatch->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-
-	dispatch->control_thread = MM_THREAD_NONE;
-#if ENABLE_DEBUG
-	dispatch->last_control_thread = MM_THREAD_NONE;
-#endif
-#if ENABLE_DISPATCH_BUSYWAIT
-	dispatch->busywait = 0;
-#endif
-
-	// Initialize the space for change events.
-	mm_event_batch_prepare(&dispatch->changes, 1024);
-	dispatch->publish_stamp = 0;
-
-	// Initialize system-specific resources.
-	mm_event_backend_prepare(&dispatch->backend);
 
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
@@ -59,18 +44,13 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 	for (mm_thread_t i = 0; i < nthreads; i++)
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, threads[i]);
 
-	// Determine event flags that require change event serialization.
-	if (mm_event_backend_serial(&dispatch->backend)) {
-		// The backend requires all changes to be serialized.
-		dispatch->serial_changes = (MM_EVENT_BATCH_REGISTER
-					    | MM_EVENT_BATCH_UNREGISTER
-					    | MM_EVENT_BATCH_INPUT_OUTPUT);
-	} else {
-		// The backend has no requirements. However we want to
-		// ensure that event sinks get no other events after
-		// unregistering.
-		dispatch->serial_changes = MM_EVENT_BATCH_UNREGISTER;
-	}
+	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	dispatch->poller_thread = MM_THREAD_NONE;
+
+	dispatch->reclaim_epoch = 0;
+
+	// Initialize system-specific resources.
+	mm_event_backend_prepare(&dispatch->backend);
 
 	LEAVE();
 }
@@ -79,9 +59,6 @@ void NONNULL(1)
 mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 {
 	ENTER();
-
-	// Release the space for changes.
-	mm_event_batch_cleanup(&dispatch->changes);
 
 	// Release system-specific resources.
 	mm_event_backend_cleanup(&dispatch->backend);
@@ -94,12 +71,6 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 	LEAVE();
 }
 
-static inline bool NONNULL(1)
-mm_dispatch_has_urgent_changes(struct mm_event_listener *listener)
-{
-	return mm_event_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
-}
-
 void NONNULL(1)
 mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
 {
@@ -107,112 +78,51 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
 
-	// Handle the change events.
-	mm_regular_lock(&dispatch->lock);
-	mm_thread_t control_thread = dispatch->control_thread;
-	if (control_thread == MM_THREAD_NONE) {
-
-#if ENABLE_DEBUG
-		if (dispatch->last_control_thread != thread) {
-			DEBUG("switch control thread %d -> %d",
-			      dispatch->last_control_thread, thread);
-			dispatch->last_control_thread = thread;
-		}
-#endif
-
-		// The first arrived thread is elected to conduct the next
-		// event poll.
-		dispatch->control_thread = thread;
-
-		// Capture all the published change events.
-		mm_event_batch_append(&listener->changes, &dispatch->changes);
-		// Forget just captured events.
-		mm_event_batch_clear(&dispatch->changes);
-		// Start the next publish/capture round.
-		dispatch->publish_stamp++;
-
-		mm_regular_unlock(&dispatch->lock);
-
-		// If this thread previously published any change events
-		// then upon this dispatch cycle the events will certainly
-		// be handled (perhaps by the very same thread).
-		listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
-
-	} else if (mm_event_listener_has_changes(listener)) {
-
-		// Publish the private change events.
-		mm_event_batch_append(&dispatch->changes, &listener->changes);
-
-		// The changes just published might be missed by the current
-		// control thread. So the publisher must force another
-		// dispatch cycle.
-		listener->changes_state = MM_EVENT_LISTENER_CHANGES_PUBLISHED;
-		listener->publish_stamp = dispatch->publish_stamp;
-
-		mm_regular_unlock(&dispatch->lock);
-
-		// Forget just published events.
-		mm_event_batch_clear(&listener->changes);
-
-		// Wake up the control thread if it is still sleeping.
-		// But by this time the known control thread might have
-		// given up its role and be busy with something else.
-		// So it might be needed to wake up a new control thread.
-		mm_dispatch_notify(dispatch, control_thread);
-		// Avoid sleeping until another dispatch cycle begins.
+	// There may be changes that need to be immediately acknowledged.
+	if (mm_event_listener_has_changes(listener))
 		timeout = 0;
 
-	} else {
-		mm_regular_unlock(&dispatch->lock);
-
-		if (listener->changes_state != MM_EVENT_LISTENER_CHANGES_PRIVATE) {
-			if (listener->publish_stamp != dispatch->publish_stamp) {
-				// At this point the change events published by this
-				// thread must have been captured by a control thread.
-				listener->changes_state = MM_EVENT_LISTENER_CHANGES_PRIVATE;
-			} else {
-				// Wake up the control thread if it is still sleeping.
-				mm_dispatch_notify(dispatch, control_thread);
-				// Avoid sleeping until another dispatch cycle begins.
-				timeout = 0;
-			}
-		}
+	if (timeout != 0 && listener->busywait) {
+		// Presume that if there were incoming events moments ago then
+		// there is a chance to get some more immediately. Spin a little
+		// bit to avoid context switches.
+		listener->busywait--;
+		timeout = 0;
 	}
 
-	// Wait for incoming events.
-	if (control_thread == MM_THREAD_NONE) {
-#if ENABLE_DISPATCH_BUSYWAIT
-		if (dispatch->busywait) {
-			// Presume that if there were incoming events
-			// moments ago then there is a chance to get
-			// some more immediately. Spin a little bit to
-			// avoid context switches.
-			dispatch->busywait--;
-			timeout = 0;
+	// The first arrived thread that is going to sleep is elected to conduct
+	// the next event poll.
+	bool is_poller_thread = false;
+	if (timeout != 0) {
+		mm_regular_lock(&dispatch->poller_lock);
+		if (dispatch->poller_thread == MM_THREAD_NONE) {
+			dispatch->poller_thread = thread;
+			is_poller_thread = true;
 		}
-		else
-#endif
-		if (mm_dispatch_has_urgent_changes(listener)) {
-			// There are changes that need to be immediately
-			// acknowledged.
-			timeout = 0;
-		}
+		mm_regular_unlock(&dispatch->poller_lock);
+	}
+
+	if (timeout == 0 || is_poller_thread) {
+		if (timeout != 0)
+			mm_dispatch_advance_epoch(dispatch);
 
 		// Wait for incoming events or timeout expiration.
 		mm_event_listener_poll(listener, timeout);
 
-#if ENABLE_DISPATCH_BUSYWAIT
-		if (dispatch->receiver.got_events)
-			dispatch->busywait = 250;
-#endif
-
-		// Give up the control thread role.
-		mm_memory_store_fence();
-		mm_memory_store(dispatch->control_thread, MM_THREAD_NONE);
+		// Give up the poller thread role.
+		if (is_poller_thread) {
+			mm_regular_lock(&dispatch->poller_lock);
+			dispatch->poller_thread = MM_THREAD_NONE;
+			mm_regular_unlock(&dispatch->poller_lock);
+			listener->busywait += mm_poller_busywait;
+		}
 
 		// Forget just handled change events.
 		mm_event_batch_clear(&listener->changes);
 
+		// Arm busy-wait counter if got any events.
+		if (listener->receiver.got_events)
+			listener->busywait += mm_events_busywait;
 	} else {
 		// Wait for forwarded events or timeout expiration.
 		mm_event_listener_wait(listener, timeout);
@@ -269,6 +179,7 @@ mm_dispatch_check_epoch(struct mm_dispatch *dispatch, uint32_t epoch)
 		if (active) {
 			mm_thread_send_1(listener->thread, mm_dispatch_observe_req,
 					 (uintptr_t) receiver);
+			mm_event_listener_notify(listener);
 			return false;
 		}
 	}
@@ -285,7 +196,7 @@ mm_dispatch_advance_epoch(struct mm_dispatch *dispatch)
 	if (rc) {
 		mm_memory_fence(); // TODO: load_store fence
 		mm_memory_store(dispatch->reclaim_epoch, epoch + 1);
-		DEBUG("advance epoch");
+		DEBUG("advance epoch %u", epoch + 1);
 	}
 
 	LEAVE();
