@@ -661,7 +661,12 @@ mm_net_socket_handler(mm_event_t event, void *data)
 			(sock->server->proto->attach)(sock);
 		break;
 
-	case MM_EVENT_CLEANUP:
+	case MM_EVENT_DISABLE:
+		// Close the socket.
+		// TODO: set linger off and/or close concurrently to avoid stalls.
+		ASSERT(sock->event.fd >= 0);
+		mm_close(sock->event.fd);
+		sock->event.fd = -1;
 		break;
 
 	case MM_EVENT_RECLAIM:
@@ -866,11 +871,6 @@ mm_net_destroy(mm_value_t arg)
 	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
 	//ASSERT(sock->core == mm_core_self());
 	ASSERT(mm_net_is_closed(sock));
-
-	// Close the socket.
-	// TODO: set linger off and/or close concurrently to avoid stalls.
-	mm_close(sock->event.fd);
-	sock->event.fd = -1;
 
 	// Remove the socket from the server lists.
 	mm_net_destroy_socket(sock);

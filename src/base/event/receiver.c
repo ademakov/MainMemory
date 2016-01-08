@@ -588,7 +588,7 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 {
 	ENTER();
 
-	sink->unregister_phase = MM_EVENT_CLEANUP;
+	sink->unregister_phase = MM_EVENT_DISABLE;
 	mm_event_receiver_reclaim_queue_insert(receiver, sink);
 	mm_event_receiver_handle(receiver, sink, 0);
 

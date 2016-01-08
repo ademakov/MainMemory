@@ -185,7 +185,7 @@ mm_event_convey(struct mm_event_fd *sink)
 	while (event != MM_EVENT_NONE) {
 		// Invoke the required event handler.
 		(hd->handler)(event, sink);
-		if (event == MM_EVENT_CLEANUP || event == MM_EVENT_RECLAIM)
+		if (event == MM_EVENT_DISABLE || event == MM_EVENT_RECLAIM)
 			break;
 		event = mm_event_pull(sink);
 	}
