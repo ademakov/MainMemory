@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.c - MainMemory threads.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -209,16 +209,22 @@ mm_thread_setaffinity(uint32_t cpu_tag)
 static void
 mm_thread_setaffinity(uint32_t cpu_tag)
 {
-	thread_affinity_policy_data_t policy;
-	policy.affinity_tag = cpu_tag + 1;
-
+	kern_return_t kr;
 	thread_t tid = mach_thread_self();
-	kern_return_t kr = thread_policy_set(tid,
-					     THREAD_AFFINITY_POLICY,
-					     (thread_policy_t) &policy,
-					     THREAD_AFFINITY_POLICY_COUNT);
+
+	thread_extended_policy_data_t epolicy = { .timeshare = FALSE };
+	kr = thread_policy_set(tid, THREAD_EXTENDED_POLICY,
+			       (thread_policy_t) &epolicy,
+			       THREAD_EXTENDED_POLICY_COUNT);
 	if (kr != KERN_SUCCESS)
-		mm_error(0, "failed to set thread affinity");
+		mm_error(0, "failed to set thread extended policy");
+
+	thread_affinity_policy_data_t apolicy = { .affinity_tag = cpu_tag + 1 };
+	kr = thread_policy_set(tid, THREAD_AFFINITY_POLICY,
+			       (thread_policy_t) &apolicy,
+			       THREAD_AFFINITY_POLICY_COUNT);
+	if (kr != KERN_SUCCESS)
+		mm_error(0, "failed to set thread affinity policy");
 }
 #else
 # define mm_thread_setaffinity(cpu_tag) ((void) cpu_tag)
