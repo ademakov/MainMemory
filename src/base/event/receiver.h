@@ -24,6 +24,8 @@
 #include "base/bitset.h"
 #include "base/list.h"
 
+#define ENABLE_EVENT_PUBLISH	0
+
 /* Forward declarations. */
 struct mm_dispatch;
 
@@ -37,12 +39,14 @@ struct mm_event_receiver_fwdbuf
 	unsigned int nsinks;
 };
 
+#if ENABLE_EVENT_PUBLISH
 /* Event sink publish buffer. */
 struct mm_event_receiver_pubbuf
 {
 	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_PUBBUF_SIZE];
 	unsigned int nsinks;
 };
+#endif
 
 struct mm_event_receiver
 {
@@ -55,8 +59,10 @@ struct mm_event_receiver
 
 	/* The flag indicating that some events were received. */
 	bool got_events;
+#if ENABLE_EVENT_PUBLISH
 	/* The flag indicating that some events were published in the domain request queue. */
 	bool published_events;
+#endif
 
 	/* The top-level event dispatch data. */
 	struct mm_dispatch *dispatch;
@@ -67,8 +73,10 @@ struct mm_event_receiver
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
 
+#if ENABLE_EVENT_PUBLISH
 	/* Per-domain temporary store for sinks of received events. */
 	struct mm_event_receiver_pubbuf publish_buffer;
+#endif
 
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];

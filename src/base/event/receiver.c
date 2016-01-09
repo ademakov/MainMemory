@@ -98,6 +98,8 @@ mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
  * Event publish request handlers.
  **********************************************************************/
 
+#if ENABLE_EVENT_PUBLISH
+
 static void
 mm_event_receiver_publish_1(uintptr_t context, uintptr_t *arguments)
 {
@@ -172,6 +174,8 @@ mm_event_receiver_publish_4(uintptr_t context, uintptr_t *arguments)
 	LEAVE();
 }
 
+#endif
+
 /**********************************************************************
  * Event forwarding.
  **********************************************************************/
@@ -243,6 +247,8 @@ mm_event_receiver_forward(struct mm_thread *thread, struct mm_event_receiver_fwd
  * Event publishing.
  **********************************************************************/
 
+#if ENABLE_EVENT_PUBLISH
+
 static void
 mm_event_receiver_pubbuf_prepare(struct mm_event_receiver_pubbuf *buffer)
 {
@@ -305,6 +311,8 @@ mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pub
 
 	LEAVE();
 }
+
+#endif
 
 /**********************************************************************
  * Event sink reclamation.
@@ -379,8 +387,10 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch
 	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
 			  dispatch->nlisteners);
 
+#if ENABLE_EVENT_PUBLISH
 	// Prepare publish buffer.
 	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
+#endif
 
 	LEAVE();
 }
@@ -404,7 +414,9 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 
 	// Initialize flags that indicate event arrival.
 	receiver->got_events = false;
+#if ENABLE_EVENT_PUBLISH
 	receiver->published_events = false;
+#endif
 	mm_bitset_clear_all(&receiver->forward_targets);
 
 	// Start a reclamation-critical section.
@@ -426,11 +438,13 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 
 	struct mm_dispatch *dispatch = receiver->dispatch;
 
+#if ENABLE_EVENT_PUBLISH
 	// Flush published events.
 	if (receiver->published_events) {
 		mm_event_receiver_publish_flush(dispatch->domain, &receiver->publish_buffer);
 		mm_dispatch_notify_waiting(dispatch);
 	}
+#endif
 
 	// Flush forwarded events.
 	mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
@@ -483,8 +497,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			if (!attached
 			    && iostate == expected_iostate
 			    && sink->unregister_phase == MM_EVENT_NONE) {
-#if 0
-				// Forbid this for now.
+#if ENABLE_EVENT_PUBLISH
 				target = sink->target = MM_THREAD_NONE;
 #else
 				target = sink->target = receiver->thread;
@@ -506,8 +519,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_bitset_set(&receiver->forward_targets, target);
 
 		} else {
-#if 0
-			// Forbid this for now.
+#if ENABLE_EVENT_PUBLISH
 			// TODO: BUG!!! If this is done more than once for
 			// a single sink then there might be a big problem.
 			// This must be resolved before any production use.
