@@ -494,9 +494,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			uint32_t iostate = mm_memory_load(sink->io.state);
 			mm_memory_load_fence();
 			uint8_t attached = mm_memory_load(sink->attached);
-			if (!attached
-			    && iostate == expected_iostate
-			    && sink->unregister_phase == MM_EVENT_NONE) {
+			if (!attached && iostate == expected_iostate) {
 #if ENABLE_EVENT_PUBLISH
 				target = sink->target = MM_THREAD_NONE;
 #else
@@ -611,7 +609,7 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 
 	sink->unregister_phase = MM_EVENT_DISABLE;
 	mm_event_receiver_reclaim_queue_insert(receiver, sink);
-	mm_event_receiver_handle(receiver, sink, 0);
+	mm_event_convey(sink);
 
 	LEAVE();
 }
