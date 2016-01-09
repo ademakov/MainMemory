@@ -23,6 +23,9 @@
 #include "common.h"
 #include "base/list.h"
 
+/* Forward declarations. */
+struct mm_dispatch;
+
 /* Event types. */
 typedef enum {
 	MM_EVENT_NONE = -1,
@@ -139,17 +142,6 @@ struct mm_event_fd
 	struct mm_slink reclaim_link;
 };
 
-bool NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
-		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
-		    mm_event_affinity_t target);
-
-void NONNULL(1)
-mm_event_convey(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink);
-
 static inline mm_thread_t NONNULL(1)
 mm_event_target(const struct mm_event_fd *sink)
 {
@@ -161,5 +153,28 @@ mm_event_attached(const struct mm_event_fd *sink)
 {
 	return sink->attached;
 }
+
+bool NONNULL(1)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
+		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
+		    mm_event_affinity_t target);
+
+void NONNULL(1, 2)
+mm_event_register_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+
+void NONNULL(1, 2)
+mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+
+void NONNULL(1, 2)
+mm_event_trigger_input(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+
+void NONNULL(1, 2)
+mm_event_trigger_output(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+
+void NONNULL(1)
+mm_event_convey(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_detach(struct mm_event_fd *sink);
 
 #endif /* BASE_EVENT_EVENT_H */
