@@ -70,4 +70,4 @@ and smaller latency) until it hits the single-core execution limits.
 
 As a rule of thumb if the required throughput of the server is less than about
 100k requests per second then it might be benefitical to use the single-threaded
-build. Otherwise a multi-threaded build should be used.
+build. Otherwise the multi-threaded build is preferred.
