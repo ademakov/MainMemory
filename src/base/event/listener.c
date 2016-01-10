@@ -38,7 +38,7 @@
 #endif
 
 void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch *dispatch,
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
 			  struct mm_thread *thread)
 {
 	ENTER();

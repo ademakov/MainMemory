@@ -27,7 +27,7 @@
 #define ENABLE_EVENT_PUBLISH	0
 
 /* Forward declarations. */
-struct mm_dispatch;
+struct mm_event_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	4
 #define MM_EVENT_RECEIVER_PUBBUF_SIZE	4
@@ -65,7 +65,7 @@ struct mm_event_receiver
 #endif
 
 	/* The top-level event dispatch data. */
-	struct mm_dispatch *dispatch;
+	struct mm_event_dispatch *dispatch;
 
 	/* Target threads that have received events. */
 	struct mm_bitset forward_targets;
@@ -83,7 +83,7 @@ struct mm_event_receiver
 };
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch,
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
 			  mm_thread_t thread);
 
 void NONNULL(1)

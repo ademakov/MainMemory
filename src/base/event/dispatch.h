@@ -30,7 +30,7 @@
 #include "base/log/debug.h"
 #include "base/thread/thread.h"
 
-struct mm_dispatch
+struct mm_event_dispatch
 {
 	/* The thread domain associated with the dispatcher. */
 	struct mm_domain *domain;
@@ -53,40 +53,41 @@ struct mm_dispatch
 };
 
 void NONNULL(1, 2, 4)
-mm_dispatch_prepare(struct mm_dispatch *dispatch,
-		    struct mm_domain *domain,
-		    mm_thread_t nthreads,
-		    struct mm_thread *threads[]);
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
+			  struct mm_domain *domain,
+			  mm_thread_t nthreads,
+			  struct mm_thread *threads[]);
 
 void NONNULL(1)
-mm_dispatch_cleanup(struct mm_dispatch *dispatch);
+mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
 
 static inline struct mm_event_listener * NONNULL(1)
-mm_dispatch_listener(struct mm_dispatch *dispatch, mm_thread_t thread)
+mm_event_dispatch_listener(struct mm_event_dispatch *dispatch, mm_thread_t thread)
 {
 	ASSERT(thread < dispatch->nlisteners);
 	return &dispatch->listeners[thread];
 }
 
 static inline void NONNULL(1)
-mm_dispatch_notify(struct mm_dispatch *dispatch, mm_thread_t thread)
+mm_event_dispatch_notify(struct mm_event_dispatch *dispatch, mm_thread_t thread)
 {
 	ASSERT(thread < dispatch->nlisteners);
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_notify(listener);
 }
 
 void NONNULL(1)
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
+mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
+			 mm_timeout_t timeout);
 
 void NONNULL(1)
-mm_dispatch_notify_waiting(struct mm_dispatch *dispatch);
+mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch);
 
 /**********************************************************************
  * Reclamation epoch maintenance.
  **********************************************************************/
 
 bool NONNULL(1)
-mm_dispatch_advance_epoch(struct mm_dispatch *dispatch);
+mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch);
 
 #endif /* BASE_EVENT_DISPATCH_H */

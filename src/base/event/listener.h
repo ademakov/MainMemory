@@ -40,7 +40,7 @@
 #endif
 
 /* Forward declarations. */
-struct mm_dispatch;
+struct mm_event_dispatch;
 struct mm_thread;
 
 #define MM_EVENT_LISTENER_STATE		((uint32_t) 3)
@@ -97,7 +97,7 @@ struct mm_event_listener
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_dispatch *dispatch,
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
 			  struct mm_thread *thread);
 
 void NONNULL(1)

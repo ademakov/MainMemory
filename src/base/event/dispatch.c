@@ -27,10 +27,10 @@ static uint16_t mm_poller_busywait = 2;
 static uint16_t mm_events_busywait = 4;
 
 void NONNULL(1, 2, 4)
-mm_dispatch_prepare(struct mm_dispatch *dispatch,
-		    struct mm_domain *domain,
-		    mm_thread_t nthreads,
-		    struct mm_thread *threads[])
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
+			  struct mm_domain *domain,
+			  mm_thread_t nthreads,
+			  struct mm_thread *threads[])
 {
 	ENTER();
 	ASSERT(nthreads > 0);
@@ -56,7 +56,7 @@ mm_dispatch_prepare(struct mm_dispatch *dispatch,
 }
 
 void NONNULL(1)
-mm_dispatch_cleanup(struct mm_dispatch *dispatch)
+mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
@@ -72,11 +72,12 @@ mm_dispatch_cleanup(struct mm_dispatch *dispatch)
 }
 
 void NONNULL(1)
-mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
+mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
+			 mm_timeout_t timeout)
 {
 	ENTER();
 	ASSERT(thread < dispatch->nlisteners);
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
 	// There may be changes that need to be immediately acknowledged.
 	if (mm_event_listener_has_changes(listener))
@@ -104,7 +105,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 
 	if (timeout == 0 || is_poller_thread) {
 		if (timeout != 0)
-			mm_dispatch_advance_epoch(dispatch);
+			mm_event_dispatch_advance_epoch(dispatch);
 
 		// Wait for incoming events or timeout expiration.
 		mm_event_listener_poll(listener, timeout);
@@ -132,7 +133,7 @@ mm_dispatch_listen(struct mm_dispatch *dispatch, mm_thread_t thread, mm_timeout_
 }
 
 void NONNULL(1)
-mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
+mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
@@ -153,7 +154,7 @@ mm_dispatch_notify_waiting(struct mm_dispatch *dispatch)
  **********************************************************************/
 
 static void
-mm_dispatch_observe_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_dispatch_observe_req(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -163,7 +164,7 @@ mm_dispatch_observe_req(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static bool
-mm_dispatch_check_epoch(struct mm_dispatch *dispatch, uint32_t epoch)
+mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch)
 {
 	mm_thread_t n = dispatch->nlisteners;
 	struct mm_event_listener *listeners = dispatch->listeners;
@@ -177,7 +178,7 @@ mm_dispatch_check_epoch(struct mm_dispatch *dispatch, uint32_t epoch)
 		mm_memory_load_fence();
 		bool active = mm_memory_load(receiver->reclaim_active);
 		if (active) {
-			mm_thread_send_1(listener->thread, mm_dispatch_observe_req,
+			mm_thread_send_1(listener->thread, mm_event_dispatch_observe_req,
 					 (uintptr_t) receiver);
 			mm_event_listener_notify(listener);
 			return false;
@@ -187,12 +188,12 @@ mm_dispatch_check_epoch(struct mm_dispatch *dispatch, uint32_t epoch)
 }
 
 bool NONNULL(1)
-mm_dispatch_advance_epoch(struct mm_dispatch *dispatch)
+mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
 	uint32_t epoch = mm_memory_load(dispatch->reclaim_epoch);
-	bool rc = mm_dispatch_check_epoch(dispatch, epoch);
+	bool rc = mm_event_dispatch_check_epoch(dispatch, epoch);
 	if (rc) {
 		mm_memory_fence(); // TODO: load_store fence
 		mm_memory_store(dispatch->reclaim_epoch, epoch + 1);

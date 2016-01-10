@@ -24,7 +24,7 @@
 #include "base/list.h"
 
 /* Forward declarations. */
-struct mm_dispatch;
+struct mm_event_dispatch;
 
 /* Event types. */
 typedef enum {
@@ -160,16 +160,16 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		    mm_event_affinity_t target);
 
 void NONNULL(1, 2)
-mm_event_register_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+mm_event_register_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1, 2)
-mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1, 2)
-mm_event_trigger_input(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+mm_event_trigger_input(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1, 2)
-mm_event_trigger_output(struct mm_event_fd *sink, struct mm_dispatch *dispatch);
+mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_convey(struct mm_event_fd *sink);

@@ -62,7 +62,7 @@ __thread struct mm_core *__mm_core_self;
 static struct mm_bitset mm_core_event_affinity;
 
 // Common event dispatch.
-struct mm_dispatch mm_core_dispatch;
+struct mm_event_dispatch mm_core_dispatch;
 
 /**********************************************************************
  * Yield routine for backoff on busy waiting.
@@ -517,7 +517,8 @@ mm_core_halt(struct mm_core *core)
 		}
 
 		// Halt the core waiting for incoming events.
-		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
+		mm_event_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
+					 timeout);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);
@@ -527,7 +528,8 @@ mm_core_halt(struct mm_core *core)
 
 	} else {
 		// Halt the core waiting for incoming events.
-		mm_dispatch_listen(&mm_core_dispatch, mm_core_getid(core), MM_CORE_HALT_TIMEOUT);
+		mm_event_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
+					 MM_CORE_HALT_TIMEOUT);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);
@@ -690,10 +692,8 @@ mm_core_boot_init(struct mm_core *core)
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_thread_local_summary(domain);
 
-		mm_dispatch_prepare(&mm_core_dispatch,
-				    domain,
-				    domain->nthreads,
-				    domain->threads);
+		mm_event_dispatch_prepare(&mm_core_dispatch, domain,
+					  domain->nthreads, domain->threads);
 
 		mm_thread_domain_barrier();
 	} else {
@@ -713,7 +713,7 @@ mm_core_boot_term(struct mm_core *core)
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_hook_call(&mm_core_stop_hook, false);
-		mm_dispatch_cleanup(&mm_core_dispatch);
+		mm_event_dispatch_cleanup(&mm_core_dispatch);
 	}
 
 	mm_timer_cleanup(&core->time_manager);
@@ -874,13 +874,13 @@ static void
 mm_core_thread_notify(struct mm_thread *thread)
 {
 	mm_thread_t n = mm_thread_getnumber(thread);
-	mm_dispatch_notify(&mm_core_dispatch, n);
+	mm_event_dispatch_notify(&mm_core_dispatch, n);
 }
 
 static void
 mm_core_domain_notify(struct mm_domain *domain UNUSED)
 {
-	mm_dispatch_notify_waiting(&mm_core_dispatch);
+	mm_event_dispatch_notify_waiting(&mm_core_dispatch);
 }
 
 #if ENABLE_TRACE
@@ -1020,7 +1020,7 @@ mm_core_stop(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
-		mm_dispatch_notify(&mm_core_dispatch, i);
+		mm_event_dispatch_notify(&mm_core_dispatch, i);
 	}
 
 	LEAVE();

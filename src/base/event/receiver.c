@@ -355,7 +355,7 @@ mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
 		ASSERT((receiver->reclaim_epoch + 1) == epoch);
 		mm_memory_store(receiver->reclaim_epoch, epoch);
 		mm_event_receiver_reclaim_epoch(receiver, epoch);
-		mm_dispatch_advance_epoch(receiver->dispatch);
+		mm_event_dispatch_advance_epoch(receiver->dispatch);
 	}
 }
 
@@ -364,7 +364,7 @@ mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_dispatch *dispatch,
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
 			  mm_thread_t thread)
 {
 	ENTER();
@@ -436,7 +436,7 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
-	struct mm_dispatch *dispatch = receiver->dispatch;
+	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
 #if ENABLE_EVENT_PUBLISH
 	// Flush published events.
@@ -510,7 +510,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_event_convey(sink);
 
 		} else if (target != MM_THREAD_NONE) {
-			struct mm_dispatch *dispatch = receiver->dispatch;
+			struct mm_event_dispatch *dispatch = receiver->dispatch;
 			struct mm_event_listener *listener = &dispatch->listeners[target];
 			mm_event_receiver_forward(listener->thread,
 						  &receiver->forward_buffers[target], sink);

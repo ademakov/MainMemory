@@ -133,7 +133,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 }
 
 void NONNULL(1, 2)
-mm_event_register_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch)
+mm_event_register_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	if (thread == MM_THREAD_NONE) {
@@ -141,37 +141,37 @@ mm_event_register_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch)
 	} else {
 		ASSERT(mm_event_target(sink) == thread);
 	}
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_REGISTER);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_REGISTER);
 }
 
 void NONNULL(1, 2)
-mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_dispatch *dispatch)
+mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_UNREGISTER);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 void NONNULL(1, 2)
-mm_event_trigger_input(struct mm_event_fd *sink, struct mm_dispatch *dispatch)
+mm_event_trigger_input(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_INPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 }
 
 void NONNULL(1, 2)
-mm_event_trigger_output(struct mm_event_fd *sink, struct mm_dispatch *dispatch)
+mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
 {
 	mm_thread_t thread = mm_event_target(sink);
 	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
 	mm_event_listener_addflags(listener, MM_EVENT_BATCH_INPUT_OUTPUT);
 }
