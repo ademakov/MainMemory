@@ -135,17 +135,18 @@ mm_server_init(void)
 	//mm_core_register_server(mm_ucmd_server);
 	mm_core_register_server(mm_icmd_server);
 
+	uint32_t port = mm_settings_get_uint32("memcache-port", "11211");
 	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", "64");
 	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", "8");
 
 	struct mm_memcache_config memcache_config;
+	memcache_config.port = port;
 	memcache_config.volume = mbytes * 1024 * 1024;
+	memcache_config.nparts = nparts;
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.arena, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
 	mm_bitset_set(&memcache_config.affinity, 7);
-#else
-	memcache_config.nparts = nparts;
 #endif
 	mm_memcache_init(&memcache_config);
 
@@ -153,17 +154,28 @@ mm_server_init(void)
 }
 
 static struct mm_args_info mm_args_info_tbl[] = {
-	{ "help", 'h', MM_ARGS_SPECIAL, "\n\t\tdisplay this help text and exit" },
-	{ "version", 'V', MM_ARGS_SPECIAL, "\n\t\tdisplay version information and exit" },
-	{ "verbose", 'v', MM_ARGS_TRIVIAL, "\n\t\tenable verbose messages" },
-	{ "warning", 'w', MM_ARGS_TRIVIAL, "\n\t\tenable warning messages" },
+	{ "help", 'h', MM_ARGS_SPECIAL,
+	  "\n\t\tdisplay this help text and exit" },
+	{ "version", 'V', MM_ARGS_SPECIAL,
+	   "\n\t\tdisplay version information and exit" },
+	{ "verbose", 'v', MM_ARGS_TRIVIAL,
+	  "\n\t\tenable verbose messages" },
+	{ "warning", 'w', MM_ARGS_TRIVIAL,
+	  "\n\t\tenable warning messages" },
 	{ NULL, 0, 0, NULL },
-	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
-	{ "daemon", 'd', MM_ARGS_TRIVIAL, "\n\t\trun as a daemon" },
-	{ "thread-number", 't', MM_ARGS_REQUIRED, "\n\t\tnumber of threads" },
+	{ "config", 'c', MM_ARGS_REQUIRED,
+	  "\n\t\tconfiguration file" },
+	{ "daemon", 'd', MM_ARGS_TRIVIAL,
+	  "\n\t\trun as a daemon" },
+	{ "thread-number", 't', MM_ARGS_REQUIRED,
+	  "\n\t\tnumber of threads" },
 	{ NULL, 0, 0, NULL },
-	{ "memcache-memory", 'm', MM_ARGS_REQUIRED, "\n\t\tmemory for memcache items in megabytes" },
-	{ "memcache-partitions", 'M', MM_ARGS_REQUIRED, "\n\t\tnumber of memcache table partitions" },
+	{ "memcache-port", 'p', MM_ARGS_REQUIRED,
+	  "\n\t\tmemcache TCP port" },
+	{ "memcache-memory", 'm', MM_ARGS_REQUIRED,
+	  "\n\t\tmemory for memcache items in megabytes" },
+	{ "memcache-partitions", 'M', MM_ARGS_REQUIRED,
+	  "\n\t\tnumber of memcache table partitions" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);

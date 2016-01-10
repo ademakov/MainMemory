@@ -198,8 +198,11 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		.reader = mc_reader_routine,
 	};
 
-	mc_tcp_server = mm_net_create_inet_server("memcache", &proto,
-						  "0.0.0.0", 11211);
+	uint16_t port = 11211;
+	if (config != NULL && config->port != 0)
+		port = config->port;
+
+	mc_tcp_server = mm_net_create_inet_server("memcache", &proto, "0.0.0.0", port);
 
 	mm_core_hook_start(mc_memcache_start);
 	mm_core_hook_stop(mc_memcache_stop);
