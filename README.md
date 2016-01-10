@@ -45,18 +45,18 @@ subdirectory.
 
 ## Single-Threaded and Multi-Threaded Builds
 
-MainMemory can be built in one of two configurations:
+MainMemory can be built in one of the two configurations:
 
 - single-threaded
 - or multi-threaded (SMT).
 
-For the former build config it like this:
+For the former option, run the configure script as follows:
 
 ```
 > ./configure --disable-smp
 ```
 
-For the later build config it like this:
+For the later option, run the configure script as follows:
 
 ```
 > ./configure --enable-smp
