@@ -130,28 +130,10 @@ mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *si
 	mm_event_batch_add(&listener->changes, event, sink);
 }
 
-static inline void NONNULL(1)
-mm_event_listener_addflags(struct mm_event_listener *listener, unsigned int flags)
-{
-	mm_event_batch_addflags(&listener->changes, flags);
-}
-
-static inline bool NONNULL(1)
-mm_event_listener_hasflags(struct mm_event_listener *listener, unsigned int flags)
-{
-	return mm_event_batch_hasflags(&listener->changes, flags);
-}
-
 static inline bool NONNULL(1)
 mm_event_listener_has_changes(struct mm_event_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);
-}
-
-static inline bool NONNULL(1)
-mm_event_listener_has_urgent_changes(struct mm_event_listener *listener)
-{
-	return mm_event_listener_hasflags(listener, MM_EVENT_BATCH_UNREGISTER);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */

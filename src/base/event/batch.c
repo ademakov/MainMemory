@@ -31,7 +31,6 @@ mm_event_batch_prepare(struct mm_event_batch *batch, unsigned int size)
 {
 	ENTER();
 
-	batch->flags = 0;
 	batch->nchanges = 0;
 	batch->nchanges_max = max(size, MM_EVENT_NCHANGES_MIN);
 	batch->changes = mm_common_alloc(batch->nchanges_max * sizeof(struct mm_event_change));
@@ -60,22 +59,6 @@ mm_event_batch_expand(struct mm_event_batch *batch)
 	batch->nchanges_max *= 2;
 	batch->changes = mm_common_realloc(batch->changes,
 					   batch->nchanges_max * sizeof(struct mm_event_change));
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_batch_append(struct mm_event_batch *restrict batch,
-		      const struct mm_event_batch *restrict batch2)
-{
-	ENTER();
-
-	mm_event_batch_addflags(batch, batch2->flags);
-
-	for (unsigned int i = 0; i < batch2->nchanges; i++) {
-		struct mm_event_change *change = &batch2->changes[i];
-		mm_event_batch_add(batch, change->kind, change->sink);
-	}
 
 	LEAVE();
 }
