@@ -17,10 +17,8 @@ to take full advantage of modern multi-core systems with larger RAM sizes.
 # Target Platforms
 
 MainMemory intends to run on x86/x86-64 boxes with Linux or any BSD flavor
-OS including Mac OS/X.
-
-The key system requirement is the availability of epoll or kqueue API in
-addition to the standard POSIX API.
+OS including Mac OS/X. The key system requirement is the availability of
+either epoll or kqueue API in addition to the standard POSIX API.
 
 However so far it has only been extensively tested on Linux and Mac OS/X.
 And on a single FreeBSD instance running on a VM. Therefore any reports
