@@ -224,15 +224,10 @@ mm_event_convey(struct mm_event_fd *sink)
 		(hd->handler)(MM_EVENT_ATTACH, sink);
 	}
 
-	// Handle any received events.
+	// Handle a single received event.
 	mm_event_t event = mm_event_pull(sink);
-	while (event != MM_EVENT_NONE) {
-		// Invoke the required event handler.
+	if (event != MM_EVENT_NONE)
 		(hd->handler)(event, sink);
-		if (event == MM_EVENT_DISABLE || event == MM_EVENT_RECLAIM)
-			break;
-		event = mm_event_pull(sink);
-	}
 
 	LEAVE();
 }
