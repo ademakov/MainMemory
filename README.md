@@ -26,9 +26,8 @@ and/or patches for other platforms are welcome.
 
 As there is a not-yet-tested "generic architecture" port there is a slim
 chance MainMemory will run on any non-x86 platform too. But most likely
-it will take some extra work yet.
-
-In the future it is planed to have a native ARM port too,
+it will take some extra work yet. In the future it is planed to have a
+native ARM port too,
 
 # Build
 
