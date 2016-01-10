@@ -2,5 +2,7 @@
 	"daemon" : false,
 	"verbose" : true,
 	"warning" : true,
-	"thread-number" : 4
+	"thread-number" : 4,
+	"memcache-memory" : 64,
+	"memcache-partitions" : 8
 }

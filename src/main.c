@@ -135,14 +135,17 @@ mm_server_init(void)
 	//mm_core_register_server(mm_ucmd_server);
 	mm_core_register_server(mm_icmd_server);
 
+	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", "64");
+	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", "8");
+
 	struct mm_memcache_config memcache_config;
-	memcache_config.volume = 64 * 1024 * 1024;
+	memcache_config.volume = mbytes * 1024 * 1024;
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.arena, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
 	mm_bitset_set(&memcache_config.affinity, 7);
 #else
-	memcache_config.nparts = 1;
+	memcache_config.nparts = nparts;
 #endif
 	mm_memcache_init(&memcache_config);
 
@@ -158,6 +161,9 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	{ "config", 'c', MM_ARGS_REQUIRED, "\n\t\tconfiguration file" },
 	{ "daemon", 'd', MM_ARGS_TRIVIAL, "\n\t\trun as a daemon" },
 	{ "thread-number", 't', MM_ARGS_REQUIRED, "\n\t\tnumber of threads" },
+	{ NULL, 0, 0, NULL },
+	{ "memcache-memory", 'm', MM_ARGS_REQUIRED, "\n\t\tmemory for memcache items in megabytes" },
+	{ "memcache-partitions", 'M', MM_ARGS_REQUIRED, "\n\t\tnumber of memcache table partitions" },
 };
 
 static size_t mm_args_info_cnt = sizeof(mm_args_info_tbl) / sizeof(mm_args_info_tbl[0]);
