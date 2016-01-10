@@ -1,9 +1,8 @@
 
 ASAP:
-* increase concurrency
-* optimize event dispatch
 * optimize buffer management and beautify netbuf interface
 * minimize memcache locks or non-blocking memcache table
+* verify event sink recalmation correctness
 * add more config options
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
