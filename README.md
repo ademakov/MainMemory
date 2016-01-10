@@ -53,7 +53,7 @@ MainMemory can be built in one of the two configurations:
 For the former option, run the configure script as follows:
 
 ```
-> ./configure --disable-smp
+> ./configure
 ```
 
 For the later option, run the configure script as follows:
@@ -69,5 +69,5 @@ multi-threaded version. Therefore it performs better (with higher throughput
 and smaller latency) until it hits the single-core execution limits.
 
 As a rule of thumb if the required throughput of the server is less than about
-100k requests per second then it might be benefitical to use the single-threded
+100k requests per second then it might be benefitical to use the single-threaded
 build. Otherwise a multi-threaded build should be used.
