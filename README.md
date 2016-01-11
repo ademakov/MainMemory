@@ -49,7 +49,7 @@ native ARM port too.
 
 # Build
 
-MainMemory relies on the venerable autotools suite for builds. The build
+MainMemory relies on the venerable autotools suite to build. The build
 procedure is as follows:
 
 ```
