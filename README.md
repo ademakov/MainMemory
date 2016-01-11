@@ -22,13 +22,12 @@ server, proxy, storage platform, or a pub-sub system.
 
 # Status
 
-The project is at early stage now.
+The project has been slowly brewing as a personal research vehicle for
+some time already. A number of different approaches has been tried and
+abandoned. All this time it was run mostly against memslap and memtier
+benchmarks.
 
-It has been developed as a proof of concept and as a personal research
-vehicle for some time already. And it was run mostly against memslap and
-memtier benchmarks.
-
-But it has matured enough to declare it ready for experimental use by a
+Now it has matured enough to consider it ready for experimental use by a
 wide audience. Hopefully in a short term it could be declared production
 ready as well.
 
