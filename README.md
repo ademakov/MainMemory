@@ -1,7 +1,7 @@
 MainMemory
 ==========
 
-MainMemory project is intended to provide
+The MainMemory project is intended to provide
 
 - a framework for network servers of all sorts;
 - some specific implementations of such servers.
