@@ -22,7 +22,7 @@ server, proxy, storage platform, or a pub-sub system.
 
 # Status
 
-The project is at early stage naw.
+The project is at early stage now.
 
 It has been developed as a proof of concept and as a personal research
 vehicle for some time already. And it was run mostly against memslap and
