@@ -28,7 +28,7 @@ It has been developed as a proof of concept and as a personal research
 vehicle for some time already. And it was run mostly against memslap and
 memtier benchmarks.
 
-But it has matured enough to declare it ready for experimental use by
+But it has matured enough to declare it ready for experimental use by a
 wide audience. Hopefully in a short term it could be dclared production
 ready as well.
 
