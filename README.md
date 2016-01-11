@@ -1,18 +1,36 @@
 MainMemory
-===========
+==========
 
-MainMemory is a light-weight framework for networked servers of all sorts.
-However efficient handling of in-memory workloads is its primary priority.
-As its first application MainMemory provides almost complete implementation
-of the memcached protocol.
+MainMemory project is intended to provide
 
-Potentially it could be used to implement any other protcol, for instance,
-redis protocol. Or something completely different like HTTP protocol thus
-allowing to implement a caching HTTP server.
+- a framework for network servers of all sorts;
+- some specific implementations of such servers.
 
-The purpose of the MainMemory project is a bit akin to SGI's State Threads
-Library (http://state-threads.sourceforge.net/). But MainMemory also aims
-to take full advantage of modern multi-core systems with larger RAM sizes.
+The purpose of the MainMemory project is akin to SGI's State Threads
+Library (http://state-threads.sourceforge.net/). But MainMemory also
+aims to take full advantage of modern multi-core systems with large
+RAM sizes.
+
+As the first application and testbed for the MainMemory framework
+the project provides almost complete implementation of the memcached
+protocol.
+
+In the future it could also be used to implement any other protcol,
+for instance, redis. Or something completely different like HTTP,
+WebDAV, WebSocket protocols thus allowing to implement a caching HTTP
+server, proxy, storage platform, or a pub-sub system.
+
+# Status
+
+The project is at early stage naw.
+
+It has been developed as a proof of concept and as a personal research
+vehicle for some time already. And it was run mostly against memslap and
+memtier benchmarks.
+
+But it has matured enough to declare it ready for experimental use by
+wide audience. Hopefully in a short term it could be dclared production
+ready as well.
 
 # Target Platforms
 
@@ -40,15 +58,16 @@ procedure is as follows:
 > make
 ```
 
-The resulting binary file is named 'mmem' and is located in the 'src'
-subdirectory.
+This produces few lubraries and a binary file is named 'mmem' located in
+the 'src' subdirectory. The 'mmem' file could be used as a replacement for
+your memcached.
 
 ## Single-Threaded and Multi-Threaded Builds
 
 MainMemory can be built in one of the two configurations:
 
 - single-threaded
-- or multi-threaded (SMT).
+- or multi-threaded (SMP).
 
 For the former option, run the configure script as follows:
 
@@ -64,10 +83,11 @@ For the later option, run the configure script as follows:
 
 ## What Build to Use
 
-The single-threaded version does not use the synchronization mechanisms of the
-multi-threaded version. Therefore it performs better (with higher throughput
-and smaller latency) until it hits the single-core execution limits.
+The single-threaded version does not use the synchronization mechanisms of
+the multi-threaded version. Therefore it performs better (with higher
+throughput and smaller latency) until it hits the single-core execution
+limits.
 
-As a rule of thumb if the required throughput of the server is less than about
-100k requests per second then it might be benefitical to use the single-threaded
-build. Otherwise the multi-threaded build is preferred.
+As a rule of thumb if the required throughput of the server is less than
+about 100k requests per second then it might be benefitical to use the
+single-threaded build. Otherwise the multi-threaded build is preferred.
