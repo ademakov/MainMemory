@@ -29,7 +29,7 @@ vehicle for some time already. And it was run mostly against memslap and
 memtier benchmarks.
 
 But it has matured enough to declare it ready for experimental use by a
-wide audience. Hopefully in a short term it could be dclared production
+wide audience. Hopefully in a short term it could be declared production
 ready as well.
 
 # Target Platforms
