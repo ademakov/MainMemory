@@ -43,7 +43,7 @@ And on a single FreeBSD instance running on a VM. Therefore any portability
 reports and/or patches are welcome.
 
 MainMemory includes a not-much-tested "generic architecture" port so there
-is a slim chance MainMemory will run on any non-x86 platform too. But most
+is a slim chance it will run on any non-x86 platform easily enough. But most
 likely it will take some extra work. In the future it is planed to have a
 native ARM port too.
 
