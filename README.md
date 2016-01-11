@@ -34,18 +34,18 @@ ready as well.
 
 # Target Platforms
 
-MainMemory intends to run on x86/x86-64 boxes with Linux or any BSD flavor
-OS including Mac OS/X. The key system requirement is the availability of
+MainMemory is intended to run on x86/x86-64 boxes with Linux or any BSD
+flavor OS including Mac OS/X. The key requirement is the availability of
 either epoll or kqueue API in addition to the standard POSIX API.
 
 However so far it has only been extensively tested on Linux and Mac OS/X.
-And on a single FreeBSD instance running on a VM. Therefore any reports
-and/or patches for other platforms are welcome.
+And on a single FreeBSD instance running on a VM. Therefore any portability
+reports and/or patches are welcome.
 
-As there is a not-yet-tested "generic architecture" port there is a slim
-chance MainMemory will run on any non-x86 platform too. But most likely
-it will take some extra work yet. In the future it is planed to have a
-native ARM port too,
+MainMemory includes a not-much-tested "generic architecture" port so there
+is a slim chance MainMemory will run on any non-x86 platform too. But most
+likely it will take some extra work. In the future it is planed to have a
+native ARM port too.
 
 # Build
 
