@@ -59,7 +59,9 @@
 
 struct mm_memcache_config
 {
+	const char *addr;
 	uint16_t port;
+
 	size_t volume;
 	mm_core_t nparts;
 

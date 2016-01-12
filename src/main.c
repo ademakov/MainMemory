@@ -43,8 +43,12 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#define ENABLE_TEST_SERVERS	0
+
+#if ENABLE_TEST_SERVERS
 static struct mm_net_server *mm_ucmd_server;
 static struct mm_net_server *mm_icmd_server;
+#endif
 
 static bool mm_daemonize = false;
 
@@ -86,6 +90,7 @@ mm_signal_init(void)
 	LEAVE();
 }
 
+#if ENABLE_TEST_SERVERS
 static void
 mm_cmd_reader(struct mm_net_socket *sock)
 {
@@ -104,6 +109,7 @@ mm_cmd_reader(struct mm_net_socket *sock)
 
 	LEAVE();
 }
+#endif
 
 static void
 mm_server_init(void)
@@ -119,6 +125,7 @@ mm_server_init(void)
 	mm_bitset_set(&event_loop_cores, 3);
 	mm_core_set_event_affinity(&event_loop_cores);
 
+#if ENABLE_TEST_SERVERS
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
 		.prepare = NULL,
@@ -134,12 +141,15 @@ mm_server_init(void)
 
 	//mm_core_register_server(mm_ucmd_server);
 	mm_core_register_server(mm_icmd_server);
+#endif
 
+	const char *addr = mm_settings_get("memcache-ip", "127.0.0.1");
 	uint32_t port = mm_settings_get_uint32("memcache-port", "11211");
 	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", "64");
 	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", "8");
 
 	struct mm_memcache_config memcache_config;
+	memcache_config.addr = addr;
 	memcache_config.port = port;
 	memcache_config.volume = mbytes * 1024 * 1024;
 	memcache_config.nparts = nparts;
@@ -170,8 +180,10 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	{ "thread-number", 't', MM_ARGS_REQUIRED,
 	  "\n\t\tnumber of threads" },
 	{ NULL, 0, 0, NULL },
+	{ "memcache-ip", 'l', MM_ARGS_REQUIRED,
+	  "\n\t\tmemcache server IP address to listen on" },
 	{ "memcache-port", 'p', MM_ARGS_REQUIRED,
-	  "\n\t\tmemcache TCP port" },
+	  "\n\t\tmemcache server TCP port" },
 	{ "memcache-memory", 'm', MM_ARGS_REQUIRED,
 	  "\n\t\tmemory for memcache items in megabytes" },
 	{ "memcache-partitions", 'M', MM_ARGS_REQUIRED,
