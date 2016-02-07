@@ -341,7 +341,7 @@ mm_event_receiver_reclaim_epoch(struct mm_event_receiver *receiver, uint32_t epo
 	while (!mm_stack_empty(stack)) {
 		struct mm_slink *link = mm_stack_remove(stack);
 		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-		ASSERT(sink->unregister_phase == MM_EVENT_CLEANUP);
+		ASSERT(sink->unregister_phase == MM_EVENT_DISABLE);
 		sink->unregister_phase = MM_EVENT_RECLAIM;
 		mm_event_convey(sink);
 	}
