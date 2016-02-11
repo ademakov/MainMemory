@@ -56,31 +56,36 @@ static struct mc_command_type *mc_binary_commands[256] = {
 };
 
 static bool
-mc_binary_fill(struct mc_parser *parser, uint32_t body_len)
+mc_binary_fill(struct mc_parser *parser, uint32_t required)
 {
-	uint32_t available = mm_slider_getsize_used(&parser->cursor);
-	if (body_len > available) {
-		mm_netbuf_demand(&parser->state->sock, body_len - available);
-		do {
-			ssize_t n = mm_netbuf_fill(&parser->state->sock);
-			if (n <= 0) {
-				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-					parser->state->error = true;
-				return false;
-			}
-			available += n;
-		} while (body_len > available);
-		mm_slider_reset_used(&parser->cursor);
+	uint32_t available = mm_netbuf_getleft(&parser->state->sock);
+	while (required > available) {
+		ssize_t n = mm_netbuf_fill(&parser->state->sock, required - available);
+		if (n <= 0) {
+			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+				parser->state->error = true;
+			return false;
+		}
+		available += n;
 	}
 	return true;
 }
 
 static bool
-mc_binary_skip(struct mc_parser *parser, uint32_t body_len)
+mc_binary_skip(struct mc_parser *parser, uint32_t required)
 {
-	if (!mc_binary_fill(parser, body_len))
-		return false;
-	mm_slider_flush(&parser->cursor, body_len);
+	for (;;) {
+		required -= mm_netbuf_reduce(&parser->state->sock, required);
+		if (required == 0)
+			break;
+
+		ssize_t n = mm_netbuf_fill(&parser->state->sock, required);
+		if (n <= 0) {
+			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+				parser->state->error = true;
+			return false;
+		}
+	}
 	return true;
 }
 
@@ -111,17 +116,17 @@ mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 {
 	struct mc_command *command = parser->command;
 
-	struct mm_slider *cursor = &parser->cursor;
-	if (unlikely(cursor->ptr == cursor->end))
-		mm_slider_next_used(cursor);
+	struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+	if (unlikely(iter->ptr == iter->end))
+		mm_netbuf_read_next(&parser->state->sock);
 
 	char *key;
-	if (cursor->ptr + key_len <= cursor->end) {
-		key = cursor->ptr;
-		cursor->ptr += key_len;
+	if (iter->ptr + key_len <= iter->end) {
+		key = iter->ptr;
+		iter->ptr += key_len;
 	} else {
 		key = mm_private_alloc(key_len);
-		mm_slider_read(cursor, key, key_len);
+		mm_netbuf_read(&parser->state->sock, key, key_len);
 		command->own_key = true;
 	}
 
@@ -152,7 +157,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 		uint32_t flags;
 		uint32_t exp_time;
 	} extras;
-	mm_slider_read(&parser->cursor, &extras, sizeof extras);
+	mm_netbuf_read(&parser->state->sock, &extras, sizeof extras);
 
 	// Read the key.
 	mc_binary_set_key(parser, key_len);
@@ -170,7 +175,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	// Read the entry value.
 	char *value = mc_entry_getvalue(entry);
-	mm_slider_read(&parser->cursor, value, entry->value_len);
+	mm_netbuf_read(&parser->state->sock, value, entry->value_len);
 
 	return true;
 }
@@ -190,15 +195,15 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	command->action.value_len = value_len;
 
 	// Read the value.
-	struct mm_slider *cursor = &parser->cursor;
-	if (unlikely(cursor->ptr == cursor->end))
-		mm_slider_next_used(cursor);
-	if (cursor->ptr + value_len <= cursor->end) {
-		command->action.alter_value = cursor->ptr;
-		cursor->ptr += value_len;
+	struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+	if (unlikely(iter->ptr == iter->end))
+		mm_netbuf_read_next(&parser->state->sock);
+	if (iter->ptr + value_len <= iter->end) {
+		command->action.alter_value = iter->ptr;
+		iter->ptr += value_len;
 	} else {
 		char *value = mm_private_alloc(value_len);
-		mm_slider_read(cursor, value, value_len);
+		mm_netbuf_read(&parser->state->sock, value, value_len);
 		command->action.alter_value = value;
 		command->own_alter_value = true;
 	}
@@ -219,7 +224,7 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 		uint64_t value;
 		uint32_t exp_time;
 	} extras;
-	mm_slider_read(&parser->cursor, &extras, 20);
+	mm_netbuf_read(&parser->state->sock, &extras, 20);
 
 	struct mc_command *command = parser->command;
 	command->delta = mm_ntohll(extras.delta);
@@ -239,7 +244,7 @@ mc_binary_read_flush(struct mc_parser *parser)
 		return false;
 
 	uint32_t exp_time;
-	mm_slider_read(&parser->cursor, &exp_time, sizeof exp_time);
+	mm_netbuf_read(&parser->state->sock, &exp_time, sizeof exp_time);
 
 	struct mc_command *command = parser->command;
 	command->exp_time = mm_ntohl(exp_time);
@@ -253,7 +258,7 @@ mc_binary_parse(struct mc_parser *parser)
 	ENTER();
 	bool rc = true;
 
-	size_t size = mm_slider_getsize_used(&parser->cursor);
+	size_t size = mm_netbuf_getleft(&parser->state->sock);
 	DEBUG("available bytes: %lu", size);
 	if (size < sizeof(struct mc_binary_header)) {
 		rc = false;
@@ -261,7 +266,7 @@ mc_binary_parse(struct mc_parser *parser)
 	}
 
 	struct mc_binary_header header;
-	mm_slider_read(&parser->cursor, &header, sizeof header);
+	mm_netbuf_read(&parser->state->sock, &header, sizeof header);
 	if (unlikely(header.magic != MC_BINARY_REQUEST)) {
 		parser->state->trash = true;
 		rc = false;

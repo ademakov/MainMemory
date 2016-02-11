@@ -20,16 +20,16 @@
 #ifndef MEMCACHE_PARSER_H
 #define MEMCACHE_PARSER_H
 
-#include "base/memory/slider.h"
+#include "base/memory/buffer.h"
 
 /* Forward declaration. */
 struct mc_state;
 
 struct mc_parser
 {
-	struct mm_slider cursor;
-	struct mc_command *command;
 	struct mc_state *state;
+	struct mc_command *command;
+	struct mm_buffer_position start;
 };
 
 void NONNULL(1, 2)

@@ -21,8 +21,8 @@
 #define NET_NETBUF_H
 
 #include "common.h"
+#include "base/log/debug.h"
 #include "base/memory/buffer.h"
-#include "base/memory/slider.h"
 #include "net/net.h"
 
 struct mm_netbuf_socket
@@ -30,10 +30,16 @@ struct mm_netbuf_socket
 	/* The client socket. */
 	struct mm_net_socket sock;
 	/* Receive buffer. */
-	struct mm_buffer rbuf;
+	struct mm_buffer rxbuf;
 	/* Transmit buffer. */
-	struct mm_buffer tbuf;
+	struct mm_buffer txbuf;
 };
+
+static inline mm_thread_t NONNULL(1)
+mm_netbuf_thread(struct mm_netbuf_socket *sock)
+{
+	return mm_event_target(&sock->sock.event);
+}
 
 void NONNULL(1)
 mm_netbuf_prepare(struct mm_netbuf_socket *sock);
@@ -42,10 +48,7 @@ void NONNULL(1)
 mm_netbuf_cleanup(struct mm_netbuf_socket *sock);
 
 ssize_t NONNULL(1)
-mm_netbuf_fill(struct mm_netbuf_socket *sock);
-
-ssize_t NONNULL(1)
-mm_netbuf_flush(struct mm_netbuf_socket *sock);
+mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt);
 
 ssize_t NONNULL(1, 2)
 mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
@@ -53,46 +56,57 @@ mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
 ssize_t NONNULL(1, 2)
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size);
 
-static inline mm_thread_t NONNULL(1)
-mm_netbuf_thread(struct mm_netbuf_socket *sock)
+ssize_t NONNULL(1)
+mm_netbuf_flush(struct mm_netbuf_socket *sock);
+
+static inline size_t NONNULL(1)
+mm_netbuf_empty(struct mm_netbuf_socket *sock)
 {
-	return mm_event_target(&sock->sock.event);
+	return mm_buffer_empty(&sock->rxbuf);
+}
+
+static inline size_t NONNULL(1)
+mm_netbuf_getleft(struct mm_netbuf_socket *sock)
+{
+	return mm_buffer_getleft(&sock->rxbuf);
+}
+
+static inline void NONNULL(1, 2)
+mm_netbuf_save_position(struct mm_netbuf_socket *sock, struct mm_buffer_position *pos)
+{
+	DEBUG("save read position");
+	mm_buffer_position_save(pos, &sock->rxbuf);
+}
+
+static inline void NONNULL(1, 2)
+mm_netbuf_restore_position(struct mm_netbuf_socket *sock, struct mm_buffer_position *pos)
+{
+	DEBUG("restore read position");
+	mm_buffer_position_save(pos, &sock->rxbuf);
+}
+
+static inline bool NONNULL(1)
+mm_netbuf_read_next(struct mm_netbuf_socket *sock)
+{
+	return mm_buffer_read_next(&sock->rxbuf);
 }
 
 static inline void NONNULL(1)
 mm_netbuf_read_reset(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_rectify(&sock->rbuf);
+	mm_buffer_rectify(&sock->rxbuf);
 }
 
 static inline void NONNULL(1)
 mm_netbuf_write_reset(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_rectify(&sock->tbuf);
+	mm_buffer_rectify(&sock->txbuf);
 }
 
-static inline void NONNULL(1)
-mm_netbuf_demand(struct mm_netbuf_socket *sock, size_t size)
-{
-	mm_buffer_demand(&sock->rbuf, size);
-}
-
-static inline void NONNULL(1)
+static inline ssize_t NONNULL(1)
 mm_netbuf_reduce(struct mm_netbuf_socket *sock, size_t size)
 {
-	mm_buffer_flush(&sock->rbuf, size);
-}
-
-static inline bool NONNULL(1)
-mm_netbuf_read_empty(struct mm_netbuf_socket *sock)
-{
-	return mm_buffer_empty(&sock->rbuf);
-}
-
-static inline bool NONNULL(1)
-mm_netbuf_read_first(struct mm_netbuf_socket *sock, struct mm_slider *cur)
-{
-	return mm_slider_first_used(cur, &sock->rbuf);
+	return mm_buffer_flush(&sock->rxbuf, size);
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)
@@ -102,7 +116,7 @@ static inline void NONNULL(1, 2)
 mm_netbuf_splice(struct mm_netbuf_socket *sock, char *data, size_t size,
 		 mm_buffer_release_t release, uintptr_t release_data)
 {
-	mm_buffer_splice(&sock->tbuf, data, size, release, release_data);
+	mm_buffer_splice(&sock->txbuf, data, size, size, release, release_data);
 }
 
 static inline void NONNULL(1)

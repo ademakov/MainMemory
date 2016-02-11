@@ -53,7 +53,6 @@ libmmbase_a_SOURCES = \
 	memory/memory.c memory/memory.h \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
-	memory/slider.c memory/slider.h \
 	memory/space.c memory/space.h \
 	thread/backoff.c thread/backoff.h \
 	thread/barrier.c thread/barrier.h \

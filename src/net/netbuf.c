@@ -26,65 +26,62 @@
 void NONNULL(1)
 mm_netbuf_prepare(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_prepare(&sock->rbuf);
-	mm_buffer_prepare(&sock->tbuf);
+	mm_buffer_prepare(&sock->rxbuf);
+	mm_buffer_prepare(&sock->txbuf);
 }
 
 void NONNULL(1)
 mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_cleanup(&sock->rbuf);
-	mm_buffer_cleanup(&sock->tbuf);
+	mm_buffer_cleanup(&sock->rxbuf);
+	mm_buffer_cleanup(&sock->txbuf);
 }
 
 ssize_t NONNULL(1)
-mm_netbuf_fill(struct mm_netbuf_socket *sock)
+mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
 {
 	ENTER();
 	ASSERT(mm_netbuf_thread(sock) == mm_thread_self());
+	ssize_t rc;
 
-	struct mm_buffer *rbuf = &sock->rbuf;
-
-	ssize_t n = 0;
+	size_t len = 0;
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
-	struct mm_slider cur;
-	bool rc = mm_slider_first_free(&cur, rbuf);
-	while (rc) {
-		size_t len = cur.end - cur.ptr;
-		if (likely(len)) {
-			n += len;
+	struct mm_buffer *buf = &sock->rxbuf;
+	struct mm_buffer_iterator *iter = &buf->tail;
+	for (;;) {
+		char *p = iter->ptr;
+		size_t n = iter->end - p;
+		if (likely(n)) {
+			len += n;
 
-			iov[iovcnt].iov_len = len;
-			iov[iovcnt].iov_base = cur.ptr;
+			iov[iovcnt].iov_len = n;
+			iov[iovcnt].iov_base = p;
 			++iovcnt;
 
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_slider_next_free(&cur);
+
+		if (cnt <= len)
+			break;
+
+		mm_buffer_write_next(buf, cnt - len);
 	}
 
-	if (unlikely(n <= 0)) {
-		n = -1;
-		errno = EINVAL;
-		goto leave;
-	}
+	if (iovcnt == 1)
+		rc = mm_net_read(&sock->sock, iov[0].iov_base, iov[0].iov_len);
+	else if (iovcnt)
+		rc = mm_net_readv(&sock->sock, iov, iovcnt, len);
+	else
+		rc = 0;
+	if (rc > 0)
+		mm_buffer_fill(buf, rc);
 
-	if (iovcnt == 1) {
-		n = mm_net_read(&sock->sock, iov[0].iov_base, iov[0].iov_len);
-	} else {
-		n = mm_net_readv(&sock->sock, iov, iovcnt, n);
-	}
-	if (n > 0) {
-		mm_buffer_fill(rbuf, n);
-	}
-
-leave:
-	DEBUG("n: %ld", (long) n);
+	DEBUG("rc: %ld", (long) rc);
 	LEAVE();
-	return n;
+	return rc;
 }
 
 ssize_t NONNULL(1)
@@ -92,61 +89,56 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
 	ASSERT(mm_netbuf_thread(sock) == mm_core_self());
+	ssize_t rc;
 
-	struct mm_buffer *tbuf = &sock->tbuf;
-
-	ssize_t n = 0;
+	size_t len = 0;
 	int iovcnt = 0;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
-	struct mm_slider cur;
-	bool rc = mm_slider_first_used(&cur, tbuf);
-	while (rc) {
-		size_t len = cur.end - cur.ptr;
-		if (likely(len)) {
-			n += len;
+	struct mm_buffer *buf = &sock->txbuf;
+	struct mm_buffer_iterator *iter = &buf->head;
+	for (;;) {
+		char *p = iter->ptr;
+		size_t n = iter->end - p;
+		if (likely(n)) {
+			len += n;
 
-			iov[iovcnt].iov_len = len;
-			iov[iovcnt].iov_base = cur.ptr;
+			iov[iovcnt].iov_len = n;
+			iov[iovcnt].iov_base = p;
 			++iovcnt;
 
 			if (unlikely(iovcnt == MM_NETBUF_MAXIOV))
 				break;
 		}
-		rc = mm_slider_next_used(&cur);
+
+		if (!mm_buffer_read_next(buf))
+			break;
 	}
 
-	if (unlikely(n <= 0)) {
-		n = -1;
-		errno = EINVAL;
-		goto leave;
-	}
+	if (iovcnt == 1)
+		rc = mm_net_write(&sock->sock, iov[0].iov_base, iov[0].iov_len);
+	else if (iovcnt)
+		rc = mm_net_writev(&sock->sock, iov, iovcnt, len);
+	else
+		rc = 0;
+	if (rc > 0)
+		mm_buffer_flush(buf, rc);
 
-	if (iovcnt == 1) {
-		n = mm_net_write(&sock->sock, iov[0].iov_base, iov[0].iov_len);
-	} else {
-		n = mm_net_writev(&sock->sock, iov, iovcnt, n);
-	}
-	if (n > 0) {
-		mm_buffer_flush(tbuf, n);
-	}
-
-leave:
-	DEBUG("n: %ld", (long) n);
+	DEBUG("rc: %ld", (long) rc);
 	LEAVE();
-	return n;
+	return rc;
 }
 
 ssize_t NONNULL(1, 2)
 mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes)
 {
-	return mm_buffer_read(&sock->rbuf, buffer, nbytes);
+	return mm_buffer_read(&sock->rxbuf, buffer, nbytes);
 }
 
 ssize_t NONNULL(1, 2)
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
 {
-	return mm_buffer_write(&sock->tbuf, data, size);
+	return mm_buffer_write(&sock->txbuf, data, size);
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)
@@ -154,6 +146,6 @@ mm_netbuf_printf(struct mm_netbuf_socket *sock, const char *restrict fmt, ...)
 {
 	va_list va;
 	va_start(va, fmt);
-	mm_buffer_vprintf(&sock->tbuf, fmt, va);
+	mm_buffer_vprintf(&sock->txbuf, fmt, va);
 	va_end(va);
 }

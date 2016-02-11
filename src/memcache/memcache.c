@@ -79,8 +79,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
-	mm_netbuf_demand(&state->sock, 1);
-	ssize_t n = mm_netbuf_fill(&state->sock);
+	ssize_t n = mm_netbuf_fill(&state->sock, 1);
 	mm_net_set_read_timeout(&state->sock.sock, MC_READ_TIMEOUT);
 
 retry:
@@ -119,25 +118,24 @@ parse:
 		}
 		if (state->trash) {
 			mm_netbuf_close(&state->sock);
-			mm_warning(0, "disconnect odd client");
+			mm_warning(0, "disconnect an odd client");
 			goto leave;
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_netbuf_demand(&state->sock, 1);
-		n = mm_netbuf_fill(&state->sock);
+		mm_netbuf_restore_position(&parser.state->sock, &parser.start);
+		n = mm_netbuf_fill(&state->sock, 1);
 		goto retry;
 	}
 
 	// Process the parsed command.
 	mc_process_command(state, parser.command);
 
-	// Mark the parsed input as consumed.
-	mm_slider_flush_used(&parser.cursor);
-
 	// If there is more input in the buffer then try to parse
 	// the next command.
-	if (!mm_slider_empty(&parser.cursor)) {
+	if (!mm_netbuf_empty(&parser.state->sock)) {
+		// Mark the parsed input as consumed.
+		mm_netbuf_save_position(&parser.state->sock, &parser.start);
 		parser.command = NULL;
 		goto parse;
 	}

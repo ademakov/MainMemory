@@ -34,12 +34,13 @@ void NONNULL(1, 2)
 mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 {
 	ENTER();
-	DEBUG("Start parser.");
+	DEBUG("start parser");
 
-	mm_netbuf_read_first(&state->sock, &parser->cursor);
+	parser->state = state;
+	parser->command = NULL;
 
 	if (state->protocol == MC_PROTOCOL_INIT) {
-		uint8_t c = * (uint8_t *) parser->cursor.ptr;
+		uint8_t c = *((uint8_t *) parser->state->sock.rxbuf.head.ptr);
 		if (c == MC_BINARY_REQUEST) {
 			DEBUG("binary protocol detected");
 			state->protocol = MC_PROTOCOL_BINARY;
@@ -49,8 +50,7 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 		}
 	}
 
-	parser->state = state;
-	parser->command = NULL;
+	mm_netbuf_save_position(&parser->state->sock, &parser->start);
 
 	LEAVE();
 }
@@ -58,20 +58,17 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 static bool
 mc_parser_scan_lf(struct mc_parser *parser, char *s)
 {
-	ASSERT(mm_slider_contains(&parser->cursor, s));
-
-	if ((s + 1) < parser->cursor.end)
-		return *(s + 1) == '\n';
-
-	struct mm_buffer *buf = &parser->state->sock.rbuf;
-	struct mm_buffer_segment *seg = parser->cursor.seg;
-	if (seg != buf->tail_seg) {
-		seg = seg->next;
-		if (seg != buf->tail_seg || buf->tail_off)
-			return seg->data[0] == '\n';
+	bool rc = false;
+	struct mm_buffer *buf = &parser->state->sock.rxbuf;
+	if ((s + 1) < buf->head.end) {
+		rc = (*(s + 1) == '\n');
+	} else {
+		struct mm_buffer_iterator iter = buf->head;
+		if (mm_buffer_iterator_next(&iter) && iter.ptr < iter.end)
+			rc = *iter.ptr == '\n';
 	}
-
-	return false;
+	DEBUG("nl=%d", rc);
+	return rc;
 }
 
 static bool
@@ -80,42 +77,38 @@ mc_parser_scan_value(struct mc_parser *parser)
 	ENTER();
 	bool rc = true;
 
-	struct mm_slider *cursor = &parser->cursor;
 	struct mc_command *command = parser->command;
 	struct mc_action *action = &command->action;
 
 	// Try to read the value and required LF and optional CR.
 	uint32_t required = action->value_len + 1;
-	uint32_t available = mm_slider_getsize_used(cursor);
-	if (required > available) {
-		mm_netbuf_demand(&parser->state->sock, required - available + 1);
-		do {
-			ssize_t n = mm_netbuf_fill(&parser->state->sock);
-			if (n <= 0) {
-				if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-					parser->state->error = true;
-				rc = false;
-				goto leave;
-			}
-			available += n;
-		} while (required > available);
-		mm_slider_reset_used(cursor);
+	uint32_t available = mm_netbuf_getleft(&parser->state->sock);
+	while (required > available) {
+		ssize_t n = mm_netbuf_fill(&parser->state->sock, required - available + 1);
+		if (n <= 0) {
+			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
+				parser->state->error = true;
+			rc = false;
+			goto leave;
+		}
+		available += n;
 	}
 
 	// Read the entry value.
 	if (action->alter_type == MC_ACTION_ALTER_OTHER) {
 		struct mc_entry *entry = action->new_entry;
 		char *value = mc_entry_getvalue(entry);
-		mm_slider_read(cursor, value, action->value_len);
+		mm_netbuf_read(&parser->state->sock, value, action->value_len);
 	} else {
-		if (unlikely(cursor->ptr == cursor->end))
-			mm_slider_next_used(cursor);
-		if (cursor->ptr + action->value_len <= cursor->end) {
-			action->alter_value = cursor->ptr;
-			cursor->ptr += action->value_len;
+		struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+		if (unlikely(iter->ptr == iter->end))
+			mm_netbuf_read_next(&parser->state->sock);
+		if (iter->ptr + action->value_len <= iter->end) {
+			action->alter_value = iter->ptr;
+			iter->ptr += action->value_len;
 		} else {
 			char *value = mm_private_alloc(action->value_len);
-			mm_slider_read(cursor, value, action->value_len);
+			mm_netbuf_read(&parser->state->sock, value, action->value_len);
 			action->alter_value = value;
 			command->own_alter_value = true;
 		}
@@ -212,7 +205,7 @@ mc_parser_parse(struct mc_parser *parser)
 	uint32_t set_exp_time = 0;
 
 	// The current command.
-	mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
+	const mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
 	struct mc_command *command = mc_command_create(thread);
 	parser->command = command;
 
@@ -220,10 +213,11 @@ mc_parser_parse(struct mc_parser *parser)
 	// too much junk data.
 	int count = 0;
 
+	struct mm_buffer_iterator *const iter = &parser->state->sock.rxbuf.head;
 	do {
 		// Get the input buffer position.
-		char *s = parser->cursor.ptr;
-		char *e = parser->cursor.end;
+		char *s = iter->ptr;
+		char *e = iter->end;
 		DEBUG("'%.*s'", (int) (e - s), s);
 
 		for (; s < e; s++) {
@@ -235,7 +229,7 @@ again:
 					// Skip space.
 					break;
 				} else if (unlikely(c == '\n')) {
-					DEBUG("Unexpected line end.");
+					DEBUG("unexpected line end");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -248,7 +242,7 @@ again:
 			case S_CMD_1:
 				// Store the second command char.
 				if (unlikely(c == '\n')) {
-					DEBUG("Unexpected line end.");
+					DEBUG("unexpected line end");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -260,7 +254,7 @@ again:
 			case S_CMD_2:
 				// Store the third command char.
 				if (unlikely(c == '\n')) {
-					DEBUG("Unexpected line end.");
+					DEBUG("unexpected line end");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -381,7 +375,7 @@ again:
 					shift = S_EOL;
 					break;
 				} else {
-					DEBUG("Unrecognized command.");
+					DEBUG("unrecognized command");
 					state = S_ERROR;
 					goto again;
 				}
@@ -391,26 +385,26 @@ again:
 				if (c == *match) {
 					// So far so good.
 					if (unlikely(c == 0)) {
-						// Hmm, zero byte in the input.
+						// Hmm, a zero byte in the input.
 						state = S_ERROR;
 						break;
 					}
 					match++;
 					break;
 				} else if (unlikely(*match)) {
-					// Unexpected char before the end.
+					DEBUG("unexpected char before the end");
 					state = S_ERROR;
 					goto again;
 				} else if (c == ' ') {
-					// It matched.
+					DEBUG("match");
 					state = S_SPACE;
 					break;
 				} else if (c == '\r' || c == '\n') {
-					// It matched as well.
+					DEBUG("match");
 					state = shift;
 					goto again;
 				} else {
-					DEBUG("Unexpected char after the end.");
+					DEBUG("unexpected char after the end");
 					state = S_ERROR;
 					break;
 				}
@@ -427,7 +421,7 @@ again:
 			case S_KEY:
 				ASSERT(c != ' ');
 				if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s)) || unlikely(c == '\n')) {
-					DEBUG("Missing key.");
+					DEBUG("missing key");
 					state = S_ERROR;
 					goto again;
 				} else {
@@ -440,7 +434,7 @@ again:
 				if (c == ' ') {
 					size_t len = s - command->action.key;
 					if (unlikely(len > MC_KEY_LEN_MAX)) {
-						DEBUG("Too long key.");
+						DEBUG("too long key");
 						state = S_ERROR;
 					} else {
 						state = S_SPACE;
@@ -450,7 +444,7 @@ again:
 				} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
 					size_t len = s - command->action.key;
 					if (len > MC_KEY_LEN_MAX) {
-						DEBUG("Too long key.");
+						DEBUG("too long key");
 						state = S_ERROR;
 					} else {
 						state = shift;
@@ -472,7 +466,7 @@ again:
 					command->action.key_len = MC_KEY_LEN_MAX;
 					goto again;
 				} else {
-					DEBUG("Too long key.");
+					DEBUG("too long key");
 					state = S_ERROR;
 					break;
 				}
@@ -487,7 +481,7 @@ again:
 				} else {
 					struct mc_action *action = &command->action;
 					if (action->key_len == MC_KEY_LEN_MAX) {
-						DEBUG("Too long key.");
+						DEBUG("too long key");
 						state = S_ERROR;
 					} else {
 						char *str = (char *) action->key;
@@ -805,12 +799,12 @@ again:
 				}
 
 			case S_VALUE_2:
-				parser->cursor.ptr = s;
+				iter->ptr = s;
 				rc = mc_parser_scan_value(parser);
 				if (unlikely(!rc))
 					goto leave;
-				s = parser->cursor.ptr;
-				e = parser->cursor.end;
+				s = iter->ptr;
+				e = iter->end;
 				state = S_EOL;
 				ASSERT(s < e);
 				c = *s;
@@ -825,9 +819,10 @@ again:
 				/* no break */
 			case S_EOL_1:
 				if (likely(c == '\n')) {
-					parser->cursor.ptr = s + 1;
+					iter->ptr = s + 1;
 					goto leave;
 				} else {
+					DEBUG("no eol");
 					state = S_ERROR;
 					break;
 				}
@@ -858,7 +853,7 @@ again:
 				/* no break */
 			case S_ERROR_1:
 				if (c == '\n') {
-					parser->cursor.ptr = s + 1;
+					iter->ptr = s + 1;
 					goto leave;
 				} else {
 					// Skip char.
@@ -870,7 +865,7 @@ again:
 			}
 		}
 
-		count += e - parser->cursor.ptr;
+		count += e - iter->ptr;
 		if (unlikely(count > 1024)) {
 			bool too_much = true;
 			if (command->type != NULL
@@ -887,11 +882,11 @@ again:
 		}
 
 		if (state == S_KEY_N) {
-			DEBUG("Split key.");
+			DEBUG("split key");
 
 			size_t len = e - command->action.key;
 			if (len > MC_KEY_LEN_MAX) {
-				DEBUG("Too long key.");
+				DEBUG("too long key");
 				state = S_ERROR;
 			} else if (len == MC_KEY_LEN_MAX) {
 				state = S_KEY_EDGE;
@@ -906,7 +901,7 @@ again:
 			}
 		}
 
-		rc = mm_slider_next_used(&parser->cursor);
+		rc = mm_netbuf_read_next(&parser->state->sock);
 
 	} while (rc);
 
