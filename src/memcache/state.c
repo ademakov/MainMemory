@@ -1,7 +1,7 @@
 /*
  * memcache/state.c - MainMemory memcache connection state.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,7 +38,6 @@ mc_state_free(struct mm_net_socket *sock)
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
 	mm_regular_free(state);
 
 	LEAVE();
@@ -50,11 +49,14 @@ mc_state_prepare(struct mm_net_socket *sock)
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
 	state->command_head = NULL;
 	state->command_tail = NULL;
 	state->protocol = MC_PROTOCOL_INIT;
 	state->error = false;
 	state->trash = false;
+
+	mm_netbuf_prepare(&state->sock);
 
 	LEAVE();
 }
@@ -73,20 +75,7 @@ mc_state_cleanup(struct mm_net_socket *sock)
 		mc_command_destroy(core, command);
 	}
 
-	if (mm_event_attached(&state->sock.sock.event)) {
-		mm_netbuf_cleanup(&state->sock);
-	}
-
-	LEAVE();
-}
-
-void
-mc_state_attach(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	mm_netbuf_prepare(&state->sock);
+	mm_netbuf_cleanup(&state->sock);
 
 	LEAVE();
 }
@@ -94,14 +83,10 @@ mc_state_attach(struct mm_net_socket *sock)
 bool
 mc_state_detach(struct mm_net_socket *sock)
 {
-	bool rc = false;
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	if (state->command_head == NULL) {
-		mm_netbuf_cleanup(&state->sock);
-		rc = true;
-	}
+	bool rc = (state->command_head == NULL);
 
 	LEAVE();
 	return rc;

@@ -1,7 +1,7 @@
 /*
  * memcache/memcache.c - MainMemory memcached protocol support.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -191,7 +191,7 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		.free = mc_state_free,
 		.prepare = mc_state_prepare,
 		.cleanup = mc_state_cleanup,
-		.attach = mc_state_attach,
+		.attach = NULL,
 		.detach = mc_state_detach,
 		.reader = mc_reader_routine,
 	};

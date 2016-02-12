@@ -1,7 +1,7 @@
 /*
  * memcache/state.h - MainMemory memcache connection state.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,7 +51,6 @@ struct mm_net_socket *mc_state_alloc(void);
 void mc_state_free(struct mm_net_socket *sock);
 void mc_state_prepare(struct mm_net_socket *sock);
 void mc_state_cleanup(struct mm_net_socket *sock);
-void mc_state_attach(struct mm_net_socket *sock);
 bool mc_state_detach(struct mm_net_socket *sock);
 
 static inline void
