@@ -1,7 +1,7 @@
 /*
  * base/memory/chunk.h - MainMemory memory chunks.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@
 struct mm_thread;
 
 /**********************************************************************
- * Chunk Tags.
+ * Chunk tags.
  **********************************************************************/
 
 #define MM_CHUNK_SHARED_MAX	((int) 3)
@@ -45,7 +45,7 @@ struct mm_thread;
 typedef uint16_t mm_chunk_t;
 
 /**********************************************************************
- * Chunk Access.
+ * Chunk access.
  **********************************************************************/
 
 #define MM_CHUNK_OVERHEAD (sizeof(struct mm_chunk) + MM_ALLOC_OVERHEAD)
@@ -121,8 +121,62 @@ mm_chunk_from_qlink(struct mm_qlink *link)
 #endif
 }
 
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_stack_head(struct mm_stack *stack)
+{
+	return mm_chunk_from_slink(mm_stack_head(stack));
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_stack_next(struct mm_chunk *chunk)
+{
+	return mm_chunk_from_slink(chunk->base.slink.next);
+}
+
+static inline void NONNULL(1, 2)
+mm_chunk_stack_insert(struct mm_stack *stack, struct mm_chunk *chunk)
+{
+	mm_stack_insert(stack, &chunk->base.slink);
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_stack_remove(struct mm_stack *stack)
+{
+	return mm_chunk_from_slink(mm_stack_remove(stack));
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_queue_head(struct mm_queue *queue)
+{
+	return mm_chunk_from_qlink(mm_queue_head(queue));
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_queue_next(struct mm_chunk *chunk)
+{
+	return mm_chunk_from_qlink(chunk->base.qlink.next);
+}
+
+static inline void NONNULL(1, 2)
+mm_chunk_queue_append(struct mm_queue *queue, struct mm_chunk *chunk)
+{
+	mm_queue_append(queue, &chunk->base.qlink);
+}
+
+static inline void NONNULL(1, 2)
+mm_chunk_queue_prepend(struct mm_queue *queue, struct mm_chunk *chunk)
+{
+	mm_queue_prepend(queue, &chunk->base.qlink);
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_queue_remove(struct mm_queue *queue)
+{
+	return mm_chunk_from_qlink(mm_queue_remove(queue));
+}
+
 /**********************************************************************
- * Chunk Creation and Destruction.
+ * Chunk creation and destruction.
  **********************************************************************/
 
 struct mm_chunk * MALLOC

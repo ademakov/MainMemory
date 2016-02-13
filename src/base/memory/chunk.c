@@ -1,7 +1,7 @@
 /*
  * base/memory/chunk.c - MainMemory chunks.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -144,29 +144,29 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	}
 
 	thread->deferred_chunks_count++;
-	mm_stack_insert(&thread->deferred_chunks, &chunk->base.slink);
+	mm_chunk_stack_insert(&thread->deferred_chunks, chunk);
 	mm_chunk_enqueue_deferred(thread, false);
 }
 
 void NONNULL(1)
 mm_chunk_destroy_stack(struct mm_stack *stack)
 {
-	struct mm_slink *link = mm_stack_head(stack);
-	while (link != NULL) {
-		struct mm_slink *next = link->next;
-		mm_chunk_destroy(mm_chunk_from_slink(link));
-		link = next;
+	struct mm_chunk *chunk = mm_chunk_stack_head(stack);
+	while (chunk != NULL) {
+		struct mm_chunk *next = mm_chunk_stack_next(chunk);
+		mm_chunk_destroy(chunk);
+		chunk = next;
 	}
 }
 
 void NONNULL(1)
 mm_chunk_destroy_queue(struct mm_queue *queue)
 {
-	struct mm_qlink *link = mm_queue_head(queue);
-	while (link != NULL) {
-		struct mm_qlink *next = link->next;
-		mm_chunk_destroy(mm_chunk_from_qlink(link));
-		link = next;
+	struct mm_chunk *chunk = mm_chunk_queue_head(queue);
+	while (chunk != NULL) {
+		struct mm_chunk *next = mm_chunk_queue_next(chunk);
+		mm_chunk_destroy(chunk);
+		chunk = next;
 	}
 }
 
@@ -190,8 +190,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 
 	// Try to submit the chunks to respective reclamation queues.
 	while (!mm_stack_empty(&chunks)) {
-		struct mm_slink *link = mm_stack_remove(&chunks);
-		struct mm_chunk *chunk = containerof(link, struct mm_chunk, base.slink);
+		struct mm_chunk *chunk = mm_chunk_stack_remove(&chunks);
 
 		struct mm_domain *domain = mm_regular_domain;
 #if ENABLE_SMP
@@ -209,7 +208,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 			} else if (backoff >= MM_BACKOFF_SMALL) {
 				// If failed to submit the chunk after a number
 				// of attempts then defer it again.
-				mm_stack_insert(&thread->deferred_chunks, link);
+				mm_chunk_stack_insert(&thread->deferred_chunks, chunk);
 				thread->deferred_chunks_count++;
 				break;
 			}

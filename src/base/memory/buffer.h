@@ -235,22 +235,25 @@ mm_buffer_iterator_prepare(struct mm_buffer_iterator *iter)
 	iter->ptr = iter->end = NULL;
 }
 
-static inline struct mm_buffer_segment * NONNULL(1)
+static inline struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_iterator_chunk_start(struct mm_buffer_iterator *iter, struct mm_chunk *chunk)
 {
-	if (chunk != NULL) {
-		iter->chunk = chunk;
-		iter->seg = mm_buffer_chunk_begin(chunk);
-		iter->sen = mm_buffer_chunk_end(chunk);
-		return iter->seg;
-	}
-	return NULL;
+	iter->chunk = chunk;
+	iter->seg = mm_buffer_chunk_begin(chunk);
+	iter->sen = mm_buffer_chunk_end(chunk);
+	return iter->seg;
+}
+
+static inline struct mm_buffer_segment * NONNULL(1)
+mm_buffer_iterator_start(struct mm_buffer_iterator *iter, struct mm_chunk *chunk)
+{
+	return chunk == NULL ? NULL : mm_buffer_iterator_chunk_start(iter, chunk);
 }
 
 static inline struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_iterator_begin(struct mm_buffer_iterator *iter, struct mm_buffer *buf)
 {
-	return mm_buffer_iterator_chunk_start(iter, mm_chunk_from_qlink(mm_queue_head(&buf->chunks)));
+	return mm_buffer_iterator_start(iter, mm_chunk_queue_head(&buf->chunks));
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
@@ -258,12 +261,13 @@ mm_buffer_iterator_next(struct mm_buffer_iterator *iter)
 {
 	if (iter->seg == NULL)
 		return NULL;
+
 	struct mm_buffer_segment *seg = mm_buffer_chunk_next(iter->seg);
 	if (seg != iter->sen) {
 		iter->seg = seg;
 		return seg;
 	}
-	return mm_buffer_iterator_chunk_start(iter, mm_chunk_from_qlink(iter->chunk->base.qlink.next));
+	return mm_buffer_iterator_start(iter, mm_chunk_queue_next(iter->chunk));
 }
 
 static inline void NONNULL(1)

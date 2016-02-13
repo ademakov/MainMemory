@@ -95,7 +95,7 @@ mm_buffer_rectify(struct mm_buffer *buf)
 			// If the chunk end is reached proceed to the next one.
 			if (last == iter.sen) {
 				struct mm_chunk *chunk = iter.chunk;
-				start = mm_buffer_iterator_chunk_start(&iter, mm_chunk_from_qlink(iter.chunk->base.qlink.next));
+				start = mm_buffer_iterator_chunk_start(&iter, mm_chunk_queue_next(iter.chunk));
 				last = start;
 				// Release the last chunk.
 				ASSERT(chunk == mm_chunk_from_qlink(mm_queue_head(&buf->chunks)));
@@ -158,7 +158,7 @@ mm_buffer_extend(struct mm_buffer *buf, size_t size)
 	// Create the buffer chunk.
 	DEBUG("create a buffer chunk of %u bytes", (unsigned) size);
 	struct mm_chunk *chunk = mm_chunk_create_private(size);
-	mm_queue_append(&buf->chunks, &chunk->base.qlink);
+	mm_chunk_queue_append(&buf->chunks, chunk);
 
 	// Initialize the initial segment within the chunk.
 	struct mm_buffer_segment *seg = mm_buffer_chunk_begin(chunk);
@@ -226,10 +226,10 @@ size_t NONNULL(1)
 mm_buffer_getsize(struct mm_buffer *buf)
 {
 	size_t size = 0;
-	struct mm_chunk *chunk = mm_chunk_from_qlink(mm_queue_head(&buf->chunks));
+	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
 	while (chunk != NULL) {
 		size += mm_buffer_chunk_getsize(chunk);
-		chunk = mm_chunk_from_qlink(chunk->base.qlink.next);
+		chunk = mm_chunk_queue_next(chunk);
 	}
 	return size;
 }
@@ -238,13 +238,11 @@ size_t NONNULL(1)
 mm_buffer_getarea(struct mm_buffer *buf)
 {
 	size_t size = 0;
-	if (mm_buffer_valid(buf)) {
-		struct mm_buffer_iterator iter;
-		struct mm_buffer_segment *seg = mm_buffer_iterator_begin(&iter, buf);
-		while (seg != NULL) {
-			size += mm_buffer_segment_getarea(seg);
-			seg = mm_buffer_iterator_next(&iter);
-		}
+	struct mm_buffer_iterator iter;
+	struct mm_buffer_segment *seg = mm_buffer_iterator_begin(&iter, buf);
+	while (seg != NULL) {
+		size += mm_buffer_segment_getarea(seg);
+		seg = mm_buffer_iterator_next(&iter);
 	}
 	return size;
 }
@@ -253,11 +251,9 @@ size_t NONNULL(1)
 mm_buffer_getleft(struct mm_buffer *buf)
 {
 	size_t size = buf->head.end - buf->head.ptr;
-	if (mm_buffer_valid(buf)) {
-		struct mm_buffer_iterator iter = buf->head;
-		while (mm_buffer_iterator_next(&iter))
-			size += mm_buffer_segment_getused(iter.seg);
-	}
+	struct mm_buffer_iterator iter = buf->head;
+	while (mm_buffer_iterator_next(&iter))
+		size += mm_buffer_segment_getused(iter.seg);
 	return size;
 }
 

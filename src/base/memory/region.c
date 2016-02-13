@@ -1,7 +1,7 @@
 /*
  * base/memory/region.c - MainMemory region allocator.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -68,7 +68,7 @@ mm_region_reserve(struct mm_region *reg, size_t more_size)
 	// Create a new memory chunk.
 	struct mm_chunk *chunk = mm_chunk_create(new_size);
 	reg->chunk_end = chunk->data + mm_chunk_getsize(chunk);
-	mm_stack_insert(&reg->chunks, &chunk->base.slink);
+	mm_chunk_stack_insert(&reg->chunks, chunk);
 
 	// Align the initial block address.
 	uintptr_t addr = (uintptr_t) chunk->data;
@@ -80,7 +80,7 @@ mm_region_reserve(struct mm_region *reg, size_t more_size)
 		memcpy(ptr, reg->block_ptr, old_size);
 
 		// Free the old chunk if it was entirely used for the old block.
-		struct mm_chunk *old_chunk = mm_chunk_from_slink(chunk->base.slink.next);
+		struct mm_chunk *old_chunk = mm_chunk_stack_next(chunk);
 		addr = (uintptr_t) old_chunk->data;
 		addr = mm_round_up(addr, MM_REGION_ALIGN);
 		if (reg->block_ptr == (char *) addr) {
