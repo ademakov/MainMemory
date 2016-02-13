@@ -215,12 +215,12 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 	} else if (core == NULL) {
 		// Submit it to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
-		mm_domain_send_1(domain, mm_core_post_work_req, (uintptr_t) work);
+		mm_domain_post_1(domain, mm_core_post_work_req, (uintptr_t) work);
 		mm_domain_notify(domain);
 	} else {
 		// Submit it to the thread request queue.
 		struct mm_thread *thread = core->thread;
-		mm_thread_send_1(thread, mm_core_post_work_req, (uintptr_t) work);
+		mm_thread_post_1(thread, mm_core_post_work_req, (uintptr_t) work);
 		mm_thread_notify(thread);
 	}
 
@@ -286,7 +286,7 @@ mm_core_run_task(struct mm_task *task)
 	} else {
 		// Submit the task to the thread request queue.
 		struct mm_thread *thread = task->core->thread;
-		mm_thread_send_1(thread, mm_core_run_task_req, (uintptr_t) task);
+		mm_thread_post_1(thread, mm_core_run_task_req, (uintptr_t) task);
 		mm_thread_notify(thread);
 	}
 #else

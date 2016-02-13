@@ -178,7 +178,7 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 		mm_memory_load_fence();
 		bool active = mm_memory_load(receiver->reclaim_active);
 		if (active) {
-			mm_thread_send_1(listener->thread, mm_event_dispatch_observe_req,
+			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
 					 (uintptr_t) receiver);
 			mm_event_listener_notify(listener);
 			return false;

@@ -196,25 +196,25 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_thread_send_1(thread, mm_event_receiver_forward_1,
+		mm_thread_post_1(thread, mm_event_receiver_forward_1,
 				 (uintptr_t) buffer->sinks[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_thread_send_2(thread, mm_event_receiver_forward_2,
+		mm_thread_post_2(thread, mm_event_receiver_forward_2,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1]);
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_thread_send_3(thread, mm_event_receiver_forward_3,
+		mm_thread_post_3(thread, mm_event_receiver_forward_3,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2]);
 		break;
 	case 4:
 		buffer->nsinks = 0;
-		mm_thread_send_4(thread, mm_event_receiver_forward_4,
+		mm_thread_post_4(thread, mm_event_receiver_forward_4,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
@@ -265,25 +265,25 @@ mm_event_receiver_publish_flush(struct mm_domain *domain, struct mm_event_receiv
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_domain_send_1(domain, mm_event_receiver_publish_1,
+		mm_domain_post_1(domain, mm_event_receiver_publish_1,
 				 (uintptr_t) buffer->sinks[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_domain_send_2(domain, mm_event_receiver_publish_2,
+		mm_domain_post_2(domain, mm_event_receiver_publish_2,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1]);
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_domain_send_3(domain, mm_event_receiver_publish_3,
+		mm_domain_post_3(domain, mm_event_receiver_publish_3,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2]);
 		break;
 	case 4:
 		buffer->nsinks = 0;
-		mm_domain_send_4(domain, mm_event_receiver_publish_4,
+		mm_domain_post_4(domain, mm_event_receiver_publish_4,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
