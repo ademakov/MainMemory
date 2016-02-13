@@ -304,25 +304,27 @@ mm_buffer_iterator_seek(struct mm_buffer_iterator *iter, struct mm_buffer_segmen
 static inline bool NONNULL(1)
 mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 {
-	if (iter->seg == NULL)
-		return false;
-	struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
-	if (seg == NULL)
-		return false;
-	mm_buffer_iterator_read_start(iter);
-	return true;
+	if (iter->seg != NULL) {
+		struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
+		if (seg != NULL) {
+			mm_buffer_iterator_read_start(iter);
+			return true;
+		}
+	}
+	return false;
 }
 
 static inline bool NONNULL(1)
 mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 {
-	if (iter->seg == NULL)
-		return false;
-	struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
-	if (seg == NULL)
-		return false;
-	mm_buffer_iterator_write_start(iter);
-	return true;
+	if (iter->seg != NULL) {
+		struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
+		if (seg != NULL) {
+			mm_buffer_iterator_write_start(iter);
+			return true;
+		}
+	}
+	return false;
 }
 
 /**********************************************************************
