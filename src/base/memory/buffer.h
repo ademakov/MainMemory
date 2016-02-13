@@ -259,9 +259,6 @@ mm_buffer_iterator_begin(struct mm_buffer_iterator *iter, struct mm_buffer *buf)
 static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_iterator_next(struct mm_buffer_iterator *iter)
 {
-	if (iter->seg == NULL)
-		return NULL;
-
 	struct mm_buffer_segment *seg = mm_buffer_chunk_next(iter->seg);
 	if (seg != iter->sen) {
 		iter->seg = seg;
@@ -296,27 +293,37 @@ mm_buffer_iterator_write_start(struct mm_buffer_iterator *iter)
 	mm_buffer_iterator_write_reset(iter);
 }
 
-#if 0
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_iterator_seek(struct mm_buffer_iterator *it, struct mm_buffer_segment *seg)
+mm_buffer_iterator_seek(struct mm_buffer_iterator *iter, struct mm_buffer_segment *seg)
 {
 	while (seg != NULL && mm_buffer_segment_ignored(seg))
-		seg = mm_buffer_iterator_next(it);
+		seg = mm_buffer_iterator_next(iter);
 	return seg;
 }
 
-static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_iterator_begin(struct mm_buffer_iterator *it, struct mm_buffer *buf)
+static inline bool NONNULL(1)
+mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 {
-	return mm_buffer_iterator_seek(it, mm_buffer_iterator_begin_low(it, buf));
+	if (iter->seg == NULL)
+		return false;
+	struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
+	if (seg == NULL)
+		return false;
+	mm_buffer_iterator_read_start(iter);
+	return true;
 }
 
-static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_iterator_next(struct mm_buffer_iterator *it)
+static inline bool NONNULL(1)
+mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 {
-	return mm_buffer_iterator_seek(it, mm_buffer_iterator_next_low(it));
+	if (iter->seg == NULL)
+		return false;
+	struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
+	if (seg == NULL)
+		return false;
+	mm_buffer_iterator_write_start(iter);
+	return true;
 }
-#endif
 
 /**********************************************************************
  * Buffer top-level routines.
@@ -347,44 +354,21 @@ mm_buffer_empty(struct mm_buffer *buf)
 }
 
 static inline void NONNULL(1)
-mm_buffer_read_reset(struct mm_buffer *buf)
+mm_buffer_update(struct mm_buffer *buf)
 {
 	mm_buffer_iterator_read_reset(&buf->head);
-}
-
-static inline void NONNULL(1)
-mm_buffer_write_reset(struct mm_buffer *buf)
-{
-	mm_buffer_iterator_write_reset(&buf->tail);
-}
-
-static inline void NONNULL(1)
-mm_buffer_read_start(struct mm_buffer *buf)
-{
-	mm_buffer_iterator_read_start(&buf->head);
-}
-
-static inline void NONNULL(1)
-mm_buffer_write_start(struct mm_buffer *buf)
-{
-	mm_buffer_iterator_write_start(&buf->tail);
 }
 
 static inline bool NONNULL(1)
 mm_buffer_read_next(struct mm_buffer *buf)
 {
-	if (!mm_buffer_iterator_next(&buf->head))
-		return false;
-	mm_buffer_read_start(buf);
-	return true;
+	return mm_buffer_iterator_read_next(&buf->head);
 }
 
 static inline void NONNULL(1)
 mm_buffer_write_next(struct mm_buffer *buf, size_t size)
 {
-	if (mm_buffer_iterator_next(&buf->tail))
-		mm_buffer_write_start(buf);
-	else
+	if (!mm_buffer_iterator_write_next(&buf->tail))
 		mm_buffer_extend(buf, size);
 }
 
@@ -451,7 +435,7 @@ mm_buffer_position_restore(struct mm_buffer_position *pos, struct mm_buffer *buf
 	buf->head.seg = pos->seg;
 	buf->head.sen = mm_buffer_chunk_end(pos->chunk);
 	buf->head.ptr = pos->ptr;
-	mm_buffer_read_reset(buf);
+	mm_buffer_update(buf);
 }
 
 #endif /* BASE_MEMORY_BUFFER_H */

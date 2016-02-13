@@ -1,7 +1,7 @@
 /*
  * memcache/parser.c - MainMemory memcache parser.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,7 +64,7 @@ mc_parser_scan_lf(struct mc_parser *parser, char *s)
 		rc = (*(s + 1) == '\n');
 	} else {
 		struct mm_buffer_iterator iter = buf->head;
-		if (mm_buffer_iterator_next(&iter) && iter.ptr < iter.end)
+		if (mm_buffer_iterator_read_next(&iter) && iter.ptr < iter.end)
 			rc = *iter.ptr == '\n';
 	}
 	DEBUG("nl=%d", rc);

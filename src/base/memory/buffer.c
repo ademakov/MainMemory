@@ -95,7 +95,7 @@ mm_buffer_rectify(struct mm_buffer *buf)
 			// If the chunk end is reached proceed to the next one.
 			if (last == iter.sen) {
 				struct mm_chunk *chunk = iter.chunk;
-				start = mm_buffer_iterator_chunk_start(&iter, mm_chunk_queue_next(iter.chunk));
+				start = mm_buffer_iterator_chunk_start(&iter, mm_chunk_queue_next(chunk));
 				last = start;
 				// Release the last chunk.
 				ASSERT(chunk == mm_chunk_from_qlink(mm_queue_head(&buf->chunks)));
@@ -130,9 +130,9 @@ mm_buffer_rectify(struct mm_buffer *buf)
 		if (buf->tail.seg == last) {
 			ASSERT(buf->tail.ptr == buf->head.ptr);
 			buf->tail.seg = start;
-			mm_buffer_write_start(buf);
+			mm_buffer_iterator_write_start(&buf->tail);
 		}
-		mm_buffer_read_start(buf);
+		mm_buffer_iterator_read_start(&buf->head);
 	}
 
 leave:
@@ -169,12 +169,12 @@ mm_buffer_extend(struct mm_buffer *buf, size_t size)
 	// Initialize the head position for the first buffer chunk.
 	if (first) {
 		mm_buffer_iterator_chunk_start(&buf->head, chunk);
-		mm_buffer_read_start(buf);
+		mm_buffer_iterator_read_start(&buf->head);
 	}
 
 	// Initialize the tail position.
 	mm_buffer_iterator_chunk_start(&buf->tail, chunk);
-	mm_buffer_write_start(buf);
+	mm_buffer_iterator_write_start(&buf->tail);
 
 	LEAVE();
 	return seg;
@@ -216,7 +216,7 @@ mm_buffer_insert(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
 		seg->used = 0;
 
 		buf->tail.seg = seg;
-		mm_buffer_write_start(buf);
+		mm_buffer_iterator_write_start(&buf->tail);
 	}
 
 	return res;
@@ -250,6 +250,9 @@ mm_buffer_getarea(struct mm_buffer *buf)
 size_t NONNULL(1)
 mm_buffer_getleft(struct mm_buffer *buf)
 {
+	if (unlikely(!mm_buffer_valid(buf)))
+		return 0;
+
 	size_t size = buf->head.end - buf->head.ptr;
 	struct mm_buffer_iterator iter = buf->head;
 	while (mm_buffer_iterator_next(&iter))
@@ -287,7 +290,7 @@ mm_buffer_fill(struct mm_buffer *buf, size_t cnt)
 		mm_buffer_write_next(buf, left);
 	}
 
-	mm_buffer_read_reset(buf);
+	mm_buffer_update(buf);
 
 	LEAVE();
 	return (cnt - left);
@@ -393,7 +396,7 @@ mm_buffer_write(struct mm_buffer *buf, const void *ptr, size_t cnt)
 		mm_buffer_write_next(buf, left);
 	}
 
-	mm_buffer_read_reset(buf);
+	mm_buffer_update(buf);
 
 	LEAVE();
 	return (cnt - left);
