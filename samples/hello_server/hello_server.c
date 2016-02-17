@@ -65,6 +65,26 @@ static const struct mm_args_info args_tbl[] = {
 // Command line arguments table size.
 static const size_t args_cnt = sizeof(args_tbl) / sizeof(args_tbl[0]);
 
+static void
+read_message(const char *file)
+{
+	int fd = open(file, O_RDONLY);
+	if (fd < 0)
+		mm_fatal(errno, "open()");
+
+	struct stat st;
+	if (fstat(fd, &st) < 0)
+		mm_fatal(errno, "fstat()");
+
+	message_len = st.st_size;
+	char *buffer = mm_global_alloc(message_len);
+	message = buffer;
+
+	if (mm_read(fd, buffer, message_len) != (ssize_t) message_len)
+		mm_fatal(errno, "read()");
+	mm_close(fd);
+}
+
 int
 main(int argc, char *argv[])
 {
@@ -85,31 +105,14 @@ main(int argc, char *argv[])
 	if (port == 0 || port > UINT16_MAX)
 		mm_fatal(0, "no valid port number is specified");
 
-	// Get the server response message from a file.
+	// Get the server response message.
 	const char *file =  mm_settings_get("message-file", NULL);
 	if (file != NULL) {
 		if (mm_settings_get("message", NULL) != NULL)
-			mm_fatal(0, "message and message-file options are mutually exclusive");
-
-		int fd = open(file, O_RDONLY);
-		if (fd < 0)
-			mm_fatal(errno, "open()");
-
-		struct stat st;
-		if (fstat(fd, &st) < 0)
-			mm_fatal(errno, "fstat()");
-
-		message_len = st.st_size;
-		char *buffer = mm_global_alloc(message_len);
-		message = buffer;
-
-		if (mm_read(fd, buffer, message_len) != (ssize_t) message_len)
-			mm_fatal(errno, "read()");
-		mm_close(fd);
-	}
-
-	// Get the server response message.
-	if (message == NULL) {
+			mm_fatal(0, "the options message and message-file"
+				    " are mutually exclusive");
+		read_message(file);
+	} else {
 		message = mm_settings_get("message", "Hello, World!");
 		message_len = strlen(message);
 	}
@@ -122,7 +125,7 @@ main(int argc, char *argv[])
 	server = mm_net_create_inet_server("hello", &proto, "0.0.0.0", port);
 	mm_core_register_server(server);
 
-	// Assign event loops to the first core.
+	// Assign event loop to the first core.
 	struct mm_bitset event_loop_cores;
 	mm_bitset_prepare(&event_loop_cores, &mm_global_arena, 4);
 	mm_bitset_set(&event_loop_cores, 0);
