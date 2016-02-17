@@ -249,13 +249,13 @@ mm_args_usage(size_t ninfo, const struct mm_args_info *info)
 	for (size_t i = 0; i < ninfo; i++) {
 		const struct mm_args_info *p = &info[i];
 
-		const char **arg = mm_args_none;
-		if (p->param != MM_ARGS_TRIVIAL || p->param == MM_ARGS_SPECIAL) {
-			if (p->param == MM_ARGS_OPTIONAL)
-				arg = mm_args_optional;
-			else
-				arg = mm_args_required;
-		}
+		const char **arg;
+		if (p->param == MM_ARGS_OPTIONAL)
+			arg = mm_args_optional;
+		else if (p->param == MM_ARGS_REQUIRED)
+			arg = mm_args_required;
+		else
+			arg = mm_args_none;
 
 		mm_log_fmt("  ");
 		if (p->flag)
