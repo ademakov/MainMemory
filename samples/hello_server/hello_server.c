@@ -131,7 +131,7 @@ main(int argc, char *argv[])
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {
 		mm_daemon_start();
-		mm_daemon_stdio(NULL, "mmem.log");
+		mm_daemon_stdio(NULL, "hello_server.log");
 		mm_daemon_notify();
 	}
 
