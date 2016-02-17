@@ -126,5 +126,7 @@ AC_CONFIG_FILES([
 	src/memcache/Makefile
 	tests/Makefile
 	tests/base/Makefile
-	tests/unit/Makefile])
+	tests/unit/Makefile
+	samples/Makefile
+	samples/hello_server/Makefile])
 AC_OUTPUT
