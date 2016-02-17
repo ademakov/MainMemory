@@ -30,9 +30,8 @@ mm_runq_prepare(struct mm_runq *runq)
 	ASSERT(MM_RUNQ_BINS <= (8 * sizeof(runq->bmap)));
 
 	runq->bmap = 0;
-	for (int i = 0; i < MM_RUNQ_BINS; i++) {
+	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_list_prepare(&runq->bins[i]);
-	}
 
 	LEAVE();
 }
@@ -47,7 +46,7 @@ mm_runq_get(struct mm_runq *runq)
 	ASSERT(!mm_list_empty(&runq->bins[priority]));
 
 	struct mm_link *link = mm_list_remove_head(&runq->bins[priority]);
-	struct mm_task *task = task = containerof(link, struct mm_task, queue);
+	struct mm_task *task = containerof(link, struct mm_task, queue);
 	if (mm_list_empty(&runq->bins[priority]))
 		runq->bmap &= ~(1 << priority);
 	ASSERT(priority == task->priority);
