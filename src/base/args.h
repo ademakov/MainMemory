@@ -45,7 +45,7 @@ struct mm_args_info
 };
 
 void NONNULL(2)
-mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info);
+mm_args_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info);
 
 const char *
 mm_args_getname(void);
@@ -57,6 +57,6 @@ char **
 mm_args_getargv(void);
 
 void
-mm_args_usage(size_t ninfo, struct mm_args_info *info);
+mm_args_usage(size_t ninfo, const struct mm_args_info *info);
 
 #endif /* BASE_ARGS_H */

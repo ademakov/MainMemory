@@ -66,14 +66,14 @@ mm_args_final_shift(uint32_t idx)
 }
 
 static void NORETURN
-mm_args_error(size_t ninfo, struct mm_args_info *info)
+mm_args_error(size_t ninfo, const struct mm_args_info *info)
 {
 	mm_args_usage(ninfo, info);
 	mm_exit(MM_EXIT_USAGE);
 }
 
 static uint32_t
-mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
+mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 {
 	char *arg = &mm_args_argv[idx][2];
 	size_t len = strlen(arg);
@@ -84,9 +84,9 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 	if (unlikely(len == 0))
 		mm_args_error(ninfo, info);
 
-	struct mm_args_info *arginfo = NULL;
+	const struct mm_args_info *arginfo = NULL;
 	for (size_t i = 0; i < ninfo; i++) {
-		struct mm_args_info *p = &info[i];
+		const struct mm_args_info *p = &info[i];
 		if (strlen(p->name) == len && memcmp(p->name, arg, len) == 0) {
 			arginfo = p;
 			break;
@@ -115,13 +115,13 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 }
 
 static uint32_t
-mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
+mm_args_parse_flags(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 {
 	const char *arg = &mm_args_argv[idx][1];
 	for (int flag = *arg++; flag; flag = *arg++) {
-		struct mm_args_info *arginfo = NULL;
+		const struct mm_args_info *arginfo = NULL;
 		for (size_t i = 0; i < ninfo; i++) {
-			struct mm_args_info *p = &info[i];
+			const struct mm_args_info *p = &info[i];
 			if (flag == p->flag) {
 				arginfo = p;
 				break;
@@ -150,7 +150,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, struct mm_args_info *info)
 }
 
 static void
-mm_args_parse(size_t ninfo, struct mm_args_info *info)
+mm_args_parse(size_t ninfo, const struct mm_args_info *info)
 {
 	uint32_t idx = 1;
 	while ((idx + mm_args_extc) < mm_args_argc) {
@@ -183,7 +183,7 @@ mm_args_parse(size_t ninfo, struct mm_args_info *info)
  **********************************************************************/
 
 void NONNULL(2)
-mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
+mm_args_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 {
 	if (unlikely(argc <= 0))
 		mm_fatal(0, "Missing command line arguments");
@@ -199,7 +199,7 @@ mm_args_init(int argc, char *argv[], size_t ninfo, struct mm_args_info *info)
 		mm_args_name = argv[0];
 
 	for (size_t i = 0; i < ninfo; i++) {
-		struct mm_args_info *p = &info[i];
+		const struct mm_args_info *p = &info[i];
 		if (p->name != NULL && p->param != MM_ARGS_SPECIAL) {
 			if (p->param == MM_ARGS_TRIVIAL)
 				mm_settings_settype(p->name, MM_SETTINGS_TRIVIAL);
@@ -242,12 +242,12 @@ static const char *mm_args_required[] = { " <ARG>", "=<ARG>" };
 static const char *mm_args_optional[] = { " [<ARG>]", "=[<ARG>]" };
 
 void
-mm_args_usage(size_t ninfo, struct mm_args_info *info)
+mm_args_usage(size_t ninfo, const struct mm_args_info *info)
 {
 	mm_log_fmt("Usage: %s [options]\n", mm_args_getname());
 	mm_log_fmt("Options:\n");
 	for (size_t i = 0; i < ninfo; i++) {
-		struct mm_args_info *p = &info[i];
+		const struct mm_args_info *p = &info[i];
 
 		const char **arg = mm_args_none;
 		if (p->param != MM_ARGS_TRIVIAL || p->param == MM_ARGS_SPECIAL) {
