@@ -5,7 +5,10 @@ AM_CFLAGS = -Wall -Wextra
 
 bin_PROGRAMS = mmem
 
+lib_LTLIBRARIES = libmm.la
+
 core_sources = \
+	common.h \
 	core/async.c core/async.h \
 	core/combiner.c core/combiner.h \
 	core/core.c core/core.h \
@@ -22,8 +25,8 @@ net_sources = \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h
 
-mmem_SOURCES = \
-	$(core_sources) $(net_sources) \
-	common.h main.c
+libmm_la_SOURCES = $(core_sources) $(net_sources)
+libmm_la_LIBADD = base/libmmbase.la arch/libmmarch.la
 
-mmem_LDADD = memcache/libmemcache.a base/libmmbase.a arch/libmmarch.a
+mmem_SOURCES = main.c
+mmem_LDADD = memcache/libmemcache.a libmm.la

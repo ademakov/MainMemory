@@ -34,7 +34,7 @@ AM_CONDITIONAL([ARCH_X86], [test "$arch" = "x86"])
 AM_CONDITIONAL([ARCH_X86_64], [test "$arch" = "x86-64"])
 AM_CONDITIONAL([ARCH_GENERIC], [test "$arch" = "generic"])
 
-dnl check for API variants
+dnl Check for API variants.
 AC_GNU_SOURCE
 #case "$host" in
 #        *-*-darwin*)
@@ -49,7 +49,9 @@ AC_PROG_CC_C99
 AM_PROG_CC_C_O
 AM_PROG_AR
 AM_PROG_AS
-AC_PROG_RANLIB
+
+dnl Initialize libtool.
+LT_INIT([disable-shared])
 
 dnl Checks for libraries.
 AC_SEARCH_LIBS([clock_gettime], [rt])

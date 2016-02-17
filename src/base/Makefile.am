@@ -1,10 +1,10 @@
 
-noinst_LIBRARIES = libmmbase.a
+noinst_LTLIBRARIES = libmmbase.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 
-libmmbase_a_SOURCES = \
+libmmbase_la_SOURCES = \
 	args.c args.h \
 	base.c base.h \
 	bitops.h \
