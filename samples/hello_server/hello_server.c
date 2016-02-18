@@ -31,20 +31,20 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-static void writer(struct mm_net_socket *sock);
+static void hello_writer(struct mm_net_socket *sock);
 
 // Server descriptor.
-static struct mm_net_proto proto = {
+static struct mm_net_proto hello_proto = {
 	.flags = MM_NET_OUTBOUND,
-	.writer = writer,
+	.writer = hello_writer,
 };
 
 // Server instance.
-static struct mm_net_server *server;
+static struct mm_net_server *hello_server;
 
 // Server response message.
-static const char *message;
-static size_t message_len;
+static const char *hello_msg;
+static size_t hello_len;
 
 // Command line arguments table.
 static const struct mm_args_info args_tbl[] = {
@@ -65,7 +65,7 @@ static const struct mm_args_info args_tbl[] = {
 static const size_t args_cnt = sizeof(args_tbl) / sizeof(args_tbl[0]);
 
 static void
-read_message(const char *file)
+read_hello_message(const char *file)
 {
 	int fd = open(file, O_RDONLY);
 	if (fd < 0)
@@ -75,11 +75,11 @@ read_message(const char *file)
 	if (fstat(fd, &st) < 0)
 		mm_fatal(errno, "fstat()");
 
-	message_len = st.st_size;
-	char *buffer = mm_global_alloc(message_len);
-	message = buffer;
+	hello_len = st.st_size;
+	char *buffer = mm_global_alloc(hello_len);
+	hello_msg = buffer;
 
-	if (mm_read(fd, buffer, message_len) != (ssize_t) message_len)
+	if (mm_read(fd, buffer, hello_len) != (ssize_t) hello_len)
 		mm_fatal(errno, "read()");
 	mm_close(fd);
 }
@@ -105,15 +105,15 @@ main(int argc, char *argv[])
 		mm_fatal(0, "no valid port number is specified");
 
 	// Get the server response message.
-	const char *file =  mm_settings_get("message-file", NULL);
+	const char *file = mm_settings_get("message-file", NULL);
 	if (file != NULL) {
 		if (mm_settings_get("message", NULL) != NULL)
 			mm_fatal(0, "the options message and message-file"
 				    " are mutually exclusive");
-		read_message(file);
+		read_hello_message(file);
 	} else {
-		message = mm_settings_get("message", "Hello, World!");
-		message_len = strlen(message);
+		hello_msg = mm_settings_get("message", "Hello, World!");
+		hello_len = strlen(hello_msg);
 	}
 
 	// Initialize subsystems.
@@ -121,8 +121,9 @@ main(int argc, char *argv[])
 	mm_core_init();
 
 	// Create the server.
-	server = mm_net_create_inet_server("hello", &proto, "0.0.0.0", port);
-	mm_core_register_server(server);
+	hello_server = mm_net_create_inet_server("hello", &hello_proto,
+						 "0.0.0.0", port);
+	mm_core_register_server(hello_server);
 
 	// Assign event loop to the first core.
 	struct mm_bitset event_loop_cores;
@@ -149,10 +150,10 @@ main(int argc, char *argv[])
 }
 
 static void
-writer(struct mm_net_socket *sock)
+hello_writer(struct mm_net_socket *sock)
 {
-	const char *msg = message;
-	size_t len = message_len;
+	const char *msg = hello_msg;
+	size_t len = hello_len;
 	while (len) {
 		ssize_t n = mm_net_write(sock, msg, len);
 		if (n <= 0)
