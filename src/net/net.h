@@ -36,23 +36,27 @@
 struct mm_task;
 
 /* Protocol flags. */
-#define MM_NET_INBOUND		0x01
-#define MM_NET_OUTBOUND		0x02
+#define MM_NET_INBOUND		0x0001
+#define MM_NET_OUTBOUND		0x0002
 
-/* Socket I/O flags. */
-#define MM_NET_READ_READY	0x01
-#define MM_NET_WRITE_READY	0x02
-#define MM_NET_READ_ERROR	0x04
-#define MM_NET_WRITE_ERROR	0x08
-#define MM_NET_READER_SPAWNED	0x10
-#define MM_NET_WRITER_SPAWNED	0x20
-#define MM_NET_READER_PENDING	0x40
-#define MM_NET_WRITER_PENDING	0x80
+/* Connection flags. */
+#define MM_NET_CONNECTION	0x0004
+#define MM_NET_CONNECTING	0x0008
 
 /* Socket close flags. */
-#define MM_NET_CLOSED		0x01
-#define MM_NET_READER_SHUTDOWN	0x02
-#define MM_NET_WRITER_SHUTDOWN	0x04
+#define MM_NET_CLOSED		0x0010
+#define MM_NET_READER_SHUTDOWN	0x0020
+#define MM_NET_WRITER_SHUTDOWN	0x0040
+
+/* Socket I/O flags. */
+#define MM_NET_READ_READY	0x0100
+#define MM_NET_WRITE_READY	0x0200
+#define MM_NET_READ_ERROR	0x0400
+#define MM_NET_WRITE_ERROR	0x0800
+#define MM_NET_READER_SPAWNED	0x1000
+#define MM_NET_WRITER_SPAWNED	0x2000
+#define MM_NET_READER_PENDING	0x4000
+#define MM_NET_WRITER_PENDING	0x8000
 
 /* Socket address. */
 struct mm_net_addr
@@ -116,16 +120,18 @@ struct mm_net_socket
 	mm_timeout_t write_timeout;
 
 	/* Socket flags. */
-	uint8_t flags;
-	uint8_t close_flags;
+	uint16_t flags;
+
+	/* The server's thread. */
+	mm_thread_t server_thread;
 
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
 	struct mm_work write_work;
 	struct mm_work cleanup_work;
 
-	/* Socket server. */
-	struct mm_net_server *server;
+	/* Socket protocol handlers. */
+	struct mm_net_proto *proto;
 
 	/* A link in the server's list of all client sockets. */
 	struct mm_link clients;
@@ -137,7 +143,7 @@ struct mm_net_socket
 /* Protocol handler. */
 struct mm_net_proto
 {
-	int flags;
+	uint16_t flags;
 
 	struct mm_net_socket * (*alloc)(void);
 	void (*free)(struct mm_net_socket *);
@@ -210,19 +216,19 @@ mm_net_shutdown_writer(struct mm_net_socket *sock);
 static inline bool NONNULL(1)
 mm_net_is_closed(struct mm_net_socket *sock)
 {
-	return (sock->close_flags & MM_NET_CLOSED) != 0;
+	return (sock->flags & MM_NET_CLOSED) != 0;
 }
 
 static inline bool NONNULL(1)
 mm_net_is_reader_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
+	return (sock->flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
 }
 
 static inline bool NONNULL(1)
 mm_net_is_writer_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->close_flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
+	return (sock->flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
 }
 
 static inline void NONNULL(1)

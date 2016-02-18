@@ -294,35 +294,47 @@ mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 }
 
 static void
-mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
+mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_proto *proto, struct mm_net_server *srv)
 {
-	// Prepare the event data.
-	mm_event_occurrence_t input = MM_EVENT_REGULAR;
-	mm_event_occurrence_t output = MM_EVENT_REGULAR;
-	mm_event_affinity_t affinity = MM_EVENT_BOUND;
-	if (!(srv->proto->flags & MM_NET_INBOUND))
-		input = MM_EVENT_ONESHOT;
-	if (!(srv->proto->flags & MM_NET_OUTBOUND))
-		output = MM_EVENT_ONESHOT;
-	if (srv->proto->detach != NULL)
-		affinity = MM_EVENT_AGILE;
-	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
-			    input, output, affinity);
-
-	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock,
-			mm_net_reader_complete);
-	mm_work_prepare(&sock->write_work, mm_net_writer, (mm_value_t) sock,
-			mm_net_writer_complete);
-	mm_work_prepare(&sock->cleanup_work, mm_net_cleanup, (mm_value_t) sock,
-			mm_work_complete_noop);
-
-	sock->flags = 0;
-	sock->close_flags = 0;
+	sock->proto = proto;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->reader = NULL;
 	sock->writer = NULL;
-	sock->server = srv;
+
+	// Remember the server thread if any.
+	if (srv != NULL) {
+		sock->server_thread = mm_event_target(&srv->event);
+		ASSERT(sock->server_thread != MM_THREAD_NONE);
+	} else {
+		sock->server_thread = MM_THREAD_NONE;
+	}
+
+	// Figure out flags.
+	uint16_t flags = proto->flags & (MM_NET_INBOUND | MM_NET_OUTBOUND);
+	if (flags == 0) {
+		if (proto->reader != NULL)
+			flags |= MM_NET_INBOUND;
+		if (proto->writer != NULL)
+			flags |= MM_NET_OUTBOUND;
+	} else {
+		if (proto->reader == NULL)
+			flags &= ~MM_NET_INBOUND;
+		if (proto->writer == NULL)
+			flags &= ~MM_NET_OUTBOUND;
+	}
+	sock->flags = flags;
+
+	// Prepare the event sink.
+	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+	mm_event_affinity_t affinity = proto->detach != NULL ? MM_EVENT_AGILE : MM_EVENT_BOUND;
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid, input, output, affinity);
+
+	// Prepare the work items.
+	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock, mm_net_reader_complete);
+	mm_work_prepare(&sock->write_work, mm_net_writer, (mm_value_t) sock, mm_net_writer_complete);
+	mm_work_prepare(&sock->cleanup_work, mm_net_cleanup, (mm_value_t) sock, mm_work_complete_noop);
 }
 
 static void
@@ -371,7 +383,7 @@ mm_net_create_socket(struct mm_net_server *srv, int fd)
 
 	// Initialize the fields.
 	if (likely(sock != NULL))
-		mm_net_prepare_socket(sock, fd, srv);
+		mm_net_prepare_socket(sock, fd, srv->proto, srv);
 
 	LEAVE();
 	return sock;
@@ -384,8 +396,8 @@ mm_net_destroy_socket(struct mm_net_socket *sock)
 
 	mm_net_cleanup_socket(sock);
 
-	if (sock->server->proto->free != NULL)
-		(sock->server->proto->free)(sock);
+	if (sock->proto->free != NULL)
+		(sock->proto->free)(sock);
 	else
 		mm_pool_free(&mm_socket_pool, sock);
 
@@ -516,7 +528,7 @@ mm_net_init_accept_handler(void)
  **********************************************************************/
 
 static void
-mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
+mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -531,7 +543,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 		// Check to see if a new reader should be spawned.
 		flags = sock->flags & (MM_NET_READER_SPAWNED | MM_NET_READER_PENDING);
 		if (flags == MM_NET_READER_PENDING) {
-			if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
+			if ((sock->flags & MM_NET_INBOUND) == 0)
 				sock->flags &= ~MM_NET_READER_PENDING;
 			// Remember a reader has been started.
 			sock->flags |= MM_NET_READER_SPAWNED;
@@ -545,7 +557,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint8_t flags)
 }
 
 static void
-mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
+mm_net_set_write_ready(struct mm_net_socket *sock, uint16_t flags)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -560,7 +572,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint8_t flags)
 		// Check to see if a new writer should be spawned.
 		flags = sock->flags & (MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING);
 		if (flags == MM_NET_WRITER_PENDING) {
-			if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
+			if ((sock->flags & MM_NET_OUTBOUND) == 0)
 				sock->flags &= ~MM_NET_WRITER_PENDING;
 			// Remember a writer has been started.
 			sock->flags |= MM_NET_WRITER_SPAWNED;
@@ -580,8 +592,7 @@ mm_net_reset_read_ready(struct mm_net_socket *sock)
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_READ_READY;
-	bool oneshot = !(sock->server->proto->flags & MM_NET_INBOUND);
-	if (oneshot)
+	if ((sock->flags & MM_NET_INBOUND) == 0)
 		mm_event_trigger_input(&sock->event, &mm_core_dispatch);
 
 	LEAVE();
@@ -594,8 +605,7 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	sock->flags &= ~MM_NET_WRITE_READY;
-	bool oneshot = !(sock->server->proto->flags & MM_NET_OUTBOUND);
-	if (oneshot)
+	if ((sock->flags & MM_NET_OUTBOUND) == 0)
 		mm_event_trigger_output(&sock->event, &mm_core_dispatch);
 
 	LEAVE();
@@ -657,8 +667,8 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		break;
 
 	case MM_EVENT_ATTACH:
-		if (sock->server->proto->attach != NULL)
-			(sock->server->proto->attach)(sock);
+		if (sock->proto->attach != NULL)
+			(sock->proto->attach)(sock);
 		break;
 
 	case MM_EVENT_DISABLE:
@@ -709,7 +719,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
-	if (sock->server->proto->reader == NULL)
+	if (sock->proto->reader == NULL)
 		goto leave;
 
 	if ((sock->flags & MM_NET_READER_SPAWNED) != 0) {
@@ -739,7 +749,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
-	if (sock->server->proto->writer == NULL)
+	if (sock->proto->writer == NULL)
 		goto leave;
 
 	if ((sock->flags & MM_NET_WRITER_SPAWNED) != 0) {
@@ -785,9 +795,9 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	}
 
 	// Check to see if a new reader should be spawned.
-	uint8_t fd_flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
+	uint16_t fd_flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
 	if ((sock->flags & MM_NET_READER_PENDING) != 0 && fd_flags != 0) {
-		if ((sock->server->proto->flags & MM_NET_INBOUND) == 0)
+		if ((sock->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
 		mm_core_t core = mm_event_target(&sock->event);
@@ -825,9 +835,9 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	}
 
 	// Check to see if a new writer should be spawned.
-	uint8_t fd_flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
+	uint16_t fd_flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
 	if ((sock->flags & MM_NET_WRITER_PENDING) != 0 && fd_flags != 0) {
-		if ((sock->server->proto->flags & MM_NET_OUTBOUND) == 0)
+		if ((sock->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
 		mm_core_t core = mm_event_target(&sock->event);
@@ -850,8 +860,8 @@ mm_net_prepare(mm_value_t arg)
 	ASSERT(!mm_net_is_closed(sock));
 
 	// Let the protocol layer prepare the socket data if needed.
-	if (sock->server->proto->prepare != NULL)
-		(sock->server->proto->prepare)(sock);
+	if (sock->proto->prepare != NULL)
+		(sock->proto->prepare)(sock);
 
 	// Register the socket with the event loop.
 	mm_event_register_fd(&sock->event, &mm_core_dispatch);
@@ -900,11 +910,13 @@ mm_net_cleanup(mm_value_t arg)
 	}
 
 	// Run the protocol handler routine.
-	if (sock->server->proto->cleanup != NULL)
-		(sock->server->proto->cleanup)(sock);
+	if (sock->proto->cleanup != NULL)
+		(sock->proto->cleanup)(sock);
 
-	mm_core_t core = mm_event_target(&sock->server->event);
-	mm_core_post(core, mm_net_destroy, (mm_value_t) sock);
+	if (sock->server_thread != MM_THREAD_NONE)
+		mm_core_post(sock->server_thread, mm_net_destroy, (mm_value_t) sock);
+	else
+		mm_net_destroy_socket(sock);
 
 	LEAVE();
 	return 0;
@@ -927,7 +939,7 @@ mm_net_reader(mm_value_t arg)
 #endif
 
 	// Run the protocol handler routine.
-	(sock->server->proto->reader)(sock);
+	(sock->proto->reader)(sock);
 
 leave:
 	LEAVE();
@@ -951,7 +963,7 @@ mm_net_writer(mm_value_t arg)
 #endif
 
 	// Run the protocol handler routine.
-	(sock->server->proto->writer)(sock);
+	(sock->proto->writer)(sock);
 
 leave:
 	LEAVE();
@@ -1482,7 +1494,7 @@ mm_net_close(struct mm_net_socket *sock)
 		goto leave;
 
 	// Mark the socket as closed.
-	sock->close_flags = MM_NET_CLOSED;
+	sock->flags |= MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(&sock->event, &mm_core_dispatch);
@@ -1501,7 +1513,7 @@ mm_net_shutdown_reader(struct mm_net_socket *sock)
 		goto leave;
 
 	// Mark the socket as having the reader part closed.
-	sock->close_flags |= MM_NET_READER_SHUTDOWN;
+	sock->flags |= MM_NET_READER_SHUTDOWN;
 
 	if (mm_shutdown(sock->event.fd, SHUT_RD) < 0)
 		mm_warning(errno, "shutdown");
@@ -1520,7 +1532,7 @@ mm_net_shutdown_writer(struct mm_net_socket *sock)
 		goto leave;
 
 	// Mark the socket as having the writer part closed.
-	sock->close_flags |= MM_NET_WRITER_SHUTDOWN;
+	sock->flags |= MM_NET_WRITER_SHUTDOWN;
 
 	if (mm_shutdown(sock->event.fd, SHUT_WR) < 0)
 		mm_warning(errno, "shutdown");
