@@ -244,10 +244,30 @@ static const char *mm_args_optional[] = { " [<ARG>]", "=[<ARG>]" };
 void
 mm_args_usage(size_t ninfo, const struct mm_args_info *info)
 {
-	mm_log_fmt("Usage: %s [options]\n", mm_args_getname());
+	size_t index = 0;
+	const char *param = NULL;
+
+	if (ninfo != 0 && info->flag == 0 && info->name == NULL) {
+		param = info->help;
+		index++;
+	}
+
+	if (index == ninfo) {
+		if (param == NULL)
+			mm_log_fmt("Usage: %s\n", mm_args_getname());
+		else
+			mm_log_fmt("Usage: %s %s\n", mm_args_getname(), param);
+		return;
+	}
+
+	if (param == NULL)
+		mm_log_fmt("Usage: %s [options]\n", mm_args_getname());
+	else
+		mm_log_fmt("Usage: %s [options] %s\n", mm_args_getname(), param);
+
 	mm_log_fmt("Options:\n");
-	for (size_t i = 0; i < ninfo; i++) {
-		const struct mm_args_info *p = &info[i];
+	for (; index < ninfo; index++) {
+		const struct mm_args_info *p = &info[index];
 
 		const char **arg;
 		if (p->param == MM_ARGS_OPTIONAL)
