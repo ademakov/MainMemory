@@ -187,10 +187,9 @@ mm_memcache_init(const struct mm_memcache_config *config)
 
 	static struct mm_net_proto proto = {
 		.flags = MM_NET_INBOUND,
-		.alloc = mc_state_alloc,
-		.free = mc_state_free,
-		.prepare = mc_state_prepare,
-		.cleanup = mc_state_cleanup,
+		.create = mc_state_create,
+		.reclaim = mc_state_reclaim,
+		.destroy = mc_state_destroy,
 		.attach = NULL,
 		.detach = mc_state_detach,
 		.reader = mc_reader_routine,

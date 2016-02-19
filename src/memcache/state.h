@@ -47,10 +47,9 @@ struct mc_state
 };
 
 /* Net-proto routines. */
-struct mm_net_socket *mc_state_alloc(void);
-void mc_state_free(struct mm_net_socket *sock);
-void mc_state_prepare(struct mm_net_socket *sock);
-void mc_state_cleanup(struct mm_net_socket *sock);
+struct mm_net_socket *mc_state_create(void);
+void mc_state_reclaim(struct mm_net_socket *sock);
+void mc_state_destroy(struct mm_net_socket *sock);
 bool mc_state_detach(struct mm_net_socket *sock);
 
 static inline void

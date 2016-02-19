@@ -1,7 +1,7 @@
 /*
  * net/net.h - MainMemory networking.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,8 +39,8 @@ struct mm_task;
 #define MM_NET_INBOUND		0x0001
 #define MM_NET_OUTBOUND		0x0002
 
-/* Connection flags. */
-#define MM_NET_CONNECTION	0x0004
+/* Client flags. */
+#define MM_NET_CLIENT		0x0004
 #define MM_NET_CONNECTING	0x0008
 
 /* Socket close flags. */
@@ -122,19 +122,24 @@ struct mm_net_socket
 	/* Socket flags. */
 	uint16_t flags;
 
-	/* The server's thread. */
-	mm_thread_t server_thread;
+	/* The socket destruction thread. */
+	mm_thread_t destroy_thread;
 
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
 	struct mm_work write_work;
-	struct mm_work cleanup_work;
+	struct mm_work reclaim_work;
 
 	/* Socket protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* A link in the server's list of all client sockets. */
-	struct mm_link clients;
+	union {
+		/* A link in the server's list of all client sockets. */
+		struct mm_link clients;
+
+		/* A client socket destruction routine. */
+		void (*destroy)(struct mm_net_socket *);
+	};
 
 	/* Client address. */
 	struct mm_net_peer_addr peer;
@@ -145,11 +150,9 @@ struct mm_net_proto
 {
 	uint16_t flags;
 
-	struct mm_net_socket * (*alloc)(void);
-	void (*free)(struct mm_net_socket *);
-
-	void (*prepare)(struct mm_net_socket *sock);
-	void (*cleanup)(struct mm_net_socket *sock);
+	struct mm_net_socket * (*create)(void);
+	void (*reclaim)(struct mm_net_socket *);
+	void (*destroy)(struct mm_net_socket *);
 
 	void (*attach)(struct mm_net_socket *sock);
 	bool (*detach)(struct mm_net_socket *sock);
@@ -158,42 +161,51 @@ struct mm_net_proto
 	void (*writer)(struct mm_net_socket *sock);
 };
 
+/**********************************************************************
+ * Network subsystem initialization and termination.
+ **********************************************************************/
+
 void mm_net_init(void);
 void mm_net_term(void);
 
-struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
-			  const char *path);
+/**********************************************************************
+ * Network address manipulation routines.
+ **********************************************************************/
+
+bool NONNULL(1, 2)
+mm_net_set_unix_addr(struct mm_net_addr *addr, const char *path);
+
+bool NONNULL(1)
+mm_net_set_inet_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port);
+
+bool NONNULL(1)
+mm_net_set_inet6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port);
+
+/**********************************************************************
+ * Network servers.
+ **********************************************************************/
 
 struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
-			  const char *addrstr, uint16_t port);
+mm_net_create_unix_server(const char *name, struct mm_net_proto *proto, const char *path);
 
 struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
-			   const char *addrstr, uint16_t port);
+mm_net_create_inet_server(const char *name, struct mm_net_proto *proto, const char *addrstr, uint16_t port);
+
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto, const char *addrstr, uint16_t port);
 
 void NONNULL(1, 2)
 mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask);
 
 void NONNULL(1)
 mm_net_start_server(struct mm_net_server *srv);
+
 void NONNULL(1)
 mm_net_stop_server(struct mm_net_server *srv);
 
-ssize_t NONNULL(1, 2)
-mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
-ssize_t NONNULL(1, 2)
-mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
-
-ssize_t NONNULL(1, 2)
-mm_net_readv(struct mm_net_socket *sock,
-	     const struct iovec *iov, int iovcnt,
-	     ssize_t nbytes);
-ssize_t NONNULL(1, 2)
-mm_net_writev(struct mm_net_socket *sock,
-	      const struct iovec *iov, int iovcnt,
-	      ssize_t nbytes);
+/**********************************************************************
+ * Network I/O tasks for server sockets.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_net_spawn_reader(struct mm_net_socket *sock);
@@ -204,6 +216,53 @@ void NONNULL(1)
 mm_net_yield_reader(struct mm_net_socket *sock);
 void NONNULL(1)
 mm_net_yield_writer(struct mm_net_socket *sock);
+
+/**********************************************************************
+ * Network client connection sockets.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket *));
+
+struct mm_net_socket *
+mm_net_create(void);
+
+/*
+ * BEWARE!!!
+ *
+ * As long as a socket was successfully connected it becomes registered in
+ * the event loop. Therefore it is forbidden to destroy a connected socket.
+ * This function is to be called only if the socket failed to connect.
+ *
+ * A connected socket is automatically destroyed at an appropriate moment
+ * after closing it with mm_net_close(). In turn closing a socket makes any
+ * access to it after that point dangerous.
+ */
+void NONNULL(1)
+mm_net_destroy(struct mm_net_socket *sock);
+
+int NONNULL(1, 2)
+mm_net_connect(struct mm_net_socket *sock, const struct mm_net_addr *addr);
+
+int NONNULL(1, 2)
+mm_net_connect_inet(struct mm_net_socket *sock, const char *addrstr, uint16_t port);
+
+int NONNULL(1, 2)
+mm_net_connect_inet6(struct mm_net_socket *sock, const char *addrstr, uint16_t port);
+
+/**********************************************************************
+ * Network socket I/O.
+ **********************************************************************/
+
+ssize_t NONNULL(1, 2)
+mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes);
+ssize_t NONNULL(1, 2)
+mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
+
+ssize_t NONNULL(1, 2)
+mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes);
+ssize_t NONNULL(1, 2)
+mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes);
 
 void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock);

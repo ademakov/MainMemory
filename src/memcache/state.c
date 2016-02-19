@@ -22,33 +22,11 @@
 #include "base/event/event.h"
 
 struct mm_net_socket *
-mc_state_alloc(void)
+mc_state_create(void)
 {
 	ENTER();
 
 	struct mc_state *state = mm_regular_alloc(sizeof(struct mc_state));
-
-	LEAVE();
-	return &state->sock.sock;
-}
-
-void
-mc_state_free(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	mm_regular_free(state);
-
-	LEAVE();
-}
-
-void
-mc_state_prepare(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
 	state->command_head = NULL;
 	state->command_tail = NULL;
@@ -59,23 +37,35 @@ mc_state_prepare(struct mm_net_socket *sock)
 	mm_netbuf_prepare(&state->sock);
 
 	LEAVE();
+	return &state->sock.sock;
 }
 
 void
-mc_state_cleanup(struct mm_net_socket *sock)
+mc_state_reclaim(struct mm_net_socket *sock)
 {
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	mm_core_t core = mm_event_target(&sock->event);
+	mm_thread_t thread = mm_event_target(&sock->event);
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(core, command);
+		mc_command_destroy(thread, command);
 	}
 
 	mm_netbuf_cleanup(&state->sock);
+
+	LEAVE();
+}
+
+void
+mc_state_destroy(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	struct mc_state *state = containerof(sock, struct mc_state, sock);
+	mm_regular_free(state);
 
 	LEAVE();
 }

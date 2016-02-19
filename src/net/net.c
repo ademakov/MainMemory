@@ -1,7 +1,7 @@
 /*
  * net/net.c - MainMemory networking.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,19 +40,14 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 
-static mm_value_t mm_net_prepare(mm_value_t arg);
-static mm_value_t mm_net_cleanup(mm_value_t arg);
-static mm_value_t mm_net_reader(mm_value_t arg);
-static mm_value_t mm_net_writer(mm_value_t arg);
-
-/* Accept event handler cookie. */
+// Accept event handler cookie.
 static mm_event_hid_t mm_net_accept_hid;
 
-/* Client socket I/O event handler ID. */
+// Client socket I/O event handler ID.
 static mm_event_hid_t mm_net_socket_hid;
 
 /**********************************************************************
- * Address manipulation routines.
+ * Network address manipulation routines.
  **********************************************************************/
 
 static inline socklen_t
@@ -70,84 +65,66 @@ mm_net_sockaddr_len(int sa_family)
 	}
 }
 
-static int NONNULL(1, 2)
-mm_net_set_un_addr(struct mm_net_addr *addr, const char *path)
+static bool NONNULL(1)
+mm_net_parse_in_addr(struct sockaddr_in *addr, const char *addrstr, uint16_t port)
 {
-	ENTER();
-	ASSERT(path != NULL);
+	if (addrstr == NULL || *addrstr == 0) {
+		addr->sin_addr = (struct in_addr) { INADDR_ANY };
+	} else {
+		int rc = inet_pton(AF_INET, addrstr, &addr->sin_addr);
+		if (rc != 1) {
+			if (rc < 0)
+				mm_fatal(errno, "IP address parsing failure: %s", addrstr);
+			return false;
+		}
+	}
+	addr->sin_family = AF_INET;
+	addr->sin_port = htons(port);
+	memset(addr->sin_zero, 0, sizeof addr->sin_zero);
+	return true;
+}
 
-	int rc = 0;
+static bool NONNULL(1)
+mm_net_parse_in6_addr(struct sockaddr_in6 *addr, const char *addrstr, uint16_t port)
+{
+	if (addrstr == NULL || *addrstr == 0) {
+		addr->sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
+	} else {
+		int rc = inet_pton(AF_INET6, addrstr, &addr->sin6_addr);
+		if (rc != 1) {
+			if (rc < 0)
+				mm_fatal(errno, "IPv6 address parsing failure: %s", addrstr);
+			return false;
+		}
+	}
+	addr->sin6_family = AF_INET6;
+	addr->sin6_port = htons(port);
+	addr->sin6_flowinfo = 0;
+	addr->sin6_scope_id = 0;
+	return true;
+}
 
+bool NONNULL(1, 2)
+mm_net_set_unix_addr(struct mm_net_addr *addr, const char *path)
+{
 	size_t len = strlen(path);
-	if (len < sizeof(addr->un_addr.sun_path)) {
-		memcpy(addr->un_addr.sun_path, path, len + 1);
-		addr->un_addr.sun_family = AF_UNIX;
-	} else {
-		mm_error(0, "unix-domain socket path is too long.");
-		rc = -1;
-	}
-
-	LEAVE();
-	return rc;
+	if (len >= sizeof(addr->un_addr.sun_path))
+		return false;
+	memcpy(addr->un_addr.sun_path, path, len + 1);
+	addr->un_addr.sun_family = AF_UNIX;
+	return true;
 }
 
-static int NONNULL(1)
-mm_net_set_in_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
+bool NONNULL(1)
+mm_net_set_inet_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 {
-	ENTER();
-
-	int rc = 0;
-
-	if (addrstr && *addrstr) {
-		int pr = inet_pton(AF_INET, addrstr, &addr->in_addr.sin_addr);
-		if (pr != 1) {
-			if (pr < 0)
-				mm_fatal(errno, "IP address parsing failure");
-
-			mm_error(0, "IP address parsing failure");
-			rc = -1;
-			goto leave;
-		}
-	} else {
-		addr->in_addr.sin_addr = (struct in_addr) { INADDR_ANY };
-	}
-	addr->in_addr.sin_family = AF_INET;
-	addr->in_addr.sin_port = htons(port);
-	memset(addr->in_addr.sin_zero, 0, sizeof addr->in_addr.sin_zero);
-
-leave:
-	LEAVE();
-	return rc;
+	return mm_net_parse_in_addr(&addr->in_addr, addrstr, port);
 }
 
-static int NONNULL(1)
-mm_net_set_in6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
+bool NONNULL(1)
+mm_net_set_inet6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port)
 {
-	ENTER();
-
-	int rc = 0;
-
-	if (addrstr && *addrstr) {
-		int pr = inet_pton(AF_INET6, addrstr, &addr->in6_addr.sin6_addr);
-		if (pr != 1) {
-			if (pr < 0)
-				mm_fatal(errno, "IPv6 address parsing failure");
-
-			mm_error(0, "IPv6 address parsing failure");
-			rc = -1;
-			goto leave;
-		}
-	} else {
-		addr->in6_addr.sin6_addr = (struct in6_addr) IN6ADDR_ANY_INIT;
-	}
-	addr->in6_addr.sin6_family = AF_INET6;
-	addr->in6_addr.sin6_port = htons(port);
-	addr->in6_addr.sin6_flowinfo = 0;
-	addr->in6_addr.sin6_scope_id = 0;
-
-leave:
-	LEAVE();
-	return rc;
+	return mm_net_parse_in6_addr(&addr->in6_addr, addrstr, port);
 }
 
 /**********************************************************************
@@ -157,14 +134,12 @@ leave:
 static int NONNULL(1)
 mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 {
-	ENTER();
-
-	/* Create the socket. */
-	int sock = socket(addr->addr.sa_family, SOCK_STREAM, 0);
+	// Create the socket.
+	int sock = mm_socket(addr->addr.sa_family, SOCK_STREAM, 0);
 	if (sock < 0)
 		mm_fatal(errno, "socket()");
 
-	/* Set socket options. */
+	// Set socket options.
 	int val = 1;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &val, sizeof val) < 0)
 		mm_fatal(errno, "setsockopt(..., SO_REUSEADDR, ...)");
@@ -172,51 +147,56 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 	    && setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &val, sizeof val) < 0)
 		mm_fatal(errno, "setsockopt(..., IPV6_V6ONLY, ...)");
 
-	/* Bind the socket to the given address. */
+	// Bind the socket to the given address.
 	socklen_t salen = mm_net_sockaddr_len(addr->addr.sa_family);
-	if (bind(sock, &addr->addr, salen) < 0)
+	if (mm_bind(sock, &addr->addr, salen) < 0)
 		mm_fatal(errno, "bind()");
 
-	/* Make the socket ready to accept connections. */
-	if (listen(sock, backlog > 0 ? backlog : SOMAXCONN) < 0)
+	// Make the socket ready to accept connections.
+	if (mm_listen(sock, backlog > 0 ? backlog : SOMAXCONN) < 0)
 		mm_fatal(errno, "listen()");
 
-	/* Make the socket non-blocking. */
+	// Make the socket non-blocking.
 	mm_set_nonblocking(sock);
 
-	TRACE("sock: %d", sock);
-	LEAVE();
 	return sock;
+}
+
+static void
+mm_net_set_socket_options(int fd)
+{
+	// Set the socket options.
+	int val = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
+	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
+		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
+
+	// Make the socket non-blocking.
+	mm_set_nonblocking(fd);
 }
 
 static void NONNULL(1)
 mm_net_remove_unix_socket(struct mm_net_addr *addr)
 {
-	ENTER();
-
 	if (addr->addr.sa_family == AF_UNIX) {
 		mm_brief("removing %s", addr->un_addr.sun_path);
 		if (unlink(addr->un_addr.sun_path) < 0) {
 			mm_error(errno, "unlink(\"%s\")", addr->un_addr.sun_path);
 		}
 	}
-
-	LEAVE();
 }
 
 static void NONNULL(1)
 mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 {
-	ENTER();
 	TRACE("sock: %d", sock);
 
-	/* Close the socket. */
+	// Close the socket.
 	mm_close(sock);
 
-	/* Remove the Unix-domain socket file. */
+	// Remove the Unix-domain socket file.
 	mm_net_remove_unix_socket(addr);
-
-	LEAVE();
 }
 
 /**********************************************************************
@@ -278,8 +258,151 @@ mm_net_alloc_server(void)
 }
 
 /**********************************************************************
+ * Socket pool.
+ **********************************************************************/
+
+static struct mm_pool mm_net_socket_pool;
+
+static void
+mm_net_socket_pool_start(void)
+{
+	ENTER();
+
+	mm_pool_prepare_shared(&mm_net_socket_pool, "net-socket", sizeof(struct mm_net_socket));
+
+	LEAVE();
+}
+
+static void
+mm_net_socket_pool_stop(void)
+{
+	ENTER();
+
+	mm_pool_cleanup(&mm_net_socket_pool);
+
+	LEAVE();
+}
+
+static struct mm_net_socket *
+mm_net_socket_pool_alloc(void)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = mm_pool_alloc(&mm_net_socket_pool);
+
+	LEAVE();
+	return sock;
+}
+
+static void
+mm_net_socket_pool_free(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	mm_pool_free(&mm_net_socket_pool, sock);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Socket create and destroy routines.
+ **********************************************************************/
+
+static struct mm_net_socket *
+mm_net_socket_create(struct mm_net_proto *proto)
+{
+	ENTER();
+
+	struct mm_net_socket *sock;
+	if (proto->create != NULL)
+		sock = (proto->create)();
+	else
+		sock = mm_net_socket_pool_alloc();
+
+	LEAVE();
+	return sock;
+}
+
+static void
+mm_net_socket_destroy(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT((sock->flags & MM_NET_CLIENT) == 0);
+
+	mm_list_delete(&sock->clients);
+
+	if (sock->proto->destroy != NULL)
+		(sock->proto->destroy)(sock);
+	else
+		mm_net_socket_pool_free(sock);
+
+	LEAVE();
+}
+
+static mm_value_t
+mm_net_destroy_routine(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(mm_net_is_closed(sock));
+
+	// Remove the socket from the server lists.
+	mm_net_socket_destroy(sock);
+
+	LEAVE();
+	return 0;
+}
+
+static mm_value_t
+mm_net_reclaim_routine(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+
+	// Notify a reader/writer about closing.
+	// TODO: don't block here, have a queue of closed socks
+	while (sock->reader != NULL || sock->writer != NULL) {
+		struct mm_task *task = mm_task_selfptr();
+		mm_priority_t priority = MM_PRIO_UPPER(task->priority, 1);
+		if (sock->reader != NULL)
+			mm_task_hoist(sock->reader, priority);
+ 		if (sock->writer != NULL)
+			mm_task_hoist(sock->writer, priority);
+		mm_task_yield();
+	}
+
+	// The client connection is destroyed by its own destruction routine.
+	if ((sock->flags & MM_NET_CLIENT) != 0) {
+		(sock->destroy)(sock);
+		goto leave;
+	}
+
+	// Run the protocol handler reclamation routine.
+	if (sock->proto->reclaim != NULL)
+		(sock->proto->reclaim)(sock);
+
+	// Run the protocol handler destruction routine.
+	mm_thread_t thread = sock->destroy_thread;
+	if (thread != MM_THREAD_NONE && thread != mm_event_target(&sock->event))
+		mm_core_post(thread, mm_net_destroy_routine, (mm_value_t) sock);
+	else
+		mm_net_socket_destroy(sock);
+
+leave:
+	LEAVE();
+	return 0;
+}
+
+/**********************************************************************
  * Socket initialization and cleanup.
  **********************************************************************/
+
+static mm_value_t mm_net_register_routine(mm_value_t arg);
+static mm_value_t mm_net_reader_routine(mm_value_t arg);
+static mm_value_t mm_net_writer_routine(mm_value_t arg);
 
 static void
 mm_net_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
@@ -294,23 +417,41 @@ mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 }
 
 static void
-mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_proto *proto, struct mm_net_server *srv)
+mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto,
+			    uint16_t flags, mm_thread_t thread)
 {
+	// Invalidate the event sink.
+	sock->event.fd = -1;
+	// Initialize common socket fields.
 	sock->proto = proto;
+	sock->flags = flags;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->reader = NULL;
 	sock->writer = NULL;
+	sock->destroy_thread = thread;
+}
 
-	// Remember the server thread if any.
-	if (srv != NULL) {
-		sock->server_thread = mm_event_target(&srv->event);
-		ASSERT(sock->server_thread != MM_THREAD_NONE);
-	} else {
-		sock->server_thread = MM_THREAD_NONE;
-	}
+static void
+mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
+{
+	uint16_t flags = sock->flags;
+	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+#if ENABLE_SMP
+	mm_event_affinity_t affinity = sock->proto->detach != NULL ? MM_EVENT_AGILE : MM_EVENT_BOUND;
+#else
+	mm_event_affinity_t affinity = MM_EVENT_BOUND;
+#endif
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid, input, output, affinity);
+}
 
-	// Figure out flags.
+static void
+mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd, mm_thread_t thread)
+{
+	ASSERT(thread == mm_thread_self());
+
+	// Figure out the required flags.
 	uint16_t flags = proto->flags & (MM_NET_INBOUND | MM_NET_OUTBOUND);
 	if (flags == 0) {
 		if (proto->reader != NULL)
@@ -323,85 +464,20 @@ mm_net_prepare_socket(struct mm_net_socket *sock, int fd, struct mm_net_proto *p
 		if (proto->writer == NULL)
 			flags &= ~MM_NET_OUTBOUND;
 	}
-	sock->flags = flags;
+	if ((flags & MM_NET_INBOUND) != 0)
+		flags |= MM_NET_READER_PENDING;
+	if ((flags & MM_NET_OUTBOUND) != 0)
+		flags |= MM_NET_WRITER_PENDING;
 
-	// Prepare the event sink.
-	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
-	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
-	mm_event_affinity_t affinity = proto->detach != NULL ? MM_EVENT_AGILE : MM_EVENT_BOUND;
-	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid, input, output, affinity);
+	// Initialize basic fields.
+	mm_net_socket_prepare_basic(sock, proto, flags, thread);
+	// Initialize the event sink.
+	mm_net_socket_prepare_event(sock, fd);
 
-	// Prepare the work items.
-	mm_work_prepare(&sock->read_work, mm_net_reader, (mm_value_t) sock, mm_net_reader_complete);
-	mm_work_prepare(&sock->write_work, mm_net_writer, (mm_value_t) sock, mm_net_writer_complete);
-	mm_work_prepare(&sock->cleanup_work, mm_net_cleanup, (mm_value_t) sock, mm_work_complete_noop);
-}
-
-static void
-mm_net_cleanup_socket(struct mm_net_socket *sock)
-{
-	mm_list_delete(&sock->clients);
-}
-
-/**********************************************************************
- * Socket pool.
- **********************************************************************/
-
-static struct mm_pool mm_socket_pool;
-
-static void
-mm_net_init_socket_table(void)
-{
-	ENTER();
-
-	mm_pool_prepare_shared(&mm_socket_pool, "net-socket", sizeof(struct mm_net_socket));
-
-	LEAVE();
-}
-
-static void
-mm_net_free_socket_table(void)
-{
-	ENTER();
-	
-	mm_pool_cleanup(&mm_socket_pool);
-
-	LEAVE();
-}
-
-static struct mm_net_socket *
-mm_net_create_socket(struct mm_net_server *srv, int fd)
-{
-	ENTER();
-
-	// Allocate the socket.
-	struct mm_net_socket *sock;
-	if (srv->proto->alloc != NULL)
-		sock = (srv->proto->alloc)();
-	else
-		sock = mm_pool_alloc(&mm_socket_pool);
-
-	// Initialize the fields.
-	if (likely(sock != NULL))
-		mm_net_prepare_socket(sock, fd, srv->proto, srv);
-
-	LEAVE();
-	return sock;
-}
-
-static void
-mm_net_destroy_socket(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	mm_net_cleanup_socket(sock);
-
-	if (sock->proto->free != NULL)
-		(sock->proto->free)(sock);
-	else
-		mm_pool_free(&mm_socket_pool, sock);
-
-	LEAVE();
+	// Initialize the required work items.
+	mm_work_prepare(&sock->read_work, mm_net_reader_routine, (mm_value_t) sock, mm_net_reader_complete);
+	mm_work_prepare(&sock->write_work, mm_net_writer_routine, (mm_value_t) sock, mm_net_writer_complete);
+	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, (mm_value_t) sock, mm_work_complete_noop);
 }
 
 /**********************************************************************
@@ -412,7 +488,6 @@ static bool
 mm_net_accept(struct mm_net_server *srv)
 {
 	ENTER();
-
 	bool rc = true;
 
 	// Client socket.
@@ -434,25 +509,20 @@ retry:
 		goto leave;
 	}
 
-	// Set the socket options.
-	int val = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
-		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
-		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
-
-	// Make the socket non-blocking.
-	mm_set_nonblocking(fd);
+	// Set common socket options.
+	mm_net_set_socket_options(fd);
 
 	// Allocate a new socket structure.
-	struct mm_net_socket *sock = mm_net_create_socket(srv, fd);
-	if (sock == NULL) {
-		mm_error(0, "%s: failed to allocate socket data", srv->name);
+	struct mm_net_socket *sock = mm_net_socket_create(srv->proto);
+	if (unlikely(sock == NULL)) {
+		mm_error(0, "%s: failed to allocate a socket", srv->name);
 		mm_close(fd);
 		goto leave;
 	}
 
 	// Initialize the socket structure.
+	mm_thread_t thread = mm_event_target(&srv->event);
+	mm_net_socket_prepare(sock, srv->proto, fd, thread);
 	if (sa.ss_family == AF_INET)
 		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
 	else if (sa.ss_family == AF_INET6)
@@ -464,17 +534,12 @@ retry:
 	mm_list_append(&srv->clients, &sock->clients);
 	srv->client_count++;
 
-	// Request required I/O tasks.
-	if (srv->proto->reader != NULL
-	    && (srv->proto->flags & MM_NET_INBOUND) != 0)
-		sock->flags |= MM_NET_READER_PENDING;
-	if (srv->proto->writer != NULL
-	    && (srv->proto->flags & MM_NET_OUTBOUND) != 0)
-		sock->flags |= MM_NET_WRITER_PENDING;
-
-	// Request protocol handler routine.
-	mm_core_t core = mm_event_target(&sock->event);
-	mm_core_post(core, mm_net_prepare, (mm_value_t) sock);
+	// Register the socket for event dispatch.
+	mm_thread_t target = mm_event_target(&sock->event);
+	if (target == MM_THREAD_NONE || target == thread)
+		mm_event_register_fd(&sock->event, &mm_core_dispatch);
+	else
+		mm_core_post(target, mm_net_register_routine, (mm_value_t) sock);
 
 leave:
 	LEAVE();
@@ -490,9 +555,8 @@ mm_net_acceptor(mm_value_t arg)
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
 
 	// Accept incoming connections.
-	while (mm_net_accept(srv)) {
+	while (mm_net_accept(srv))
 		mm_task_yield();
-	}
 
 	LEAVE();
 	return 0;
@@ -505,8 +569,8 @@ mm_net_accept_handler(mm_event_t event, void *data)
 
 	if (event == MM_EVENT_INPUT) {
 		struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
-		mm_core_t core = mm_event_target(&srv->event);
-		mm_core_post(core, mm_net_acceptor, (mm_value_t) srv);
+		mm_thread_t thread = mm_event_target(&srv->event);
+		mm_core_post(thread, mm_net_acceptor, (mm_value_t) srv);
 	}
 
 	LEAVE();
@@ -686,7 +750,7 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		mm_core_post_work(mm_event_target(&sock->event), &sock->cleanup_work);
+		mm_core_post_work(mm_event_target(&sock->event), &sock->reclaim_work);
 		break;
 
 	default:
@@ -708,7 +772,7 @@ mm_net_init_socket_handler()
 }
 
 /**********************************************************************
- * Socket I/O tasks.
+ * Network I/O tasks for server sockets.
  **********************************************************************/
 
 void
@@ -852,78 +916,7 @@ leave:
 }
 
 static mm_value_t
-mm_net_prepare(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(!mm_net_is_closed(sock));
-
-	// Let the protocol layer prepare the socket data if needed.
-	if (sock->proto->prepare != NULL)
-		(sock->proto->prepare)(sock);
-
-	// Register the socket with the event loop.
-	mm_event_register_fd(&sock->event, &mm_core_dispatch);
-
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_destroy(mm_value_t arg)
-{
-	ENTER();
-
-	// At this time there are no and will not be any reader/writer tasks
-	// bound to this socket.
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	//ASSERT(sock->core == mm_core_self());
-	ASSERT(mm_net_is_closed(sock));
-
-	// Remove the socket from the server lists.
-	mm_net_destroy_socket(sock);
-
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_cleanup(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
-
-	// Notify a reader/writer about closing.
-	// TODO: don't block here, have a queue of closed socks
-	while (sock->reader != NULL || sock->writer != NULL) {
-		struct mm_task *task = mm_task_selfptr();
-		mm_priority_t priority = MM_PRIO_UPPER(task->priority, 1);
-		if (sock->reader != NULL)
-			mm_task_hoist(sock->reader, priority);
- 		if (sock->writer != NULL)
-			mm_task_hoist(sock->writer, priority);
-		mm_task_yield();
-	}
-
-	// Run the protocol handler routine.
-	if (sock->proto->cleanup != NULL)
-		(sock->proto->cleanup)(sock);
-
-	if (sock->server_thread != MM_THREAD_NONE)
-		mm_core_post(sock->server_thread, mm_net_destroy, (mm_value_t) sock);
-	else
-		mm_net_destroy_socket(sock);
-
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_reader(mm_value_t arg)
+mm_net_reader_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -947,7 +940,7 @@ leave:
 }
 
 static mm_value_t
-mm_net_writer(mm_value_t arg)
+mm_net_writer_routine(mm_value_t arg)
 {
 	ENTER();
 
@@ -970,8 +963,23 @@ leave:
 	return 0;
 }
 
+static mm_value_t
+mm_net_register_routine(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	ASSERT(!mm_net_is_closed(sock));
+
+	// Register the socket with the event loop.
+	mm_event_register_fd(&sock->event, &mm_core_dispatch);
+
+	LEAVE();
+	return 0;
+}
+
 /**********************************************************************
- * Network initialization and termination.
+ * Network subsystem initialization and termination.
  **********************************************************************/
 
 static int mm_net_initialized = 0;
@@ -1002,8 +1010,8 @@ mm_net_init(void)
 
 	mm_atexit(mm_net_exit_cleanup);
 
-	mm_core_hook_start(mm_net_init_socket_table);
-	mm_core_hook_stop(mm_net_free_socket_table);
+	mm_core_hook_start(mm_net_socket_pool_start);
+	mm_core_hook_stop(mm_net_socket_pool_stop);
 
 	mm_net_init_server_table();
 	mm_net_init_accept_handler();
@@ -1049,9 +1057,8 @@ mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
 	srv->name = mm_format(&mm_global_arena, "%s (%s)", name, path);
 	srv->proto = proto;
 
-	if (mm_net_set_un_addr(&srv->addr, path) < 0)
-		mm_fatal(0, "failed to create '%s' server with path '%s'",
-		name, path);
+	if (!mm_net_set_unix_addr(&srv->addr, path))
+		mm_fatal(0, "failed to create '%s' server with path '%s'", name, path);
 
 	LEAVE();
 	return srv;
@@ -1067,9 +1074,8 @@ mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
 	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
-	if (mm_net_set_in_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
-			 name, addrstr, port);
+	if (!mm_net_set_inet_addr(&srv->addr, addrstr, port))
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
 
 	LEAVE();
 	return srv;
@@ -1085,9 +1091,8 @@ mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
 	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
 	srv->proto = proto;
 
-	if (mm_net_set_in6_addr(&srv->addr, addrstr, port) < 0)
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'",
-			 name, addrstr, port);
+	if (!mm_net_set_inet6_addr(&srv->addr, addrstr, port))
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
 
 	LEAVE();
 	return srv;
@@ -1171,7 +1176,166 @@ mm_net_stop_server(struct mm_net_server *srv)
 }
 
 /**********************************************************************
- * Network sockets.
+ * Network client connection sockets.
+ **********************************************************************/
+
+// Zero protocol handler for client sockets.
+static struct mm_net_proto mm_net_dummy_proto;
+
+void NONNULL(1, 2)
+mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket *))
+{
+	ENTER();
+
+	// Initialize common fields.
+	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto, MM_NET_CLIENT, MM_THREAD_NONE);
+	// Initialize the destruction routine.
+	sock->destroy = destroy;
+	// Initialize the required work items.
+	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, (mm_value_t) sock, mm_work_complete_noop);
+
+	LEAVE();
+}
+
+struct mm_net_socket *
+mm_net_create(void)
+{
+	ENTER();
+
+	// Create the socket.
+	struct mm_net_socket *sock = mm_net_socket_pool_alloc();
+	// Initialize the socket basic fields.
+	mm_net_prepare(sock, mm_net_socket_pool_free);
+
+	LEAVE();
+	return sock;
+}
+
+void NONNULL(1)
+mm_net_destroy(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if (unlikely((sock->flags & MM_NET_CLIENT) == 0))
+		ABORT();
+	if (unlikely(sock->event.fd >= 0))
+		ABORT();
+
+	(sock->destroy)(sock);
+
+	LEAVE();
+}
+
+int NONNULL(1, 2)
+mm_net_connect(struct mm_net_socket *sock, const struct mm_net_addr *addr)
+{
+	ENTER();
+	int rc = -1;
+
+	// Create the socket.
+	int fd = mm_socket(addr->addr.sa_family, SOCK_STREAM, 0);
+	if (fd < 0) {
+		int saved_errno = errno;
+		mm_error(saved_errno, "socket()");
+		errno = saved_errno;
+		goto leave;
+	}
+
+	// Set common socket options.
+	mm_net_set_socket_options(fd);
+
+	// Initiate the connection.
+	socklen_t salen = mm_net_sockaddr_len(addr->addr.sa_family);
+retry:
+	rc = mm_connect(fd, &addr->addr, salen);
+	if (rc < 0) {
+		if (errno == EINTR)
+			goto retry;
+		if (errno != EINPROGRESS) {
+			int saved_errno = errno;
+			mm_close(fd);
+			mm_error(saved_errno, "connect()");
+			errno = saved_errno;
+			goto leave;
+		}
+	}
+
+	// Indicate that the socket connection is in progress.
+	sock->flags |= MM_NET_CONNECTING;
+
+	// Register the socket in the event loop.
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
+			    MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_BOUND);
+	mm_event_register_fd(&sock->event, &mm_core_dispatch);
+
+	// Block the task waiting for connection completion.
+	sock->writer = mm_task_selfptr();
+	while ((sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR)) == 0) {
+		mm_task_block();
+		// TODO: mm_task_testcancel();
+	}
+	sock->writer = NULL;
+
+	// Check for EINPROGRESS connection outcome.
+	if (rc == -1) {
+		int conn_errno = 0;
+		socklen_t len = sizeof(conn_errno);
+		if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &conn_errno, &len) < 0)
+			mm_fatal(errno, "getsockopt(..., SO_ERROR, ...)");
+		if (conn_errno == 0) {
+			rc = 0;
+		} else {
+			mm_event_unregister_faulty_fd(&sock->event, &mm_core_dispatch);
+			errno = conn_errno;
+		}
+	}
+
+	// Indicate that the socket connection has completed.
+	sock->flags &= ~MM_NET_CONNECTING;
+
+leave:
+	LEAVE();
+	return rc;
+}
+
+int NONNULL(1, 2)
+mm_net_connect_inet(struct mm_net_socket *sock, const char *addrstr, uint16_t port)
+{
+	ENTER();
+	int rc;
+
+	struct mm_net_addr addr;
+	if (mm_net_parse_in_addr(&addr.in_addr, addrstr, port)) {
+		rc = mm_net_connect(sock, &addr);
+	} else {
+		errno = EINVAL;
+		rc = -1;
+	}
+
+	LEAVE();
+	return rc;
+}
+
+int NONNULL(1, 2)
+mm_net_connect_inet6(struct mm_net_socket *sock, const char *addrstr, uint16_t port)
+{
+	ENTER();
+	int rc;
+
+	struct mm_net_addr addr;
+	if (mm_net_parse_in6_addr(&addr.in6_addr, addrstr, port)) {
+		rc = mm_net_connect(sock, &addr);
+	} else {
+		errno = EINVAL;
+		rc = -1;
+	}
+
+	LEAVE();
+	return rc;
+}
+
+/**********************************************************************
+ * Network socket I/O.
  **********************************************************************/
 
 static int
@@ -1290,11 +1454,10 @@ retry:
 	// Check to see if the socket is ready for reading.
 	n = mm_net_wait_readable(sock, deadline);
 	if (n <= 0) {
-		if (n < 0) {
+		if (n < 0)
 			goto leave;
-		} else {
+		else
 			goto retry;
-		}
 	}
 
 	// Try to read (nonblocking).
@@ -1311,8 +1474,6 @@ retry:
 			goto retry;
 		} else {
 			int saved_errno = errno;
-			if (errno != EINVAL && errno != EFAULT)
-				mm_net_close(sock);
 			mm_error(saved_errno, "read()");
 			errno = saved_errno;
 		}
@@ -1342,11 +1503,10 @@ retry:
 	// Check to see if the socket is ready for writing.
 	n = mm_net_wait_writable(sock, deadline);
 	if (n <= 0) {
-		if (n < 0) {
+		if (n < 0)
 			goto leave;
-		} else {
+		else
 			goto retry;
-		}
 	}
 
 	// Try to write (nonblocking).
@@ -1363,8 +1523,6 @@ retry:
 			goto retry;
 		} else {
 			int saved_errno = errno;
-			if (errno != EINVAL && errno != EFAULT)
-				mm_net_close(sock);
 			mm_error(saved_errno, "write()");
 			errno = saved_errno;
 		}
@@ -1377,9 +1535,7 @@ leave:
 }
 
 ssize_t NONNULL(1, 2)
-mm_net_readv(struct mm_net_socket *sock,
-	     const struct iovec *iov, int iovcnt,
-	     ssize_t nbytes)
+mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -1396,11 +1552,10 @@ retry:
 	// Check to see if the socket is ready for reading.
 	n = mm_net_wait_readable(sock, deadline);
 	if (n <= 0) {
-		if (n < 0) {
+		if (n < 0)
 			goto leave;
-		} else {
+		else
 			goto retry;
-		}
 	}
 
 	// Try to read (nonblocking).
@@ -1417,8 +1572,6 @@ retry:
 			goto retry;
 		} else {
 			int saved_errno = errno;
-			if (errno != EINVAL && errno != EFAULT)
-				mm_net_close(sock);
 			mm_error(saved_errno, "readv()");
 			errno = saved_errno;
 		}
@@ -1431,9 +1584,7 @@ leave:
 }
 
 ssize_t NONNULL(1, 2)
-mm_net_writev(struct mm_net_socket *sock,
-	      const struct iovec *iov, int iovcnt,
-	      ssize_t nbytes)
+mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -1450,11 +1601,10 @@ retry:
 	// Check to see if the socket is ready for writing.
 	n = mm_net_wait_writable(sock, deadline);
 	if (n <= 0) {
-		if (n < 0) {
+		if (n < 0)
 			goto leave;
-		} else {
+		else
 			goto retry;
-		}
 	}
 
 	// Try to write (nonblocking).
@@ -1471,8 +1621,6 @@ retry:
 			goto retry;
 		} else {
 			int saved_errno = errno;
-			if (errno != EINVAL && errno != EFAULT)
-				mm_net_close(sock);
 			mm_error(saved_errno, "writev()");
 			errno = saved_errno;
 		}
