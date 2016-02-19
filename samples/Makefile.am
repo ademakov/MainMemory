@@ -1,2 +1,2 @@
 
-SUBDIRS = hello_server
+SUBDIRS = hello_server proxy_server

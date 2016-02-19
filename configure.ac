@@ -128,5 +128,6 @@ AC_CONFIG_FILES([
 	tests/base/Makefile
 	tests/unit/Makefile
 	samples/Makefile
-	samples/hello_server/Makefile])
+	samples/hello_server/Makefile
+	samples/proxy_server/Makefile])
 AC_OUTPUT
