@@ -55,7 +55,6 @@ mm_do_atexit(void)
 void
 mm_exit(int status)
 {
-	mm_log_str("exiting...\n");
 	mm_do_atexit();
 	exit(status);
 }

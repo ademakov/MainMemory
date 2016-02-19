@@ -125,5 +125,7 @@ mm_base_loop(struct mm_base_params *params)
 	// Wait for regular threads completion.
 	mm_domain_join(mm_regular_domain);
 
+	mm_log_str("exiting...\n");
+
 	LEAVE();
 }
