@@ -76,14 +76,57 @@ mm_close(int fd)
 }
 
 static inline int
+mm_socket(int domain, int type, int protocol)
+{
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { domain, type, protocol };
+	return mm_syscall_2(SYS_socketcall, SYS_SOCKET, (uintptr_t) args);
+#else
+	return mm_syscall_3(MM_SYSCALL_N(SYS_socket), domain, type, protocol);
+#endif
+}
+
+static inline int
+mm_connect(int sock, const struct sockaddr *addr, socklen_t addr_len)
+{
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { sock, (uintptr_t) addr, addr_len };
+	return mm_syscall_2(SYS_socketcall, SYS_CONNECT, (uintptr_t) args);
+#else
+	return mm_syscall_3(MM_SYSCALL_N(SYS_connect), sock, (uintptr_t) addr, addr_len);
+#endif
+}
+
+static inline int
+mm_bind(int sock, const struct sockaddr *addr, socklen_t addr_len)
+{
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { sock, (uintptr_t) addr, addr_len };
+	return mm_syscall_2(SYS_socketcall, SYS_BIND, (uintptr_t) args);
+#else
+	return mm_syscall_3(MM_SYSCALL_N(SYS_bind), sock, (uintptr_t) addr, addr_len);
+#endif
+}
+
+static inline int
+mm_listen(int socket, int backlog)
+{
+#if LINUX_SOCKETCALL
+	uintptr_t args[] = { socket, backlog };
+	return mm_syscall_2(SYS_socketcall, SYS_LISTEN, (uintptr_t) args);
+#else
+	return mm_syscall_2(MM_SYSCALL_N(SYS_listen), socket, backlog);
+#endif
+}
+
+static inline int
 mm_accept(int sock, struct sockaddr *restrict addr, socklen_t *restrict addr_len)
 {
 #if LINUX_SOCKETCALL
 	uintptr_t args[] = { sock, (uintptr_t) addr, (uintptr_t) addr_len };
 	return mm_syscall_2(SYS_socketcall, SYS_ACCEPT, (uintptr_t) args);
 #else
-	return mm_syscall_3(MM_SYSCALL_N(SYS_accept), sock, (uintptr_t) addr,
-			    (uintptr_t) addr_len);
+	return mm_syscall_3(MM_SYSCALL_N(SYS_accept), sock, (uintptr_t) addr, (uintptr_t) addr_len);
 #endif
 }
 
@@ -107,6 +150,10 @@ mm_shutdown(int sock, int how)
 #define mm_readv	readv
 #define mm_writev	writev
 #define mm_close	close
+#define mm_socket	socket
+#define mm_connect	connect
+#define mm_bind		bind
+#define mm_listen	listen
 #define mm_accept	accept
 #define mm_shutdown	shutdown
 
