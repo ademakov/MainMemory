@@ -1286,6 +1286,8 @@ retry:
 			rc = 0;
 		} else {
 			mm_event_unregister_faulty_fd(&sock->event, &mm_core_dispatch);
+			sock->event.fd = -1;
+			mm_close(fd);
 			errno = conn_errno;
 		}
 	}
