@@ -1,7 +1,7 @@
 /*
  * base/daemon.c - Daemonize routine.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -93,23 +93,24 @@ mm_daemon_start(void)
 void
 mm_daemon_stdio(const char *input, const char *output)
 {
-	// Redirect standard input to /dev/null.
-	close(STDIN_FILENO);
+	static const char *dev_null = "/dev/null";
+
+	int fd, oflags = O_WRONLY;
 	if (input == NULL)
-		input = "/dev/null";
-	int fd = open(input, O_RDONLY);
-	if (fd != STDIN_FILENO)
-		mm_fatal(errno, "open(\"%s\"), ...", input);
+		input = dev_null;
+	if (output == NULL)
+		output = dev_null;
+	if (strcmp(output, dev_null) != 0)
+		oflags |= O_APPEND | O_CREAT;
+
+	// Redirect standard input.
+	close(STDIN_FILENO);
+	if (open(input, O_RDONLY) != STDIN_FILENO)
+		mm_fatal(errno, "open(\"%s\", ...)", input);
 
 	// Redirect standard output and error.
-	int oflags = O_WRONLY | O_CREAT | O_APPEND;
-	if (output == NULL) {
-		output = "/dev/null";
-		oflags = O_WRONLY;
-	}
-	fd = open(output, oflags, 0644);
-	if (fd < 0)
-		mm_fatal(errno, "open(\"%s\"), ...", output);
+	if ((fd = open(output, oflags, 0644)) < 0)
+		mm_fatal(errno, "open(\"%s\", ...)", output);
 	if (dup2(fd, STDOUT_FILENO) < 0)
 		mm_fatal(errno, "dup2()");
 	if (dup2(fd, STDERR_FILENO) < 0)
