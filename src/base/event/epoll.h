@@ -1,7 +1,7 @@
 /*
  * base/event/epoll.h - MainMemory epoll support.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -66,12 +66,15 @@ mm_event_epoll_prepare(struct mm_event_epoll *backend);
 void NONNULL(1)
 mm_event_epoll_cleanup(struct mm_event_epoll *backend);
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2, 3, 4)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
 		      struct mm_event_epoll_storage *storage,
 		      struct mm_event_batch *changes,
 		      struct mm_event_receiver *receiver,
 		      mm_timeout_t timeout);
+
+void NONNULL(1, 2)
+mm_event_epoll_change(struct mm_event_epoll *backend, struct mm_event_change *change);
 
 #if MM_EVENT_NATIVE_NOTIFY
 

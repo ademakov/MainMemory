@@ -1,7 +1,7 @@
 /*
  * base/event/event.c - MainMemory event loop.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -152,6 +152,13 @@ mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispa
 	ASSERT(thread == mm_thread_self());
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_UNREGISTER);
+}
+
+void NONNULL(1, 2)
+mm_event_unregister_faulty_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+{
+	struct mm_event_change change = { .kind = MM_EVENT_UNREGISTER, .sink = sink };
+	mm_event_backend_change(&dispatch->backend, &change);
 }
 
 void NONNULL(1, 2)

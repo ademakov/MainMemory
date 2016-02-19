@@ -1,7 +1,7 @@
 /*
  * base/event/kqueue.c - MainMemory kqueue support.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by 
@@ -59,10 +59,9 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
 #endif
 
 static bool
-mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
-			   struct mm_event_change *change)
+mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event_change *change)
 {
-	int nevents = storage->nevents;
+	int nevents = *pnevents;
 	struct mm_event_fd *sink = change->sink;
 
 	switch (change->kind) {
@@ -81,7 +80,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 				flags = EV_ADD | EV_CLEAR;
 			}
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
 		}
 		if (sink->regular_output || sink->oneshot_output) {
@@ -98,7 +97,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 				flags = EV_ADD | EV_CLEAR;
 			}
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
 		}
 		break;
@@ -110,7 +109,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 			if (unlikely(sink->changed))
 				return false;
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
 		if (sink->regular_output || sink->oneshot_output_trigger) {
@@ -119,7 +118,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 			if (unlikely(sink->changed))
 				return false;
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 		break;
@@ -132,7 +131,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 				return false;
 			sink->oneshot_input_trigger = 1;
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
 		}
 		break;
@@ -145,7 +144,7 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 				return false;
 			sink->oneshot_output_trigger = 1;
 
-			struct kevent *kp = &storage->events[nevents++];
+			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
 		}
 		break;
@@ -154,8 +153,8 @@ mm_event_kqueue_add_change(struct mm_event_kqueue_storage *storage,
 		ABORT();
 	}
 
-	if (storage->nevents != nevents) {
-		storage->nevents = nevents;
+	if (*pnevents != nevents) {
+		*pnevents = nevents;
 		sink->changed = 1;
 	}
 
@@ -199,26 +198,16 @@ mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
 				    struct mm_event_receiver *receiver,
 				    unsigned int first, unsigned int last)
 {
-	if (receiver != NULL) {
-		for (unsigned int i = first; i < last; i++) {
-			struct mm_event_change *change = &changes->changes[i];
-			struct mm_event_fd *sink = change->sink;
+	for (unsigned int i = first; i < last; i++) {
+		struct mm_event_change *change = &changes->changes[i];
+		struct mm_event_fd *sink = change->sink;
 
-			// Reset the change flag.
-			sink->changed = 0;
+		// Reset the change flag.
+		sink->changed = 0;
 
-			// Store the pertinent event.
-			if (change->kind == MM_EVENT_UNREGISTER)
-				mm_event_receiver_unregister(receiver, sink);
-		}
-	} else {
-		for (unsigned int i = first; i < last; i++) {
-			struct mm_event_change *change = &changes->changes[i];
-			struct mm_event_fd *sink = change->sink;
-
-			// Reset the change flag.
-			sink->changed = 0;
-		}
+		// Store the pertinent event.
+		if (change->kind == MM_EVENT_UNREGISTER)
+			mm_event_receiver_unregister(receiver, sink);
 	}
 }
 
@@ -232,12 +221,8 @@ mm_event_kqueue_commit_changes(struct mm_event_kqueue *backend,
 	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
 			  NULL, 0, NULL);
 	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
-	if (unlikely(n < 0)) {
-		if (errno == EINTR)
-			mm_warning(errno, "kevent");
-		else
-			mm_error(errno, "kevent");
-	}
+	if (unlikely(n < 0))
+		mm_error(errno, "kevent");
 	storage->nevents = 0;
 
 	LEAVE();
@@ -315,7 +300,7 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 	LEAVE();
 }
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2, 3, 4)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		       struct mm_event_kqueue_storage *storage,
 		       struct mm_event_batch *changes,
@@ -328,7 +313,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 	unsigned int first = 0, next = 0;
 	while (next < changes->nchanges) {
 		struct mm_event_change *change = &changes->changes[next];
-		if (likely(mm_event_kqueue_add_change(storage, change))) {
+		if (likely(mm_event_kqueue_add_change(storage->events, &storage->nevents, change))) {
 			// Proceed with more change events if any.
 			next++;
 		} else {
@@ -344,19 +329,31 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		}
 	}
 
-	if (receiver != NULL) {
-		// Poll for incoming events.
-		int n = mm_event_kqueue_poll(backend, storage, timeout);
+	// Poll for incoming events.
+	int n = mm_event_kqueue_poll(backend, storage, timeout);
 
-		// Store incoming events.
-		mm_event_kqueue_receive_events(storage, receiver, n);
-	} else {
-		// Flush event changes.
-		mm_event_kqueue_commit_changes(backend, storage);
-	}
+	// Store incoming events.
+	mm_event_kqueue_receive_events(storage, receiver, n);
 
 	// Store unregister events.
 	mm_event_kqueue_postprocess_changes(changes, receiver, first, changes->nchanges);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_kqueue_change(struct mm_event_kqueue *backend, struct mm_event_change *change)
+{
+	ENTER();
+
+	int nevents = 0;
+	struct kevent events[2];
+	mm_event_kqueue_add_change(events, &nevents, change);
+
+	int n = mm_kevent(backend->event_fd, events, nevents, NULL, 0, NULL);
+	DEBUG("kevent changed: %d, received: %d", nevents, n);
+	if (unlikely(n < 0))
+		mm_error(errno, "kevent");
 
 	LEAVE();
 }

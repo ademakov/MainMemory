@@ -1,7 +1,7 @@
 /*
  * base/event/backend.c - MainMemory event system backend.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,13 +49,10 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 	mm_selfpipe_prepare(&backend->selfpipe);
 
 	// Register the self-pipe.
-	struct mm_event_batch changes;
-	mm_event_batch_prepare(&changes, 1);
-	struct mm_event_backend_storage storage;
-	mm_event_backend_storage_prepare(&storage);
-	mm_event_batch_add(&changes, MM_EVENT_REGISTER, &backend->selfpipe.event_fd);
-	mm_event_backend_listen(backend, &storage, &changes, NULL, 0);
-	mm_event_batch_cleanup(&changes);
+	struct mm_event_change change;
+	change.kind = MM_EVENT_REGISTER,
+	change.sink = &backend->selfpipe.event_fd;
+	mm_event_backend_change(backend, &change);
 
 #if MM_EVENT_NATIVE_NOTIFY
 leave:

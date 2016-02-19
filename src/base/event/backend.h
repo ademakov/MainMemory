@@ -1,7 +1,7 @@
 /*
  * base/event/backend.h - MainMemory events system backend.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -80,7 +80,7 @@ mm_event_backend_serial(struct mm_event_backend *backend UNUSED)
 #endif
 }
 
-static inline void NONNULL(1, 2, 3)
+static inline void NONNULL(1, 2, 3, 4)
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_backend_storage *storage,
 			struct mm_event_batch *changes,
@@ -91,6 +91,16 @@ mm_event_backend_listen(struct mm_event_backend *backend,
 	mm_event_epoll_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
+#endif
+}
+
+static inline void NONNULL(1, 2)
+mm_event_backend_change(struct mm_event_backend *backend, struct mm_event_change *change)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_change(&backend->backend, change);
+#elif HAVE_SYS_EVENT_H
+	mm_event_kqueue_change(&backend->backend, change);
 #endif
 }
 

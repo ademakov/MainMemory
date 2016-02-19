@@ -1,7 +1,7 @@
 /*
  * base/event/epoll.c - MainMemory epoll support.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -140,7 +140,8 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 
-		mm_event_receiver_unregister(receiver, sink);
+		if (receiver != NULL)
+			mm_event_receiver_unregister(receiver, sink);
 		break;
 
 	case MM_EVENT_TRIGGER_INPUT:
@@ -284,7 +285,7 @@ mm_event_epoll_cleanup(struct mm_event_epoll *backend)
 	LEAVE();
 }
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2, 3, 4)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
 		      struct mm_event_epoll_storage *storage,
 		      struct mm_event_batch *changes,
@@ -299,13 +300,21 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 		mm_event_epoll_add_change(backend, change, receiver);
 	}
 
-	if (receiver != NULL) {
-		// Poll for incoming events.
-		int n = mm_event_epoll_poll(backend, storage, timeout);
+	// Poll for incoming events.
+	int n = mm_event_epoll_poll(backend, storage, timeout);
 
-		// Store incoming events.
-		mm_event_epoll_receive_events(backend, storage, receiver, n);
-	}
+	// Store incoming events.
+	mm_event_epoll_receive_events(backend, storage, receiver, n);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_epoll_change(struct mm_event_epoll *backend, struct mm_event_change *change)
+{
+	ENTER();
+
+	mm_event_epoll_add_change(backend, change, NULL);
 
 	LEAVE();
 }
