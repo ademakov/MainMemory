@@ -34,10 +34,7 @@
 static void hello_writer(struct mm_net_socket *sock);
 
 // Server descriptor.
-static struct mm_net_proto hello_proto = {
-	.flags = MM_NET_OUTBOUND,
-	.writer = hello_writer,
-};
+static struct mm_net_proto hello_proto = { .writer = hello_writer };
 
 // Server instance.
 static struct mm_net_server *hello_server;
@@ -48,22 +45,21 @@ static size_t hello_len;
 
 // Command line arguments table.
 static const struct mm_args_info args_tbl[] = {
+	{ NULL, 0, 0, "<port>" },
 	{ "help", 'h', MM_ARGS_SPECIAL,
 	  "\n\t\tdisplay this help text and exit" },
-	{ NULL, 0, 0, NULL },
-	{ "port", 'p', MM_ARGS_REQUIRED,
-	  "\n\t\thello server TCP port" },
+	{ "daemon", 'd', MM_ARGS_TRIVIAL,
+	   "\n\t\trun as a daemon (false by default)" },
 	{ "message", 'm', MM_ARGS_REQUIRED,
 	  "\n\t\thello server message ('Hello, World!' by default)" },
 	{ "message-file", 'f', MM_ARGS_REQUIRED,
 	   "\n\t\tget hello server message from the specified file" },
-	{ "daemon", 'd', MM_ARGS_TRIVIAL,
-	  "\n\t\trun as a daemon (false by default)" },
 };
 
 // Command line arguments table size.
 static const size_t args_cnt = sizeof(args_tbl) / sizeof(args_tbl[0]);
 
+// This function loads the response message from a file.
 static void
 read_hello_message(const char *file)
 {
@@ -85,24 +81,30 @@ read_hello_message(const char *file)
 }
 
 int
-main(int argc, char *argv[])
+main(int ac, char *av[])
 {
-	// Handle command line arguments.
+	// Parse command line arguments.
 	mm_settings_init();
-	mm_args_init(argc, argv, args_cnt, args_tbl);
-	if (mm_args_getargc() > 0) {
-		mm_args_usage(args_cnt, args_tbl);
-		mm_exit(MM_EXIT_USAGE);
-	}
+	mm_args_init(ac, av, args_cnt, args_tbl);
+	ac = mm_args_getargc();
+	av = mm_args_getargv();
+
+	// Handle the help option.
 	if (mm_settings_get("help", NULL)) {
 		mm_args_usage(args_cnt, args_tbl);
 		mm_exit(MM_EXIT_SUCCESS);
 	}
 
-	// Get the port number.
-	uint32_t port = mm_settings_get_uint32("port", "0");
-	if (port == 0 || port > UINT16_MAX)
-		mm_fatal(0, "no valid port number is specified");
+	// Parse the required port number parameter.
+	if (ac != 1) {
+		mm_args_usage(args_cnt, args_tbl);
+		mm_fatal(0, "\nNo port number is provided.");
+	}
+	uint32_t port = atoi(av[0]);
+	if (port == 0 || port > UINT16_MAX) {
+		mm_args_usage(args_cnt, args_tbl);
+		mm_fatal(0, "\nInvalid port number is provided.");
+	}
 
 	// Get the server response message.
 	const char *file = mm_settings_get("message-file", NULL);
@@ -112,7 +114,7 @@ main(int argc, char *argv[])
 				    " are mutually exclusive");
 		read_hello_message(file);
 	} else {
-		hello_msg = mm_settings_get("message", "Hello, World!");
+		hello_msg = mm_settings_get("message", "Hello, World!\n");
 		hello_len = strlen(hello_msg);
 	}
 
@@ -149,6 +151,8 @@ main(int argc, char *argv[])
 	return MM_EXIT_SUCCESS;
 }
 
+// This function gets an open client connection as argument,
+// transmits the response message and closes the connection.
 static void
 hello_writer(struct mm_net_socket *sock)
 {
