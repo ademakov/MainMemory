@@ -69,7 +69,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 {
 	ENTER();
 	ASSERT(mm_buffer_valid(buf));
-	size_t size = 0;
+	size_t consumed = 0;
 
 	// Consume the chunks that precede the given position.
 	for (;;) {
@@ -78,7 +78,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 			break;
 
 		// Account the chunk size.
-		size += mm_buffer_chunk_getsize(chunk);
+		consumed += mm_buffer_chunk_getsize(chunk);
 
 		// Release external segments.
 		struct mm_buffer_segment *seg = mm_buffer_chunk_begin(chunk);
@@ -106,7 +106,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 		start->used = 0;
 
 		// Account the segment size.
-		size += area;
+		consumed += area;
 
 		// Combine the chunk segments.
 		for (;;) {
@@ -123,7 +123,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 			start->meta += area;
 
 			// Account the segment size.
-			size += area;
+			consumed += area;
 		}
 	}
 
@@ -144,7 +144,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 		}
 
 		// Account the segment size.
-		size += area;
+		consumed += area;
 
 		// Fix up the head and tail iterators if needed.
 		if (buf->head.seg == pos->seg) {
@@ -159,8 +159,13 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 		}
 	}
 
+	// Remember the maximum consumed data size to optimize later
+	// buffer chunk allocation.
+	if (buf->consumed_max < consumed)
+		buf->consumed_max = consumed;
+
 	LEAVE();
-	return size;
+	return consumed;
 }
 
 /* Improve space utilization of an empty buffer that was previously in use. */
@@ -177,12 +182,7 @@ mm_buffer_rectify(struct mm_buffer *buf)
 	mm_buffer_position_save(&pos, buf);
 
 	// Consume everything up to it.
-	size_t consumed = mm_buffer_consume(buf, &pos);
-
-	// Remember the maximum data size consumed to optimize later
-	// buffer chunk allocation.
-	if (buf->consumed_max < consumed)
-		buf->consumed_max = consumed;
+	mm_buffer_consume(buf, &pos);
 
 leave:
 	LEAVE();
