@@ -44,8 +44,8 @@
  * release routine to let the user know that the external segment is no longer
  * used.
  * 
- * NOTE: Buffers are not thread-safe, care should be taken not to pass them
- * across cores.
+ * NOTE: Buffers are not thread-safe, care should be taken not to access them
+ * concurrently.
  */
 
 typedef void (*mm_buffer_release_t)(uintptr_t release_data);
@@ -111,6 +111,7 @@ struct mm_buffer_iterator
 	struct mm_chunk *chunk;
 };
 
+/* Segmented data buffer. */
 struct mm_buffer
 {
 	/* The current outgoing data position. */
@@ -119,6 +120,19 @@ struct mm_buffer
 	struct mm_buffer_iterator tail;
 	/* Entire buffer memory as a list of chunks. */
 	struct mm_queue chunks;
+	/* The maximum consumed size. */
+	size_t consumed_max;
+};
+
+/* Buffer read position. */
+struct mm_buffer_position
+{
+	/* The current position. */
+	char *ptr;
+	/* The current segment. */
+	struct mm_buffer_segment *seg;
+	/* The current chunk. */
+	struct mm_chunk *chunk;
 };
 
 /**********************************************************************
@@ -336,6 +350,9 @@ mm_buffer_cleanup(struct mm_buffer *buf);
 struct mm_buffer_segment * NONNULL(1)
 mm_buffer_extend(struct mm_buffer *buf, size_t size);
 
+size_t NONNULL(1, 2)
+mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos);
+
 void NONNULL(1)
 mm_buffer_rectify(struct mm_buffer *buf);
 
@@ -407,16 +424,6 @@ mm_buffer_embed(struct mm_buffer *buf, uint32_t size);
 /**********************************************************************
  * Buffer position.
  **********************************************************************/
-
-struct mm_buffer_position
-{
-	/* The current position. */
-	char *ptr;
-	/* The current segment. */
-	struct mm_buffer_segment *seg;
-	/* The current chunk. */
-	struct mm_chunk *chunk;
-};
 
 static inline void NONNULL(1, 2)
 mm_buffer_position_save(struct mm_buffer_position *pos, struct mm_buffer *buf)
