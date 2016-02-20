@@ -148,10 +148,11 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 
 		// Fix up the head and tail iterators if needed.
 		if (buf->head.seg == pos->seg) {
+			ASSERT(buf->head.ptr == pos->ptr);
 			buf->head.seg = start;
 			mm_buffer_iterator_read_start(&buf->head);
 			if (buf->tail.seg == pos->seg) {
-				ASSERT(buf->tail.ptr == buf->head.ptr);
+				ASSERT(buf->tail.ptr == pos->ptr);
 				buf->tail.seg = start;
 				mm_buffer_iterator_write_start(&buf->tail);
 			}
