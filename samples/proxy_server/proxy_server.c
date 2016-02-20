@@ -133,6 +133,7 @@ main(int ac, char *av[])
 	return MM_EXIT_SUCCESS;
 }
 
+// Create a command.
 static struct proxy_command *
 command_create(void)
 {
@@ -141,6 +142,7 @@ command_create(void)
 	return command;
 }
 
+// Destroy a command.
 static void
 command_destroy(struct proxy_command *command)
 {
@@ -149,6 +151,7 @@ command_destroy(struct proxy_command *command)
 	mm_regular_free(command);
 }
 
+// Create a socket that serves an incoming connection.
 static struct mm_net_socket *
 proxy_create(void)
 {
@@ -158,6 +161,7 @@ proxy_create(void)
 	return &client->sock.sock;
 }
 
+// Destroy a socket that served an incoming connection.
 static void
 proxy_destroy(struct mm_net_socket *sock)
 {
@@ -171,16 +175,7 @@ proxy_destroy(struct mm_net_socket *sock)
 	mm_regular_free(client);
 }
 
-static void
-proxy_parse_error(struct client_conn *client)
-{
-	mm_netbuf_close(&client->sock);
-	mm_error(0, "invalid command");
-}
-
-//
 // Parse a command -- get the target IP address and port.
-//
 static struct proxy_command *
 proxy_parse(char *addr, char *end)
 {
@@ -214,6 +209,7 @@ proxy_parse(char *addr, char *end)
 	return command;
 }
 
+// Read response message from the target server.
 static void
 proxy_read(struct proxy_command *command)
 {
@@ -254,6 +250,7 @@ proxy_read(struct proxy_command *command)
 	mm_net_close(sock);
 }
 
+// Send response message to the client.
 static void
 proxy_write(struct client_conn *client, struct proxy_command *command)
 {
@@ -269,6 +266,7 @@ proxy_write(struct client_conn *client, struct proxy_command *command)
 	}
 }
 
+// Execute a single command.
 static void
 proxy_handle(struct client_conn *client, struct proxy_command *command)
 {
@@ -280,6 +278,7 @@ proxy_handle(struct client_conn *client, struct proxy_command *command)
 	//mm_list_delete(&command->link);
 }
 
+// Read and execute incoming commands from a client.
 static void
 proxy_reader(struct mm_net_socket *sock)
 {
@@ -309,7 +308,8 @@ proxy_reader(struct mm_net_socket *sock)
 			// Parse and handle the command.
 			struct proxy_command *command = proxy_parse(p, e);
 			if (command == NULL) {
-				proxy_parse_error(client);
+				mm_netbuf_close(&client->sock);
+				mm_error(0, "Invalid command");
 				break;
 			}
 			proxy_handle(client, command);
