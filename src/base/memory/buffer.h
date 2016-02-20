@@ -294,7 +294,7 @@ mm_buffer_iterator_write_start(struct mm_buffer_iterator *iter)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_iterator_seek(struct mm_buffer_iterator *iter, struct mm_buffer_segment *seg)
+mm_buffer_iterator_filter(struct mm_buffer_iterator *iter, struct mm_buffer_segment *seg)
 {
 	while (seg != NULL && mm_buffer_segment_ignored(seg))
 		seg = mm_buffer_iterator_next(iter);
@@ -304,12 +304,10 @@ mm_buffer_iterator_seek(struct mm_buffer_iterator *iter, struct mm_buffer_segmen
 static inline bool NONNULL(1)
 mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 {
-	if (iter->seg != NULL) {
-		struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
-		if (seg != NULL) {
-			mm_buffer_iterator_read_start(iter);
-			return true;
-		}
+	struct mm_buffer_segment *seg = mm_buffer_iterator_filter(iter, mm_buffer_iterator_next(iter));
+	if (seg != NULL) {
+		mm_buffer_iterator_read_start(iter);
+		return true;
 	}
 	return false;
 }
@@ -317,12 +315,10 @@ mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 static inline bool NONNULL(1)
 mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 {
-	if (iter->seg != NULL) {
-		struct mm_buffer_segment *seg = mm_buffer_iterator_seek(iter, mm_buffer_iterator_next(iter));
-		if (seg != NULL) {
-			mm_buffer_iterator_write_start(iter);
-			return true;
-		}
+	struct mm_buffer_segment *seg = mm_buffer_iterator_filter(iter, mm_buffer_iterator_next(iter));
+	if (seg != NULL) {
+		mm_buffer_iterator_write_start(iter);
+		return true;
 	}
 	return false;
 }
@@ -346,7 +342,7 @@ mm_buffer_rectify(struct mm_buffer *buf);
 static inline bool NONNULL(1)
 mm_buffer_valid(struct mm_buffer *buf)
 {
-	return buf->head.ptr != NULL;
+	return buf->head.seg != NULL;
 }
 
 static inline bool NONNULL(1)
@@ -364,13 +360,13 @@ mm_buffer_update(struct mm_buffer *buf)
 static inline bool NONNULL(1)
 mm_buffer_read_next(struct mm_buffer *buf)
 {
-	return mm_buffer_iterator_read_next(&buf->head);
+	return mm_buffer_valid(buf) && mm_buffer_iterator_read_next(&buf->head);
 }
 
 static inline void NONNULL(1)
 mm_buffer_write_next(struct mm_buffer *buf, size_t size)
 {
-	if (!mm_buffer_iterator_write_next(&buf->tail))
+	if (!mm_buffer_valid(buf) || !mm_buffer_iterator_write_next(&buf->tail))
 		mm_buffer_extend(buf, size);
 }
 
