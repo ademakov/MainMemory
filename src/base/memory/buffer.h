@@ -311,8 +311,13 @@ static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 {
 	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
-	while (seg != NULL && mm_buffer_segment_ignored(seg))
-		seg = mm_buffer_iterator_next(iter);
+	if (seg != NULL) {
+		// An embedded segment cannot be the last one in
+		// a buffer so if one is met then there should
+		// be another one after it.
+		while (mm_buffer_segment_ignored(seg))
+			seg = mm_buffer_iterator_next(iter);
+	}
 	return seg;
 }
 
