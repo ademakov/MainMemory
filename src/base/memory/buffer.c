@@ -189,14 +189,13 @@ leave:
 }
 
 struct mm_buffer_segment * NONNULL(1)
-mm_buffer_extend(struct mm_buffer *buf, size_t size)
+mm_buffer_extend(struct mm_buffer *buf, size_t size_hint)
 {
 	ENTER();
 
 	// The chunk should have a reasonable size that does not put
 	// too much pressure on the memory allocator.
-	if (size < buf->consumed_max)
-		size = buf->consumed_max;
+	size_t size = max(size_hint, buf->consumed_max);
 	if (size > MM_BUFFER_MAX_CHUNK_SIZE)
 		size = MM_BUFFER_MAX_CHUNK_SIZE;
 	if (size < MM_BUFFER_MIN_CHUNK_SIZE)
@@ -306,7 +305,7 @@ mm_buffer_getleft(struct mm_buffer *buf)
 
 	size_t size = buf->head.end - buf->head.ptr;
 	struct mm_buffer_iterator iter = buf->head;
-	while (mm_buffer_iterator_next(&iter))
+	while (mm_buffer_iterator_filter_next(&iter) != NULL)
 		size += mm_buffer_segment_getused(iter.seg);
 	return size;
 }

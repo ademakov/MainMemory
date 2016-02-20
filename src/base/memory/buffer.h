@@ -308,8 +308,9 @@ mm_buffer_iterator_write_start(struct mm_buffer_iterator *iter)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_iterator_filter(struct mm_buffer_iterator *iter, struct mm_buffer_segment *seg)
+mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 {
+	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
 	while (seg != NULL && mm_buffer_segment_ignored(seg))
 		seg = mm_buffer_iterator_next(iter);
 	return seg;
@@ -318,7 +319,7 @@ mm_buffer_iterator_filter(struct mm_buffer_iterator *iter, struct mm_buffer_segm
 static inline bool NONNULL(1)
 mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 {
-	struct mm_buffer_segment *seg = mm_buffer_iterator_filter(iter, mm_buffer_iterator_next(iter));
+	struct mm_buffer_segment *seg = mm_buffer_iterator_filter_next(iter);
 	if (seg != NULL) {
 		mm_buffer_iterator_read_start(iter);
 		return true;
@@ -329,7 +330,7 @@ mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 static inline bool NONNULL(1)
 mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 {
-	struct mm_buffer_segment *seg = mm_buffer_iterator_filter(iter, mm_buffer_iterator_next(iter));
+	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
 	if (seg != NULL) {
 		mm_buffer_iterator_write_start(iter);
 		return true;
@@ -348,7 +349,7 @@ void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
 
 struct mm_buffer_segment * NONNULL(1)
-mm_buffer_extend(struct mm_buffer *buf, size_t size);
+mm_buffer_extend(struct mm_buffer *buf, size_t size_hint);
 
 size_t NONNULL(1, 2)
 mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos);
