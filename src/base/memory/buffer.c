@@ -640,7 +640,7 @@ mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
 
 	/* Store the char offset (if found) or the scanned data length (if
 	   not found). */
-	*poffset = (ret != NULL ? ret - buf->head.ptr : len);
+	*poffset = (ret != NULL ? (size_t) (ret - buf->head.ptr) : len);
 
 	LEAVE();
 	return ret;
