@@ -106,7 +106,7 @@ mm_settings_get(const char *key, const char *def)
 }
 
 bool NONNULL(1)
-mm_settings_getbool(const char *key, const char *def)
+mm_settings_get_bool(const char *key, const char *def)
 {
 	bool val = false;
 	const char *str = mm_settings_get(key, def);
