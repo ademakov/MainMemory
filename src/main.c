@@ -1,7 +1,7 @@
 /*
  * main.c - MainMemory main routine.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -43,13 +43,6 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#define ENABLE_TEST_SERVERS	0
-
-#if ENABLE_TEST_SERVERS
-static struct mm_net_server *mm_ucmd_server;
-static struct mm_net_server *mm_icmd_server;
-#endif
-
 static bool mm_daemonize = false;
 
 static void
@@ -90,33 +83,12 @@ mm_signal_init(void)
 	LEAVE();
 }
 
-#if ENABLE_TEST_SERVERS
-static void
-mm_cmd_reader(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	char buf[1024];
-	int n = mm_net_read(sock, buf, sizeof(buf));
-	if (n <= 0) {
-		if (n < 0)
-			mm_error(errno, "read()");
-		mm_net_close(sock);
-	}
-
-	mm_net_write(sock, "test\n", 5);
-	mm_net_close(sock);
-
-	LEAVE();
-}
-#endif
-
 static void
 mm_server_init(void)
 {
 	ENTER();
 
-	// Assign event loops to first three cores.
+	// Assign event loops to the first four cores.
 	struct mm_bitset event_loop_cores;
 	mm_bitset_prepare(&event_loop_cores, &mm_global_arena, 4);
 	mm_bitset_set(&event_loop_cores, 0);
@@ -124,24 +96,6 @@ mm_server_init(void)
 	mm_bitset_set(&event_loop_cores, 2);
 	mm_bitset_set(&event_loop_cores, 3);
 	mm_core_set_event_affinity(&event_loop_cores);
-
-#if ENABLE_TEST_SERVERS
-	static struct mm_net_proto proto = {
-		.flags = MM_NET_INBOUND,
-		.prepare = NULL,
-		.cleanup = NULL,
-		.reader = mm_cmd_reader,
-		.writer = NULL,
-	};
-
-	mm_ucmd_server = mm_net_create_unix_server("test", &proto,
-						   "mm_cmd.sock");
-	mm_icmd_server = mm_net_create_inet_server("test", &proto,
-						   "127.0.0.1", 8000);
-
-	//mm_core_register_server(mm_ucmd_server);
-	mm_core_register_server(mm_icmd_server);
-#endif
 
 	const char *addr = mm_settings_get("memcache-ip", "127.0.0.1");
 	uint32_t port = mm_settings_get_uint32("memcache-port", "11211");
