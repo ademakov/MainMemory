@@ -125,4 +125,41 @@ mm_netbuf_close(struct mm_netbuf_socket *sock)
 	mm_net_close(&sock->sock);
 }
 
+/**********************************************************************
+ * Receive buffer in-place parsing support.
+ **********************************************************************/
+
+/* Get current read pointer. */
+static inline char * NONNULL(1)
+mm_netbuf_rptr(struct mm_netbuf_socket *sock)
+{
+	return sock->rxbuf.head.ptr;
+}
+
+/* Get current read segment end. */
+static inline char * NONNULL(1)
+mm_netbuf_rend(struct mm_netbuf_socket *sock)
+{
+	return sock->rxbuf.head.end;
+}
+
+static inline void NONNULL(1)
+mm_netbuf_radd(struct mm_netbuf_socket *sock, size_t len)
+{
+	sock->rxbuf.head.ptr += len;
+}
+
+/* Ensure the current */
+static inline bool NONNULL(1)
+mm_netbuf_rspan(struct mm_netbuf_socket *sock, size_t nbytes)
+{
+	return mm_buffer_span(&sock->rxbuf, nbytes);
+}
+
+static inline char * NONNULL(1, 3)
+mm_netbuf_rfind(struct mm_netbuf_socket *sock, int c, size_t *poffset)
+{
+	return mm_buffer_find(&sock->rxbuf, c, poffset);
+}
+
 #endif /* NET_NETBUF_H */
