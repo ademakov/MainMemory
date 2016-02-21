@@ -174,7 +174,6 @@ main(int argc, char *argv[])
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 
 	// Initialize subsystems.
-	mm_base_init();
 	mm_core_init();
 
 	// Daemonize if needed.
@@ -197,7 +196,6 @@ main(int argc, char *argv[])
 
 	// Terminate subsystems.
 	mm_core_term();
-	mm_base_term();
 	mm_settings_term();
 
 	LEAVE();

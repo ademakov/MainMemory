@@ -101,7 +101,6 @@ main(int ac, char *av[])
 	}
 
 	// Initialize subsystems.
-	mm_base_init();
 	mm_core_init();
 
 	// Create the server.
@@ -127,7 +126,6 @@ main(int ac, char *av[])
 
 	// Terminate subsystems.
 	mm_core_term();
-	mm_base_term();
 	mm_settings_term();
 
 	return MM_EXIT_SUCCESS;

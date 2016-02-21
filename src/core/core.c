@@ -905,6 +905,8 @@ mm_core_init(void)
 	ENTER();
 	ASSERT(mm_core_num == 0);
 
+	mm_base_init();
+
 	// Find the number of CPU cores.
 	mm_core_num = mm_ncpus;
 	if (mm_core_num == 1)
@@ -953,6 +955,8 @@ mm_core_term(void)
 	mm_wait_term();
 
 	mm_net_term();
+
+	mm_base_term();
 
 	LEAVE();
 }
