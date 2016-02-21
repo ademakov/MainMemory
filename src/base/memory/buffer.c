@@ -559,6 +559,10 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	if (buf->tail.seg == buf->head.seg)
 		goto leave;
 
+	// TODO: Have more than one target chunks.
+	if (unlikely(left > MM_BUFFER_MAX_CHUNK_SIZE))
+		mm_fatal(0, "not implemented yet");
+
 	// Consolidate the entire unread data it the tail segment.
 	// If the original tail segment is not empty and at the same
 	// time is large enough to fit the entire data then the tail
