@@ -300,13 +300,12 @@ mm_buffer_getarea(struct mm_buffer *buf)
 size_t NONNULL(1)
 mm_buffer_getleft(struct mm_buffer *buf)
 {
-	if (unlikely(!mm_buffer_valid(buf)))
-		return 0;
-
 	size_t size = buf->head.end - buf->head.ptr;
-	struct mm_buffer_iterator iter = buf->head;
-	while (mm_buffer_iterator_filter_next(&iter) != NULL)
-		size += mm_buffer_segment_getused(iter.seg);
+	if (buf->tail.seg != buf->head.seg) {
+		struct mm_buffer_iterator iter = buf->head;
+		while (mm_buffer_iterator_filter_next(&iter) != NULL)
+			size += mm_buffer_segment_getused(iter.seg);
+	}
 	return size;
 }
 
@@ -518,4 +517,127 @@ mm_buffer_embed(struct mm_buffer *buf, uint32_t size)
 
 	LEAVE();
 	return iseg->data;
+}
+
+/**********************************************************************
+ * Buffer in-place parsing support.
+ **********************************************************************/
+
+bool NONNULL(1)
+mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
+{
+	ENTER();
+	bool rc = true;
+
+	// Check to see if the requested span is too large.
+	if (unlikely(cnt > MM_BUFFER_MAX_CHUNK_SIZE)) {
+		rc = false;
+		goto leave;
+	}
+
+	// Find out how much data is in the buffer.
+	size_t left = mm_buffer_getleft(buf);
+
+	// Find out how much room is required to fit the data.
+	size_t size = max(left, cnt);
+
+	// Find out how much room is available an the buffer tail.
+	size_t room;
+	if (buf->tail.seg == buf->head.seg)
+		room = buf->tail.end - buf->head.ptr;
+	else
+		room = mm_buffer_segment_getsize(buf->tail.seg);
+
+	// If the available room is not sufficient then get more
+	// advancing the tail segment.
+	while (room < size) {
+		mm_buffer_write_next(buf, size);
+		room = mm_buffer_segment_getsize(buf->tail.seg);
+	}
+
+	// The current head segment will do.
+	if (buf->tail.seg == buf->head.seg)
+		goto leave;
+
+	// Consolidate the entire unread data it the tail segment.
+	// If the original tail segment is not empty and at the same
+	// time is large enough to fit the entire data then the tail
+	// data have to be shifted towards the end of the segment.
+	// The rest of the data have to be inserted just before it.
+	size_t tail_left = mm_buffer_segment_getused(buf->tail.seg);
+	size_t rest_left = left - tail_left;
+	if (rest_left == 0) {
+		// There is no actual data to insert so just advance
+		// the head iterator.
+		while (buf->head.seg != buf->tail.seg)
+			mm_buffer_iterator_read_next(&buf->head);
+	} else {
+		// Get the target address.
+		char *data = mm_buffer_segment_getdata(buf->tail.seg);
+
+		// Shift the tail data.
+		if (tail_left)
+			memmove(data + rest_left, data, tail_left);
+
+		// Advance the tail position accordingly.
+		buf->tail.ptr += rest_left;
+
+		// Insert the rest of the data.
+		while (buf->head.seg != buf->tail.seg) {
+			char *p = buf->head.ptr;
+			size_t n = buf->head.end - p;
+
+			// Copy the current head segment.
+			memcpy(data, p, n);
+			data += n;
+
+			// Account for the copied data.
+			buf->head.seg->used -= n;
+			buf->tail.seg->used += n;
+
+			// Proceed to the next segment.
+			mm_buffer_iterator_read_next(&buf->head);
+		}
+	}
+
+leave:
+	LEAVE();
+	return rc;
+}
+
+char * NONNULL(1, 3)
+mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
+{
+	ENTER();
+
+	/* Seek the given char in the current segment. */
+	char *ptr = buf->head.ptr;
+	size_t len = buf->head.end - ptr;
+	char *ret = memchr(ptr, c, len);
+
+	/* If not found then scan the following segments and merge
+	   them as necessary if the char is found there. */
+	if (ret == NULL && buf->tail.seg != buf->head.seg) {
+		struct mm_buffer_iterator iter = buf->head;
+		while (mm_buffer_iterator_read_next(&iter)) {
+			size_t n = iter.end - iter.ptr;
+			char *p = memchr(iter.ptr, c, n);
+			if (p != NULL) {
+				len += p - iter.ptr;
+				if (!mm_buffer_span_slow(buf, len + 1))
+					mm_error(0, "too long buffer span");
+				else
+					ret = buf->head.ptr + len;
+				break;
+			}
+			len += n;
+		}
+	}
+
+	/* Store the char offset (if found) or the scanned data length (if
+	   not found). */
+	*poffset = (ret != NULL ? ret - buf->head.ptr : len);
+
+	LEAVE();
+	return ret;
 }

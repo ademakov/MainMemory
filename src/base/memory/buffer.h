@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/bitops.h"
+#include "base/log/debug.h"
 #include "base/memory/chunk.h"
 
 #include <stdarg.h>
@@ -312,11 +313,13 @@ mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 {
 	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
 	if (seg != NULL) {
-		// An embedded segment cannot be the last one in
-		// a buffer so if one is met then there should
-		// be another one after it.
-		while (mm_buffer_segment_ignored(seg))
+		/* An embedded segment cannot be the last one in
+		   a buffer so if one is found then there should
+		   be another one after it. */
+		while (mm_buffer_segment_ignored(seg)) {
 			seg = mm_buffer_iterator_next(iter);
+			ASSERT(seg != NULL);
+		}
 	}
 	return seg;
 }
@@ -335,6 +338,13 @@ mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 static inline bool NONNULL(1)
 mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 {
+	/* A write segment cannot be followed by an embedded segment
+	   so there is no need to use filter_next() here. Typically
+	   the write segment is the last one in the buffer thus this
+	   function returns nothing. But in certain cases it could be
+	   followed by an empty segment. For instance, a buffer might
+	   be extended for a readv() call but the call filled just a
+	   part of the reserved space. */
 	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
 	if (seg != NULL) {
 		mm_buffer_iterator_write_start(iter);
@@ -371,7 +381,7 @@ mm_buffer_valid(struct mm_buffer *buf)
 static inline bool NONNULL(1)
 mm_buffer_empty(struct mm_buffer *buf)
 {
-	return buf->head.ptr == buf->head.end && buf->head.seg == buf->tail.seg;
+	return buf->head.ptr == buf->tail.ptr;
 }
 
 static inline void NONNULL(1)
@@ -448,5 +458,31 @@ mm_buffer_position_restore(struct mm_buffer_position *pos, struct mm_buffer *buf
 	buf->head.ptr = pos->ptr;
 	mm_buffer_update(buf);
 }
+
+/**********************************************************************
+ * Buffer in-place parsing support.
+ **********************************************************************/
+
+/* Ensure a contiguous memory span at the current read position (slow
+ * path of the inline mm_buffer_span() function).
+ */
+bool NONNULL(1)
+mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt);
+
+/* Ensure a contiguous memory span at the current read position. */
+static inline bool NONNULL(1)
+mm_buffer_span(struct mm_buffer *buf, size_t cnt)
+{
+	size_t len;
+	if (buf->tail.seg == buf->head.seg)
+		len = buf->tail.end - buf->head.ptr;
+	else
+		len = buf->head.end - buf->head.ptr;
+	return (len < cnt) || mm_buffer_span_slow(buf, cnt);
+}
+
+/* Seek for a given char and ensure a contiguous memory span up to it. */
+char * NONNULL(1, 3)
+mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset);
 
 #endif /* BASE_MEMORY_BUFFER_H */
