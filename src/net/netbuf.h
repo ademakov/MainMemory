@@ -51,7 +51,7 @@ ssize_t NONNULL(1)
 mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt);
 
 ssize_t NONNULL(1, 2)
-mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes);
+mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t cnt);
 
 ssize_t NONNULL(1, 2)
 mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size);
@@ -129,37 +129,51 @@ mm_netbuf_close(struct mm_netbuf_socket *sock)
  * Receive buffer in-place parsing support.
  **********************************************************************/
 
-/* Get current read pointer. */
-static inline char * NONNULL(1)
+/* Ensure a contiguous memory span at the current read position. */
+static inline bool NONNULL(1)
+mm_netbuf_span(struct mm_netbuf_socket *sock, size_t cnt)
+{
+	return mm_buffer_span(&sock->rxbuf, cnt);
+}
+
+/* Seek for a given char and ensure a contiguous memory span up to it. */
+static inline char * NONNULL(1, 3)
+mm_netbuf_find(struct mm_netbuf_socket *sock, int c, size_t *poffset)
+{
+	return mm_buffer_find(&sock->rxbuf, c, poffset);
+}
+
+/* Get the current read pointer. */
+static inline void * NONNULL(1)
 mm_netbuf_rptr(struct mm_netbuf_socket *sock)
 {
 	return sock->rxbuf.head.ptr;
 }
 
-/* Get current read segment end. */
+/* Get the current read segment end. */
 static inline char * NONNULL(1)
 mm_netbuf_rend(struct mm_netbuf_socket *sock)
 {
 	return sock->rxbuf.head.end;
 }
 
+/* Advance the read position. */
 static inline void NONNULL(1)
-mm_netbuf_radd(struct mm_netbuf_socket *sock, size_t len)
+mm_netbuf_radd(struct mm_netbuf_socket *sock, size_t cnt)
 {
-	sock->rxbuf.head.ptr += len;
+	sock->rxbuf.head.ptr += cnt;
 }
 
-/* Ensure the current */
-static inline bool NONNULL(1)
-mm_netbuf_rspan(struct mm_netbuf_socket *sock, size_t nbytes)
+/* Get a contiguous memory span and advance past it. */
+static inline void * NONNULL(1)
+mm_netbuf_rget(struct mm_netbuf_socket *sock, size_t cnt)
 {
-	return mm_buffer_span(&sock->rxbuf, nbytes);
-}
-
-static inline char * NONNULL(1, 3)
-mm_netbuf_rfind(struct mm_netbuf_socket *sock, int c, size_t *poffset)
-{
-	return mm_buffer_find(&sock->rxbuf, c, poffset);
+	if (mm_netbuf_span(sock, cnt)) {
+		void *ptr = mm_netbuf_rptr(sock);
+		mm_netbuf_radd(sock, cnt);
+		return ptr;
+	}
+	return NULL;
 }
 
 #endif /* NET_NETBUF_H */

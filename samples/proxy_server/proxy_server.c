@@ -295,7 +295,7 @@ proxy_reader(struct mm_net_socket *sock)
 		for (;;) {
 			// Seek the command terminator char in the read buffer.
 			size_t off = 0;
-			char *e = mm_netbuf_rfind(&client->sock, '\n', &off);
+			char *e = mm_netbuf_find(&client->sock, '\n', &off);
 			if (e == NULL) {
 				if (off > 32) {
 					mm_netbuf_close(&client->sock);
