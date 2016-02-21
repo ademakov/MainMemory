@@ -36,6 +36,7 @@
 
 /* Forward declarations. */
 struct mm_event_batch;
+struct mm_event_change;
 struct mm_event_receiver;
 
 /* Common data for epoll support. */
