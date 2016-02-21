@@ -293,19 +293,19 @@ proxy_reader(struct mm_net_socket *sock)
 		}
 
 		for (;;) {
-			char *p = client->sock.rxbuf.head.ptr;
-			size_t n = client->sock.rxbuf.head.end - p;
-			if (n == 0)
-				break;
-
-			// Seek the command terminator char.
-			char *e = memchr(p, '\n', n);
+			// Seek the command terminator char in the read buffer.
+			size_t off = 0;
+			char *e = mm_netbuf_rfind(&client->sock, '\n', &off);
 			if (e == NULL) {
-				// TODO: check the next segment
+				if (off > 32) {
+					mm_netbuf_close(&client->sock);
+					mm_error(0, "Missing command terminator");
+				}
 				break;
 			}
 
 			// Parse and handle the command.
+			char *p = mm_netbuf_rptr(&client->sock);
 			struct proxy_command *command = proxy_parse(p, e);
 			if (command == NULL) {
 				mm_netbuf_close(&client->sock);
@@ -314,8 +314,11 @@ proxy_reader(struct mm_net_socket *sock)
 			}
 			proxy_handle(client, command);
 
-			// Advance the buffer position.
-			client->sock.rxbuf.head.ptr = e + 1;
+			// Advance the read buffer position.
+			mm_netbuf_radd(&client->sock, off + 1);
 		}
+
+		// Consume already parsed read buffer data.
+		mm_netbuf_read_reset(&client->sock);
 	}
 }
