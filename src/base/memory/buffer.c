@@ -119,7 +119,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 			mm_buffer_segment_release(seg);
 
 			// Merge this segment with the first one.
-			uint32_t area = mm_buffer_segment_getarea(start);
+			uint32_t area = mm_buffer_segment_getarea(seg);
 			start->meta += area;
 
 			// Account the segment size.
@@ -135,7 +135,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos)
 		mm_buffer_segment_release(pos->seg);
 
 		// Merge this segment with the first one.
-		uint32_t area = mm_buffer_segment_getarea(start);
+		uint32_t area = mm_buffer_segment_getarea(pos->seg);
 		if (start == pos->seg) {
 			start->meta = area | MM_BUFFER_INTERNAL;
 			start->used = 0;
@@ -231,44 +231,62 @@ mm_buffer_extend(struct mm_buffer *buf, size_t size_hint)
 }
 
 static struct mm_buffer_segment * NONNULL(1)
-mm_buffer_insert(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
+mm_buffer_append(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
 {
-	struct mm_buffer_segment *seg = buf->tail.seg;
-	if (seg == NULL) {
-		seg = mm_buffer_extend(buf, size);
+	ENTER();
+
+	// Find out the available room in the current tail segment.
+	uint32_t room;
+	if (buf->tail.seg == NULL) {
+		room = 0;
 	} else {
-		ASSERT(mm_buffer_segment_gettype(seg) == MM_BUFFER_INTERNAL);
-		uint32_t area = mm_buffer_segment_getarea(seg);
-		uint32_t used = seg->used;
-		if (used)
-			used = mm_buffer_round_size(used + MM_BUFFER_SEGMENT_SIZE);
-		if ((size + MM_BUFFER_SEGMENT_SIZE) > (area - used)) {
-			seg = mm_buffer_extend(buf, size);
-		} else if (used) {
-			seg->meta = used | MM_BUFFER_INTERNAL;
-			seg = (struct mm_buffer_segment *) (((char *) seg) + used);
-			seg->meta = (area - used) | MM_BUFFER_INTERNAL;
-			seg->used = 0;
+		room = mm_buffer_segment_getarea(buf->tail.seg);
+		uint32_t used = buf->tail.seg->used;
+		if (used) {
+			used += MM_BUFFER_SEGMENT_SIZE;
+			room -= mm_buffer_round_size(used);
 		}
 	}
 
-	struct mm_buffer_segment *res = seg;
+	// If the available room is not sufficient then get more
+	// advancing the tail segment.
+	uint32_t area = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
+	while (room < area) {
+		mm_buffer_write_next(buf, size);
+		room = mm_buffer_segment_getarea(buf->tail.seg);
+	}
 
-	uint32_t area = mm_buffer_segment_getarea(seg);
-	uint32_t used = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
-	if (area <= (used + MM_BUFFER_SEGMENT_SIZE)) {
-		seg->meta = area | type;
-		mm_buffer_extend(buf, 0);
+	// If the segment is not empty it has to be split in two.
+	uint32_t used = buf->tail.seg->used;
+	if (used) {
+		used = mm_buffer_round_size(used + MM_BUFFER_SEGMENT_SIZE);
+		buf->tail.seg->meta = used | MM_BUFFER_INTERNAL;
+		buf->tail.seg = mm_buffer_chunk_next(buf->tail.seg);
+		buf->tail.seg->meta = room | MM_BUFFER_INTERNAL;
+		buf->tail.seg->used = 0;
+	}
+
+	// Setup the result segment.
+	struct mm_buffer_segment *res = buf->tail.seg;
+	res->meta = area | type;
+
+	// Move the buffer tail past the result segment.
+	if (room == area) {
+		mm_buffer_write_next(buf, 0);
 	} else {
-		seg->meta = used | type;
-		seg = (struct mm_buffer_segment *) (((char *) seg) + used);
-		seg->meta = (area - used) | MM_BUFFER_INTERNAL;
-		seg->used = 0;
-
-		buf->tail.seg = seg;
+		buf->tail.seg = mm_buffer_chunk_next(buf->tail.seg);
+		buf->tail.seg->meta = (room - area) | MM_BUFFER_INTERNAL;
+		buf->tail.seg->used = 0;
 		mm_buffer_iterator_write_start(&buf->tail);
 	}
 
+	// Update the read iterator as appropriate.
+	if (buf->head.seg == res && mm_buffer_segment_ignored(res))
+		mm_buffer_iterator_read_next(&buf->head);
+	else
+		mm_buffer_update(buf);
+
+	LEAVE();
 	return res;
 }
 
@@ -493,7 +511,7 @@ mm_buffer_splice(struct mm_buffer *buf, char *data, uint32_t size, uint32_t used
 	}
 
 	uint32_t area = sizeof(struct mm_buffer_xsegment) - MM_BUFFER_SEGMENT_SIZE;
-	struct mm_buffer_segment *seg = mm_buffer_insert(buf, MM_BUFFER_EXTERNAL, area);
+	struct mm_buffer_segment *seg = mm_buffer_append(buf, MM_BUFFER_EXTERNAL, area);
 	struct mm_buffer_xsegment *xseg = (struct mm_buffer_xsegment *) seg;
 
 	xseg->data = data;
@@ -510,13 +528,20 @@ void * NONNULL(1)
 mm_buffer_embed(struct mm_buffer *buf, uint32_t size)
 {
 	ENTER();
-	ASSERT(size <= (UINT32_MAX - MM_BUFFER_SEGMENT_SIZE));
+	void *res = NULL;
 
-	struct mm_buffer_segment *seg = mm_buffer_insert(buf, MM_BUFFER_EMBEDDED, size);
+	// Check to see if the requested size is too large.
+	if (unlikely(size > MM_BUFFER_MAX_CHUNK_SIZE))
+		goto leave;
+
+	// Create the required embedded segment at the buffer tail.
+	struct mm_buffer_segment *seg = mm_buffer_append(buf, MM_BUFFER_EMBEDDED, size);
 	struct mm_buffer_isegment *iseg = (struct mm_buffer_isegment *) seg;
+	res = iseg->data;
 
+leave:
 	LEAVE();
-	return iseg->data;
+	return res;
 }
 
 /**********************************************************************
