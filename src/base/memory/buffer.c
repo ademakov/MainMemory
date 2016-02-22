@@ -282,7 +282,7 @@ mm_buffer_append(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
 
 	// Update the read iterator as appropriate.
 	if (buf->head.seg == res && mm_buffer_segment_ignored(res))
-		mm_buffer_iterator_read_next(&buf->head);
+		mm_buffer_iterator_read_next_unsafe(&buf->head);
 	else
 		mm_buffer_update(buf);
 
@@ -599,7 +599,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 		// There is no actual data to insert so just advance
 		// the head iterator.
 		while (buf->head.seg != buf->tail.seg)
-			mm_buffer_iterator_read_next(&buf->head);
+			mm_buffer_iterator_read_next_unsafe(&buf->head);
 	} else {
 		// Get the target address.
 		char *data = mm_buffer_segment_getdata(buf->tail.seg);
@@ -625,7 +625,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 			buf->tail.seg->used += n;
 
 			// Proceed to the next segment.
-			mm_buffer_iterator_read_next(&buf->head);
+			mm_buffer_iterator_read_next_unsafe(&buf->head);
 		}
 	}
 
@@ -648,7 +648,7 @@ mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
 	   them as necessary if the char is found there. */
 	if (ret == NULL && buf->tail.seg != buf->head.seg) {
 		struct mm_buffer_iterator iter = buf->head;
-		while (mm_buffer_iterator_read_next(&iter)) {
+		while (mm_buffer_iterator_read_next_unsafe(&iter)) {
 			size_t n = iter.end - iter.ptr;
 			char *p = memchr(iter.ptr, c, n);
 			if (p != NULL) {

@@ -49,10 +49,10 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
 	struct mm_buffer *buf = &sock->rxbuf;
-	struct mm_buffer_iterator *iter = &buf->tail;
+	struct mm_buffer_iterator iter = buf->tail;
 	for (;;) {
-		char *p = iter->ptr;
-		size_t n = iter->end - p;
+		char *p = iter.ptr;
+		size_t n = iter.end - p;
 		if (likely(n)) {
 			len += n;
 
@@ -67,7 +67,10 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
 		if (cnt <= len)
 			break;
 
-		mm_buffer_write_next(buf, cnt - len);
+		if (!mm_buffer_iterator_write_next(&iter)) {
+			mm_buffer_extend(buf, cnt - len);
+			iter = buf->tail;
+		}
 	}
 
 	if (iovcnt == 1)
@@ -96,10 +99,10 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 	struct iovec iov[MM_NETBUF_MAXIOV];
 
 	struct mm_buffer *buf = &sock->txbuf;
-	struct mm_buffer_iterator *iter = &buf->head;
+	struct mm_buffer_iterator iter = buf->head;
 	for (;;) {
-		char *p = iter->ptr;
-		size_t n = iter->end - p;
+		char *p = iter.ptr;
+		size_t n = iter.end - p;
 		if (likely(n)) {
 			len += n;
 
@@ -111,7 +114,7 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 				break;
 		}
 
-		if (!mm_buffer_read_next(buf))
+		if (!mm_buffer_iterator_read_next(&iter))
 			break;
 	}
 

@@ -64,7 +64,7 @@ mc_parser_scan_lf(struct mc_parser *parser, char *s)
 		rc = (*(s + 1) == '\n');
 	} else {
 		struct mm_buffer_iterator iter = buf->head;
-		if (mm_buffer_iterator_read_next(&iter) && iter.ptr < iter.end)
+		if (mm_buffer_iterator_read_next_unsafe(&iter) && iter.ptr < iter.end)
 			rc = *iter.ptr == '\n';
 	}
 	DEBUG("nl=%d", rc);

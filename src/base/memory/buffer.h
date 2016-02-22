@@ -325,7 +325,7 @@ mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 }
 
 static inline bool NONNULL(1)
-mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
+mm_buffer_iterator_read_next_unsafe(struct mm_buffer_iterator *iter)
 {
 	struct mm_buffer_segment *seg = mm_buffer_iterator_filter_next(iter);
 	if (seg != NULL) {
@@ -336,7 +336,7 @@ mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
 }
 
 static inline bool NONNULL(1)
-mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
+mm_buffer_iterator_write_next_unsafe(struct mm_buffer_iterator *iter)
 {
 	/* A write segment cannot be followed by an embedded segment
 	   so there is no need to use filter_next() here. Typically
@@ -351,6 +351,18 @@ mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
 		return true;
 	}
 	return false;
+}
+
+static inline bool NONNULL(1)
+mm_buffer_iterator_read_next(struct mm_buffer_iterator *iter)
+{
+	return iter->seg != NULL && mm_buffer_iterator_read_next_unsafe(iter);
+}
+
+static inline bool NONNULL(1)
+mm_buffer_iterator_write_next(struct mm_buffer_iterator *iter)
+{
+	return iter->seg != NULL && mm_buffer_iterator_write_next_unsafe(iter);
 }
 
 /**********************************************************************
@@ -393,14 +405,14 @@ mm_buffer_update(struct mm_buffer *buf)
 static inline bool NONNULL(1)
 mm_buffer_read_next(struct mm_buffer *buf)
 {
-	return mm_buffer_valid(buf) && mm_buffer_iterator_read_next(&buf->head);
+	return mm_buffer_iterator_read_next(&buf->head);
 }
 
 static inline void NONNULL(1)
-mm_buffer_write_next(struct mm_buffer *buf, size_t size)
+mm_buffer_write_next(struct mm_buffer *buf, size_t size_hint)
 {
-	if (!mm_buffer_valid(buf) || !mm_buffer_iterator_write_next(&buf->tail))
-		mm_buffer_extend(buf, size);
+	if (!mm_buffer_iterator_write_next(&buf->tail))
+		mm_buffer_extend(buf, size_hint);
 }
 
 size_t NONNULL(1)
