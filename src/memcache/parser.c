@@ -37,7 +37,6 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 	DEBUG("start parser");
 
 	parser->state = state;
-	parser->command = NULL;
 
 	LEAVE();
 }
@@ -64,7 +63,7 @@ mc_parser_scan_value(struct mc_parser *parser)
 	ENTER();
 	bool rc = true;
 
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 	struct mc_action *action = &command->action;
 
 	// Try to read the value and required LF and optional CR.
@@ -194,7 +193,7 @@ mc_parser_parse(struct mc_parser *parser)
 	// The current command.
 	const mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
 	struct mc_command *command = mc_command_create(thread);
-	parser->command = command;
+	parser->state->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
 	// too much junk data.
@@ -824,16 +823,16 @@ again:
 				// If it was a GET command then it is required
 				// to destroy all commands past the first one.
 				// The first one is for the error response.
-				if (parser->command->next != NULL) {
-					command = parser->command->next;
+				if (parser->state->command->next != NULL) {
+					command = parser->state->command->next;
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
 						mc_command_destroy(thread, tmp);
 					} while (command != NULL);
 
-					parser->command->next = NULL;
-					command = parser->command;
+					parser->state->command->next = NULL;
+					command = parser->state->command;
 				}
 				command->type = &mc_command_ascii_error;
 				state = S_ERROR_1;

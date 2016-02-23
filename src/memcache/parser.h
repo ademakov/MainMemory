@@ -28,7 +28,6 @@ struct mc_state;
 struct mc_parser
 {
 	struct mc_state *state;
-	struct mc_command *command;
 };
 
 void NONNULL(1, 2)

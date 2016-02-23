@@ -28,6 +28,7 @@ mc_state_create(void)
 
 	struct mc_state *state = mm_regular_alloc(sizeof(struct mc_state));
 
+	state->command = NULL;
 	state->command_head = NULL;
 	state->command_tail = NULL;
 	state->protocol = MC_PROTOCOL_INIT;

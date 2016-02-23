@@ -114,10 +114,10 @@ parse:
 		rc = mc_parser_parse(&parser);
 
 	if (!rc) {
-		if (parser.command != NULL) {
+		if (state->command != NULL) {
 			mm_core_t core = mm_event_target(&sock->event);
-			mc_command_destroy(core, parser.command);
-			parser.command = NULL;
+			mc_command_destroy(core, state->command);
+			state->command = NULL;
 		}
 		if (state->trash) {
 			mm_netbuf_close(&state->sock);
@@ -132,14 +132,14 @@ parse:
 	}
 
 	// Process the parsed command.
-	mc_process_command(state, parser.command);
+	mc_process_command(state, state->command);
 
 	// If there is more input in the buffer then try to parse
 	// the next command.
 	if (!mm_netbuf_empty(&parser.state->sock)) {
 		// Mark the parsed input as consumed.
 		mm_netbuf_save_position(&parser.state->sock, &start);
-		parser.command = NULL;
+		state->command = NULL;
 		goto parse;
 	}
 

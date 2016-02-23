@@ -94,8 +94,8 @@ mc_binary_error(struct mc_parser *parser, uint32_t body_len, uint16_t status)
 {
 	if (!mc_binary_skip(parser, body_len))
 		return false;
-	parser->command->type = &mc_command_binary_error;
-	parser->command->value = status;
+	parser->state->command->type = &mc_command_binary_error;
+	parser->state->command->value = status;
 	return true;
 }
 
@@ -114,7 +114,7 @@ mc_binary_invalid_arguments(struct mc_parser *parser, uint32_t body_len)
 static void
 mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 {
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 
 	struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
 	if (unlikely(iter->ptr == iter->end))
@@ -163,7 +163,7 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	mc_binary_set_key(parser, key_len);
 
 	// Create an entry.
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 	uint32_t value_len = body_len - key_len - sizeof extras;
 	mc_action_create(&command->action, value_len);
 
@@ -190,7 +190,7 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 	mc_binary_set_key(parser, key_len);
 
 	// Find the value length.
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 	uint32_t value_len = body_len - key_len;
 	command->action.value_len = value_len;
 
@@ -226,7 +226,7 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 	} extras;
 	mm_netbuf_read(&parser->state->sock, &extras, 20);
 
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 	command->delta = mm_ntohll(extras.delta);
 	command->value = mm_ntohll(extras.value);
 	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
@@ -246,7 +246,7 @@ mc_binary_read_flush(struct mc_parser *parser)
 	uint32_t exp_time;
 	mm_netbuf_read(&parser->state->sock, &exp_time, sizeof exp_time);
 
-	struct mc_command *command = parser->command;
+	struct mc_command *command = parser->state->command;
 	command->exp_time = mm_ntohl(exp_time);
 
 	return true;
@@ -276,7 +276,7 @@ mc_binary_parse(struct mc_parser *parser)
 	struct mc_command *command = mc_command_create(mm_core_self());
 	command->binary.opaque = header.opaque;
 	command->binary.opcode = header.opcode;
-	parser->command = command;
+	parser->state->command = command;
 
 	// The current command.
 	uint32_t body_len = mm_ntohl(header.body_len);
