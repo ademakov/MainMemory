@@ -40,7 +40,7 @@ mc_state_create(void)
 	return &state->sock.sock;
 }
 
-void
+void NONNULL(1)
 mc_state_reclaim(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -59,7 +59,7 @@ mc_state_reclaim(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mc_state_destroy(struct mm_net_socket *sock)
 {
 	ENTER();
@@ -70,7 +70,7 @@ mc_state_destroy(struct mm_net_socket *sock)
 	LEAVE();
 }
 
-bool
+bool NONNULL(1)
 mc_state_detach(struct mm_net_socket *sock)
 {
 	ENTER();

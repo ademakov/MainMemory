@@ -21,20 +21,23 @@
 #define MEMCACHE_STATE_H
 
 #include "memcache/command.h"
+#include "memcache/binary.h"
 
-#include "base/log/trace.h"
+#include "base/log/debug.h"
 #include "net/netbuf.h"
 
-#define MC_PROTOCOL_INIT	0
-#define MC_PROTOCOL_ASCII	1
-#define MC_PROTOCOL_BINARY	2
+typedef enum {
+	MC_PROTOCOL_INIT = 0,
+	MC_PROTOCOL_ASCII = 1,
+	MC_PROTOCOL_BINARY = 2,
+} mc_protocol_t;
 
 struct mc_state
 {
-	// The client socket,
+	/* The client socket. */
 	struct mm_netbuf_socket sock;
 
-	// Command processing queue.
+	/* Command processing queue. */
 	struct mc_command *command_head;
 	struct mc_command *command_tail;
 
@@ -46,29 +49,56 @@ struct mc_state
 	bool trash;
 };
 
-/* Net-proto routines. */
-struct mm_net_socket *mc_state_create(void);
-void mc_state_reclaim(struct mm_net_socket *sock);
-void mc_state_destroy(struct mm_net_socket *sock);
-bool mc_state_detach(struct mm_net_socket *sock);
+/**********************************************************************
+ * Net protocol routines.
+ **********************************************************************/
 
-static inline void
+struct mm_net_socket *
+mc_state_create(void);
+
+void NONNULL(1)
+mc_state_reclaim(struct mm_net_socket *sock);
+
+void NONNULL(1)
+mc_state_destroy(struct mm_net_socket *sock);
+
+bool NONNULL(1)
+mc_state_detach(struct mm_net_socket *sock);
+
+/**********************************************************************
+ * Command support.
+ **********************************************************************/
+
+static inline mc_protocol_t NONNULL(1)
+mc_getprotocol(struct mc_state *state)
+{
+	mc_protocol_t protocol = state->protocol;
+	if (protocol == MC_PROTOCOL_INIT) {
+		ASSERT(mm_netbuf_rptr(&state->sock) < mm_netbuf_rend(&state->sock));
+		uint8_t *p = (uint8_t *) mm_netbuf_rptr(&state->sock);
+		if (*p == MC_BINARY_REQUEST) {
+			DEBUG("binary protocol detected");
+			protocol = MC_PROTOCOL_BINARY;
+		} else {
+			DEBUG("ASCII protocol detected");
+			protocol = MC_PROTOCOL_ASCII;
+		}
+		state->protocol = protocol;
+	}
+	return protocol;
+}
+
+static inline void NONNULL(1, 2, 3)
 mc_queue_command(struct mc_state *state,
 		 struct mc_command *first,
 		 struct mc_command *last)
 {
-	ENTER();
-	ASSERT(first != NULL);
-	ASSERT(last != NULL);
-
 	if (state->command_head == NULL) {
 		state->command_head = first;
 	} else {
 		state->command_tail->next = first;
 	}
 	state->command_tail = last;
-
-	LEAVE();
 }
 
 #endif /* MEMCACHE_STATE_H */

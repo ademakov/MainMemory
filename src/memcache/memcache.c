@@ -103,11 +103,12 @@ retry:
 	mc_parser_start(&parser, state);
 	struct mm_buffer_position start;
 	mm_netbuf_save_position(&state->sock, &start);
+	mc_protocol_t protocol = mc_getprotocol(state);
 
 	// Try to parse the received input.
 	bool rc;
 parse:
-	if (state->protocol == MC_PROTOCOL_BINARY)
+	if (protocol == MC_PROTOCOL_BINARY)
 		rc = mc_binary_parse(&parser);
 	else
 		rc = mc_parser_parse(&parser);

@@ -39,17 +39,6 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 	parser->state = state;
 	parser->command = NULL;
 
-	if (state->protocol == MC_PROTOCOL_INIT) {
-		uint8_t c = *((uint8_t *) parser->state->sock.rxbuf.head.ptr);
-		if (c == MC_BINARY_REQUEST) {
-			DEBUG("binary protocol detected");
-			state->protocol = MC_PROTOCOL_BINARY;
-		} else {
-			DEBUG("ASCII protocol detected");
-			state->protocol = MC_PROTOCOL_ASCII;
-		}
-	}
-
 	LEAVE();
 }
 
