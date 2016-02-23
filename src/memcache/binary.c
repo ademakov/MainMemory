@@ -19,7 +19,6 @@
 
 #include "memcache/binary.h"
 #include "memcache/command.h"
-#include "memcache/parser.h"
 #include "memcache/state.h"
 
 #include "base/bytes.h"
@@ -56,14 +55,14 @@ static struct mc_command_type *mc_binary_commands[256] = {
 };
 
 static bool
-mc_binary_fill(struct mc_parser *parser, uint32_t required)
+mc_binary_fill(struct mc_state *state, uint32_t required)
 {
-	uint32_t available = mm_netbuf_getleft(&parser->state->sock);
+	uint32_t available = mm_netbuf_getleft(&state->sock);
 	while (required > available) {
-		ssize_t n = mm_netbuf_fill(&parser->state->sock, required - available);
+		ssize_t n = mm_netbuf_fill(&state->sock, required - available);
 		if (n <= 0) {
 			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-				parser->state->error = true;
+				state->error = true;
 			return false;
 		}
 		available += n;
@@ -72,17 +71,17 @@ mc_binary_fill(struct mc_parser *parser, uint32_t required)
 }
 
 static bool
-mc_binary_skip(struct mc_parser *parser, uint32_t required)
+mc_binary_skip(struct mc_state *state, uint32_t required)
 {
 	for (;;) {
-		required -= mm_netbuf_reduce(&parser->state->sock, required);
+		required -= mm_netbuf_reduce(&state->sock, required);
 		if (required == 0)
 			break;
 
-		ssize_t n = mm_netbuf_fill(&parser->state->sock, required);
+		ssize_t n = mm_netbuf_fill(&state->sock, required);
 		if (n <= 0) {
 			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-				parser->state->error = true;
+				state->error = true;
 			return false;
 		}
 	}
@@ -90,35 +89,35 @@ mc_binary_skip(struct mc_parser *parser, uint32_t required)
 }
 
 static bool
-mc_binary_error(struct mc_parser *parser, uint32_t body_len, uint16_t status)
+mc_binary_error(struct mc_state *state, uint32_t body_len, uint16_t status)
 {
-	if (!mc_binary_skip(parser, body_len))
+	if (!mc_binary_skip(state, body_len))
 		return false;
-	parser->state->command->type = &mc_command_binary_error;
-	parser->state->command->value = status;
+	state->command->type = &mc_command_binary_error;
+	state->command->value = status;
 	return true;
 }
 
 static bool
-mc_binary_unknown_command(struct mc_parser *parser, uint32_t body_len)
+mc_binary_unknown_command(struct mc_state *state, uint32_t body_len)
 {
-	return mc_binary_error(parser, body_len, MC_BINARY_STATUS_UNKNOWN_COMMAND);
+	return mc_binary_error(state, body_len, MC_BINARY_STATUS_UNKNOWN_COMMAND);
 }
 
 static bool
-mc_binary_invalid_arguments(struct mc_parser *parser, uint32_t body_len)
+mc_binary_invalid_arguments(struct mc_state *state, uint32_t body_len)
 {
-	return mc_binary_error(parser, body_len, MC_BINARY_STATUS_INVALID_ARGUMENTS);
+	return mc_binary_error(state, body_len, MC_BINARY_STATUS_INVALID_ARGUMENTS);
 }
 
 static void
-mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
+mc_binary_set_key(struct mc_state *state, uint32_t key_len)
 {
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 
-	struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+	struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
 	if (unlikely(iter->ptr == iter->end))
-		mm_netbuf_read_next(&parser->state->sock);
+		mm_netbuf_read_next(&state->sock);
 
 	char *key;
 	if (iter->ptr + key_len <= iter->end) {
@@ -126,7 +125,7 @@ mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 		iter->ptr += key_len;
 	} else {
 		key = mm_private_alloc(key_len);
-		mm_netbuf_read(&parser->state->sock, key, key_len);
+		mm_netbuf_read(&state->sock, key, key_len);
 		command->own_key = true;
 	}
 
@@ -134,21 +133,21 @@ mc_binary_set_key(struct mc_parser *parser, uint32_t key_len)
 }
 
 static bool
-mc_binary_read_key(struct mc_parser *parser, uint32_t key_len)
+mc_binary_read_key(struct mc_state *state, uint32_t key_len)
 {
-	if (!mc_binary_fill(parser, key_len))
+	if (!mc_binary_fill(state, key_len))
 		return false;
 
 	// Read the key.
-	mc_binary_set_key(parser, key_len);
+	mc_binary_set_key(state, key_len);
 
 	return true;
 }
 
 static bool
-mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_len)
+mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint32_t key_len)
 {
-	if (!mc_binary_fill(parser, body_len))
+	if (!mc_binary_fill(state, body_len))
 		return false;
 
 	// Read the extras.
@@ -157,13 +156,13 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 		uint32_t flags;
 		uint32_t exp_time;
 	} extras;
-	mm_netbuf_read(&parser->state->sock, &extras, sizeof extras);
+	mm_netbuf_read(&state->sock, &extras, sizeof extras);
 
 	// Read the key.
-	mc_binary_set_key(parser, key_len);
+	mc_binary_set_key(state, key_len);
 
 	// Create an entry.
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len - sizeof extras;
 	mc_action_create(&command->action, value_len);
 
@@ -175,35 +174,35 @@ mc_binary_read_entry(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 
 	// Read the entry value.
 	char *value = mc_entry_getvalue(entry);
-	mm_netbuf_read(&parser->state->sock, value, entry->value_len);
+	mm_netbuf_read(&state->sock, value, entry->value_len);
 
 	return true;
 }
 
 static bool
-mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_len)
+mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len)
 {
-	if (!mc_binary_fill(parser, body_len))
+	if (!mc_binary_fill(state, body_len))
 		return false;
 
 	// Read the key.
-	mc_binary_set_key(parser, key_len);
+	mc_binary_set_key(state, key_len);
 
 	// Find the value length.
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len;
 	command->action.value_len = value_len;
 
 	// Read the value.
-	struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+	struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
 	if (unlikely(iter->ptr == iter->end))
-		mm_netbuf_read_next(&parser->state->sock);
+		mm_netbuf_read_next(&state->sock);
 	if (iter->ptr + value_len <= iter->end) {
 		command->action.alter_value = iter->ptr;
 		iter->ptr += value_len;
 	} else {
 		char *value = mm_private_alloc(value_len);
-		mm_netbuf_read(&parser->state->sock, value, value_len);
+		mm_netbuf_read(&state->sock, value, value_len);
 		command->action.alter_value = value;
 		command->own_alter_value = true;
 	}
@@ -212,9 +211,9 @@ mc_binary_read_chunk(struct mc_parser *parser, uint32_t body_len, uint32_t key_l
 }
 
 static bool
-mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
+mc_binary_read_delta(struct mc_state *state, uint32_t key_len)
 {
-	if (!mc_binary_fill(parser, key_len))
+	if (!mc_binary_fill(state, key_len))
 		return false;
 
 	// Read the extras.
@@ -224,41 +223,41 @@ mc_binary_read_delta(struct mc_parser *parser, uint32_t key_len)
 		uint64_t value;
 		uint32_t exp_time;
 	} extras;
-	mm_netbuf_read(&parser->state->sock, &extras, 20);
+	mm_netbuf_read(&state->sock, &extras, 20);
 
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 	command->delta = mm_ntohll(extras.delta);
 	command->value = mm_ntohll(extras.value);
 	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
 
 	// Read the key.
-	mc_binary_set_key(parser, key_len);
+	mc_binary_set_key(state, key_len);
 
 	return true;
 }
 
 static bool
-mc_binary_read_flush(struct mc_parser *parser)
+mc_binary_read_flush(struct mc_state *state)
 {
-	if (!mc_binary_fill(parser, 4))
+	if (!mc_binary_fill(state, 4))
 		return false;
 
 	uint32_t exp_time;
-	mm_netbuf_read(&parser->state->sock, &exp_time, sizeof exp_time);
+	mm_netbuf_read(&state->sock, &exp_time, sizeof exp_time);
 
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 	command->exp_time = mm_ntohl(exp_time);
 
 	return true;
 }
 
 bool NONNULL(1)
-mc_binary_parse(struct mc_parser *parser)
+mc_binary_parse(struct mc_state *state)
 {
 	ENTER();
 	bool rc = true;
 
-	size_t size = mm_netbuf_getleft(&parser->state->sock);
+	size_t size = mm_netbuf_getleft(&state->sock);
 	DEBUG("available bytes: %lu", size);
 	if (size < sizeof(struct mc_binary_header)) {
 		rc = false;
@@ -266,9 +265,9 @@ mc_binary_parse(struct mc_parser *parser)
 	}
 
 	struct mc_binary_header header;
-	mm_netbuf_read(&parser->state->sock, &header, sizeof header);
+	mm_netbuf_read(&state->sock, &header, sizeof header);
 	if (unlikely(header.magic != MC_BINARY_REQUEST)) {
-		parser->state->trash = true;
+		state->trash = true;
 		rc = false;
 		goto leave;
 	}
@@ -276,20 +275,20 @@ mc_binary_parse(struct mc_parser *parser)
 	struct mc_command *command = mc_command_create(mm_core_self());
 	command->binary.opaque = header.opaque;
 	command->binary.opcode = header.opcode;
-	parser->state->command = command;
+	state->command = command;
 
 	// The current command.
 	uint32_t body_len = mm_ntohl(header.body_len);
 	uint32_t key_len = mm_ntohs(header.key_len);
 	uint32_t ext_len = header.ext_len;
 	if (unlikely((key_len + ext_len) > body_len)) {
-		rc = mc_binary_invalid_arguments(parser, body_len);
+		rc = mc_binary_invalid_arguments(state, body_len);
 		goto leave;
 	}
 
 	command->type = mc_binary_commands[header.opcode];
 	if (unlikely(command->type == NULL)) {
-		rc = mc_binary_unknown_command(parser, body_len);
+		rc = mc_binary_unknown_command(state, body_len);
 		goto leave;
 	}
 	DEBUG("command type: %s", command->type->name);
@@ -300,19 +299,19 @@ mc_binary_parse(struct mc_parser *parser)
 		if (unlikely(ext_len != 0)
 		    || unlikely(key_len != body_len)
 		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(parser, body_len);
+			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
-		rc = mc_binary_read_key(parser, key_len);
+		rc = mc_binary_read_key(state, key_len);
 		break;
 
 	case MC_COMMAND_STORAGE:
 		if (unlikely(ext_len != 8)
 		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(parser, body_len);
+			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
-		rc = mc_binary_read_entry(parser, body_len, key_len);
+		rc = mc_binary_read_entry(state, body_len, key_len);
 		command->action.stamp = mm_ntohll(header.stamp);
 		break;
 
@@ -320,7 +319,7 @@ mc_binary_parse(struct mc_parser *parser)
 		if (unlikely(ext_len != 0)
 		    || unlikely(key_len == body_len)
 		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(parser, body_len);
+			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
 		switch (header.opcode) {
@@ -333,32 +332,32 @@ mc_binary_parse(struct mc_parser *parser)
 			command->action.alter_type = MC_ACTION_ALTER_PREPEND;
 			break;
 		}
-		rc = mc_binary_read_chunk(parser, body_len, key_len);
+		rc = mc_binary_read_chunk(state, body_len, key_len);
 		break;
 
 	case MC_COMMAND_DELTA:
 		if (unlikely(ext_len != 20)
 		    || unlikely(key_len + ext_len != body_len)
 		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(parser, body_len);
+			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
-		rc = mc_binary_read_delta(parser, key_len);
+		rc = mc_binary_read_delta(state, key_len);
 		break;
 
 	case MC_COMMAND_FLUSH:
 		if (unlikely(ext_len != 0 && ext_len != 4)
 		    || unlikely(key_len != 0)
 		    || unlikely(body_len != ext_len)) {
-			rc = mc_binary_invalid_arguments(parser, body_len);
+			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
 		if (ext_len)
-			rc = mc_binary_read_flush(parser);
+			rc = mc_binary_read_flush(state);
 		break;
 
 	default:
-		mc_binary_skip(parser, body_len);
+		mc_binary_skip(state, body_len);
 		break;
 	}
 

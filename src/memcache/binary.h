@@ -23,7 +23,7 @@
 #include "common.h"
 
 /* Forward declarations. */
-struct mc_parser;
+struct mc_state;
 
 /* Binary protocol magic bytes. */
 #define MC_BINARY_REQUEST			0x80
@@ -83,6 +83,6 @@ struct mc_binary_header
 };
 
 bool NONNULL(1)
-mc_binary_parse(struct mc_parser *parser);
+mc_binary_parse(struct mc_state *state);
 
 #endif /* MEMCACHE_BINARY_H */

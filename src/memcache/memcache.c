@@ -109,7 +109,7 @@ retry:
 	bool rc;
 parse:
 	if (protocol == MC_PROTOCOL_BINARY)
-		rc = mc_binary_parse(&parser);
+		rc = mc_binary_parse(state);
 	else
 		rc = mc_parser_parse(&parser);
 
