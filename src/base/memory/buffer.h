@@ -375,8 +375,8 @@ mm_buffer_prepare(struct mm_buffer *buf);
 void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
 
-struct mm_buffer_segment * NONNULL(1)
-mm_buffer_extend(struct mm_buffer *buf, size_t size_hint);
+struct mm_buffer_segment * NONNULL(1, 2)
+mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t size_hint);
 
 size_t NONNULL(1, 2)
 mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos);
@@ -412,7 +412,7 @@ static inline void NONNULL(1)
 mm_buffer_write_next(struct mm_buffer *buf, size_t size_hint)
 {
 	if (!mm_buffer_iterator_write_next(&buf->tail))
-		mm_buffer_extend(buf, size_hint);
+		mm_buffer_extend(buf, &buf->tail, size_hint);
 }
 
 size_t NONNULL(1)

@@ -68,7 +68,7 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
 			break;
 
 		if (!mm_buffer_iterator_write_next(&iter)) {
-			mm_buffer_extend(buf, cnt - len);
+			mm_buffer_extend(buf, &iter, cnt - len);
 			iter = buf->tail;
 		}
 	}

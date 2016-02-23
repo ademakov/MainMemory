@@ -188,8 +188,8 @@ leave:
 	LEAVE();
 }
 
-struct mm_buffer_segment * NONNULL(1)
-mm_buffer_extend(struct mm_buffer *buf, size_t size_hint)
+struct mm_buffer_segment * NONNULL(1, 2)
+mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t size_hint)
 {
 	ENTER();
 
@@ -216,15 +216,19 @@ mm_buffer_extend(struct mm_buffer *buf, size_t size_hint)
 	seg->meta = size | MM_BUFFER_INTERNAL;
 	seg->used = 0;
 
-	// Initialize the head position for the first buffer chunk.
+	// Initialize the head and tail iterators for the first buffer chunk.
 	if (first) {
 		mm_buffer_iterator_chunk_start(&buf->head, chunk);
 		mm_buffer_iterator_read_start(&buf->head);
+		if (&buf->tail != iter) {
+			mm_buffer_iterator_chunk_start(&buf->tail, chunk);
+			mm_buffer_iterator_write_start(&buf->tail);
+		}
 	}
 
 	// Initialize the tail position.
-	mm_buffer_iterator_chunk_start(&buf->tail, chunk);
-	mm_buffer_iterator_write_start(&buf->tail);
+	mm_buffer_iterator_chunk_start(iter, chunk);
+	mm_buffer_iterator_write_start(iter);
 
 	LEAVE();
 	return seg;
