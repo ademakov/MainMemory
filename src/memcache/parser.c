@@ -50,8 +50,6 @@ mc_parser_start(struct mc_parser *parser, struct mc_state *state)
 		}
 	}
 
-	mm_netbuf_save_position(&parser->state->sock, &parser->start);
-
 	LEAVE();
 }
 

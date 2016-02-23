@@ -20,7 +20,7 @@
 #ifndef MEMCACHE_PARSER_H
 #define MEMCACHE_PARSER_H
 
-#include "base/memory/buffer.h"
+#include "common.h"
 
 /* Forward declaration. */
 struct mc_state;
@@ -29,7 +29,6 @@ struct mc_parser
 {
 	struct mc_state *state;
 	struct mc_command *command;
-	struct mm_buffer_position start;
 };
 
 void NONNULL(1, 2)

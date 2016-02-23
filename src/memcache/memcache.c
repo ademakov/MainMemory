@@ -101,6 +101,8 @@ retry:
 	// Initialize the parser.
 	struct mc_parser parser;
 	mc_parser_start(&parser, state);
+	struct mm_buffer_position start;
+	mm_netbuf_save_position(&state->sock, &start);
 
 	// Try to parse the received input.
 	bool rc;
@@ -123,7 +125,7 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_netbuf_restore_position(&parser.state->sock, &parser.start);
+		mm_netbuf_restore_position(&parser.state->sock, &start);
 		n = mm_netbuf_fill(&state->sock, 1);
 		goto retry;
 	}
@@ -135,7 +137,7 @@ parse:
 	// the next command.
 	if (!mm_netbuf_empty(&parser.state->sock)) {
 		// Mark the parsed input as consumed.
-		mm_netbuf_save_position(&parser.state->sock, &parser.start);
+		mm_netbuf_save_position(&parser.state->sock, &start);
 		parser.command = NULL;
 		goto parse;
 	}
