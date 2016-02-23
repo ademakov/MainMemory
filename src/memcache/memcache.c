@@ -99,11 +99,11 @@ retry:
 	}
 
 	// Initialize the parser.
-	struct mc_parser parser;
-	mc_parser_start(&parser, state);
 	struct mm_buffer_position start;
 	mm_netbuf_save_position(&state->sock, &start);
 	mc_protocol_t protocol = mc_getprotocol(state);
+
+	state->command = NULL;
 
 	// Try to parse the received input.
 	bool rc;
@@ -111,7 +111,7 @@ parse:
 	if (protocol == MC_PROTOCOL_BINARY)
 		rc = mc_binary_parse(state);
 	else
-		rc = mc_parser_parse(&parser);
+		rc = mc_parser_parse(state);
 
 	if (!rc) {
 		if (state->command != NULL) {
@@ -126,7 +126,7 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_netbuf_restore_position(&parser.state->sock, &start);
+		mm_netbuf_restore_position(&state->sock, &start);
 		n = mm_netbuf_fill(&state->sock, 1);
 		goto retry;
 	}
@@ -136,9 +136,9 @@ parse:
 
 	// If there is more input in the buffer then try to parse
 	// the next command.
-	if (!mm_netbuf_empty(&parser.state->sock)) {
+	if (!mm_netbuf_empty(&state->sock)) {
 		// Mark the parsed input as consumed.
-		mm_netbuf_save_position(&parser.state->sock, &start);
+		mm_netbuf_save_position(&state->sock, &start);
 		state->command = NULL;
 		goto parse;
 	}

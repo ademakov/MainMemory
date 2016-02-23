@@ -27,25 +27,11 @@
 #define MC_KEY_LEN_MAX		250
 
 
-/*
- * Prepare for parsing a command.
- */
-void NONNULL(1, 2)
-mc_parser_start(struct mc_parser *parser, struct mc_state *state)
-{
-	ENTER();
-	DEBUG("start parser");
-
-	parser->state = state;
-
-	LEAVE();
-}
-
 static bool
-mc_parser_scan_lf(struct mc_parser *parser, char *s)
+mc_parser_scan_lf(struct mc_state *state, char *s)
 {
 	bool rc = false;
-	struct mm_buffer *buf = &parser->state->sock.rxbuf;
+	struct mm_buffer *buf = &state->sock.rxbuf;
 	if ((s + 1) < buf->head.end) {
 		rc = (*(s + 1) == '\n');
 	} else {
@@ -58,22 +44,22 @@ mc_parser_scan_lf(struct mc_parser *parser, char *s)
 }
 
 static bool
-mc_parser_scan_value(struct mc_parser *parser)
+mc_parser_scan_value(struct mc_state *state)
 {
 	ENTER();
 	bool rc = true;
 
-	struct mc_command *command = parser->state->command;
+	struct mc_command *command = state->command;
 	struct mc_action *action = &command->action;
 
 	// Try to read the value and required LF and optional CR.
 	uint32_t required = action->value_len + 1;
-	uint32_t available = mm_netbuf_getleft(&parser->state->sock);
+	uint32_t available = mm_netbuf_getleft(&state->sock);
 	while (required > available) {
-		ssize_t n = mm_netbuf_fill(&parser->state->sock, required - available + 1);
+		ssize_t n = mm_netbuf_fill(&state->sock, required - available + 1);
 		if (n <= 0) {
 			if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-				parser->state->error = true;
+				state->error = true;
 			rc = false;
 			goto leave;
 		}
@@ -84,17 +70,17 @@ mc_parser_scan_value(struct mc_parser *parser)
 	if (action->alter_type == MC_ACTION_ALTER_OTHER) {
 		struct mc_entry *entry = action->new_entry;
 		char *value = mc_entry_getvalue(entry);
-		mm_netbuf_read(&parser->state->sock, value, action->value_len);
+		mm_netbuf_read(&state->sock, value, action->value_len);
 	} else {
-		struct mm_buffer_iterator *iter = &parser->state->sock.rxbuf.head;
+		struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
 		if (unlikely(iter->ptr == iter->end))
-			mm_netbuf_read_next(&parser->state->sock);
+			mm_netbuf_read_next(&state->sock);
 		if (iter->ptr + action->value_len <= iter->end) {
 			action->alter_value = iter->ptr;
 			iter->ptr += action->value_len;
 		} else {
 			char *value = mm_private_alloc(action->value_len);
-			mm_netbuf_read(&parser->state->sock, value, action->value_len);
+			mm_netbuf_read(&state->sock, value, action->value_len);
 			action->alter_value = value;
 			command->own_alter_value = true;
 		}
@@ -121,7 +107,7 @@ mc_parser_handle_option(struct mc_command *command)
 }
 
 bool NONNULL(1)
-mc_parser_parse(struct mc_parser *parser)
+mc_parser_parse(struct mc_state *parser)
 {
 	ENTER();
 
@@ -191,15 +177,15 @@ mc_parser_parse(struct mc_parser *parser)
 	uint32_t set_exp_time = 0;
 
 	// The current command.
-	const mm_core_t thread = mm_netbuf_thread(&parser->state->sock);
+	const mm_core_t thread = mm_netbuf_thread(&parser->sock);
 	struct mc_command *command = mc_command_create(thread);
-	parser->state->command = command;
+	parser->command = command;
 
 	// The count of scanned chars. Used to check if the client sends
 	// too much junk data.
 	int count = 0;
 
-	struct mm_buffer_iterator *const iter = &parser->state->sock.rxbuf.head;
+	struct mm_buffer_iterator *const iter = &parser->sock.rxbuf.head;
 	do {
 		// Get the input buffer position.
 		char *s = iter->ptr;
@@ -823,16 +809,16 @@ again:
 				// If it was a GET command then it is required
 				// to destroy all commands past the first one.
 				// The first one is for the error response.
-				if (parser->state->command->next != NULL) {
-					command = parser->state->command->next;
+				if (parser->command->next != NULL) {
+					command = parser->command->next;
 					do {
 						struct mc_command *tmp = command;
 						command = command->next;
 						mc_command_destroy(thread, tmp);
 					} while (command != NULL);
 
-					parser->state->command->next = NULL;
-					command = parser->state->command;
+					parser->command->next = NULL;
+					command = parser->command;
 				}
 				command->type = &mc_command_ascii_error;
 				state = S_ERROR_1;
@@ -861,7 +847,7 @@ again:
 
 			// The client looks insane. Quit fast.
 			if (too_much) {
-				parser->state->trash = true;
+				parser->trash = true;
 				rc = false;
 				goto leave;
 			}
@@ -887,7 +873,7 @@ again:
 			}
 		}
 
-		rc = mm_netbuf_read_next(&parser->state->sock);
+		rc = mm_netbuf_read_next(&parser->sock);
 
 	} while (rc);
 

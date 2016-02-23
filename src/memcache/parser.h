@@ -25,15 +25,7 @@
 /* Forward declaration. */
 struct mc_state;
 
-struct mc_parser
-{
-	struct mc_state *state;
-};
-
-void NONNULL(1, 2)
-mc_parser_start(struct mc_parser *parser, struct mc_state *state);
-
 bool NONNULL(1)
-mc_parser_parse(struct mc_parser *parser);
+mc_parser_parse(struct mc_state *state);
 
 #endif /* MEMCACHE_PARSER_H */
