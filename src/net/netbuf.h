@@ -144,7 +144,7 @@ mm_netbuf_find(struct mm_netbuf_socket *sock, int c, size_t *poffset)
 }
 
 /* Get the current read pointer. */
-static inline void * NONNULL(1)
+static inline char * NONNULL(1)
 mm_netbuf_rptr(struct mm_netbuf_socket *sock)
 {
 	return sock->rxbuf.head.ptr;
