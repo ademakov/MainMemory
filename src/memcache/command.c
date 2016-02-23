@@ -36,8 +36,6 @@ static uint8_t mc_verbose = 0;
 
 static uint32_t mc_exptime;
 
-static struct mm_pool mc_command_pool;
-
 static char mc_result_nl[] = "\r\n";
 static char mc_result_ok[] = "OK\r\n";
 static char mc_result_end[] = "END\r\n";
@@ -79,48 +77,23 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
 #undef MC_COMMAND_TYPE
 
 /**********************************************************************
- * Memcache command pool initialization and termination.
- **********************************************************************/
-
-void
-mc_command_start(void)
-{
-	ENTER();
-
-	mm_pool_prepare_shared(&mc_command_pool, "memcache command", sizeof(struct mc_command));
-
-	LEAVE();
-}
-
-void
-mc_command_stop(void)
-{
-	ENTER();
-
-	mm_pool_cleanup(&mc_command_pool);
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Memcache command creation and destruction.
  **********************************************************************/
 
-struct mc_command *
-mc_command_create(mm_thread_t thread)
+struct mc_command * NONNULL(1)
+mc_command_create(struct mc_state *state)
 {
 	ENTER();
 
-	struct mc_command *command
-		= mm_pool_shared_alloc_low(thread, &mc_command_pool);
+	struct mc_command *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command));
 	memset(command, 0, sizeof(struct mc_command));
 
 	LEAVE();
 	return command;
 }
 
-void
-mc_command_destroy(mm_thread_t thread, struct mc_command *command)
+void NONNULL(1)
+mc_command_destroy(struct mc_command *command)
 {
 	ENTER();
 
@@ -130,8 +103,6 @@ mc_command_destroy(mm_thread_t thread, struct mc_command *command)
 		mm_private_free((char *) command->action.alter_value);
 
 	mc_action_cleanup(&command->action);
-
-	mm_pool_shared_free_low(thread, &mc_command_pool, command);
 
 	LEAVE();
 }

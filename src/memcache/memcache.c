@@ -48,8 +48,6 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 {
 	ENTER();
 
-	mm_thread_t thread = mm_netbuf_thread(&state->sock);
-
 	do {
 		// Handle the command if it has associated
 		// execution routine.
@@ -57,7 +55,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 		// Release the command data
 		struct mc_command *next = command->next;
-		mc_command_destroy(thread, command);
+		mc_command_destroy(command);
 		command = next;
 
 	} while (command != NULL);
@@ -90,8 +88,7 @@ retry:
 
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			mm_core_t core = mm_event_target(&sock->event);
-			struct mc_command *command = mc_command_create(core);
+			struct mc_command *command = mc_command_create(state);
 			command->type = &mc_command_ascii_quit;
 			mc_process_command(state, command);
 		}
@@ -115,8 +112,7 @@ parse:
 
 	if (!rc) {
 		if (state->command != NULL) {
-			mm_core_t core = mm_event_target(&sock->event);
-			mc_command_destroy(core, state->command);
+			mc_command_destroy(state->command);
 			state->command = NULL;
 		}
 		if (state->trash) {
@@ -164,7 +160,6 @@ mc_memcache_start(void)
 
 	mc_table_init(&mc_config);
 	mc_action_start();
-	mc_command_start();
 	mm_net_start_server(mc_tcp_server);
 
 	LEAVE();
@@ -176,7 +171,6 @@ mc_memcache_stop(void)
 	ENTER();
 
 	mm_net_stop_server(mc_tcp_server);
-	mc_command_stop();
 	mc_action_stop();
 	mc_table_term();
 

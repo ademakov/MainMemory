@@ -272,7 +272,7 @@ mc_binary_parse(struct mc_state *state)
 		goto leave;
 	}
 
-	struct mc_command *command = mc_command_create(mm_core_self());
+	struct mc_command *command = mc_command_create(state);
 	command->binary.opaque = header.opaque;
 	command->binary.opcode = header.opcode;
 	state->command = command;

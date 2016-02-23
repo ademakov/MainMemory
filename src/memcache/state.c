@@ -48,11 +48,10 @@ mc_state_reclaim(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
-	mm_thread_t thread = mm_event_target(&sock->event);
 	while (state->command_head != NULL) {
 		struct mc_command *command = state->command_head;
 		state->command_head = command->next;
-		mc_command_destroy(thread, command);
+		mc_command_destroy(command);
 	}
 
 	mm_netbuf_cleanup(&state->sock);
@@ -72,13 +71,9 @@ mc_state_destroy(struct mm_net_socket *sock)
 }
 
 bool NONNULL(1)
-mc_state_detach(struct mm_net_socket *sock)
+mc_state_detach(struct mm_net_socket *sock UNUSED)
 {
 	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-	bool rc = (state->command_head == NULL);
-
 	LEAVE();
-	return rc;
+	return true;
 }

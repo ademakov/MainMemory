@@ -185,13 +185,13 @@ struct mc_command
  * Command routines.
  **********************************************************************/
 
-void mc_command_start(void);
-void mc_command_stop(void);
+struct mc_command * NONNULL(1)
+mc_command_create(struct mc_state *state);
 
-struct mc_command *mc_command_create(mm_thread_t thread);
-void mc_command_destroy(mm_thread_t thread, struct mc_command *command);
+void NONNULL(1)
+mc_command_destroy(struct mc_command *command);
 
-static inline void
+static inline void NONNULL(1, 2)
 mc_command_execute(struct mc_state *state, struct mc_command *command)
 {
 	(command->type->exec)(state, command);
