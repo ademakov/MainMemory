@@ -42,13 +42,13 @@ const char * NONNULL(1)
 mm_settings_get(const char *key, const char *def);
 
 bool NONNULL(1)
-mm_settings_get_bool(const char *key, const char *def);
+mm_settings_get_bool(const char *key, bool def);
 
 uint32_t NONNULL(1)
-mm_settings_get_uint32(const char *key, const char *def);
+mm_settings_get_uint32(const char *key, uint32_t def);
 
 uint64_t NONNULL(1)
-mm_settings_get_uint64(const char *key, const char *def);
+mm_settings_get_uint64(const char *key, uint64_t def);
 
 void NONNULL(1)
 mm_settings_settype(const char *key, mm_settings_type_t type);

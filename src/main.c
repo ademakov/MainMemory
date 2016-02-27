@@ -98,9 +98,9 @@ mm_server_init(void)
 	mm_core_set_event_affinity(&event_loop_cores);
 
 	const char *addr = mm_settings_get("memcache-ip", "127.0.0.1");
-	uint32_t port = mm_settings_get_uint32("memcache-port", "11211");
-	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", "64");
-	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", "8");
+	uint32_t port = mm_settings_get_uint32("memcache-port", 11211);
+	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", 64);
+	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", 8);
 
 	struct mm_memcache_config memcache_config;
 	memcache_config.addr = addr;

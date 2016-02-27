@@ -1,7 +1,7 @@
 /*
  * base/base.c - Base library setup.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@
 #include "base/event/event.h"
 #include "base/log/debug.h"
 #include "base/log/log.h"
+#include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
@@ -51,7 +52,7 @@ mm_base_init(void)
 {
 	ENTER();
 
-	uint32_t nthreads = mm_settings_get_uint32("thread-number", "0");
+	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
 	if (nthreads != 0 && !mm_base_validate_nthreads(nthreads)) {
 		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
 		nthreads = 0;
@@ -105,8 +106,12 @@ mm_base_loop(struct mm_base_params *params)
 	mm_domain_attr_setspace(&attr, true);
 	mm_domain_attr_setdomainqueue(&attr, mm_ncpus * 32);
 	mm_domain_attr_setthreadqueue(&attr, mm_ncpus * 32);
-	for (mm_thread_t i = 0; i < mm_ncpus; i++) {
-		mm_domain_attr_setcputag(&attr, i, i);
+
+	bool thread_affinity = mm_settings_get_bool("thread-affinity", true);
+	if (thread_affinity) {
+		mm_verbose("set thread affinity");
+		for (mm_thread_t i = 0; i < mm_ncpus; i++)
+			mm_domain_attr_setcputag(&attr, i, i);
 	}
 
 	// Start regular threads.

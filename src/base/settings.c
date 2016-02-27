@@ -106,10 +106,10 @@ mm_settings_get(const char *key, const char *def)
 }
 
 bool NONNULL(1)
-mm_settings_get_bool(const char *key, const char *def)
+mm_settings_get_bool(const char *key, bool def)
 {
-	bool val = false;
-	const char *str = mm_settings_get(key, def);
+	bool val = def;
+	const char *str = mm_settings_get(key, NULL);
 	if (str != NULL) {
 		int err = 0;
 		str = mm_scan_bool(&val, &err, str, NULL);
@@ -120,10 +120,10 @@ mm_settings_get_bool(const char *key, const char *def)
 }
 
 uint32_t NONNULL(1)
-mm_settings_get_uint32(const char *key, const char *def)
+mm_settings_get_uint32(const char *key, uint32_t def)
 {
-	uint32_t val = 0;
-	const char *str = mm_settings_get(key, def);
+	uint32_t val = def;
+	const char *str = mm_settings_get(key, NULL);
 	if (str != NULL) {
 		int err = 0;
 		str = mm_scan_n32(&val, &err, str, NULL);
@@ -134,10 +134,10 @@ mm_settings_get_uint32(const char *key, const char *def)
 }
 
 uint64_t NONNULL(1)
-mm_settings_get_uint64(const char *key, const char *def)
+mm_settings_get_uint64(const char *key, uint64_t def)
 {
-	uint64_t val = 0;
-	const char *str = mm_settings_get(key, def);
+	uint64_t val = def;
+	const char *str = mm_settings_get(key, NULL);
 	if (str != NULL) {
 		int err = 0;
 		str = mm_scan_n64(&val, &err, str, NULL);
