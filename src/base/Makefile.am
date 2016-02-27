@@ -19,6 +19,7 @@ libmmbase_la_SOURCES = \
 	format.c format.h \
 	hash.c hash.h \
 	hashmap.c hashmap.h \
+	init.c init.h \
 	json.c json.h \
 	list.h \
 	lock.c lock.h \

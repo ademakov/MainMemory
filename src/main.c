@@ -21,12 +21,12 @@
 
 #include "core/core.h"
 
-#include "base/args.h"
 #include "base/base.h"
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/conf.h"
 #include "base/daemon.h"
+#include "base/init.h"
 #include "base/settings.h"
 #include "base/event/event.h"
 #include "base/log/error.h"
@@ -151,10 +151,10 @@ main(int argc, char *argv[])
 {
 	ENTER();
 
-	mm_settings_init();
+	// The very basic setup.
+	mm_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 
 	// Handle command line arguments.
-	mm_args_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 	if (mm_args_getargc() > 0) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
 		mm_exit(MM_EXIT_USAGE);
@@ -196,7 +196,7 @@ main(int argc, char *argv[])
 
 	// Terminate subsystems.
 	mm_core_term();
-	mm_settings_term();
+	mm_term();
 
 	LEAVE();
 	mm_log_relay();

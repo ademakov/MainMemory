@@ -18,10 +18,10 @@
  */
 
 #include "common.h"
-#include "base/args.h"
 #include "base/base.h"
 #include "base/daemon.h"
 #include "base/exit.h"
+#include "base/init.h"
 #include "base/log/plain.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
@@ -78,8 +78,7 @@ int
 main(int ac, char *av[])
 {
 	// Parse command line arguments.
-	mm_settings_init();
-	mm_args_init(ac, av, args_cnt, args_tbl);
+	mm_init(ac, av, args_cnt, args_tbl);
 	ac = mm_args_getargc();
 	av = mm_args_getargv();
 
@@ -126,7 +125,7 @@ main(int ac, char *av[])
 
 	// Terminate subsystems.
 	mm_core_term();
-	mm_settings_term();
+	mm_term();
 
 	return MM_EXIT_SUCCESS;
 }
