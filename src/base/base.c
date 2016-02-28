@@ -107,7 +107,7 @@ mm_base_loop(struct mm_base_params *params)
 	mm_domain_attr_setdomainqueue(&attr, mm_ncpus * 32);
 	mm_domain_attr_setthreadqueue(&attr, mm_ncpus * 32);
 
-	bool thread_affinity = mm_settings_get_bool("thread-affinity", true);
+	bool thread_affinity = mm_settings_get_bool("thread-affinity", false);
 	if (thread_affinity) {
 		mm_verbose("set thread affinity");
 		for (mm_thread_t i = 0; i < mm_ncpus; i++)

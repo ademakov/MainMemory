@@ -131,6 +131,8 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	  "\n\t\tconfiguration file" },
 	{ "daemon", 'd', MM_ARGS_TRIVIAL,
 	  "\n\t\trun as a daemon" },
+	{ "thread-affinity", 0, MM_ARGS_REQUIRED,
+	  "\n\t\tenable thread binding to CPU cores" },
 	{ "thread-number", 't', MM_ARGS_REQUIRED,
 	  "\n\t\tnumber of threads" },
 	{ NULL, 0, 0, NULL },
@@ -168,8 +170,8 @@ main(int argc, char *argv[])
 		mm_exit(MM_EXIT_SUCCESS);
 	}
 
-	// Load configuration file.
-	mm_conf_load(mm_settings_get("config", NULL));
+	// Load the configuration file.
+	mm_conf_load(mm_settings_get("config-file", NULL));
 	mm_set_verbose_enabled(mm_settings_get("verbose", NULL) != NULL);
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 

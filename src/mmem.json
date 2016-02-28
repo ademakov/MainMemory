@@ -3,6 +3,7 @@
 	"verbose" : true,
 	"warning" : true,
 	"thread-number" : 4,
+	"thread-affinity" : false,
 
 	"memcache-ip" : "127.0.0.1",
 	"memcache-port" : 11211,
