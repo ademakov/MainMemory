@@ -199,7 +199,5 @@ main(int argc, char *argv[])
 	mm_term();
 
 	LEAVE();
-	mm_log_relay();
-	mm_log_flush();
 	return MM_EXIT_SUCCESS;
 }

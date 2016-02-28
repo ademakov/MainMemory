@@ -1,7 +1,7 @@
 /*
  * base/exit.h - MainMemory exit handling.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -64,6 +64,9 @@ mm_exit_test(void)
 /**********************************************************************
  * Exit Handling.
  **********************************************************************/
+
+void
+mm_exit_init(void);
 
 void
 mm_atexit(void (*func)(void));

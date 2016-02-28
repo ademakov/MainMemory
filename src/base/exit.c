@@ -1,7 +1,7 @@
 /*
  * base/exit.c - MainMemory exit handling.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,12 +38,6 @@ int mm_exit_flag = 0;
 
 static struct mm_queue MM_QUEUE_INIT(mm_exit_hook);
 
-void
-mm_atexit(void (*func)(void))
-{
-	mm_hook_head_proc(&mm_exit_hook, func);
-}
-
 static void
 mm_do_atexit(void)
 {
@@ -53,9 +47,20 @@ mm_do_atexit(void)
 }
 
 void
+mm_exit_init(void)
+{
+	atexit(mm_do_atexit);
+}
+
+void
+mm_atexit(void (*func)(void))
+{
+	mm_hook_head_proc(&mm_exit_hook, func);
+}
+
+void
 mm_exit(int status)
 {
-	mm_do_atexit();
 	exit(status);
 }
 
