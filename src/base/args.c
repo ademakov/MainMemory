@@ -87,6 +87,8 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 	const struct mm_args_info *arginfo = NULL;
 	for (size_t i = 0; i < ninfo; i++) {
 		const struct mm_args_info *p = &info[i];
+		if (p->name == NULL)
+			continue;
 		if (strlen(p->name) == len && memcmp(p->name, arg, len) == 0) {
 			arginfo = p;
 			break;
