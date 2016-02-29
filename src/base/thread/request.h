@@ -412,53 +412,6 @@ mm_request_trysend_5(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
 }
 
 /**********************************************************************
- * System call requests.
- **********************************************************************/
-
-uintptr_t mm_request_syscall_handler(uintptr_t context, uintptr_t *arguments);
-
-static inline void
-mm_request_syscall_0(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
-		     int number)
-{
-	mm_request_send_1(ring, rtor, mm_request_syscall_handler, number);
-}
-
-static inline void
-mm_request_syscall_1(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
-		     int number, uintptr_t arg1)
-{
-	mm_request_send_2(ring, rtor, mm_request_syscall_handler, number,
-			  arg1);
-}
-
-static inline void
-mm_request_syscall_2(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
-		     int number, uintptr_t arg1, uintptr_t arg2)
-{
-	mm_request_send_3(ring, rtor, mm_request_syscall_handler, number,
-			  arg1, arg2);
-}
-
-static inline void
-mm_request_syscall_3(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
-		     int number, uintptr_t arg1, uintptr_t arg2,
-		     uintptr_t arg3)
-{
-	mm_request_send_4(ring, rtor, mm_request_syscall_handler, number,
-			  arg1, arg2, arg3);
-}
-
-static inline void
-mm_request_syscall_4(struct mm_ring_mpmc *ring, struct mm_requestor *rtor,
-		     int number, uintptr_t arg1, uintptr_t arg2,
-		     uintptr_t arg3, uintptr_t arg4)
-{
-	mm_request_send_5(ring, rtor, mm_request_syscall_handler, number,
-			  arg1, arg2, arg3, arg4);
-}
-
-/**********************************************************************
  * Request wrapper generator.
  **********************************************************************/
 
@@ -651,43 +604,6 @@ prefix##_trysend_5(container *p, struct mm_requestor *rtor,		\
 		   uintptr_t a3, uintptr_t a4, uintptr_t a5)		\
 {									\
 	return mm_request_trysend_5(p->name, rtor, r, a1, a2, a3, a4, a5);\
-}
-
-/**
- * Define wrappers for syscall request routines.
- */
-#define MM_REQUEST_SYSCALL_WRAPPERS(prefix, container, name)		\
-static inline void NONNULL(1, 2)					\
-prefix##_syscall_0(container *p, struct mm_requestor *rtor,		\
-		   int n)						\
-{									\
-	mm_request_syscall_0(p->name, rtor, n);				\
-}									\
-static inline void NONNULL(1, 2)					\
-prefix##_syscall_1(container *p, struct mm_requestor *rtor, 		\
-		   int n, uintptr_t a1)					\
-{									\
-	mm_request_syscall_1(p->name, rtor, n, a1);			\
-}									\
-static inline void NONNULL(1, 2)					\
-prefix##_syscall_2(container *p, struct mm_requestor *rtor,		\
-		   int n, uintptr_t a1, uintptr_t a2)			\
-{									\
-	mm_request_syscall_2(p->name, rtor, n, a1, a2);			\
-}									\
-static inline void NONNULL(1, 2)					\
-prefix##_syscall_3(container *p, struct mm_requestor *rtor,		\
-		   int n, uintptr_t a1, uintptr_t a2,			\
-		   uintptr_t a3)					\
-{									\
-	mm_request_syscall_3(p->name, rtor, n, a1, a2, a3);		\
-}									\
-static inline void NONNULL(1, 2)					\
-prefix##_syscall_4(container *p, struct mm_requestor *rtor,		\
-		   int n, uintptr_t a1, uintptr_t a2,			\
-		   uintptr_t a3, uintptr_t a4)				\
-{									\
-	mm_request_syscall_4(p->name, rtor, n, a1, a2, a3, a4);		\
 }
 
 #endif /* BASE_THREAD_REQUEST_H */

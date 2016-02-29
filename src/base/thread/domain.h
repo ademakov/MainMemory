@@ -194,6 +194,4 @@ MM_REQUEST_RECEIVE_WRAPPER(mm_domain, struct mm_domain, request_queue)
 
 MM_REQUEST_SUBMIT_WRAPPERS(mm_domain, struct mm_domain, request_queue)
 
-MM_REQUEST_SYSCALL_WRAPPERS(mm_domain, struct mm_domain, request_queue)
-
 #endif /* BASE_THREAD_DOMAIN_H */
