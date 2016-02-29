@@ -18,3 +18,11 @@
  */
 
 #include "base/thread/request.h"
+
+void
+mm_request_response_handler(uintptr_t context, uintptr_t *arguments)
+{
+	struct mm_request_sender *sender = (struct mm_request_sender *) arguments[0];
+	intptr_t result = (*sender->request)(context, &arguments[1]);
+	(*sender->response)(context, sender, result);
+}
