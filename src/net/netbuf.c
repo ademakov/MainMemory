@@ -91,7 +91,7 @@ ssize_t NONNULL(1)
 mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_netbuf_thread(sock) == mm_core_self());
+	ASSERT(mm_netbuf_thread(sock) == mm_thread_self());
 	ssize_t rc;
 
 	size_t len = 0;

@@ -612,8 +612,8 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
 			// Remember a reader has been started.
 			sock->flags |= MM_NET_READER_SPAWNED;
 			// Submit a reader work.
-			mm_core_t core = mm_event_target(&sock->event);
-			mm_core_post_work(core, &sock->read_work);
+			mm_thread_t target = mm_event_target(&sock->event);
+			mm_core_post_work(target, &sock->read_work);
 		}
 	}
 
@@ -641,8 +641,8 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint16_t flags)
 			// Remember a writer has been started.
 			sock->flags |= MM_NET_WRITER_SPAWNED;
 			// Submit a writer work.
-			mm_core_t core = mm_event_target(&sock->event);
-			mm_core_post_work(core, &sock->write_work);
+			mm_thread_t target = mm_event_target(&sock->event);
+			mm_core_post_work(target, &sock->write_work);
 		}
 	}
 
@@ -794,8 +794,8 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		// Remember a reader has been started.
 		sock->flags |= MM_NET_READER_SPAWNED;
 		// Submit a reader work.
-		mm_core_t core = mm_event_target(&sock->event);
-		mm_core_post_work(core, &sock->read_work);
+		mm_thread_t target = mm_event_target(&sock->event);
+		mm_core_post_work(target, &sock->read_work);
 
 		// Let it start immediately.
 		mm_task_yield();
@@ -824,8 +824,8 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		// Remember a writer has been started.
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		// Submit a writer work.
-		mm_core_t core = mm_event_target(&sock->event);
-		mm_core_post_work(core, &sock->write_work);
+		mm_thread_t target = mm_event_target(&sock->event);
+		mm_core_post_work(target, &sock->write_work);
 
 		// Let it start immediately.
 		mm_task_yield();
@@ -864,8 +864,8 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
-		mm_core_t core = mm_event_target(&sock->event);
-		mm_core_post_work(core, &sock->read_work);
+		mm_thread_t target = mm_event_target(&sock->event);
+		mm_core_post_work(target, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_dispatch_finish(sock);
@@ -904,8 +904,8 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
-		mm_core_t core = mm_event_target(&sock->event);
-		mm_core_post_work(core, &sock->write_work);
+		mm_thread_t target = mm_event_target(&sock->event);
+		mm_core_post_work(target, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_dispatch_finish(sock);
@@ -1415,7 +1415,7 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		mm_task_block();
 		sock->writer = NULL;
 		rc = 0;
-	} else  if (mm_core_gettime(core) < deadline) {
+	} else if (mm_core_gettime(core) < deadline) {
 		mm_timeout_t timeout = deadline - mm_core_gettime(core);
 		sock->writer = mm_task_selfptr();
 		mm_timer_block(timeout);
