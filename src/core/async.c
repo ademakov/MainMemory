@@ -1,7 +1,7 @@
 /*
  * core/async.c - MainMemory asynchronous operations.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@
  */
 
 #include "core/async.h"
+
 #include "core/core.h"
 #include "core/task.h"
 #include "core/value.h"
@@ -25,168 +26,237 @@
 #include "arch/memory.h"
 #include "base/list.h"
 #include "base/log/trace.h"
-#include "base/thread/domain.h"
 #include "base/thread/request.h"
 
-#include "arch/syscall.h"
-#include <sys/syscall.h>
+#include <sys/uio.h>
 
 /* Asynchronous operation information. */
 struct mm_async_node
 {
-	/* The task that requested the operation. */
-	struct mm_task *task;
-
 	/* Link in the per-core list of async operations. */
 	struct mm_link link;
+
+	/* The task that requested the operation. */
+	struct mm_task *task;
 
 	/* Operation status. */
 	mm_value_t status;
 
 	/* Operation result. */
 	mm_value_t result;
-
-	/* Threading subsystem hook. */
-	struct mm_requestor requestor;
+	int error;
 
 	/* Human readable information for debugging. */
 	const char *description;
 };
 
-static void
-mm_async_response(uintptr_t context UNUSED,
-		  struct mm_requestor *rtor, uintptr_t result)
-{
-	struct mm_async_node *node = containerof(rtor, struct mm_async_node, requestor);
+/**********************************************************************
+ * Asynchronous system call handlers.
+ **********************************************************************/
 
+static void
+mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
+{
 	// Store the result.
 	node->result = result;
+	if (result < 0)
+		errno = node->error;
+
 	// Ensure its visibility.
 	mm_memory_store_fence();
 	// Indicate the operation completion.
-	node->status = 0;
+	mm_memory_store(node->status, 0);
 
-	// Wake up the requestor task.
+	// Notify the caller.
 	mm_core_run_task(node->task);
 }
 
 static void
-mm_async_setup(struct mm_async_node *node, const char *description)
+mm_async_syscall_1_handler(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	// Make the system call.
+	uintptr_t num = arguments[1];
+	uintptr_t arg_1 = arguments[2];
+	intptr_t result = mm_syscall_1(num, arg_1);
+
+	// Handle the result.
+	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
+	mm_async_syscall_result(node, result);
+}
+
+static void
+mm_async_syscall_2_handler(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	// Make the system call.
+	uintptr_t num = arguments[1];
+	uintptr_t arg_1 = arguments[2];
+	uintptr_t arg_2 = arguments[3];
+	intptr_t result = mm_syscall_2(num, arg_1, arg_2);
+
+	// Handle the result.
+	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
+	mm_async_syscall_result(node, result);
+}
+
+static void
+mm_async_syscall_3_handler(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	// Make the system call.
+	uintptr_t num = arguments[1];
+	uintptr_t arg_1 = arguments[2];
+	uintptr_t arg_2 = arguments[3];
+	uintptr_t arg_3 = arguments[4];
+	intptr_t result = mm_syscall_3(num, arg_1, arg_2, arg_3);
+
+	// Handle the result.
+	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
+	mm_async_syscall_result(node, result);
+}
+
+static void
+mm_async_syscall_4_handler(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	// Make the system call.
+	uintptr_t num = arguments[1];
+	uintptr_t arg_1 = arguments[2];
+	uintptr_t arg_2 = arguments[3];
+	uintptr_t arg_3 = arguments[4];
+	uintptr_t arg_4 = arguments[5];
+	intptr_t result = mm_syscall_4(num, arg_1, arg_2, arg_3, arg_4);
+
+	// Handle the result.
+	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
+	mm_async_syscall_result(node, result);
+}
+
+/**********************************************************************
+ * Asynchronous call helpers.
+ **********************************************************************/
+
+static void
+mm_async_setup(struct mm_async_node *node, const char *desc)
 {
 	// TODO: disable async task cancel
 
+	// Initialize the debugging info.
+	node->description = desc;
+
+	// Register as a waiting task.
 	struct mm_core *core = mm_core_selfptr();
 	node->task = core->task;
 	node->task->flags |= MM_TASK_WAITING;
 	mm_list_append(&core->async, &node->link);
 
+	// Initialize the result.
 	node->status = MM_RESULT_DEFERRED;
-	node->requestor.response = mm_async_response;
-	node->description = description;
+	node->error = 0;
 }
 
-static void
+static intptr_t
 mm_async_wait(struct mm_async_node *node)
 {
 	// TODO: check for shutdown and handle it gracefully while in loop.
 
 	// Wait for the operation completion.
-	while (node->status == MM_RESULT_DEFERRED) {
+	while (mm_memory_load(node->status) == MM_RESULT_DEFERRED) {
 		mm_task_block();
-		mm_compiler_barrier();
 	}
 
-	// Ensure result is visible.
+	// Ensure the result is visible.
 	mm_memory_load_fence();
+
+	// Obtain the result.
+	intptr_t result = node->result;
+	if (node->error)
+		errno = node->error;
 
 	// Cleanup.
 	node->task->flags &= ~MM_TASK_WAITING;
 	mm_list_delete(&node->link);
+
+	return result;
 }
 
-ssize_t
-mm_async_read(int fd, void *buffer, size_t nbytes)
+/**********************************************************************
+ * Asynchronous system call requests.
+ **********************************************************************/
+
+intptr_t NONNULL(1, 2)
+mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1)
 {
 	ENTER();
 
-	// Setup the async node.
+	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, __FUNCTION__);
+	mm_async_setup(&node, name);
 
-	// Make the async call.
-	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor,
-			    MM_SYSCALL_N(SYS_read),
-			    fd, (uintptr_t) buffer, nbytes);
+	// Make an asynchronous request to execute the call.
+	mm_request_post_3(domain->request_queue, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
-	// Wait for completion.
-	mm_async_wait(&node);
+	// Wait for its result.
+	intptr_t result = mm_async_wait(&node);
 
 	LEAVE();
-	return node.result;
+	return result;
 }
 
-ssize_t
-mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
+intptr_t NONNULL(1, 2)
+mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2)
 {
 	ENTER();
 
-	// Setup the async node.
+	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, __FUNCTION__);
+	mm_async_setup(&node, name);
 
-	// Make the async call.
-	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor,
-			    MM_SYSCALL_N(SYS_writev),
-			    fd, (uintptr_t) iov, iovcnt);
+	// Make an asynchronous request to execute the call.
+	mm_request_post_4(domain->request_queue, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
-	// Wait for completion.
-	mm_async_wait(&node);
+	// Wait for its result.
+	intptr_t result = mm_async_wait(&node);
 
 	LEAVE();
-	return node.result;
+	return result;
 }
 
-ssize_t
-mm_async_write(int fd, const void *buffer, size_t nbytes)
+intptr_t NONNULL(1, 2)
+mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
 	ENTER();
 
-	// Setup the async node.
+	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, __FUNCTION__);
+	mm_async_setup(&node, name);
 
-	// Make the async call.
-	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor, SYS_write,
-			    fd, (uintptr_t) buffer, nbytes);
+	// Make an asynchronous request to execute the call.
+	mm_request_post_5(domain->request_queue, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
-	// Wait for completion.
-	mm_async_wait(&node);
+	// Wait for its result.
+	intptr_t result = mm_async_wait(&node);
 
 	LEAVE();
-	return node.result;
+	return result;
 }
 
-ssize_t
-mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
+intptr_t NONNULL(1, 2)
+mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
 	ENTER();
 
-	// Setup the async node.
+	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, __FUNCTION__);
+	mm_async_setup(&node, name);
 
-	// Make the async call.
-	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_syscall_3(domain, &node.requestor,
-			    MM_SYSCALL_N(SYS_writev),
-			    fd, (uintptr_t) iov, iovcnt);
+	// Make an asynchronous request to execute the call.
+	mm_request_post_6(domain->request_queue, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
-	// Wait for completion.
-	mm_async_wait(&node);
+	// Wait for its result.
+	intptr_t result = mm_async_wait(&node);
 
 	LEAVE();
-	return node.result;
+	return result;
 }

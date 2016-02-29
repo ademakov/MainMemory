@@ -1,7 +1,7 @@
 /*
  * core/async.h - MainMemory asynchronous operations.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,19 +21,75 @@
 #define CORE_ASYNC_H
 
 #include "common.h"
+#include "arch/syscall.h"
+#include "base/thread/domain.h"
 
-#include <sys/uio.h>
+#include <sys/syscall.h>
 
-ssize_t
-mm_async_read(int fd, void *buffer, size_t nbytes);
+/* Forward declarations. */
+struct iovec;
 
-ssize_t
-mm_async_readv(int fd, const struct iovec *iov, int iovcnt);
+/**********************************************************************
+ * Asynchronous indirect system calls.
+ **********************************************************************/
 
-ssize_t
-mm_async_write(int fd, const void *buffer, size_t nbytes);
+intptr_t NONNULL(1, 2)
+mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1);
 
-ssize_t
-mm_async_writev(int fd, const struct iovec *iov, int iovcnt);
+intptr_t NONNULL(1, 2)
+mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2);
+
+intptr_t NONNULL(1, 2)
+mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3);
+
+intptr_t NONNULL(1, 2)
+mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+
+/**********************************************************************
+ * Asynchronous system call routines.
+ **********************************************************************/
+
+static inline ssize_t
+mm_async_read(int fd, void *buffer, size_t nbytes)
+{
+	struct mm_domain *domain = mm_domain_selfptr();
+	return mm_async_syscall_3(domain, "read", MM_SYSCALL_N(SYS_read),
+				  fd, (uintptr_t) buffer, nbytes);
+}
+
+static inline ssize_t
+mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
+{
+	struct mm_domain *domain = mm_domain_selfptr();
+	return mm_async_syscall_3(domain, "readv", MM_SYSCALL_N(SYS_readv),
+				  fd, (uintptr_t) iov, iovcnt);
+}
+
+static inline ssize_t
+mm_async_write(int fd, const void *buffer, size_t nbytes)
+{
+	struct mm_domain *domain = mm_domain_selfptr();
+	return mm_async_syscall_3(domain, "write", MM_SYSCALL_N(SYS_write),
+				  fd, (uintptr_t) buffer, nbytes);
+}
+
+static inline ssize_t
+mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
+{
+	struct mm_domain *domain = mm_domain_selfptr();
+	return mm_async_syscall_3(domain, "writev", MM_SYSCALL_N(SYS_writev),
+				  fd, (uintptr_t) iov, iovcnt);
+}
+
+static inline ssize_t
+mm_async_close(int fd)
+{
+	struct mm_domain *domain = mm_domain_selfptr();
+	return mm_async_syscall_1(domain, "close", MM_SYSCALL_N(SYS_close), fd);
+}
 
 #endif /* CORE_ASYNC_H */
