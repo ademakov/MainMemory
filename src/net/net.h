@@ -154,11 +154,10 @@ struct mm_net_proto
 	void (*reclaim)(struct mm_net_socket *);
 	void (*destroy)(struct mm_net_socket *);
 
-	void (*attach)(struct mm_net_socket *sock);
-	bool (*detach)(struct mm_net_socket *sock);
+	bool (*detach)(struct mm_net_socket *);
 
-	void (*reader)(struct mm_net_socket *sock);
-	void (*writer)(struct mm_net_socket *sock);
+	void (*reader)(struct mm_net_socket *);
+	void (*writer)(struct mm_net_socket *);
 };
 
 /**********************************************************************

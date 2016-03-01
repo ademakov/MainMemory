@@ -218,13 +218,9 @@ mm_event_convey(struct mm_event_fd *sink)
 	// If the event sink is detached then attach it before handling
 	// any received event.
 	if (!sink->attached) {
-		// Mark the sink as attached.
 		mm_memory_store(sink->attached, 1);
 		mm_memory_store_fence();
-
-		// Invoke the detach handler.
 		DEBUG("attach sink %d to %d", sink->fd, mm_thread_self());
-		(hd->handler)(MM_EVENT_ATTACH, sink);
 	}
 
 	// Handle a single received event.

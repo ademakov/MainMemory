@@ -730,11 +730,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		mm_net_set_write_ready(sock, MM_NET_WRITE_ERROR);
 		break;
 
-	case MM_EVENT_ATTACH:
-		if (sock->proto->attach != NULL)
-			(sock->proto->attach)(sock);
-		break;
-
 	case MM_EVENT_DISABLE:
 		// Close the socket.
 		// TODO: set linger off and/or close concurrently to avoid stalls.
