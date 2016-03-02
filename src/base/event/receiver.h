@@ -29,7 +29,7 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 
-#define MM_EVENT_RECEIVER_FWDBUF_SIZE	4
+#define MM_EVENT_RECEIVER_FWDBUF_SIZE	6
 #define MM_EVENT_RECEIVER_PUBBUF_SIZE	4
 
 /* Event sink forward buffer. */

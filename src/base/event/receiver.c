@@ -35,10 +35,8 @@ mm_event_receiver_forward_1(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-
 	// Handle events.
-	mm_event_convey(sink_1);
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
 
 	LEAVE();
 }
@@ -48,12 +46,9 @@ mm_event_receiver_forward_2(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-
 	// Handle events.
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	mm_event_convey((struct mm_event_fd *) arguments[1]);
 
 	LEAVE();
 }
@@ -63,14 +58,10 @@ mm_event_receiver_forward_3(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
-
 	// Handle events.
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
-	mm_event_convey(sink_3);
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	mm_event_convey((struct mm_event_fd *) arguments[1]);
+	mm_event_convey((struct mm_event_fd *) arguments[2]);
 
 	LEAVE();
 }
@@ -80,16 +71,42 @@ mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
-	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[3];
+	// Handle events.
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	mm_event_convey((struct mm_event_fd *) arguments[1]);
+	mm_event_convey((struct mm_event_fd *) arguments[2]);
+	mm_event_convey((struct mm_event_fd *) arguments[3]);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_forward_5(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	ENTER();
 
 	// Handle events.
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
-	mm_event_convey(sink_3);
-	mm_event_convey(sink_4);
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	mm_event_convey((struct mm_event_fd *) arguments[1]);
+	mm_event_convey((struct mm_event_fd *) arguments[2]);
+	mm_event_convey((struct mm_event_fd *) arguments[3]);
+	mm_event_convey((struct mm_event_fd *) arguments[4]);
+
+	LEAVE();
+}
+
+static void
+mm_event_receiver_forward_6(uintptr_t context UNUSED, uintptr_t *arguments)
+{
+	ENTER();
+
+	// Handle events.
+	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	mm_event_convey((struct mm_event_fd *) arguments[1]);
+	mm_event_convey((struct mm_event_fd *) arguments[2]);
+	mm_event_convey((struct mm_event_fd *) arguments[3]);
+	mm_event_convey((struct mm_event_fd *) arguments[4]);
+	mm_event_convey((struct mm_event_fd *) arguments[5]);
 
 	LEAVE();
 }
@@ -219,6 +236,25 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
 				 (uintptr_t) buffer->sinks[3]);
+		break;
+	case 5:
+		buffer->nsinks = 0;
+		mm_thread_post_5(thread, mm_event_receiver_forward_5,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2],
+				 (uintptr_t) buffer->sinks[3],
+				 (uintptr_t) buffer->sinks[4]);
+		break;
+	case 6:
+		buffer->nsinks = 0;
+		mm_thread_post_6(thread, mm_event_receiver_forward_6,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2],
+				 (uintptr_t) buffer->sinks[3],
+				 (uintptr_t) buffer->sinks[4],
+				 (uintptr_t) buffer->sinks[5]);
 		break;
 	default:
 		ABORT();
