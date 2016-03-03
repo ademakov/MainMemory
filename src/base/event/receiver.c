@@ -31,7 +31,7 @@
  **********************************************************************/
 
 static void
-mm_event_receiver_forward_1(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_1(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -42,7 +42,7 @@ mm_event_receiver_forward_1(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_forward_2(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_2(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -54,7 +54,7 @@ mm_event_receiver_forward_2(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_forward_3(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_3(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -67,7 +67,7 @@ mm_event_receiver_forward_3(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_4(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -81,7 +81,7 @@ mm_event_receiver_forward_4(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_forward_5(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_5(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -96,7 +96,7 @@ mm_event_receiver_forward_5(uintptr_t context UNUSED, uintptr_t *arguments)
 }
 
 static void
-mm_event_receiver_forward_6(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_receiver_forward_6(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -118,75 +118,62 @@ mm_event_receiver_forward_6(uintptr_t context UNUSED, uintptr_t *arguments)
 #if ENABLE_EVENT_PUBLISH
 
 static void
-mm_event_receiver_publish_1(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_convey(struct mm_event_fd *sink, mm_thread_t target)
+{
+	sink->target = target;
+	mm_event_convey(sink);
+}
+
+static void
+mm_event_receiver_publish_1(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-
 	// Handle events.
-	sink_1->target = context;
-	mm_event_convey(sink_1);
+	mm_thread_t target = mm_thread_self();
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_publish_2(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_publish_2(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-
 	// Handle events.
-	sink_1->target = context;
-	sink_2->target = context;
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
+	mm_thread_t target = mm_thread_self();
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_publish_3(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_publish_3(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
-
 	// Handle events.
-	sink_1->target = context;
-	sink_2->target = context;
-	sink_3->target = context;
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
-	mm_event_convey(sink_3);
+	mm_thread_t target = mm_thread_self();
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], target);
 
 	LEAVE();
 }
 
 static void
-mm_event_receiver_publish_4(uintptr_t context, uintptr_t *arguments)
+mm_event_receiver_publish_4(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_fd *sink_1 = (struct mm_event_fd *) arguments[0];
-	struct mm_event_fd *sink_2 = (struct mm_event_fd *) arguments[1];
-	struct mm_event_fd *sink_3 = (struct mm_event_fd *) arguments[2];
-	struct mm_event_fd *sink_4 = (struct mm_event_fd *) arguments[3];
-
 	// Handle events.
-	sink_1->target = context;
-	sink_2->target = context;
-	sink_3->target = context;
-	sink_4->target = context;
-	mm_event_convey(sink_1);
-	mm_event_convey(sink_2);
-	mm_event_convey(sink_3);
-	mm_event_convey(sink_4);
+	mm_thread_t target = mm_thread_self();
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[3], target);
 
 	LEAVE();
 }
@@ -478,7 +465,7 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 	// Flush published events.
 	if (receiver->published_events) {
 		mm_event_receiver_publish_flush(dispatch->domain, &receiver->publish_buffer);
-		mm_dispatch_notify_waiting(dispatch);
+		mm_event_dispatch_notify_waiting(dispatch);
 	}
 #endif
 

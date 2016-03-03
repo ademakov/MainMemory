@@ -154,7 +154,7 @@ mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch)
  **********************************************************************/
 
 static void
-mm_event_dispatch_observe_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_event_dispatch_observe_req(uintptr_t *arguments)
 {
 	ENTER();
 

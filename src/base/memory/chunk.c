@@ -171,7 +171,7 @@ mm_chunk_destroy_queue(struct mm_queue *queue)
 }
 
 static void
-mm_chunk_free_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_chunk_free_req(uintptr_t *arguments)
 {
 	struct mm_chunk *chunk = (struct mm_chunk *) arguments[0];
 	mm_private_free(chunk);

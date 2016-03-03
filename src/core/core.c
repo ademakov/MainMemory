@@ -190,12 +190,12 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_core_post_work_req(uintptr_t context, uintptr_t *arguments)
+mm_core_post_work_req(uintptr_t *arguments)
 {
 	ENTER();
 
 	struct mm_work *work = (struct mm_work *) arguments[0];
-	mm_core_add_work(mm_core_getptr(context), work);
+	mm_core_add_work(mm_core_selfptr(), work);
 
 	LEAVE();
 }
@@ -263,7 +263,7 @@ mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
 
 #if ENABLE_SMP
 static void
-mm_core_run_task_req(uintptr_t context UNUSED, uintptr_t *arguments)
+mm_core_run_task_req(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -463,9 +463,8 @@ mm_core_execute_requests(struct mm_core *core)
 	struct mm_request_data request;
 
 	struct mm_thread *const thread = core->thread;
-	const mm_thread_t number = mm_thread_getnumber(thread);
 	while (mm_thread_receive(thread, &request)) {
-		mm_request_execute(number, &request);
+		mm_request_execute(&request);
 		core->thread_request_count++;
 	}
 
@@ -473,7 +472,7 @@ mm_core_execute_requests(struct mm_core *core)
 	struct mm_domain *const domain = mm_thread_getdomain(thread);
 	while (mm_runq_empty_above(&core->runq, MM_PRIO_IDLE)
 	       && mm_domain_receive(domain, &request)) {
-		mm_request_execute(number, &request);
+		mm_request_execute(&request);
 		core->domain_request_count++;
 	}
 #endif

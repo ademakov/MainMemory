@@ -31,11 +31,11 @@ struct mm_request_sender;
 #define MM_REQUEST_TWOWAY_N	(5)
 
 /* Request routines. */
-typedef void (*mm_request_oneway_t)(uintptr_t context, uintptr_t arguments[MM_REQUEST_ONEWAY_N]);
-typedef uintptr_t (*mm_request_t)(uintptr_t context, uintptr_t arguments[MM_REQUEST_TWOWAY_N]);
+typedef void (*mm_request_oneway_t)(uintptr_t arguments[MM_REQUEST_ONEWAY_N]);
+typedef uintptr_t (*mm_request_t)(uintptr_t arguments[MM_REQUEST_TWOWAY_N]);
 
 /* Response routine. */
-typedef void (*mm_response_t)(uintptr_t context, struct mm_request_sender *sender, uintptr_t result);
+typedef void (*mm_response_t)(struct mm_request_sender *sender, uintptr_t result);
 
 /* The request maker identity. To be used with containerof() macro. */
 struct mm_request_sender {
@@ -58,7 +58,7 @@ struct mm_request_data
 };
 
 void
-mm_request_response_handler(uintptr_t context, uintptr_t *arguments);
+mm_request_response_handler(uintptr_t *arguments);
 
 /**********************************************************************
  * Request fetching and execution.
@@ -77,9 +77,9 @@ mm_request_relaxed_receive(struct mm_ring_mpmc *ring, struct mm_request_data *rd
 }
 
 static inline void
-mm_request_execute(uintptr_t context, struct mm_request_data *rdata)
+mm_request_execute(struct mm_request_data *rdata)
 {
-	(*rdata->request)(context, rdata->arguments);
+	(*rdata->request)(rdata->arguments);
 }
 
 /**********************************************************************
