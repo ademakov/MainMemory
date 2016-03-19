@@ -26,10 +26,10 @@
 #if ENABLE_LOCK_STATS
 
 #include "base/format.h"
+#include "base/report.h"
 #include "base/hash.h"
 #include "base/list.h"
 #include "base/log/log.h"
-#include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"
