@@ -20,7 +20,7 @@
 #include "base/log/log.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/alloc.h"
 #include "base/memory/chunk.h"
 #include "base/memory/space.h"

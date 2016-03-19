@@ -21,7 +21,7 @@
 #define NET_NETBUF_H
 
 #include "common.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/buffer.h"
 #include "net/net.h"
 

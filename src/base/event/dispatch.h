@@ -22,12 +22,12 @@
 
 #include "common.h"
 #include "base/lock.h"
+#include "base/report.h"
 #include "base/event/backend.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/listener.h"
 #include "base/event/receiver.h"
-#include "base/log/debug.h"
 #include "base/thread/thread.h"
 
 struct mm_event_dispatch

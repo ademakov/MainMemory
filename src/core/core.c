@@ -26,7 +26,6 @@
 #include "base/base.h"
 #include "base/bitset.h"
 #include "base/exit.h"
-#include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"

@@ -18,7 +18,8 @@
  */
 
 #include "base/timeq.h"
-#include "base/log/debug.h"
+
+#include "base/report.h"
 
 #define MM_TIMEQ_T1_WIDTH_MIN	1
 #define MM_TIMEQ_T1_COUNT_MIN	4

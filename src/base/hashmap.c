@@ -19,8 +19,6 @@
 
 #include "base/hashmap.h"
 
-#include "base/log/debug.h"
-
 static uint32_t mm_hashmap_nbuckets[] = {
 	29u, 43u, 61u, 97u, 139u,
 	211u, 317u, 491u, 743u, 1109u,

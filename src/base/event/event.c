@@ -19,9 +19,9 @@
 
 #include "base/event/event.h"
 
+#include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/selfpipe.h"
-#include "base/log/debug.h"
 #include "base/log/trace.h"
 #include "base/thread/thread.h"
 

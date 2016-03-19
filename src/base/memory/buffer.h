@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/bitops.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/chunk.h"
 
 #include <stdarg.h>

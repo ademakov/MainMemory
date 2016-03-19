@@ -40,7 +40,6 @@ libmmbase_la_SOURCES = \
 	event/nonblock.c event/nonblock.h \
 	event/receiver.c event/receiver.h \
 	event/selfpipe.c event/selfpipe.h \
-	log/debug.c log/debug.h \
 	log/log.c log/log.h \
 	log/trace.c log/trace.h \
 	memory/alloc.h \

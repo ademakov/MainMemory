@@ -21,7 +21,7 @@
 #define BASE_BITSET_H
 
 #include "common.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/arena.h"
 
 #define MM_BITSET_UNIT		(sizeof(uintptr_t) * 8)

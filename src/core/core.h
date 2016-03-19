@@ -27,11 +27,11 @@
 #include "core/wait.h"
 
 #include "base/list.h"
+#include "base/report.h"
+#include "base/ring.h"
 #include "base/memory/chunk.h"
 #include "base/memory/memory.h"
 #include "base/memory/pool.h"
-#include "base/log/debug.h"
-#include "base/ring.h"
 
 /* Forward declarations. */
 struct mm_bitset;

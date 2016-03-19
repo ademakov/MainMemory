@@ -148,3 +148,41 @@ mm_fatal(int error, const char *restrict msg, ...)
 
 	mm_exit(MM_EXIT_FAILURE);
 }
+
+/**********************************************************************
+ * Debug messages.
+ **********************************************************************/
+
+void NONNULL(1, 2, 3) FORMAT(3, 4) NORETURN
+mm_abort_with_message(const char *restrict location,
+		      const char *restrict function,
+		      const char *restrict msg, ...)
+{
+	mm_where(location, function);
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_abort();
+}
+
+#if ENABLE_DEBUG
+
+void NONNULL(1, 2, 3) FORMAT(3, 4)
+mm_debug(const char *restrict location,
+	 const char *restrict function,
+	 const char *restrict msg, ...)
+{
+	mm_where(location, function);
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+}
+
+#endif

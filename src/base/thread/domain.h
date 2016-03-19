@@ -23,7 +23,7 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"
 #include "base/thread/thread.h"

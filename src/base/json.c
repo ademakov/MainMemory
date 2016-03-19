@@ -20,7 +20,7 @@
 #include "base/json.h"
 
 #include "base/scan.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/memory.h"
 
 #define MM_JSON_STACK_UNIT	(sizeof(uintptr_t) * 8)

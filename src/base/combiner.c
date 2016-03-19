@@ -20,7 +20,7 @@
 #include "base/combiner.h"
 
 #include "base/bitops.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 

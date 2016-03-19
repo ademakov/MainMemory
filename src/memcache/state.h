@@ -23,7 +23,7 @@
 #include "memcache/command.h"
 #include "memcache/binary.h"
 
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "net/netbuf.h"
 
 typedef enum {

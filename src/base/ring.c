@@ -19,7 +19,7 @@
 
 #include "base/ring.h"
 #include "base/bitops.h"
-#include "base/log/debug.h"
+#include "base/report.h"
 #include "base/memory/global.h"
 
 /**********************************************************************
