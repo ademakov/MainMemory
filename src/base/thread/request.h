@@ -21,8 +21,8 @@
 #define BASE_THREAD_REQUEST_H
 
 #include "common.h"
+#include "base/report.h"
 #include "base/ring.h"
-#include "base/log/error.h"
 
 /* Forward declarations. */
 struct mm_request_sender;

@@ -19,7 +19,7 @@
 
 #include "base/event/batch.h"
 
-#include "base/log/error.h"
+#include "base/report.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 

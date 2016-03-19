@@ -18,12 +18,19 @@
  */
 
 #include "base/report.h"
+
+#include "base/exit.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
 #include <stdarg.h>
 
 static bool mm_verbose_enabled = false;
+static bool mm_warning_enabled = false;
+
+/**********************************************************************
+ * Message verbosity control.
+ **********************************************************************/
 
 void
 mm_set_verbose_enabled(bool value)
@@ -31,11 +38,27 @@ mm_set_verbose_enabled(bool value)
 	mm_verbose_enabled = value;
 }
 
+void
+mm_set_warning_enabled(bool value)
+{
+	mm_warning_enabled = value;
+}
+
 bool
 mm_get_verbose_enabled(void)
 {
 	return mm_verbose_enabled;
 }
+
+bool
+mm_get_warning_enabled(void)
+{
+	return mm_warning_enabled;
+}
+
+/**********************************************************************
+ * Plain info messages.
+ **********************************************************************/
 
 void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...)
@@ -66,3 +89,62 @@ mm_brief(const char *restrict msg, ...)
 	mm_log_str("\n");
 }
 
+/**********************************************************************
+ * Error messages.
+ **********************************************************************/
+
+void NONNULL(2) FORMAT(2, 3)
+mm_warning(int error, const char *restrict msg, ...)
+{
+	if (!mm_warning_enabled)
+		return;
+
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+}
+
+void NONNULL(2) FORMAT(2, 3)
+mm_error(int error, const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+}
+
+void NONNULL(2) FORMAT(2, 3) NORETURN
+mm_fatal(int error, const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	if (error) {
+		mm_log_fmt(": %s\n", strerror(error));
+	} else {
+		mm_log_str("\n");
+	}
+
+	mm_exit(MM_EXIT_FAILURE);
+}

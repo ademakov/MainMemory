@@ -22,16 +22,43 @@
 
 #include "common.h"
 
+/**********************************************************************
+ * Message verbosity control.
+ **********************************************************************/
+
 void
 mm_set_verbose_enabled(bool value);
 
+void
+mm_set_warning_enabled(bool value);
+
 bool
 mm_get_verbose_enabled(void);
+
+bool
+mm_get_warning_enabled(void);
+
+/**********************************************************************
+ * Plain info messages.
+ **********************************************************************/
 
 void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...);
 
 void NONNULL(1) FORMAT(1, 2)
 mm_brief(const char *restrict msg, ...);
+
+/**********************************************************************
+ * Error messages.
+ **********************************************************************/
+
+void NONNULL(2) FORMAT(2, 3)
+mm_warning(int error, const char *restrict msg, ...);
+
+void NONNULL(2) FORMAT(2, 3)
+mm_error(int error, const char *restrict msg, ...);
+
+void NONNULL(2) FORMAT(2, 3) NORETURN
+mm_fatal(int error, const char *restrict msg, ...);
 
 #endif /* BASE_REPORT_H */

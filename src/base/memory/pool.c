@@ -23,7 +23,6 @@
 #include "base/format.h"
 #include "base/report.h"
 #include "base/log/debug.h"
-#include "base/log/error.h"
 #include "base/log/trace.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"

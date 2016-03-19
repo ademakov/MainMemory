@@ -19,7 +19,7 @@
 
 #include "base/event/nonblock.h"
 
-#include "base/log/error.h"
+#include "base/report.h"
 
 #include <fcntl.h>
 

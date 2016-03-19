@@ -28,7 +28,6 @@
 #include "base/exit.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 #include "base/memory/chunk.h"

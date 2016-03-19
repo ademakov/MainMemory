@@ -30,7 +30,6 @@
 #include "base/report.h"
 #include "base/settings.h"
 #include "base/event/event.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 #include "base/memory/global.h"

@@ -20,8 +20,8 @@
 #include "base/settings.h"
 
 #include "base/hashmap.h"
+#include "base/report.h"
 #include "base/scan.h"
-#include "base/log/error.h"
 #include "base/memory/global.h"
 
 struct mm_settings_entry

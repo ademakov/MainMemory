@@ -18,7 +18,8 @@
  */
 
 #include "base/util/libcall.h"
-#include "base/log/error.h"
+
+#include "base/report.h"
 
 void
 mm_libcall(const char *name)

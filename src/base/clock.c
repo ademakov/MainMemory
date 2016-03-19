@@ -18,8 +18,8 @@
  */
 
 #include "base/clock.h"
+#include "base/report.h"
 #include "base/log/debug.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 
 #ifdef HAVE_MACH_MACH_TIME_H

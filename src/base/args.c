@@ -20,8 +20,8 @@
 #include "base/args.h"
 
 #include "base/exit.h"
+#include "base/report.h"
 #include "base/settings.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 
 #include <stdlib.h>

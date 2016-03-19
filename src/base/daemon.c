@@ -20,8 +20,8 @@
 #include "base/daemon.h"
 
 #include "base/exit.h"
+#include "base/report.h"
 #include "base/log/debug.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 
 #include <fcntl.h>

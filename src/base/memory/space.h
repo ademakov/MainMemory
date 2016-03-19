@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/lock.h"
-#include "base/log/error.h"
+#include "base/report.h"
 #include "base/memory/arena.h"
 
 /* Forward declarations. */

@@ -19,8 +19,8 @@
 
 #include "base/memory/cstack.h"
 
+#include "base/report.h"
 #include "base/log/debug.h"
-#include "base/log/error.h"
 
 #include <sys/mman.h>
 

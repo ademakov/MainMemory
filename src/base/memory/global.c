@@ -20,7 +20,7 @@
 #include "base/memory/global.h"
 
 #include "base/lock.h"
-#include "base/log/error.h"
+#include "base/report.h"
 #include "base/memory/malloc.h"
 #include "base/util/libcall.h"
 

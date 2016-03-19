@@ -22,7 +22,6 @@
 #include "base/bitops.h"
 #include "base/list.h"
 #include "base/report.h"
-#include "base/log/error.h"
 #include "base/log/log.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"

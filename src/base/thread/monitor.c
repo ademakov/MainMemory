@@ -19,7 +19,7 @@
 
 #include "base/thread/monitor.h"
 
-#include "base/log/error.h"
+#include "base/report.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
