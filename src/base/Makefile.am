@@ -23,6 +23,7 @@ libmmbase_la_SOURCES = \
 	json.c json.h \
 	list.h \
 	lock.c lock.h \
+	report.c report.h \
 	ring.c ring.h \
 	scan.c scan.h \
 	settings.c settings.h \
@@ -42,7 +43,6 @@ libmmbase_la_SOURCES = \
 	log/debug.c log/debug.h \
 	log/error.c log/error.h \
 	log/log.c log/log.h \
-	log/plain.c log/plain.h \
 	log/trace.c log/trace.h \
 	memory/alloc.h \
 	memory/arena.h \

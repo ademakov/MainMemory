@@ -20,8 +20,8 @@
 #include "base/memory/chunk.h"
 
 #include "base/base.h"
+#include "base/report.h"
 #include "base/log/error.h"
-#include "base/log/plain.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/backoff.h"

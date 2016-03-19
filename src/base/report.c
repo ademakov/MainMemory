@@ -1,7 +1,7 @@
 /*
- * base/log/plain.c - MainMemory plain message logging.
+ * base/report.c - MainMemory message logging.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/log/plain.h"
+#include "base/report.h"
 #include "base/log/log.h"
 #include "base/log/trace.h"
 
@@ -65,3 +65,4 @@ mm_brief(const char *restrict msg, ...)
 
 	mm_log_str("\n");
 }
+

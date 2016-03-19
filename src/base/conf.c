@@ -20,10 +20,10 @@
 #include "base/conf.h"
 
 #include "base/json.h"
+#include "base/report.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
 #include "base/log/error.h"
-#include "base/log/plain.h"
 #include "base/memory/global.h"
 
 static char mm_conf_buffer[1024];

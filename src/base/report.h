@@ -1,7 +1,7 @@
 /*
- * base/log/plain.h - MainMemory plain message logging.
+ * base/report.h - MainMemory message logging.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_LOG_PLAIN_H
-#define BASE_LOG_PLAIN_H
+#ifndef BASE_REPORT_H
+#define BASE_REPORT_H
 
 #include "common.h"
 
@@ -34,4 +34,4 @@ mm_verbose(const char *restrict msg, ...);
 void NONNULL(1) FORMAT(1, 2)
 mm_brief(const char *restrict msg, ...);
 
-#endif /* BASE_LOG_PLAIN_H */
+#endif /* BASE_REPORT_H */

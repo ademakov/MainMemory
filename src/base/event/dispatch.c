@@ -19,7 +19,7 @@
 
 #include "base/event/dispatch.h"
 
-#include "base/log/plain.h"
+#include "base/report.h"
 #include "base/log/trace.h"
 #include "base/memory/memory.h"
 

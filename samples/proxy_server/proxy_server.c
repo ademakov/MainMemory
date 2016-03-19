@@ -22,7 +22,7 @@
 #include "base/daemon.h"
 #include "base/exit.h"
 #include "base/init.h"
-#include "base/log/plain.h"
+#include "base/report.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/settings.h"

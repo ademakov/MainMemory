@@ -25,8 +25,8 @@
 
 #include "base/combiner.h"
 #include "base/hash.h"
+#include "base/report.h"
 #include "base/log/error.h"
-#include "base/log/plain.h"
 #include "base/log/trace.h"
 
 #include <sys/mman.h>

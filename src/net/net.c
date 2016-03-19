@@ -26,12 +26,12 @@
 
 #include "base/exit.h"
 #include "base/format.h"
+#include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
 #include "base/log/error.h"
-#include "base/log/plain.h"
 #include "base/log/trace.h"
 #include "base/memory/global.h"
 #include "base/memory/pool.h"
