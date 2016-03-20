@@ -20,8 +20,8 @@
 #include "base/init.h"
 
 #include "base/exit.h"
+#include "base/report.h"
 #include "base/settings.h"
-#include "base/log/trace.h"
 
 void NONNULL(2)
 mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)

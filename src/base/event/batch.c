@@ -20,7 +20,6 @@
 #include "base/event/batch.h"
 
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 
 #define MM_EVENT_NCHANGES_MIN	(4u)

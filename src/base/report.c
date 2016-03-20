@@ -20,8 +20,10 @@
 #include "base/report.h"
 
 #include "base/exit.h"
+#include "base/format.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
+#include "base/memory/global.h"
+#include "base/thread/thread.h"
 
 #include <stdarg.h>
 
@@ -183,6 +185,127 @@ mm_debug(const char *restrict location,
 	va_end(va);
 
 	mm_log_str("\n");
+}
+
+#endif
+
+/**********************************************************************
+ * Trace messages.
+ **********************************************************************/
+
+#if ENABLE_TRACE
+
+static struct mm_trace_context *
+mm_trace_getcontext_default(void)
+{
+	struct mm_thread *thread = mm_thread_selfptr();
+	if (unlikely(thread == NULL))
+		ABORT();
+	return mm_thread_gettracecontext(thread);
+}
+
+static mm_trace_getcontext_t mm_trace_getcontext = mm_trace_getcontext_default;
+
+void
+mm_trace_set_getcontext(mm_trace_getcontext_t getcontext)
+{
+	if (getcontext == NULL)
+		mm_trace_getcontext = mm_trace_getcontext_default;
+	else
+		mm_trace_getcontext = getcontext;
+}
+
+void NONNULL(1, 2) FORMAT(2, 3)
+mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict fmt, ...)
+{
+	va_list va;
+	va_start(va, fmt);
+	context->owner = mm_vformat(&mm_global_arena, fmt, va);
+	va_end(va);
+
+	context->level = 0;
+	context->recur = 0;
+}
+
+void NONNULL(1)
+mm_trace_context_cleanup(struct mm_trace_context *context)
+{
+	mm_arena_free(&mm_global_arena, context->owner);
+}
+
+#endif
+
+/**********************************************************************
+ * Trace level.
+ **********************************************************************/
+
+#if ENABLE_TRACE
+
+static bool
+mm_trace_enter(int level)
+{
+	struct mm_trace_context *context = mm_trace_getcontext();
+	if (unlikely(context->recur))
+		return false;
+
+	if (level < 0)
+		context->level += level;
+	context->recur++;
+
+	return true;
+}
+
+static void
+mm_trace_leave(int level)
+{
+	struct mm_trace_context *context = mm_trace_getcontext();
+
+	if (level > 0)
+		context->level += level;
+	context->recur--;
+}
+
+#endif
+
+/**********************************************************************
+ * Trace utilities.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_where(const char *restrict location, const char *function)
+{
+	mm_trace_prefix();
+	mm_log_fmt("%s(%s): ", function, location);
+}
+
+#if ENABLE_TRACE
+
+void
+mm_trace_prefix(void)
+{
+	struct mm_trace_context *context = mm_trace_getcontext();
+	mm_log_fmt("%s %*s", context->owner, context->level * 2, "");
+}
+
+void NONNULL(2, 3, 4) FORMAT(4, 5)
+mm_trace(int level,
+	 const char *restrict location,
+	 const char *restrict function,
+	 const char *restrict msg, ...)
+{
+	if (!mm_trace_enter(level))
+		return;
+
+	mm_where(location, function);
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+
+	mm_trace_leave(level);
 }
 
 #endif

@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "base/log/trace.h"
+#include "base/report.h"
 #include "base/memory/space.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"

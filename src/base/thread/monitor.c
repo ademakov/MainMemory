@@ -21,7 +21,6 @@
 
 #include "base/report.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
 
 void NONNULL(1)
 mm_thread_monitor_prepare(struct mm_thread_monitor *monitor)

@@ -21,7 +21,7 @@
 
 #include "core/task.h"
 #include "base/bitops.h"
-#include "base/log/trace.h"
+#include "base/report.h"
 
 void NONNULL(1)
 mm_runq_prepare(struct mm_runq *runq)

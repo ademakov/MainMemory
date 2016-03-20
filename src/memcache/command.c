@@ -26,7 +26,6 @@
 #include "core/task.h"
 #include "base/bytes.h"
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/buffer.h"
 
 #include "net/net.h"

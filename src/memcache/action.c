@@ -21,7 +21,7 @@
 #include "memcache/entry.h"
 
 #include "base/bitops.h"
-#include "base/log/trace.h"
+#include "base/report.h"
 
 #define MC_TABLE_STRIDE		64
 

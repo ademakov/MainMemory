@@ -22,8 +22,8 @@
 
 #include "common.h"
 #include "base/clock.h"
+#include "base/report.h"
 #include "base/timeq.h"
-#include "base/log/trace.h"
 #include "base/memory/arena.h"
 #include "base/memory/pool.h"
 

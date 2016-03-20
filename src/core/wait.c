@@ -22,8 +22,8 @@
 #include "core/task.h"
 #include "core/timer.h"
 
+#include "base/report.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
 #include "base/memory/pool.h"
 
 // An entry for a waiting task.

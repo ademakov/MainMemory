@@ -19,7 +19,6 @@
 
 #include "base/event/dispatch.h"
 
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 
 static uint16_t mm_poller_busywait = 2;

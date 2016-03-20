@@ -24,11 +24,10 @@
 #include "base/lock.h"
 #include "base/report.h"
 #include "base/event/backend.h"
-#include "base/event/batch.h"
-#include "base/event/event.h"
 #include "base/event/listener.h"
-#include "base/event/receiver.h"
-#include "base/thread/thread.h"
+
+/* Forward declarations. */
+struct mm_thread;
 
 struct mm_event_dispatch
 {

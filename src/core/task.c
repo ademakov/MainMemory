@@ -23,8 +23,8 @@
 #include "core/timer.h"
 
 #include "base/bitops.h"
+#include "base/report.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
 #include "base/memory/cstack.h"
 #include "base/memory/pool.h"
 #include "base/thread/thread.h"

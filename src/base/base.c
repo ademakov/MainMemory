@@ -26,7 +26,6 @@
 #include "base/topology.h"
 #include "base/event/event.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"

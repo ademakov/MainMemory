@@ -19,8 +19,8 @@
 
 #include "base/event/backend.h"
 
+#include "base/report.h"
 #include "base/event/batch.h"
-#include "base/log/trace.h"
 
 void NONNULL(1)
 mm_event_backend_prepare(struct mm_event_backend *backend)

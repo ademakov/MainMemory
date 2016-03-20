@@ -19,7 +19,6 @@
 
 #include "base/memory/buffer.h"
 
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 
 #include <stdio.h>

@@ -22,7 +22,6 @@
 #include "core/task.h"
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/space.h"
 #include "base/thread/domain.h"
 

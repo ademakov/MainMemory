@@ -25,7 +25,6 @@
 #include "base/stdcall.h"
 #include "base/event/nonblock.h"
 #include "base/log/log.h"
-#include "base/log/trace.h"
 
 #include <unistd.h>
 

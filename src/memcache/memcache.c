@@ -31,7 +31,6 @@
 #include "base/bitops.h"
 #include "base/list.h"
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/chunk.h"
 #include "base/memory/pool.h"
 

@@ -22,7 +22,6 @@
 #include "base/base.h"
 #include "base/format.h"
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"

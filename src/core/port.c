@@ -21,7 +21,7 @@
 #include "core/core.h"
 #include "core/task.h"
 
-#include "base/log/trace.h"
+#include "base/report.h"
 #include "base/memory/global.h"
 
 void

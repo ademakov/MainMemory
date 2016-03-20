@@ -19,7 +19,6 @@
 
 #include "base/memory/region.h"
 
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 
 void NONNULL(1)

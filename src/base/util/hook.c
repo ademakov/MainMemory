@@ -20,7 +20,7 @@
 #include "base/util/hook.h"
 
 #include "base/list.h"
-#include "base/log/trace.h"
+#include "base/report.h"
 #include "base/memory/global.h"
 
 struct mm_hook_link0

@@ -21,7 +21,6 @@
 
 #include "base/report.h"
 #include "base/event/dispatch.h"
-#include "base/log/trace.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"

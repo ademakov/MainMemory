@@ -22,7 +22,6 @@
 #include "core/core.h"
 
 #include "base/report.h"
-#include "base/log/trace.h"
 #include "base/memory/pool.h"
 
 // The memory pool for futures.

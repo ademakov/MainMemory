@@ -22,7 +22,7 @@
 #include "memcache/state.h"
 
 #include "base/bytes.h"
-#include "base/log/trace.h"
+#include "base/report.h"
 
 static struct mc_command_type *mc_binary_commands[256] = {
 	[MC_BINARY_OPCODE_GET]		= &mc_command_binary_get,
