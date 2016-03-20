@@ -30,6 +30,13 @@
 static bool mm_verbose_enabled = false;
 static bool mm_warning_enabled = false;
 
+#if ENABLE_TRACE
+static void
+mm_trace_prefix(void);
+#else
+#define mm_trace_prefix()	((void) 0)
+#endif /* ENABLE_TRACE */
+
 /**********************************************************************
  * Message verbosity control.
  **********************************************************************/
@@ -152,6 +159,17 @@ mm_fatal(int error, const char *restrict msg, ...)
 }
 
 /**********************************************************************
+ * Location message.
+ **********************************************************************/
+
+static void NONNULL(1, 2)
+mm_where(const char *restrict location, const char *function)
+{
+	mm_trace_prefix();
+	mm_log_fmt("%s(%s): ", function, location);
+}
+
+/**********************************************************************
  * Debug messages.
  **********************************************************************/
 
@@ -242,9 +260,8 @@ mm_trace_context_cleanup(struct mm_trace_context *context)
 #if ENABLE_TRACE
 
 static bool
-mm_trace_enter(int level)
+mm_trace_enter(struct mm_trace_context *context, int level)
 {
-	struct mm_trace_context *context = mm_trace_getcontext();
 	if (unlikely(context->recur))
 		return false;
 
@@ -256,10 +273,8 @@ mm_trace_enter(int level)
 }
 
 static void
-mm_trace_leave(int level)
+mm_trace_leave(struct mm_trace_context *context, int level)
 {
-	struct mm_trace_context *context = mm_trace_getcontext();
-
 	if (level > 0)
 		context->level += level;
 	context->recur--;
@@ -271,16 +286,9 @@ mm_trace_leave(int level)
  * Trace utilities.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_where(const char *restrict location, const char *function)
-{
-	mm_trace_prefix();
-	mm_log_fmt("%s(%s): ", function, location);
-}
-
 #if ENABLE_TRACE
 
-void
+static void
 mm_trace_prefix(void)
 {
 	struct mm_trace_context *context = mm_trace_getcontext();
@@ -293,7 +301,8 @@ mm_trace(int level,
 	 const char *restrict function,
 	 const char *restrict msg, ...)
 {
-	if (!mm_trace_enter(level))
+	struct mm_trace_context *context = mm_trace_getcontext();
+	if (!mm_trace_enter(context, level))
 		return;
 
 	mm_where(location, function);
@@ -305,7 +314,7 @@ mm_trace(int level,
 
 	mm_log_str("\n");
 
-	mm_trace_leave(level);
+	mm_trace_leave(context, level);
 }
 
 #endif
