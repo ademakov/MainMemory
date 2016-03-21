@@ -21,10 +21,10 @@
 
 #include "arch/atomic.h"
 #include "arch/memory.h"
+#include "base/logger.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/nonblock.h"
-#include "base/log/log.h"
 
 #include <unistd.h>
 

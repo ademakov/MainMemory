@@ -21,7 +21,7 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
-#include "base/log/log.h"
+#include "base/logger.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"
 

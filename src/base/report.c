@@ -21,7 +21,7 @@
 
 #include "base/exit.h"
 #include "base/format.h"
-#include "base/log/log.h"
+#include "base/logger.h"
 #include "base/memory/global.h"
 #include "base/thread/thread.h"
 

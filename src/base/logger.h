@@ -1,5 +1,5 @@
 /*
- * base/log/log.h - MainMemory logging.
+ * base/logger.h - MainMemory logging.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_LOG_LOG_H
-#define BASE_LOG_LOG_H
+#ifndef BASE_LOGGER_H
+#define BASE_LOGGER_H
 
 #include "common.h"
 #include <stdarg.h>
@@ -36,4 +36,4 @@ void mm_log_relay(void);
 
 size_t mm_log_flush(void);
 
-#endif /* BASE_LOG_LOG_H */
+#endif /* BASE_LOGGER_H */

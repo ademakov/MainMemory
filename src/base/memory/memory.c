@@ -18,7 +18,8 @@
  */
 
 #include "base/memory/memory.h"
-#include "base/log/log.h"
+
+#include "base/logger.h"
 
 /**********************************************************************
  * Common Memory Space.

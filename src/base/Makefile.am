@@ -23,6 +23,7 @@ libmmbase_la_SOURCES = \
 	json.c json.h \
 	list.h \
 	lock.c lock.h \
+	logger.c logger.h \
 	report.c report.h \
 	ring.c ring.h \
 	scan.c scan.h \
@@ -40,7 +41,6 @@ libmmbase_la_SOURCES = \
 	event/nonblock.c event/nonblock.h \
 	event/receiver.c event/receiver.h \
 	event/selfpipe.c event/selfpipe.h \
-	log/log.c log/log.h \
 	memory/alloc.h \
 	memory/arena.h \
 	memory/buffer.c memory/buffer.h \

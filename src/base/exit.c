@@ -20,7 +20,7 @@
 #include "base/exit.h"
 
 #include "base/list.h"
-#include "base/log/log.h"
+#include "base/logger.h"
 #include "base/util/hook.h"
 
 #include <stdlib.h>

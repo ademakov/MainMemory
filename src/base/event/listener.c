@@ -19,9 +19,9 @@
 
 #include "base/event/listener.h"
 
+#include "base/logger.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
-#include "base/log/log.h"
 #include "base/memory/memory.h"
 
 #if ENABLE_LINUX_FUTEX

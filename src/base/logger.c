@@ -1,5 +1,5 @@
 /*
- * base/log/log.c - MainMemory logging.
+ * base/logger.c - MainMemory logging.
  *
  * Copyright (C) 2013-2014  Aleksey Demakov
  *
@@ -17,7 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/log/log.h"
+#include "base/logger.h"
+
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
