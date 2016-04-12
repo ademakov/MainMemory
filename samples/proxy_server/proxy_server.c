@@ -302,7 +302,7 @@ proxy_reader(struct mm_net_socket *sock)
 			}
 
 			// Parse and handle the command.
-			char *p = mm_netbuf_rptr(&client->sock);
+			char *p = mm_netbuf_rget(&client->sock);
 			struct proxy_command *command = proxy_parse(p, e);
 			if (command == NULL) {
 				mm_netbuf_close(&client->sock);

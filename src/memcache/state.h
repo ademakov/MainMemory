@@ -77,8 +77,8 @@ mc_getprotocol(struct mc_state *state)
 {
 	mc_protocol_t protocol = state->protocol;
 	if (protocol == MC_PROTOCOL_INIT) {
-		ASSERT(mm_netbuf_rptr(&state->sock) < mm_netbuf_rend(&state->sock));
-		uint8_t *p = (uint8_t *) mm_netbuf_rptr(&state->sock);
+		ASSERT(mm_netbuf_rget(&state->sock) < mm_netbuf_rend(&state->sock));
+		uint8_t *p = (uint8_t *) mm_netbuf_rget(&state->sock);
 		if (*p == MC_BINARY_REQUEST) {
 			DEBUG("binary protocol detected");
 			protocol = MC_PROTOCOL_BINARY;

@@ -143,18 +143,27 @@ mm_netbuf_find(struct mm_netbuf_socket *sock, int c, size_t *poffset)
 	return mm_buffer_find(&sock->rxbuf, c, poffset);
 }
 
-/* Get the current read pointer. */
+/* Get the current read position. */
 static inline char * NONNULL(1)
-mm_netbuf_rptr(struct mm_netbuf_socket *sock)
+mm_netbuf_rget(struct mm_netbuf_socket *sock)
 {
 	return sock->rxbuf.head.ptr;
 }
 
-/* Get the current read segment end. */
+/* Get the current contiguous read span end. */
 static inline char * NONNULL(1)
 mm_netbuf_rend(struct mm_netbuf_socket *sock)
 {
 	return sock->rxbuf.head.end;
+}
+
+/* Set the current read position. */
+static inline void NONNULL(1, 2)
+mm_netbuf_rset(struct mm_netbuf_socket *sock, char *ptr)
+{
+	ASSERT(ptr >= sock->rxbuf.head.ptr);
+	ASSERT(ptr <= sock->rxbuf.head.end);
+	sock->rxbuf.head.ptr = ptr;
 }
 
 /* Advance the read position. */
@@ -162,18 +171,6 @@ static inline void NONNULL(1)
 mm_netbuf_radd(struct mm_netbuf_socket *sock, size_t cnt)
 {
 	sock->rxbuf.head.ptr += cnt;
-}
-
-/* Get a contiguous memory span and advance past it. */
-static inline void * NONNULL(1)
-mm_netbuf_rget(struct mm_netbuf_socket *sock, size_t cnt)
-{
-	if (mm_netbuf_span(sock, cnt)) {
-		void *ptr = mm_netbuf_rptr(sock);
-		mm_netbuf_radd(sock, cnt);
-		return ptr;
-	}
-	return NULL;
 }
 
 #endif /* NET_NETBUF_H */
