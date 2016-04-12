@@ -1,8 +1,9 @@
 
 ASAP:
-* optimize buffer management and beautify netbuf interface
+* beautify netbuf interface
 * minimize memcache locks or non-blocking memcache table
-* verify event sink recalmation correctness
+* verify event sink reclamation correctness
+* optimize events again
 * add more config options
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
@@ -16,6 +17,8 @@ Essentials:
 * syslog
 * statistics
 * global lock counters
+* utf8 support for scan, json
+* float/double support for format, scan, json
 * UDP servers
 * SSL servers
 * performance instrumentation
@@ -53,7 +56,6 @@ Low priority enhancements:
 * exit idle workers pending for too long
 * reap dead tasks pending for too long
 * adopt C11-compatible fences and atomics
-* try to separate net I/O proper and reader/writer task layers?
 * non-blocking log
 * backoff and/or wait queue on ring full
 * non-blocking pool growth
