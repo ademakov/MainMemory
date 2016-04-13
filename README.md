@@ -15,7 +15,7 @@ As the first application and testbed for the MainMemory framework
 the project provides almost complete implementation of the memcached
 protocol.
 
-In the future it could also be used to implement any other protcol,
+In the future it could also be used to implement any other protocol,
 for instance, redis. Or something completely different like HTTP,
 WebDAV, WebSocket protocols thus allowing to implement a caching HTTP
 server, proxy, storage platform, or a pub-sub system.
@@ -88,5 +88,5 @@ throughput and smaller latency) until it hits the single-core execution
 limits.
 
 As a rule of thumb if the required throughput of the server is less than
-about 100k requests per second then it might be benefitical to use the
+about 100k requests per second then it might be beneficial to use the
 single-threaded build. Otherwise the multi-threaded build is preferred.
