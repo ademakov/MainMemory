@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+
+  <head>
+    <meta charset='utf-8'>
+    <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <meta name="description" content="MainMemory : Main Memory Database with Generic Server Framework">
+
+    <link rel="stylesheet" type="text/css" media="screen" href="stylesheets/stylesheet.css">
+
+    <title>MainMemory</title>
+  </head>
+
+  <body>
+
+    <!-- HEADER -->
+    <div id="header_wrap" class="outer">
+        <header class="inner">
+          <a id="forkme_banner" href="https://github.com/ademakov/MainMemory">View on GitHub</a>
+
+          <h1 id="project_title">MainMemory</h1>
+          <h2 id="project_tagline">Main Memory Database with Generic Server Framework</h2>
+
+            <section id="downloads">
+              <a class="zip_download_link" href="https://github.com/ademakov/MainMemory/zipball/master">Download this project as a .zip file</a>
+              <a class="tar_download_link" href="https://github.com/ademakov/MainMemory/tarball/master">Download this project as a tar.gz file</a>
+            </section>
+        </header>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div id="main_content_wrap" class="outer">
+      <section id="main_content" class="inner">
+        <h1>
+<a id="mainmemory" class="anchor" href="#mainmemory" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>MainMemory</h1>
+
+<p>The MainMemory project is intended to provide</p>
+
+<ul>
+<li>a framework for network servers of all sorts;</li>
+<li>some specific implementations of such servers.</li>
+</ul>
+
+<p>The purpose of the MainMemory project is akin to SGI's State Threads
+Library (<a href="http://state-threads.sourceforge.net/">http://state-threads.sourceforge.net/</a>). But MainMemory also
+aims to take full advantage of modern multi-core systems with large
+RAM sizes.</p>
+
+<p>As the first application and testbed for the MainMemory framework
+the project provides almost complete implementation of the memcached
+protocol.</p>
+
+<p>In the future it could also be used to implement any other protocol,
+for instance, redis. Or something completely different like HTTP,
+WebDAV, WebSocket protocols thus allowing to implement a caching HTTP
+server, proxy, storage platform, or a pub-sub system.</p>
+
+<h1>
+<a id="status" class="anchor" href="#status" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Status</h1>
+
+<p>The project has been slowly brewing as a personal research vehicle for
+some time already. A number of different approaches has been tried and
+abandoned. All this time it was run mostly against memslap and memtier
+benchmarks.</p>
+
+<p>Now it has matured enough to consider it ready for experimental use by a
+wide audience. Hopefully in a short term it could be declared production
+ready as well.</p>
+
+<h1>
+<a id="target-platforms" class="anchor" href="#target-platforms" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Target Platforms</h1>
+
+<p>MainMemory is intended to run on x86/x86-64 boxes with Linux or any BSD
+flavor OS including Mac OS/X. The key requirement is the availability of
+either epoll or kqueue API in addition to the standard POSIX API.</p>
+
+<p>However so far it has only been extensively tested on Linux and Mac OS/X.
+And on a single FreeBSD instance running on a VM. Therefore any portability
+reports and/or patches are welcome.</p>
+
+<p>MainMemory includes a not-much-tested "generic architecture" port so there
+is a slim chance it will run on any non-x86 platform easily enough. But most
+likely it will take some extra work. In the future it is planed to have a
+native ARM port too.</p>
+
+<h1>
+<a id="build" class="anchor" href="#build" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Build</h1>
+
+<p>MainMemory relies on the venerable autotools suite to build. The build
+procedure is as follows:</p>
+
+<pre><code>&gt; ./bootstrap
+&gt; ./configure &lt;config-options&gt;
+&gt; make
+</code></pre>
+
+<p>This produces few libraries and a binary file named 'mmem' located in the
+'src' subdirectory. The 'mmem' file could be used as a replacement for your
+memcached.</p>
+
+<h2>
+<a id="single-threaded-and-multi-threaded-builds" class="anchor" href="#single-threaded-and-multi-threaded-builds" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Single-Threaded and Multi-Threaded Builds</h2>
+
+<p>MainMemory can be built in one of the two configurations:</p>
+
+<ul>
+<li>single-threaded</li>
+<li>or multi-threaded (SMP).</li>
+</ul>
+
+<p>For the former option, run the configure script as follows:</p>
+
+<pre><code>&gt; ./configure
+</code></pre>
+
+<p>For the later option, run the configure script as follows:</p>
+
+<pre><code>&gt; ./configure --enable-smp
+</code></pre>
+
+<h2>
+<a id="what-build-to-use" class="anchor" href="#what-build-to-use" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>What Build to Use</h2>
+
+<p>The single-threaded version does not use the synchronization mechanisms of
+the multi-threaded version. Therefore it performs better (with higher
+throughput and smaller latency) until it hits the single-core execution
+limits.</p>
+
+<p>As a rule of thumb if the required throughput of the server is less than
+about 100k requests per second then it might be beneficial to use the
+single-threaded build. Otherwise the multi-threaded build is preferred.</p>
+      </section>
+    </div>
+
+    <!-- FOOTER  -->
+    <div id="footer_wrap" class="outer">
+      <footer class="inner">
+        <p class="copyright">MainMemory maintained by <a href="https://github.com/ademakov">ademakov</a></p>
+        <p>Published with <a href="https://pages.github.com">GitHub Pages</a></p>
+      </footer>
+    </div>
+
+    
+
+  </body>
+</html>
