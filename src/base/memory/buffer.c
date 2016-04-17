@@ -567,7 +567,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	// Find out how much room is required to fit the data.
 	size_t size = max(left, cnt);
 
-	// Find out how much room is available an the buffer tail.
+	// Find out how much room is available at the buffer tail.
 	size_t room;
 	if (buf->tail.seg == buf->head.seg)
 		room = buf->tail.end - buf->head.ptr;
@@ -589,7 +589,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	if (unlikely(left > MM_BUFFER_MAX_CHUNK_SIZE))
 		mm_fatal(0, "not implemented yet");
 
-	// Consolidate the entire unread data it the tail segment.
+	// Consolidate the entire unread data in the tail segment.
 	// If the original tail segment is not empty and at the same
 	// time is large enough to fit the entire data then the tail
 	// data have to be shifted towards the end of the segment.
