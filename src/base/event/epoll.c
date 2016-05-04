@@ -21,15 +21,12 @@
 
 #if HAVE_SYS_EPOLL_H
 
+#include "base/logger.h"
 #include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
 #include "base/event/receiver.h"
-#include "base/log/debug.h"
-#include "base/log/error.h"
-#include "base/log/log.h"
-#include "base/log/trace.h"
 
 #if HAVE_SYS_EVENTFD_H
 # include <sys/eventfd.h>
