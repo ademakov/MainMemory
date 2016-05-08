@@ -21,8 +21,8 @@
 
 #include "base/memory/memory.h"
 
-static uint16_t mm_poller_busywait = 2;
-static uint16_t mm_events_busywait = 4;
+static uint16_t mm_poller_busywait = 1;
+static uint16_t mm_events_busywait = 3;
 
 void NONNULL(1, 2, 4)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
@@ -77,15 +77,14 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
-	// There may be changes that need to be immediately acknowledged.
-	if (mm_event_listener_has_changes(listener))
-		timeout = 0;
-
-	if (timeout != 0 && listener->busywait) {
+	if (listener->busywait) {
 		// Presume that if there were incoming events moments ago then
 		// there is a chance to get some more immediately. Spin a little
 		// bit to avoid context switches.
 		listener->busywait--;
+		timeout = 0;
+	} else if (mm_event_listener_has_changes(listener)) {
+		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
 	}
 
