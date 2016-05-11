@@ -301,7 +301,7 @@ noinput:
 
 	// Parse the rest of the command.
 	for (;; s++) {
-		if (s == e) {
+		while (unlikely(s == e)) {
 			if (command->type->kind != MC_COMMAND_LOOKUP)
 				goto noinput;
 
@@ -332,11 +332,10 @@ noinput:
 			}
 
 			if (!(rc = mm_netbuf_read_next(&parser->sock)))
-				break;
+				goto leave;
 
 			s = mm_netbuf_rget(&parser->sock);
 			e = mm_netbuf_rend(&parser->sock);
-			continue;
 		}
 
 		int c = *s;
