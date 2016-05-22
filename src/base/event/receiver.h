@@ -24,8 +24,6 @@
 #include "base/bitset.h"
 #include "base/list.h"
 
-#define ENABLE_EVENT_PUBLISH	0
-
 /* Forward declarations. */
 struct mm_event_dispatch;
 
@@ -39,14 +37,22 @@ struct mm_event_receiver_fwdbuf
 	unsigned int nsinks;
 };
 
-#if ENABLE_EVENT_PUBLISH
 /* Event sink publish buffer. */
 struct mm_event_receiver_pubbuf
 {
 	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_PUBBUF_SIZE];
 	unsigned int nsinks;
 };
-#endif
+
+/* Event receiver statistics. */
+struct mm_event_receiver_stats
+{
+	uint64_t loose_events;
+	uint64_t direct_events;
+	uint64_t stolen_events;
+	uint64_t forwarded_events;
+	uint64_t published_events;
+};
 
 struct mm_event_receiver
 {
@@ -54,15 +60,11 @@ struct mm_event_receiver
 	uint32_t reclaim_epoch;
 	bool reclaim_active;
 
-	/* The thread that owns the receiver. */
-	mm_thread_t thread;
-
 	/* The flag indicating that some events were received. */
 	bool got_events;
-#if ENABLE_EVENT_PUBLISH
-	/* The flag indicating that some events were published in the domain request queue. */
-	bool published_events;
-#endif
+
+	/* The thread that owns the receiver. */
+	mm_thread_t thread;
 
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
@@ -73,16 +75,19 @@ struct mm_event_receiver
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
 
-#if ENABLE_EVENT_PUBLISH
 	/* Per-domain temporary store for sinks of received events. */
 	struct mm_event_receiver_pubbuf publish_buffer;
-#endif
 
-	/* Statistics. */
-	uint64_t loose_events;
-	uint64_t direct_events;
-	uint64_t stolen_events;
-	uint64_t forwarded_events;
+	/* The count of directly handed events. */
+	uint32_t direct_events;
+	uint32_t stolen_events;
+	/* The count of events forwarded to other listeners. */
+	uint32_t forwarded_events;
+	/* The count of events published in the domain request queue. */
+	uint32_t published_events;
+
+	/* Event statistics. */
+	struct mm_event_receiver_stats stats;
 
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];

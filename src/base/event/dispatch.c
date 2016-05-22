@@ -222,11 +222,14 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &listeners[i];
 		struct mm_event_receiver *receiver = &listener->receiver;
-		mm_log_fmt("listener %d: loose=%llu, direct=%llu/%llu, forwarded=%llu\n", i,
-			   (unsigned long long) receiver->loose_events,
-			   (unsigned long long) receiver->direct_events,
-			   (unsigned long long) receiver->stolen_events,
-			   (unsigned long long) receiver->forwarded_events);
+		struct mm_event_receiver_stats *stats = &receiver->stats;
+
+		mm_log_fmt("listener %d: loose=%llu, direct=%llu/%llu, forwarded=%llu, published=%llu\n", i,
+			   (unsigned long long) stats->loose_events,
+			   (unsigned long long) stats->direct_events,
+			   (unsigned long long) stats->stolen_events,
+			   (unsigned long long) stats->forwarded_events,
+			   (unsigned long long) stats->published_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->storage.storage.nevents_stats[j];
