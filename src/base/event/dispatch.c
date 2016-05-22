@@ -188,7 +188,7 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 	}
 
 	LEAVE();
-	return true;
+	return rc;
 }
 
 bool NONNULL(1)
