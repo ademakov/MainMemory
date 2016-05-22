@@ -78,6 +78,12 @@ struct mm_event_receiver
 	struct mm_event_receiver_pubbuf publish_buffer;
 #endif
 
+	/* Statistics. */
+	uint64_t loose_events;
+	uint64_t direct_events;
+	uint64_t stolen_events;
+	uint64_t forwarded_events;
+
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];
 };

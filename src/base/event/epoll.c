@@ -247,6 +247,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 			mm_error(errno, "epoll_wait");
 		n = 0;
 	}
+	storage->nevents_stats[n]++;
 
 	LEAVE();
 	return n;
@@ -278,6 +279,17 @@ mm_event_epoll_cleanup(struct mm_event_epoll *backend)
 
 	// Close the epoll file descriptor.
 	mm_close(backend->event_fd);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage)
+{
+	ENTER();
+
+	for (size_t i = 0; i <= MM_EVENT_EPOLL_NEVENTS; i++)
+		storage->nevents_stats[i] = 0;
 
 	LEAVE();
 }

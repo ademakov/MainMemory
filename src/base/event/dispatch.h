@@ -89,4 +89,11 @@ mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch);
 bool NONNULL(1)
 mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch);
 
+/**********************************************************************
+ * Event statistics.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch);
+
 #endif /* BASE_EVENT_DISPATCH_H */

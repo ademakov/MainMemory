@@ -25,6 +25,12 @@
 #include "base/event/kqueue.h"
 #include "base/event/selfpipe.h"
 
+#if HAVE_SYS_EPOLL_H
+# define MM_EVENT_BACKEND_NEVENTS MM_EVENT_EPOLL_NEVENTS
+#elif HAVE_SYS_EVENT_H
+# define MM_EVENT_BACKEND_NEVENTS MM_EVENT_KQUEUE_NEVENTS
+#endif
+
 struct mm_event_backend
 {
 	/* Events system-specific backend. */

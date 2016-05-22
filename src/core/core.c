@@ -610,6 +610,7 @@ mm_core_stats(void)
 			   (unsigned long) core->nworkers);
 	}
 
+	mm_event_dispatch_stats(&mm_core_dispatch);
 	mm_event_stats();
 	mm_lock_stats();
 }

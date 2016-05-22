@@ -89,7 +89,7 @@ mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage)
 	ENTER();
 
 #if HAVE_SYS_EPOLL_H
-	(void) storage; // Nothing to do.
+	mm_event_epoll_storage_prepare(&storage->storage);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_storage_prepare(&storage->storage);
 #endif

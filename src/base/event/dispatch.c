@@ -19,6 +19,7 @@
 
 #include "base/event/dispatch.h"
 
+#include "base/logger.h"
 #include "base/memory/memory.h"
 
 static uint16_t mm_poller_busywait = 1;
@@ -163,6 +164,9 @@ mm_event_dispatch_observe_req(uintptr_t *arguments)
 static bool
 mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch)
 {
+	ENTER();
+	bool rc = true;
+
 	mm_thread_t n = dispatch->nlisteners;
 	struct mm_event_listener *listeners = dispatch->listeners;
 	for (mm_thread_t i = 0; i < n; i++) {
@@ -178,9 +182,12 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
 					 (uintptr_t) receiver);
 			mm_event_listener_notify(listener);
-			return false;
+			rc = false;
+			break;
 		}
 	}
+
+	LEAVE();
 	return true;
 }
 
@@ -199,4 +206,36 @@ mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch)
 
 	LEAVE();
 	return rc;
+}
+
+/**********************************************************************
+ * Event statistics.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
+{
+	ENTER();
+
+	mm_thread_t n = dispatch->nlisteners;
+	struct mm_event_listener *listeners = dispatch->listeners;
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_event_listener *listener = &listeners[i];
+		struct mm_event_receiver *receiver = &listener->receiver;
+		mm_log_fmt("listener %d: loose=%llu, direct=%llu/%llu, forwarded=%llu\n", i,
+			   (unsigned long long) receiver->loose_events,
+			   (unsigned long long) receiver->direct_events,
+			   (unsigned long long) receiver->stolen_events,
+			   (unsigned long long) receiver->forwarded_events);
+
+		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
+			uint64_t n = listener->storage.storage.nevents_stats[j];
+			if (j && !n)
+				continue;
+			mm_log_fmt(" %d=%llu", j, (unsigned long long) n);
+		}
+		mm_log_str("\n");
+	}
+
+	LEAVE();
 }

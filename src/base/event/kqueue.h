@@ -31,7 +31,7 @@
 # define MM_EVENT_NATIVE_NOTIFY		1
 #endif
 
-#define MM_EVENT_KQUEUE_NEVENTS		(512)
+#define MM_EVENT_KQUEUE_NEVENTS		(64)
 
 /* Forward declarations. */
 struct mm_event_batch;
@@ -50,9 +50,10 @@ struct mm_event_kqueue_storage
 {
 	/* The kevent list size. */
 	int nevents;
-
 	/* The kevent list. */
 	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
+	/* Statistics. */
+	uint64_t nevents_stats[MM_EVENT_KQUEUE_NEVENTS + 1];
 };
 
 void NONNULL(1)

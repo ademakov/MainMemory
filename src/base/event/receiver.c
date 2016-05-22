@@ -414,6 +414,11 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
 #endif
 
+	receiver->loose_events = 0;
+	receiver->direct_events = 0;
+	receiver->stolen_events = 0;
+	receiver->forwarded_events = 0;
+
 	LEAVE();
 }
 
@@ -506,6 +511,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 	if (sink->loose_target) {
 		// Handle the event immediately.
 		mm_event_convey(sink);
+		receiver->loose_events++;
 
 	} else {
 		mm_thread_t target = sink->target;
@@ -521,6 +527,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 				target = sink->target = MM_THREAD_NONE;
 #else
 				target = sink->target = receiver->thread;
+				receiver->stolen_events++;
 #endif
 			}
 		}
@@ -530,6 +537,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 		// the target thread.
 		if (target == receiver->thread) {
 			mm_event_convey(sink);
+			receiver->direct_events++;
 
 		} else if (target != MM_THREAD_NONE) {
 			struct mm_event_dispatch *dispatch = receiver->dispatch;
@@ -537,6 +545,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			mm_event_receiver_forward(listener->thread,
 						  &receiver->forward_buffers[target], sink);
 			mm_bitset_set(&receiver->forward_targets, target);
+			receiver->forwarded_events++;
 
 		} else {
 #if ENABLE_EVENT_PUBLISH

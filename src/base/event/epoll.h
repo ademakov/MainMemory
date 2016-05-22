@@ -32,7 +32,7 @@
 # define MM_EVENT_NATIVE_NOTIFY		1
 #endif
 
-#define MM_EVENT_EPOLL_NEVENTS		(512)
+#define MM_EVENT_EPOLL_NEVENTS		(64)
 
 /* Forward declarations. */
 struct mm_event_batch;
@@ -56,6 +56,8 @@ struct mm_event_epoll_storage
 {
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
+	/* Statistics. */
+	uint64_t nevents_stats[MM_EVENT_EPOLL_NEVENTS + 1];
 };
 
 void
@@ -66,6 +68,9 @@ mm_event_epoll_prepare(struct mm_event_epoll *backend);
 
 void NONNULL(1)
 mm_event_epoll_cleanup(struct mm_event_epoll *backend);
+
+void NONNULL(1)
+mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage);
 
 void NONNULL(1, 2, 3, 4)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
