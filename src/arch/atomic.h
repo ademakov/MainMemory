@@ -24,10 +24,12 @@
 
 #if ARCH_X86
 # include "arch/x86/atomic.h"
+# include "arch/generic/atomic64.h"
 #elif ARCH_X86_64
 # include "arch/x86-64/atomic.h"
 #else
 # include "arch/generic/atomic.h"
+# include "arch/generic/atomic64.h"
 #endif
 
 #endif /* ARCH_ATOMIC_H */
