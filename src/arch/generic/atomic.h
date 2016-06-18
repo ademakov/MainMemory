@@ -96,6 +96,7 @@ mm_atomic_fetch(uint8, add, __sync_fetch_and_add)
 mm_atomic_fetch(uint16, add, __sync_fetch_and_add)
 mm_atomic_fetch(uint32, add, __sync_fetch_and_add)
 mm_atomic_fetch(uintptr, add, __sync_fetch_and_add)
+mm_atomic_fetch_type(void *, ptr, add, __sync_fetch_and_add)
 
 /* Define atomic increment ops. */
 mm_atomic_unary(uint8, inc, __sync_fetch_and_add)

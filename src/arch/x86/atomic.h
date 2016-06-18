@@ -117,6 +117,7 @@ mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "q")
 mm_atomic_fetch(uint16, add, MM_LOCK_PREFIX, "xaddw", "r")
 mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "r")
 mm_atomic_fetch(uintptr, add, MM_LOCK_PREFIX, "xaddl", "r")
+mm_atomic_fetch_type(void *, ptr, add, MM_LOCK_PREFIX, "xaddl", "r")
 
 /* Define atomic increment ops. */
 mm_atomic_unary(uint8, inc, "incb")
