@@ -31,6 +31,7 @@
 typedef mm_atomic_type(uint8_t) mm_atomic_uint8_t;
 typedef mm_atomic_type(uint16_t) mm_atomic_uint16_t;
 typedef mm_atomic_type(uint32_t) mm_atomic_uint32_t;
+typedef mm_atomic_type(uint64_t) mm_atomic_uint64_t;
 typedef mm_atomic_type(uintptr_t) mm_atomic_uintptr_t;
 typedef mm_atomic_type(void *) mm_atomic_ptr_t;
 
@@ -57,6 +58,7 @@ typedef mm_atomic_type(void *) mm_atomic_ptr_t;
 mm_atomic_cas(uint8, "cmpxchgb", "q")
 mm_atomic_cas(uint16, "cmpxchgw", "r")
 mm_atomic_cas(uint32, "cmpxchgl", "r")
+mm_atomic_cas(uint64, "cmpxchgq", "r")
 mm_atomic_cas(uintptr, "cmpxchgq", "r")
 mm_atomic_cas_type(void *, ptr, "cmpxchgq", "r")
 
@@ -109,6 +111,7 @@ mm_atomic_cas_type(void *, ptr, "cmpxchgq", "r")
 mm_atomic_fetch(uint8, set, "", "xchgb", "q")
 mm_atomic_fetch(uint16, set, "", "xchgw", "r")
 mm_atomic_fetch(uint32, set, "", "xchgl", "r")
+mm_atomic_fetch(uint64, set, "", "xchgq", "r")
 mm_atomic_fetch(uintptr, set, "", "xchgq", "r")
 mm_atomic_fetch_type(void *, ptr, set, "", "xchgq", "r")
 
@@ -116,26 +119,32 @@ mm_atomic_fetch_type(void *, ptr, set, "", "xchgq", "r")
 mm_atomic_fetch(uint8, add, MM_LOCK_PREFIX, "xaddb", "q")
 mm_atomic_fetch(uint16, add, MM_LOCK_PREFIX, "xaddw", "r")
 mm_atomic_fetch(uint32, add, MM_LOCK_PREFIX, "xaddl", "r")
+mm_atomic_fetch(uint64, add, MM_LOCK_PREFIX, "xaddq", "r")
 mm_atomic_fetch(uintptr, add, MM_LOCK_PREFIX, "xaddq", "r")
+mm_atomic_fetch_type(void *, ptr, add, MM_LOCK_PREFIX, "xaddq", "r")
 
 /* Define atomic increment ops. */
 mm_atomic_unary(uint8, inc, "incb")
 mm_atomic_unary(uint16, inc, "incw")
 mm_atomic_unary(uint32, inc, "incl")
+mm_atomic_unary(uint64, inc, "incq")
 mm_atomic_unary(uintptr, inc, "incq")
 mm_atomic_unary_test(uint8, inc, "incb")
 mm_atomic_unary_test(uint16, inc, "incw")
 mm_atomic_unary_test(uint32, inc, "incl")
+mm_atomic_unary_test(uint64, inc, "incq")
 mm_atomic_unary_test(uintptr, inc, "incq")
 
 /* Define atomic decrement ops. */
 mm_atomic_unary(uint8, dec, "decb")
 mm_atomic_unary(uint16, dec, "decw")
 mm_atomic_unary(uint32, dec, "decl")
+mm_atomic_unary(uint64, dec, "decq")
 mm_atomic_unary(uintptr, dec, "decq")
 mm_atomic_unary_test(uint8, dec, "decb")
 mm_atomic_unary_test(uint16, dec, "decw")
 mm_atomic_unary_test(uint32, dec, "decl")
+mm_atomic_unary_test(uint64, dec, "decq")
 mm_atomic_unary_test(uintptr, dec, "decq")
 
 #undef mm_atomic_fetch_type
