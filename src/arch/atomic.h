@@ -47,7 +47,7 @@ mm_atomic_uint64_load(mm_atomic_uint64_t *p)
 static inline void
 mm_atomic_uint64_store(mm_atomic_uint64_t *p, uint64_t v)
 {
-#if 0 && MM_WORD_64BIT
+#if MM_WORD_64BIT
 	mm_memory_store(*p, v);
 #else
 	uint64_t u = *p;
