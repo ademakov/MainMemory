@@ -25,6 +25,8 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
+#define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
+
 /**********************************************************************
  * Event forward request handlers.
  **********************************************************************/
@@ -433,6 +435,7 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 
 	// No events arrived yet.
 	receiver->got_events = false;
+	receiver->direct_events_estimate = 0;
 	receiver->direct_events = 0;
 	receiver->stolen_events = 0;
 	receiver->forwarded_events = 0;
@@ -506,6 +509,37 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 	LEAVE();
 }
 
+bool NONNULL(1, 2)
+mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	if (!sink->loose_target) {
+		mm_thread_t target = mm_event_target(sink);
+		if (target == receiver->thread || target == MM_THREAD_NONE)
+			receiver->direct_events_estimate++;
+	}
+	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_STEAL_THRESHOLD;
+}
+
+static bool NONNULL(1, 2)
+mm_event_receiver_stealable(struct mm_event_receiver *receiver, struct mm_event_fd *sink,
+			    uint32_t expected_iostate, mm_thread_t target)
+{
+	if (target == MM_THREAD_NONE)
+		return true;
+	if (target == receiver->thread || sink->bound_target)
+		return false;
+	if (receiver->direct_events >= MM_EVENT_RECEIVER_STEAL_THRESHOLD)
+		return false;
+	if (receiver->direct_events_estimate >= MM_EVENT_RECEIVER_STEAL_THRESHOLD)
+		return false;
+
+	uint32_t iostate = mm_memory_load(sink->io.state);
+	mm_memory_load_fence();
+	uint8_t attached = mm_memory_load(sink->attached);
+
+	return !attached && iostate == expected_iostate;
+}
+
 static void NONNULL(1, 2)
 mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd *sink,
 			 uint32_t expected_iostate)
@@ -519,27 +553,22 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 		receiver->stats.loose_events++;
 
 	} else {
-		mm_thread_t target = sink->target;
+		mm_thread_t target = mm_event_target(sink);
 
-		// If the event sink is detached then attach it to the control
-		// thread.
-		if (!sink->bound_target && target != receiver->thread) {
-			uint32_t iostate = mm_memory_load(sink->io.state);
-			mm_memory_load_fence();
-			uint8_t attached = mm_memory_load(sink->attached);
-			if (!attached && iostate == expected_iostate) {
+		// If the event sink should be stolen then attach it to the
+		// control thread.
+		if (mm_event_receiver_stealable(receiver, sink, expected_iostate, target)) {
 #if 0
-				if (receiver->direct_events < 5) {
-					target = sink->target = receiver->thread;
-					receiver->stolen_events++;
-				} else {
-					target = sink->target = MM_THREAD_NONE;
-				}
-#else
+			if (receiver->direct_events < 5) {
 				target = sink->target = receiver->thread;
 				receiver->stolen_events++;
-#endif
+			} else {
+				target = sink->target = MM_THREAD_NONE;
 			}
+#else
+			target = sink->target = receiver->thread;
+			receiver->stolen_events++;
+#endif
 		}
 
 		// If the event sink belongs to the control thread then handle

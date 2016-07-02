@@ -27,8 +27,8 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 
-#define MM_EVENT_RECEIVER_FWDBUF_SIZE	6
-#define MM_EVENT_RECEIVER_PUBBUF_SIZE	4
+#define MM_EVENT_RECEIVER_FWDBUF_SIZE		(6)
+#define MM_EVENT_RECEIVER_PUBBUF_SIZE		(4)
 
 /* Event sink forward buffer. */
 struct mm_event_receiver_fwdbuf
@@ -78,6 +78,10 @@ struct mm_event_receiver
 	/* Per-domain temporary store for sinks of received events. */
 	struct mm_event_receiver_pubbuf publish_buffer;
 
+	/* The number of locally handled events found while adjusting
+	   the receiver for appropriate event dispatch strategy. */
+	uint32_t direct_events_estimate;
+
 	/* The number of directly handled events. */
 	uint32_t direct_events;
 	uint32_t stolen_events;
@@ -107,6 +111,9 @@ void NONNULL(1)
 mm_event_receiver_start(struct mm_event_receiver *receiver);
 void NONNULL(1)
 mm_event_receiver_finish(struct mm_event_receiver *receiver);
+
+bool NONNULL(1, 2)
+mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 
 void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);

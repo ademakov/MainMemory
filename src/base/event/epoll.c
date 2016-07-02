@@ -184,6 +184,20 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
+		if ((event->events & EPOLLIN) != 0) {
+			if (!mm_event_receiver_adjust(receiver, sink))
+				break;
+		}
+		if ((event->events & EPOLLOUT) != 0) {
+			if (!mm_event_receiver_adjust(receiver, sink))
+				break;
+		}
+	}
+
+	for (int i = 0; i < nevents; i++) {
+		struct epoll_event *event = &storage->events[i];
+		struct mm_event_fd *sink = event->data.ptr;
+
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			mm_event_receiver_input_error(receiver, sink);
 
