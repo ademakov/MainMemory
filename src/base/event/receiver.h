@@ -23,12 +23,15 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/list.h"
+#include "base/event/event.h"
 
 /* Forward declarations. */
 struct mm_event_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE		(6)
 #define MM_EVENT_RECEIVER_PUBBUF_SIZE		(4)
+
+#define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
 
 /* Event sink forward buffer. */
 struct mm_event_receiver_fwdbuf
@@ -112,8 +115,16 @@ mm_event_receiver_start(struct mm_event_receiver *receiver);
 void NONNULL(1)
 mm_event_receiver_finish(struct mm_event_receiver *receiver);
 
-bool NONNULL(1, 2)
-mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+static inline bool NONNULL(1, 2)
+mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	if (!sink->loose_target) {
+		mm_thread_t target = mm_event_target(sink);
+		if (target == receiver->thread || target == MM_THREAD_NONE)
+			receiver->direct_events_estimate++;
+	}
+	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_STEAL_THRESHOLD;
+}
 
 void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);

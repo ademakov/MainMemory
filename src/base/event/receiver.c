@@ -25,8 +25,6 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
-#define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
-
 /**********************************************************************
  * Event forward request handlers.
  **********************************************************************/
@@ -507,17 +505,6 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 	}
 
 	LEAVE();
-}
-
-bool NONNULL(1, 2)
-mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	if (!sink->loose_target) {
-		mm_thread_t target = mm_event_target(sink);
-		if (target == receiver->thread || target == MM_THREAD_NONE)
-			receiver->direct_events_estimate++;
-	}
-	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_STEAL_THRESHOLD;
 }
 
 static bool NONNULL(1, 2)
