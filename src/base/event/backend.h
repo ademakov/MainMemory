@@ -86,17 +86,16 @@ mm_event_backend_serial(struct mm_event_backend *backend UNUSED)
 #endif
 }
 
-static inline void NONNULL(1, 2, 3, 4)
+static inline void NONNULL(1, 2, 3)
 mm_event_backend_listen(struct mm_event_backend *backend,
-			struct mm_event_backend_storage *storage,
 			struct mm_event_batch *changes,
 			struct mm_event_receiver *receiver,
 			mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
+	mm_event_epoll_listen(&backend->backend, changes, receiver, timeout);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_listen(&backend->backend, &storage->storage, changes, receiver, timeout);
+	mm_event_kqueue_listen(&backend->backend, changes, receiver, timeout);
 #endif
 }
 

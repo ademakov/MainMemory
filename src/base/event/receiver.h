@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/list.h"
+#include "base/event/backend.h"
 #include "base/event/event.h"
 
 /* Forward declarations. */
@@ -98,6 +99,10 @@ struct mm_event_receiver
 
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];
+
+	/* Private event storage. */
+	struct mm_event_backend_storage storage;
+
 };
 
 void NONNULL(1, 2)

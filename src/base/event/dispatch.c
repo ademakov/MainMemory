@@ -232,7 +232,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 			   (unsigned long long) stats->published_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
-			uint64_t n = listener->storage.storage.nevents_stats[j];
+			uint64_t n = listener->receiver.storage.storage.nevents_stats[j];
 			if (j && !n)
 				continue;
 			mm_log_fmt(" %d=%llu", j, (unsigned long long) n);

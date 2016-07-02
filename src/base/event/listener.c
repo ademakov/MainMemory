@@ -44,6 +44,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->listen_stamp = 0;
 	listener->notify_stamp = 0;
 
+	listener->thread = thread;
 	listener->busywait = 0;
 
 #if ENABLE_LINUX_FUTEX
@@ -61,10 +62,8 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	mm_thread_t thread_number = listener - dispatch->listeners;
 	mm_event_receiver_prepare(&listener->receiver, dispatch, thread_number);
 
-	mm_event_backend_storage_prepare(&listener->storage);
+	// Initialize change event storage.
 	mm_event_batch_prepare(&listener->changes, 256);
-
-	listener->thread = thread;
 
 	LEAVE();
 }
@@ -229,7 +228,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	}
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&listener->receiver.dispatch->backend, &listener->storage,
+	mm_event_backend_listen(&listener->receiver.dispatch->backend,
 				&listener->changes, &listener->receiver, timeout);
 
 	// Advertise the start of another working cycle.

@@ -411,6 +411,9 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	receiver->stats.forwarded_events = 0;
 	receiver->stats.published_events = 0;
 
+	// Initialize private event storage.
+	mm_event_backend_storage_prepare(&receiver->storage);
+
 	LEAVE();
 }
 

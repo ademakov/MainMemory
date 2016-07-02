@@ -308,14 +308,14 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage)
 	LEAVE();
 }
 
-void NONNULL(1, 2, 3, 4)
+void NONNULL(1, 2, 3)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
-		      struct mm_event_epoll_storage *storage,
 		      struct mm_event_batch *changes,
 		      struct mm_event_receiver *receiver,
 		      mm_timeout_t timeout)
 {
 	ENTER();
+	struct mm_event_epoll_storage *storage = &receiver->storage.storage;
 
 	// Make event changes.
 	for (unsigned int i = 0; i < changes->nchanges; i++) {

@@ -22,7 +22,6 @@
 
 #include "common.h"
 #include "base/event/batch.h"
-#include "base/event/backend.h"
 #include "base/event/receiver.h"
 
 #if HAVE_LINUX_FUTEX_H
@@ -79,17 +78,14 @@ struct mm_event_listener
 	struct mm_thread_monitor monitor;
 #endif
 
-	/* Listener's helper to receive events. */
-	struct mm_event_receiver receiver;
-
-	/* Listener's private event storage. */
-	struct mm_event_backend_storage storage;
+	/* Associated thread. */
+	struct mm_thread *thread;
 
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
 
-	/* Associated thread. */
-	struct mm_thread *thread;
+	/* Listener's helper to receive events. */
+	struct mm_event_receiver receiver;
 
 	/* Counter for busy waiting. */
 	uint16_t busywait;

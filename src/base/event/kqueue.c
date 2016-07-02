@@ -311,14 +311,14 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 	LEAVE();
 }
 
-void NONNULL(1, 2, 3, 4)
+void NONNULL(1, 2, 3)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend,
-		       struct mm_event_kqueue_storage *storage,
 		       struct mm_event_batch *changes,
 		       struct mm_event_receiver *receiver,
 		       mm_timeout_t timeout)
 {
 	ENTER();
+	struct mm_event_kqueue_storage *storage = &receiver->storage.storage;
 
 	// Make event changes.
 	unsigned int first = 0, next = 0;
