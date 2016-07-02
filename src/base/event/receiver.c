@@ -404,12 +404,7 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	// Prepare the publish buffer.
 	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
 
-	// Initialize counts of events.
-	receiver->direct_events = 0;
-	receiver->stolen_events = 0;
-	receiver->forwarded_events = 0;
-	receiver->published_events = 0;
-
+	// Initialize event statistics.
 	receiver->stats.loose_events = 0;
 	receiver->stats.direct_events = 0;
 	receiver->stats.stolen_events = 0;
@@ -438,6 +433,10 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 
 	// No events arrived yet.
 	receiver->got_events = false;
+	receiver->direct_events = 0;
+	receiver->stolen_events = 0;
+	receiver->forwarded_events = 0;
+	receiver->published_events = 0;
 
 	// Start a reclamation-critical section.
 	if (!receiver->reclaim_active) {
@@ -458,32 +457,26 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
+	// Count directly handled events.
 	if (receiver->direct_events) {
 		receiver->got_events = true;
-
 		receiver->stats.direct_events += receiver->direct_events;
 		receiver->stats.stolen_events += receiver->stolen_events;
-		receiver->direct_events = 0;
-		receiver->stolen_events = 0;
 	}
 
-	// Flush published events.
+	// Flush and count published events.
 	if (receiver->published_events) {
 		receiver->got_events = true;
-
 		receiver->stats.published_events += receiver->published_events;
-		receiver->published_events = 0;
 
 		mm_event_receiver_publish_flush(dispatch->domain, &receiver->publish_buffer);
 		mm_event_dispatch_notify_waiting(dispatch);
 	}
 
-	// Flush forwarded events.
+	// Flush and count forwarded events.
 	if (receiver->forwarded_events) {
 		receiver->got_events = true;
-
 		receiver->stats.forwarded_events += receiver->forwarded_events;
-		receiver->forwarded_events = 0;
 
 		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
 		while (target != MM_THREAD_NONE) {

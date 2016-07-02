@@ -78,12 +78,12 @@ struct mm_event_receiver
 	/* Per-domain temporary store for sinks of received events. */
 	struct mm_event_receiver_pubbuf publish_buffer;
 
-	/* The count of directly handed events. */
+	/* The number of directly handled events. */
 	uint32_t direct_events;
 	uint32_t stolen_events;
-	/* The count of events forwarded to other listeners. */
+	/* The number of events forwarded to other listeners. */
 	uint32_t forwarded_events;
-	/* The count of events published in the domain request queue. */
+	/* The number of events published in the domain request queue. */
 	uint32_t published_events;
 
 	/* Event statistics. */
