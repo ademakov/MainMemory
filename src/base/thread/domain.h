@@ -190,7 +190,11 @@ mm_domain_join(struct mm_domain *domain);
  * Domain requests.
  **********************************************************************/
 
-MM_REQUEST_RECEIVE_WRAPPER(mm_domain, struct mm_domain, request_queue)
+static inline bool NONNULL(1, 2)
+mm_domain_receive(struct mm_domain *domain, struct mm_request_data *rdata)
+{
+	return mm_request_receive(domain->request_queue, rdata);
+}
 
 MM_REQUEST_SUBMIT_WRAPPERS(mm_domain, struct mm_domain, request_queue)
 

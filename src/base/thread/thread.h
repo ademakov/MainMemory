@@ -287,10 +287,14 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 }
 
 /**********************************************************************
- * Domain requests.
+ * Thread requests.
  **********************************************************************/
 
-MM_REQUEST_RELAXED_RECEIVE_WRAPPER(mm_thread, struct mm_thread, request_queue)
+static inline bool NONNULL(1, 2)
+mm_thread_receive(struct mm_thread *thread, struct mm_request_data *rdata)
+{
+	return mm_request_relaxed_receive(thread->request_queue, rdata);
+}
 
 MM_REQUEST_SUBMIT_WRAPPERS(mm_thread, struct mm_thread, request_queue)
 

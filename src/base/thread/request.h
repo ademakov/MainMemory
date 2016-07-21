@@ -308,26 +308,6 @@ mm_request_trysend_5(struct mm_ring_mpmc *ring, struct mm_request_sender *s,
  **********************************************************************/
 
 /**
- * Define a wrapper for request receive routine.
- */
-#define MM_REQUEST_RECEIVE_WRAPPER(prefix, container, name)		\
-static inline bool NONNULL(1, 2)					\
-prefix##_receive(container *p, struct mm_request_data *r)		\
-{									\
-	return mm_request_receive(p->name, r);				\
-}									\
-									\
-/**
- * Define a wrapper for single-threaded request receive routine.
- */
-#define MM_REQUEST_RELAXED_RECEIVE_WRAPPER(prefix, container, name)	\
-static inline bool NONNULL(1, 2)					\
-prefix##_receive(container *p, struct mm_request_data *r)		\
-{									\
-	return mm_request_relaxed_receive(p->name, r);		       	\
-}
-
-/**
  * Define wrappers for submit and oneway submit routines.
  */
 #define MM_REQUEST_SUBMIT_WRAPPERS(prefix, container, name)		\
