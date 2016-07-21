@@ -163,7 +163,7 @@ mm_request_trypost_4(struct mm_ring_mpmc *ring, mm_request_oneway_t req,
 		     uintptr_t a4)
 {
 	uintptr_t data[] = { (uintptr_t) req, a1, a2, a3, a4 };
-	return mm_ring_mpmc_get_n(ring, data, 5);
+	return mm_ring_mpmc_put_n(ring, data, 5);
 }
 
 static inline void NONNULL(1, 2)
