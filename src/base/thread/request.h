@@ -28,7 +28,7 @@
 struct mm_request_sender;
 
 #define MM_REQUEST_ONEWAY_N	(6)
-#define MM_REQUEST_TWOWAY_N	(5)
+#define MM_REQUEST_TWOWAY_N	(MM_REQUEST_ONEWAY_N - 1)
 
 /* Request routines. */
 typedef void (*mm_request_oneway_t)(uintptr_t arguments[MM_REQUEST_ONEWAY_N]);
@@ -73,7 +73,7 @@ mm_request_receive(struct mm_ring_mpmc *ring, struct mm_request_data *rdata)
 static inline bool NONNULL(1, 2)
 mm_request_relaxed_receive(struct mm_ring_mpmc *ring, struct mm_request_data *rdata)
 {
-	return mm_ring_relaxed_get_n(ring, rdata->data, 7);
+	return mm_ring_mpsc_get_n(ring, rdata->data, 7);
 }
 
 static inline void

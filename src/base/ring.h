@@ -1,7 +1,7 @@
 /*
  * base/ring.h - MainMemory single-consumer circular buffer of pointers.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -230,7 +230,8 @@ mm_ring_mpmc_busywait(struct mm_ring_node *node, uintptr_t lock)
 
 /* Multi-Producer enqueue operation without wait. */
 static inline bool
-mm_ring_mpmc_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpmc_put_sn(struct mm_ring_mpmc *ring, uintptr_t *restrict stamp,
+		    uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t tail = mm_memory_load(ring->base.tail);
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
@@ -248,18 +249,14 @@ mm_ring_mpmc_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const un
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
 
+	*stamp = tail;
 	return true;
-}
-
-static inline bool
-mm_ring_mpmc_put(struct mm_ring_mpmc *ring, uintptr_t data)
-{
-	return mm_ring_mpmc_put_n(ring, &data, 1);
 }
 
 /* Multi-Consumer enqueue operation without wait. */
 static inline bool
-mm_ring_mpmc_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpmc_get_sn(struct mm_ring_mpmc *ring, uintptr_t *restrict stamp,
+		    uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t head = mm_memory_load(ring->base.head);
 	struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
@@ -277,18 +274,14 @@ mm_ring_mpmc_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const un
 	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
 
+	*stamp = head;
 	return true;
-}
-
-static inline bool
-mm_ring_mpmc_get(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
-{
-	return mm_ring_mpmc_get_n(ring, data, 1);
 }
 
 /* Multi-Producer enqueue operation with busy wait. */
 static inline void
-mm_ring_mpmc_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpmc_enqueue_sn(struct mm_ring_mpmc *ring, uintptr_t *restrict stamp,
+			uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t tail = mm_atomic_uintptr_fetch_and_add(&ring->base.tail, 1);
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
@@ -303,17 +296,14 @@ mm_ring_mpmc_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, cons
 
 	mm_memory_store_fence();
 	mm_memory_store(node->lock, tail + 1);
-}
 
-static inline void
-mm_ring_mpmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
-{
-	mm_ring_mpmc_enqueue_n(ring, &data, 1);
+	*stamp = tail;
 }
 
 /* Multi-Consumer dequeue operation with busy wait. */
 static inline void
-mm_ring_mpmc_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpmc_dequeue_sn(struct mm_ring_mpmc *ring, uintptr_t *restrict stamp,
+			uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t head = mm_atomic_uintptr_fetch_and_add(&ring->base.head, 1);
 	struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
@@ -328,12 +318,72 @@ mm_ring_mpmc_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, cons
 
 	mm_memory_fence(); /* TODO: load_store fence */
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
+
+	*stamp = head;
+}
+
+static inline bool
+mm_ring_mpmc_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+{
+	uintptr_t dummy;
+	return mm_ring_mpmc_put_sn(ring, &dummy, data, n);
+}
+
+static inline bool
+mm_ring_mpmc_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+{
+	uintptr_t dummy;
+	return mm_ring_mpmc_get_sn(ring, &dummy, data, n);
+}
+
+static inline void
+mm_ring_mpmc_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+{
+	uintptr_t dummy;
+	mm_ring_mpmc_enqueue_sn(ring, &dummy, data, n);
+}
+
+static inline void
+mm_ring_mpmc_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+{
+	uintptr_t dummy;
+	mm_ring_mpmc_dequeue_sn(ring, &dummy, data, n);
+}
+
+static inline bool
+mm_ring_mpmc_put(struct mm_ring_mpmc *ring, uintptr_t data)
+{
+	return mm_ring_mpmc_put_n(ring, &data, 1);
+}
+
+static inline bool
+mm_ring_mpmc_get(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
+{
+	return mm_ring_mpmc_get_n(ring, data, 1);
+}
+
+static inline void
+mm_ring_mpmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
+{
+	mm_ring_mpmc_enqueue_n(ring, &data, 1);
 }
 
 static inline void
 mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
 {
 	mm_ring_mpmc_dequeue_n(ring, data, 1);
+}
+
+static inline uintptr_t
+mm_ring_mpmc_enqueue_stamp(struct mm_ring_mpmc *ring)
+{
+	return mm_memory_load(ring->base.tail);
+}
+
+static inline uintptr_t
+mm_ring_mpmc_dequeue_stamp(struct mm_ring_mpmc *ring)
+{
+	return mm_memory_load(ring->base.head);
 }
 
 /**********************************************************************
@@ -345,7 +395,7 @@ mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
 
 /* Single-Producer enqueue operation for MPMC without wait. */
 static inline bool
-mm_ring_relaxed_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_spmc_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t tail = ring->base.tail;
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
@@ -366,15 +416,9 @@ mm_ring_relaxed_put_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const
 	return true;
 }
 
-static inline bool
-mm_ring_relaxed_put(struct mm_ring_mpmc *ring, uintptr_t data)
-{
-	return mm_ring_relaxed_put_n(ring, &data, 1);
-}
-
 /* Single-Consumer enqueue operation for MPMC without wait. */
 static inline bool
-mm_ring_relaxed_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpsc_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t head = ring->base.head;
 	struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
@@ -395,15 +439,9 @@ mm_ring_relaxed_get_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const
 	return true;
 }
 
-static inline bool
-mm_ring_relaxed_get(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
-{
-	return mm_ring_relaxed_get_n(ring, data, 1);
-}
-
 /* Single-Producer enqueue operation for MPMC ring with busy wait. */
 static inline void
-mm_ring_relaxed_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_spmc_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t tail = ring->base.tail++;
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
@@ -418,15 +456,9 @@ mm_ring_relaxed_enqueue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, c
 	mm_memory_store(node->lock, tail + 1);
 }
 
-static inline void
-mm_ring_relaxed_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
-{
-	mm_ring_relaxed_enqueue_n(ring, &data, 1);
-}
-
 /* Single-Consumer dequeue operation for MPMC ring with busy wait. */
 static inline void
-mm_ring_relaxed_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
+mm_ring_mpsc_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, const unsigned n)
 {
 	uintptr_t head = ring->base.head++;
 	struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
@@ -441,10 +473,40 @@ mm_ring_relaxed_dequeue_n(struct mm_ring_mpmc *ring, uintptr_t *restrict data, c
 	mm_memory_store(node->lock, head + 1 + ring->base.mask);
 }
 
-static inline void
-mm_ring_relaxed_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
+static inline bool
+mm_ring_spmc_put(struct mm_ring_mpmc *ring, uintptr_t data)
 {
-	mm_ring_relaxed_dequeue_n(ring, data, 1);
+	return mm_ring_spmc_put_n(ring, &data, 1);
+}
+
+static inline bool
+mm_ring_mpsc_get(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
+{
+	return mm_ring_mpsc_get_n(ring, data, 1);
+}
+
+static inline void
+mm_ring_spmc_enqueue(struct mm_ring_mpmc *ring, uintptr_t data)
+{
+	mm_ring_spmc_enqueue_n(ring, &data, 1);
+}
+
+static inline void
+mm_ring_mpsc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
+{
+	mm_ring_mpsc_dequeue_n(ring, data, 1);
+}
+
+static inline uintptr_t
+mm_ring_spmc_enqueue_stamp(struct mm_ring_mpmc *ring)
+{
+	return ring->base.tail;
+}
+
+static inline uintptr_t
+mm_ring_mpsc_dequeue_stamp(struct mm_ring_mpmc *ring)
+{
+	return ring->base.head;
 }
 
 #endif /* BASE_RING_H */

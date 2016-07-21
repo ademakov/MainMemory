@@ -33,7 +33,7 @@ single_producer(void *arg)
 
 	for (i = 0; i < g_producer_data_size; i++) {
 		delay_producer();
-		mm_ring_relaxed_enqueue(ring, 1);
+		mm_ring_spmc_enqueue(ring, 1);
 	}
 }
 
@@ -61,7 +61,7 @@ single_consumer(void *arg)
 
 	for (i = 0; i < g_consumer_data_size; i++) {
 		uintptr_t data;
-		mm_ring_relaxed_dequeue(ring, &data);
+		mm_ring_mpsc_dequeue(ring, &data);
 		result += data;
 		delay_consumer();
 	}
