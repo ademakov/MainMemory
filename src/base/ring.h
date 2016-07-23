@@ -197,10 +197,12 @@ mm_ring_spsc_locked_get(struct mm_ring_spsc *ring, void **data_ptr)
  * Architectures.
  */
 
+#define MM_RING_MPMC_DATA_SIZE	(7)
+
 struct mm_ring_node
 {
 	uintptr_t lock;
-	uintptr_t data[7];
+	uintptr_t data[MM_RING_MPMC_DATA_SIZE];
 };
 
 struct mm_ring_mpmc

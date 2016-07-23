@@ -60,7 +60,7 @@ mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
 	// Store the result.
 	node->result = result;
 	if (result < 0)
-		errno = node->error;
+		node->error = errno;
 
 	// Ensure its visibility.
 	mm_memory_store_fence();
@@ -158,9 +158,8 @@ mm_async_wait(struct mm_async_node *node)
 	// TODO: check for shutdown and handle it gracefully while in loop.
 
 	// Wait for the operation completion.
-	while (mm_memory_load(node->status) == MM_RESULT_DEFERRED) {
+	while (mm_memory_load(node->status) == MM_RESULT_DEFERRED)
 		mm_task_block();
-	}
 
 	// Ensure the result is visible.
 	mm_memory_load_fence();
@@ -192,7 +191,7 @@ mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_request_post_3(domain->request_queue, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
+	mm_domain_post_3(domain, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -212,7 +211,7 @@ mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_request_post_4(domain->request_queue, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
+	mm_domain_post_4(domain, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -232,7 +231,7 @@ mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_request_post_5(domain->request_queue, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
+	mm_domain_post_5(domain, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -252,7 +251,7 @@ mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_request_post_6(domain->request_queue, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
+	mm_domain_post_6(domain, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);

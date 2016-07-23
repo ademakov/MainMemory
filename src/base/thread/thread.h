@@ -290,12 +290,216 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
  * Thread requests.
  **********************************************************************/
 
+#define MM_THREAD_POST(n, t, ...)					\
+	do {								\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		mm_ring_mpmc_enqueue_n(t->request_queue, v,		\
+				       MM_POST_ARGC(n));		\
+	} while (0)
+
+#define MM_THREAD_TRYPOST(n, t, ...)					\
+	do {								\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		return mm_ring_mpmc_put_n(t->request_queue, v,		\
+					  MM_POST_ARGC(n));		\
+	} while (0)
+
+#define MM_THREAD_SEND(n, t, ...)					\
+	do {								\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		mm_ring_mpmc_enqueue_n(t->request_queue, v,		\
+				       MM_SEND_ARGC(n));		\
+	} while (0)
+
+#define MM_THREAD_TRYSEND(n, t, ...)					\
+	do {								\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		return mm_ring_mpmc_put_n(t->request_queue, v,		\
+					  MM_SEND_ARGC(n));		\
+	} while (0)
+
 static inline bool NONNULL(1, 2)
 mm_thread_receive(struct mm_thread *thread, struct mm_request_data *rdata)
 {
 	return mm_request_relaxed_receive(thread->request_queue, rdata);
 }
 
-MM_REQUEST_SUBMIT_WRAPPERS(mm_thread, struct mm_thread, request_queue)
+static inline void NONNULL(1, 2)
+mm_thread_post_0(struct mm_thread *thread, mm_post_routine_t req)
+{
+	MM_THREAD_POST(0, thread, req);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_0(struct mm_thread *thread, mm_post_routine_t req)
+{
+	MM_THREAD_TRYPOST(0, thread, req);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_1(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1)
+{
+	MM_THREAD_POST(1, thread, req, a1);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_1(struct mm_thread *thread, mm_post_routine_t req,
+		    uintptr_t a1)
+{
+	MM_THREAD_TRYPOST(1, thread, req, a1);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_2(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1, uintptr_t a2)
+{
+	MM_THREAD_POST(2, thread, req, a1, a2);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_2(struct mm_thread *thread, mm_post_routine_t req,
+		    uintptr_t a1, uintptr_t a2)
+{
+	MM_THREAD_TRYPOST(2, thread, req, a1, a2);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_3(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_THREAD_POST(3, thread, req, a1, a2, a3);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_3(struct mm_thread *thread, mm_post_routine_t req,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_THREAD_TRYPOST(3, thread, req, a1, a2, a3);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_4(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_THREAD_POST(4, thread, req, a1, a2, a3, a4);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_4(struct mm_thread *thread, mm_post_routine_t req,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_THREAD_TRYPOST(4, thread, req, a1, a2, a3, a4);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_5(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_THREAD_POST(5, thread, req, a1, a2, a3, a4, a5);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_5(struct mm_thread *thread, mm_post_routine_t req,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_THREAD_TRYPOST(5, thread, req, a1, a2, a3, a4, a5);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_post_6(struct mm_thread *thread, mm_post_routine_t req,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_THREAD_POST(6, thread, req, a1, a2, a3, a4, a5, a6);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trypost_6(struct mm_thread *thread, mm_post_routine_t req,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_THREAD_TRYPOST(6, thread, req, a1, a2, a3, a4, a5, a6);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_0(struct mm_thread *thread, struct mm_request_sender *sender)
+{
+	MM_THREAD_SEND(0, thread, sender);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_0(struct mm_thread *thread, struct mm_request_sender *sender)
+{
+	MM_THREAD_TRYSEND(0, thread, sender);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_1(struct mm_thread *thread, struct mm_request_sender *sender,
+		 uintptr_t a1)
+{
+	MM_THREAD_SEND(1, thread, sender, a1);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_1(struct mm_thread *thread, struct mm_request_sender *sender,
+		    uintptr_t a1)
+{
+	MM_THREAD_TRYSEND(1, thread, sender, a1);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_2(struct mm_thread *thread, struct mm_request_sender *sender,
+		 uintptr_t a1, uintptr_t a2)
+{
+	MM_THREAD_SEND(2, thread, sender, a1, a2);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_2(struct mm_thread *thread, struct mm_request_sender *sender,
+		    uintptr_t a1, uintptr_t a2)
+{
+	MM_THREAD_TRYSEND(2, thread, sender, a1, a2);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_3(struct mm_thread *thread, struct mm_request_sender *sender,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_THREAD_SEND(3, thread, sender, a1, a2, a3);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_3(struct mm_thread *thread, struct mm_request_sender *sender,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_THREAD_TRYSEND(3, thread, sender, a1, a2, a3);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_4(struct mm_thread *thread, struct mm_request_sender *sender,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_THREAD_SEND(4, thread, sender, a1, a2, a3, a4);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_4(struct mm_thread *thread, struct mm_request_sender *sender,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_THREAD_TRYSEND(4, thread, sender, a1, a2, a3, a4);
+}
+
+static inline void NONNULL(1, 2)
+mm_thread_send_5(struct mm_thread *thread, struct mm_request_sender *sender,
+		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_THREAD_SEND(5, thread, sender, a1, a2, a3, a4, a5);
+}
+
+static inline bool NONNULL(1, 2)
+mm_thread_trysend_5(struct mm_thread *thread, struct mm_request_sender *sender,
+		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_THREAD_TRYSEND(5, thread, sender, a1, a2, a3, a4, a5);
+}
 
 #endif /* BASE_THREAD_THREAD_H */
