@@ -134,7 +134,7 @@ mm_syscall_6(int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, intptr_t a4,
 #if __GCC_ASM_FLAG_OUTPUTS__
 # define MM_SYSCALL_INST	"syscall"
 # define MM_SYSCALL_OUTPUTS	"=a"(result), "=@ccc"(error)
-# define MM_SYSCALL_CLOBBER	"cc", "memory", "r11"
+# define MM_SYSCALL_CLOBBER	"cc", "memory", "rcx", "r11"
 #else
 # define MM_SYSCALL_INST	"syscall; setc %1"
 # define MM_SYSCALL_OUTPUTS	"=a"(result), "=c"(error)
