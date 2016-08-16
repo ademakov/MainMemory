@@ -212,7 +212,7 @@ mm_scan_i32(int32_t *vp, int *xp, const char *sp, const char *ep)
 	MM_SCAN_INTEGER(32, INT32_MIN, INT32_MAX, UINT32_MAX);
 }
 
-const char * NONNULL(1, 3, 4)
+const char * NONNULL(1, 3)
 mm_scan_i64(int64_t *vp, int *xp, const char *sp, const char *ep)
 {
 	MM_SCAN_START();
