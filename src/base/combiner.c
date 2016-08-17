@@ -93,7 +93,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 
 	// Get a request slot in the bounded MPMC queue shared between cores.
 	struct mm_ring_mpmc *ring = &combiner->ring;
-	uintptr_t tail = mm_atomic_uintptr_fetch_and_add(&ring->base.tail, 1);
+	mm_ring_seqno_t tail = mm_ring_atomic_fai(&ring->base.tail);
 	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
 
 	// Wait until the slot becomes ready to accept a request.
