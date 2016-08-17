@@ -238,7 +238,7 @@ mm_task_getname(const struct mm_task *task)
 	return task->name;
 }
 
-void NONNULL(1, 2)
+void NONNULL(1)
 mm_task_setname(struct mm_task *task, const char *name);
 
 void NONNULL(1)

@@ -367,7 +367,7 @@ mm_task_getid(const struct mm_task *task)
 }
 
 /* Set or change the task name. */
-void NONNULL(1, 2)
+void NONNULL(1)
 mm_task_setname(struct mm_task *task, const char *name)
 {
 	size_t len = 0;
