@@ -68,11 +68,11 @@ mm_event_dispatch_listener(struct mm_event_dispatch *dispatch, mm_thread_t threa
 }
 
 static inline void NONNULL(1)
-mm_event_dispatch_notify(struct mm_event_dispatch *dispatch, mm_thread_t thread)
+mm_event_dispatch_notify(struct mm_event_dispatch *dispatch, mm_thread_t thread, mm_ring_seqno_t stamp)
 {
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
-	mm_event_listener_notify(listener);
+	mm_event_listener_notify(listener, stamp);
 }
 
 void NONNULL(1)

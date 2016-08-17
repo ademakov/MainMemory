@@ -21,6 +21,7 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
+#include "base/ring.h"
 #include "base/event/batch.h"
 #include "base/event/receiver.h"
 
@@ -29,6 +30,8 @@
 #elif HAVE_MACH_SEMAPHORE_H
 # define ENABLE_MACH_SEMAPHORE	1
 #endif
+
+#define ENABLE_NOTIFY_STAMP	ENABLE_MACH_SEMAPHORE
 
 #if ENABLE_LINUX_FUTEX
 /* Nothing for futexes. */
@@ -42,21 +45,32 @@
 struct mm_event_dispatch;
 struct mm_thread;
 
-#define MM_EVENT_LISTENER_STATE		((uint32_t) 3)
+#define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
 
 typedef enum
 {
 	MM_EVENT_LISTENER_RUNNING = 0,
 	MM_EVENT_LISTENER_POLLING = 1,
 	MM_EVENT_LISTENER_WAITING = 2,
-} mm_event_listener_state_t;
+} mm_event_listener_status_t;
 
 struct mm_event_listener
 {
+#if ENABLE_NOTIFY_STAMP
 	/*
 	 * The listener state.
 	 *
-	 * The two least-significant bits contain a mm_event_listener_state_t
+	 * The two least-significant bits contain a mm_event_listener_status_t
+	 * value. The rest contain a snapshot of the dequeue stamp. On 32-bit
+	 * platforms this discards its 2 most significant bits. However the 30
+	 * remaining bits suffice to avoid any stamp clashes in practice.
+	 */
+	uintptr_t state;
+#else
+	/*
+	 * The listener state.
+	 *
+	 * The two least-significant bits contain a mm_event_listener_status_t
 	 * value. The rest of the bits contain the listen cycle counter.
 	 */
 	uint32_t listen_stamp;
@@ -69,6 +83,7 @@ struct mm_event_listener
 	 * to detect a pending notification.
 	 */
 	uint32_t notify_stamp;
+#endif
 
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
@@ -100,7 +115,7 @@ void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
 
 void NONNULL(1)
-mm_event_listener_notify(struct mm_event_listener *listener);
+mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t stamp);
 
 void NONNULL(1)
 mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout);
@@ -108,11 +123,16 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
 
-static inline mm_event_listener_state_t NONNULL(1)
+static inline mm_event_listener_status_t NONNULL(1)
 mm_event_listener_getstate(struct mm_event_listener *listener)
 {
+#if ENABLE_NOTIFY_STAMP
+	uintptr_t state = mm_memory_load(listener->state);
+	return (state & MM_EVENT_LISTENER_STATUS);
+#else
 	uint32_t stamp = mm_memory_load(listener->listen_stamp);
-	return (stamp & MM_EVENT_LISTENER_STATE);
+	return (stamp & MM_EVENT_LISTENER_STATUS);
+#endif
 }
 
 /**********************************************************************

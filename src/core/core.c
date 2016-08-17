@@ -218,7 +218,6 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 		// Submit it to the thread request queue.
 		struct mm_thread *thread = core->thread;
 		mm_thread_post_1(thread, mm_core_post_work_req, (uintptr_t) work);
-		mm_thread_notify(thread);
 	}
 
 	LEAVE();
@@ -284,7 +283,6 @@ mm_core_run_task(struct mm_task *task)
 		// Submit the task to the thread request queue.
 		struct mm_thread *thread = task->core->thread;
 		mm_thread_post_1(thread, mm_core_run_task_req, (uintptr_t) task);
-		mm_thread_notify(thread);
 	}
 #else
 	mm_task_run(task);
@@ -868,10 +866,10 @@ mm_core_term_single(struct mm_core *core)
 }
 
 static void
-mm_core_thread_notify(struct mm_thread *thread)
+mm_core_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
 {
 	mm_thread_t n = mm_thread_getnumber(thread);
-	mm_event_dispatch_notify(&mm_core_dispatch, n);
+	mm_event_dispatch_notify(&mm_core_dispatch, n, stamp);
 }
 
 static void
@@ -1021,7 +1019,7 @@ mm_core_stop(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
-		mm_event_dispatch_notify(&mm_core_dispatch, i);
+		mm_thread_wakeup(core->thread);
 	}
 
 	LEAVE();

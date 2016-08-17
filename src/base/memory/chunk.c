@@ -200,10 +200,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 #endif
 		uint32_t backoff = 0;
 		while (!mm_thread_trypost_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {
-			if (backoff == 0) {
-				// Wake up a possibly sleeping origin thread.
-				mm_thread_notify(origin);
-			} else if (backoff >= MM_BACKOFF_SMALL) {
+			if (backoff >= MM_BACKOFF_SMALL) {
 				// If failed to submit the chunk after a number
 				// of attempts then defer it again.
 				mm_chunk_stack_insert(&thread->deferred_chunks, chunk);

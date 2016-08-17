@@ -154,6 +154,20 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 }
 
 /**********************************************************************
+ * Thread auxiliary routines.
+ **********************************************************************/
+
+static void
+mm_thread_wakeup_dummy(uintptr_t *arguments UNUSED)
+{
+}
+
+static void
+mm_thread_notify_dummy(struct mm_thread *thread UNUSED, mm_ring_seqno_t stamp UNUSED)
+{
+}
+
+/**********************************************************************
  * Thread creation routines.
  **********************************************************************/
 
@@ -273,11 +287,6 @@ mm_thread_entry(void *arg)
 	return NULL;
 }
 
-static void
-mm_thread_notify_dummy(struct mm_thread *thread UNUSED)
-{
-}
-
 struct mm_thread * NONNULL(2)
 mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t start_arg)
 {
@@ -390,6 +399,17 @@ mm_thread_cancel(struct mm_thread *thread)
 	int rc = pthread_cancel(thread->system_thread);
 	if (rc)
 		mm_error(rc, "pthread_cancel");
+
+	LEAVE();
+}
+
+/* Wakeup a thread if it sleeps. */
+void NONNULL(1)
+mm_thread_wakeup(struct mm_thread *thread)
+{
+	ENTER();
+
+	mm_thread_post_0(thread, mm_thread_wakeup_dummy);
 
 	LEAVE();
 }

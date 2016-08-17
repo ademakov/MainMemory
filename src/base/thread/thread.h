@@ -47,7 +47,7 @@ struct mm_trace_context;
 #define MM_THREAD_NAME_SIZE	40
 
 /* Thread wake-up notification routine. */
-typedef void (*mm_thread_notify_t)(struct mm_thread *thread);
+typedef void (*mm_thread_notify_t)(struct mm_thread *thread, mm_ring_seqno_t stamp);
 
 /* Thread synchronization backoff routine. */
 typedef void (*mm_thread_relax_t)(void);
@@ -146,15 +146,13 @@ void NONNULL(1)
 mm_thread_attr_prepare(struct mm_thread_attr *attr);
 
 void NONNULL(1, 2)
-mm_thread_attr_setdomain(struct mm_thread_attr *attr,
-			 struct mm_domain *domain,
-			 mm_thread_t number);
+mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t number);
 
 void NONNULL(1)
 mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify);
 
 void NONNULL(1)
-mm_thread_attr_setspace(struct mm_thread_attr *attr, bool eneble);
+mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable);
 
 void NONNULL(1)
 mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size);
@@ -246,13 +244,16 @@ mm_thread_gettracecontext(struct mm_thread *thread)
  **********************************************************************/
 
 static inline void NONNULL(1)
-mm_thread_notify(struct mm_thread *thread)
+mm_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
 {
-	(thread->notify)(thread);
+	(thread->notify)(thread, stamp);
 }
 
 void NONNULL(1)
 mm_thread_cancel(struct mm_thread *thread);
+
+void NONNULL(1)
+mm_thread_wakeup(struct mm_thread *thread);
 
 void NONNULL(1)
 mm_thread_join(struct mm_thread *thread);
@@ -292,30 +293,44 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 
 #define MM_THREAD_POST(n, t, ...)					\
 	do {								\
+		mm_ring_seqno_t stamp;					\
 		MM_POST_ARGV(v, __VA_ARGS__);				\
-		mm_ring_mpmc_enqueue_n(t->request_queue, v,		\
-				       MM_POST_ARGC(n));		\
+		mm_ring_mpmc_enqueue_sn(t->request_queue, &stamp, v,	\
+					MM_POST_ARGC(n));		\
+		mm_thread_notify(t, stamp);				\
 	} while (0)
 
 #define MM_THREAD_TRYPOST(n, t, ...)					\
 	do {								\
+		bool res;						\
+		mm_ring_seqno_t stamp;					\
 		MM_POST_ARGV(v, __VA_ARGS__);				\
-		return mm_ring_mpmc_put_n(t->request_queue, v,		\
+		res = mm_ring_mpmc_put_sn(t->request_queue, &stamp, v,	\
 					  MM_POST_ARGC(n));		\
+		if (res)						\
+			mm_thread_notify(t, stamp);			\
+		return res;						\
 	} while (0)
 
 #define MM_THREAD_SEND(n, t, ...)					\
 	do {								\
+		mm_ring_seqno_t stamp;					\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		mm_ring_mpmc_enqueue_n(t->request_queue, v,		\
-				       MM_SEND_ARGC(n));		\
+		mm_ring_mpmc_enqueue_sn(t->request_queue, &stamp, v,	\
+					MM_SEND_ARGC(n));		\
+		mm_thread_notify(t, stamp);				\
 	} while (0)
 
 #define MM_THREAD_TRYSEND(n, t, ...)					\
 	do {								\
+		bool res;						\
+		mm_ring_seqno_t stamp;					\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		return mm_ring_mpmc_put_n(t->request_queue, v,		\
+		res = mm_ring_mpmc_put_sn(t->request_queue, &stamp, v,	\
 					  MM_SEND_ARGC(n));		\
+		if (res)						\
+			mm_thread_notify(t, stamp);			\
+		return res;						\
 	} while (0)
 
 static inline bool NONNULL(1, 2)

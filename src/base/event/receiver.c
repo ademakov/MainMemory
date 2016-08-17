@@ -487,7 +487,6 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 			struct mm_event_listener *listener = &dispatch->listeners[target];
 			mm_event_receiver_forward_flush(listener->thread,
 							&receiver->forward_buffers[target]);
-			mm_event_listener_notify(listener);
 
 			if (++target < mm_bitset_size(&receiver->forward_targets))
 				target = mm_bitset_find(&receiver->forward_targets, target);

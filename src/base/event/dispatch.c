@@ -139,7 +139,7 @@ mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch)
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &dispatch->listeners[i];
 		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
-			mm_event_listener_notify(listener);
+			mm_thread_wakeup(listener->thread);
 			break;
 		}
 	}
@@ -181,7 +181,6 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 		if (active) {
 			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
 					 (uintptr_t) receiver);
-			mm_event_listener_notify(listener);
 			rc = false;
 			break;
 		}
