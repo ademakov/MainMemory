@@ -209,8 +209,7 @@ mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t 
 
 	// Initialize the initial segment within the chunk.
 	struct mm_buffer_segment *seg = mm_buffer_chunk_begin(chunk);
-	size = mm_buffer_round_room(mm_chunk_getsize(chunk));
-	seg->meta = size | MM_BUFFER_INTERNAL;
+	seg->meta = mm_buffer_chunk_getsize(chunk) | MM_BUFFER_INTERNAL;
 	seg->used = 0;
 
 	// Initialize the head and tail iterators for the first buffer chunk.
@@ -237,12 +236,13 @@ mm_buffer_append(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
 	ENTER();
 
 	// Find out the available room in the current tail segment.
-	uint32_t room;
+	uint32_t room, used;
 	if (buf->tail.seg == NULL) {
 		room = 0;
+		used = 0;
 	} else {
 		room = mm_buffer_segment_getarea(buf->tail.seg);
-		uint32_t used = buf->tail.seg->used;
+		used = buf->tail.seg->used;
 		if (used) {
 			used += MM_BUFFER_SEGMENT_SIZE;
 			room -= mm_buffer_round_size(used);
@@ -255,12 +255,11 @@ mm_buffer_append(struct mm_buffer *buf, mm_buffer_segment_t type, uint32_t size)
 	while (room < area) {
 		mm_buffer_write_next(buf, size);
 		room = mm_buffer_segment_getarea(buf->tail.seg);
+		used = 0;
 	}
 
 	// If the segment is not empty it has to be split in two.
-	uint32_t used = buf->tail.seg->used;
 	if (used) {
-		used = mm_buffer_round_size(used + MM_BUFFER_SEGMENT_SIZE);
 		buf->tail.seg->meta = used | MM_BUFFER_INTERNAL;
 		buf->tail.seg = mm_buffer_chunk_next(buf->tail.seg);
 		buf->tail.seg->meta = room | MM_BUFFER_INTERNAL;
