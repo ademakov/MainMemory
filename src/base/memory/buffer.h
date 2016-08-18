@@ -282,6 +282,18 @@ mm_buffer_iterator_next(struct mm_buffer_iterator *iter)
 	return mm_buffer_iterator_start(iter, mm_chunk_queue_next(iter->chunk));
 }
 
+/* Check to see if there are more segments and calling mm_buffer_iterator_next()
+ * is both safe and viable. */
+static inline bool NONNULL(1)
+mm_buffer_iterator_next_check(struct mm_buffer_iterator *iter)
+{
+	if (iter->seg == NULL)
+		return false;
+	if (mm_buffer_chunk_next(iter->seg) != iter->sen)
+		return true;
+	return mm_chunk_queue_next(iter->chunk) != NULL;
+}
+
 static inline void NONNULL(1)
 mm_buffer_iterator_read_reset(struct mm_buffer_iterator *iter)
 {
@@ -327,12 +339,10 @@ mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 static inline bool NONNULL(1)
 mm_buffer_iterator_read_next_unsafe(struct mm_buffer_iterator *iter)
 {
-	struct mm_buffer_segment *seg = mm_buffer_iterator_filter_next(iter);
-	if (seg != NULL) {
-		mm_buffer_iterator_read_start(iter);
-		return true;
-	}
-	return false;
+	if (mm_buffer_iterator_filter_next(iter) == NULL)
+		return false;
+	mm_buffer_iterator_read_start(iter);
+	return true;
 }
 
 static inline bool NONNULL(1)
@@ -345,12 +355,10 @@ mm_buffer_iterator_write_next_unsafe(struct mm_buffer_iterator *iter)
 	   followed by an empty segment. For instance, a buffer might
 	   be extended for a readv() call but the call filled just a
 	   part of the reserved space. */
-	struct mm_buffer_segment *seg = mm_buffer_iterator_next(iter);
-	if (seg != NULL) {
-		mm_buffer_iterator_write_start(iter);
-		return true;
-	}
-	return false;
+	if (mm_buffer_iterator_next(iter) == NULL)
+		return false;
+	mm_buffer_iterator_write_start(iter);
+	return true;
 }
 
 static inline bool NONNULL(1)
