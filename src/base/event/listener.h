@@ -31,7 +31,7 @@
 # define ENABLE_MACH_SEMAPHORE	1
 #endif
 
-#define ENABLE_NOTIFY_STAMP	!ENABLE_LINUX_FUTEX
+#define ENABLE_NOTIFY_STAMP	1
 
 #if ENABLE_LINUX_FUTEX
 /* Nothing for futexes. */

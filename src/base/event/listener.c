@@ -49,6 +49,18 @@ mm_event_listener_dequeue_stamp(struct mm_event_listener *listener)
 }
 #endif
 
+#if ENABLE_LINUX_FUTEX
+static uintptr_t
+mm_event_listener_futex(struct mm_event_listener *listener)
+{
+# if ENABLE_NOTIFY_STAMP
+	return (uintptr_t) &listener->thread->request_queue->base.tail;
+# else
+	return (uintptr_t) &listener->notify_stamp;
+# endif
+}
+#endif
+
 void NONNULL(1, 2, 3)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
 			  struct mm_thread *thread)
@@ -110,7 +122,9 @@ mm_event_listener_signal(struct mm_event_listener *listener)
 	ENTER();
 
 #if ENABLE_LINUX_FUTEX
-	mm_syscall_3(SYS_futex, (uintptr_t) &listener->notify_stamp, FUTEX_WAKE_PRIVATE, 1);
+	mm_syscall_3(SYS_futex,
+		     mm_event_listener_futex(listener),
+		     FUTEX_WAKE_PRIVATE, 1);
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_signal(listener->semaphore);
 #else
@@ -136,7 +150,8 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
 	// Publish the log before a sleep.
 	mm_log_relay();
 
-	int rc = mm_syscall_4(SYS_futex, (uintptr_t) &listener->notify_stamp,
+	int rc = mm_syscall_4(SYS_futex,
+			      mm_event_listener_futex(listener),
 			      FUTEX_WAIT_PRIVATE, stamp, (uintptr_t) &ts);
 	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
 		mm_fatal(errno, "futex");
