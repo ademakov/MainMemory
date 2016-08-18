@@ -157,8 +157,13 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
 	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
 
 	mm_thread_monitor_lock(&listener->monitor);
+#if ENABLE_NOTIFY_STAMP
+	if (stamp == mm_event_listener_enqueue_stamp(listener))
+		mm_thread_monitor_timedwait(&listener->monitor, time);
+#else
 	if (listener->notify_stamp == stamp)
 		mm_thread_monitor_timedwait(&listener->monitor, time);
+#endif
 	mm_thread_monitor_unlock(&listener->monitor);
 #endif
 
