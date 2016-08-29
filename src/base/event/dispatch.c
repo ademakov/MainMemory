@@ -22,8 +22,7 @@
 #include "base/logger.h"
 #include "base/memory/memory.h"
 
-static uint16_t mm_poller_busywait = 1;
-static uint16_t mm_events_busywait = 3;
+static uint16_t mm_events_busywait = 5;
 
 void NONNULL(1, 2, 4)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
@@ -113,7 +112,6 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 			mm_regular_lock(&dispatch->poller_lock);
 			dispatch->poller_thread = MM_THREAD_NONE;
 			mm_regular_unlock(&dispatch->poller_lock);
-			listener->busywait += mm_poller_busywait;
 		}
 
 		// Forget just handled change events.
