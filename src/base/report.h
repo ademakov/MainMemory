@@ -67,9 +67,11 @@ mm_fatal(int error, const char *restrict msg, ...);
 
 #define ABORT()		mm_abort_with_message(__LOCATION__, __FUNCTION__, "ABORT")
 
+#define VERIFY(e)	(likely(e) ? (void) 0 :	\
+			 mm_abort_with_message(__LOCATION__, __FUNCTION__, "failed condition: %s", #e))
+
 #if ENABLE_DEBUG
-# define ASSERT(e)	(likely(e) ? (void)0 :	\
-			mm_abort_with_message(__LOCATION__, __FUNCTION__, "failed assertion: %s", #e))
+# define ASSERT(e)	VERIFY(e)
 # define DEBUG(...)	mm_debug(__LOCATION__, __FUNCTION__, __VA_ARGS__)
 #else
 # define ASSERT(e)	((void) 0)
