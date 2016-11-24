@@ -1,7 +1,7 @@
 /*
  * core/task.h - MainMemory tasks.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -62,20 +62,27 @@ typedef enum {
 	MM_TASK_INVALID,
 } mm_task_state_t;
 
-/* Task flags. */
-#define MM_TASK_BOOT			0x8000
-#define MM_TASK_CANCEL_ENABLE		0x00
-#define MM_TASK_CANCEL_DISABLE		0x01
-#define MM_TASK_CANCEL_DEFERRED		0x00
-#define MM_TASK_CANCEL_ASYNCHRONOUS	0x02
-#define MM_TASK_CANCEL_REQUIRED		0x04
-#define MM_TASK_CANCEL_OCCURRED		0x08
+/*
+ * Task flags.
+ */
+/* Flags for cancellation handling. */
+#define MM_TASK_CANCEL_ENABLE		0x0000
+#define MM_TASK_CANCEL_DISABLE		0x0001
+#define MM_TASK_CANCEL_DEFERRED		0x0000
+#define MM_TASK_CANCEL_ASYNCHRONOUS	0x0002
+#define MM_TASK_CANCEL_REQUIRED		0x0004
+#define MM_TASK_CANCEL_OCCURRED		0x0008
+/* Flags for tasks blocked for various reasons. */
 #if ENABLE_TASK_IO_FLAGS
-#define MM_TASK_READING			0x10
-#define MM_TASK_WRITING			0x20
+#define MM_TASK_READING			0x0010
+#define MM_TASK_WRITING			0x0020
 #endif
-#define MM_TASK_WAITING			0x40
-#define MM_TASK_COMBINING		0x80
+#define MM_TASK_WAITING			0x0040
+#define MM_TASK_COMBINING		0x0080
+/* The task is attached to an event listener. */
+#define MM_TASK_ATTACHED		0x4000
+/* The task is a bootstrap task. */
+#define MM_TASK_BOOT			0x8000
 
 /* Task flags type. */
 typedef uint16_t mm_task_flags_t;
