@@ -92,12 +92,6 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr,
 }
 
 void NONNULL(1)
-mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify)
-{
-	attr->notify = notify;
-}
-
-void NONNULL(1)
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable)
 {
 	attr->private_space = enable;
@@ -159,11 +153,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 
 static void
 mm_thread_wakeup_dummy(uintptr_t *arguments UNUSED)
-{
-}
-
-static void
-mm_thread_notify_dummy(struct mm_thread *thread UNUSED, mm_ring_seqno_t stamp UNUSED)
 {
 }
 
@@ -309,12 +298,6 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 		thread->cpu_tag = attr->cpu_tag;
 	}
 
-	// Set thread notification routine.
-	if (attr != NULL && attr->notify != NULL)
-		thread->notify = attr->notify;
-	else
-		thread->notify = mm_thread_notify_dummy;
-
 	// Create a thread request queue if required.
 	if (attr != NULL && attr->request_queue) {
 		uint32_t sz = mm_upper_pow2(attr->request_queue);
@@ -324,6 +307,9 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 	} else {
 		thread->request_queue = NULL;
 	}
+
+	// Event listeners are not available at thread initialization.
+	thread->event_listener = NULL;
 
 	// Initialize private memory space if required.
 #if ENABLE_SMP

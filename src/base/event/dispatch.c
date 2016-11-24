@@ -39,8 +39,10 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
 	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < nthreads; i++)
+	for (mm_thread_t i = 0; i < nthreads; i++) {
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, threads[i]);
+		mm_thread_assign_listener(threads[i], &dispatch->listeners[i]);
+	}
 
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->poller_thread = MM_THREAD_NONE;

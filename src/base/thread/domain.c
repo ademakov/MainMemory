@@ -74,13 +74,6 @@ mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
 }
 
 void NONNULL(1)
-mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
-			       mm_thread_notify_t notify)
-{
-	attr->thread_notify = notify;
-}
-
-void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->domain_request_queue = size;
@@ -196,7 +189,6 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	uint32_t stack_size = 0;
 	uint32_t guard_size = 0;
 	if (attr != NULL) {
-		mm_thread_attr_setnotify(&thread_attr, attr->thread_notify);
 		mm_thread_attr_setspace(&thread_attr, attr->private_space);
 		mm_thread_attr_setrequestqueue(&thread_attr,
 					       attr->thread_request_queue);

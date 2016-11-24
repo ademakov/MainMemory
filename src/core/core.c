@@ -866,13 +866,6 @@ mm_core_term_single(struct mm_core *core)
 }
 
 static void
-mm_core_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
-{
-	mm_thread_t n = mm_thread_getnumber(thread);
-	mm_event_dispatch_notify(&mm_core_dispatch, n, stamp);
-}
-
-static void
 mm_core_domain_notify(struct mm_domain *domain UNUSED)
 {
 	mm_event_dispatch_notify_waiting(&mm_core_dispatch);
@@ -997,7 +990,6 @@ mm_core_start(void)
 	struct mm_base_params params = {
 		.regular_name = "core",
 		.domain_notify = mm_core_domain_notify,
-		.thread_notify = mm_core_thread_notify,
 		.thread_stack_size = MM_PAGE_SIZE,
 		.thread_guard_size = MM_PAGE_SIZE,
 		.thread_routine = mm_core_boot,

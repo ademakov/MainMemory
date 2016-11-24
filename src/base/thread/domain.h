@@ -60,9 +60,6 @@ struct mm_domain_attr
 	/* Notification routine for random domain's thread. */
 	mm_domain_notify_t domain_notify;
 
-	/* Notification routine for specific domain's threads. */
-	mm_thread_notify_t thread_notify;
-
 	/* Common stack parameters for domain's threads. */
 	uint32_t stack_size;
 	uint32_t guard_size;
@@ -120,10 +117,6 @@ mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 void NONNULL(1)
 mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
 			       mm_domain_notify_t notify);
-
-void NONNULL(1)
-mm_domain_attr_setthreadnotify(struct mm_domain_attr *attr,
-			       mm_thread_notify_t notify);
 
 void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size);

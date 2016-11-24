@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.h - MainMemory threads.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/report.h"
+#include "base/event/listener.h"
 #include "base/memory/space.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"
@@ -46,9 +47,6 @@ struct mm_trace_context;
 /* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
 
-/* Thread wake-up notification routine. */
-typedef void (*mm_thread_notify_t)(struct mm_thread *thread, mm_ring_seqno_t stamp);
-
 /* Thread synchronization backoff routine. */
 typedef void (*mm_thread_relax_t)(void);
 
@@ -67,9 +65,6 @@ struct mm_thread_attr
 
 	/* The size of queue for memory chunks released by other threads. */
 	uint32_t reclaim_queue;
-
-	/* Wake-up notification routine. */
-	mm_thread_notify_t notify;
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
@@ -90,13 +85,14 @@ struct mm_thread
 	struct mm_domain *domain;
 	mm_thread_t domain_number;
 
-	/* Wake-up notification routine. */
-	mm_thread_notify_t notify;
 	/* Synchronization backoff routine. */
 	mm_thread_relax_t relax;
 
 	/* Thread request queue. */
 	struct mm_ring_mpmc *request_queue;
+
+	/* Associated event listener. */
+	struct mm_event_listener *event_listener;
 
 #if ENABLE_SMP
 	/* Private memory space. */
@@ -147,9 +143,6 @@ mm_thread_attr_prepare(struct mm_thread_attr *attr);
 
 void NONNULL(1, 2)
 mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t number);
-
-void NONNULL(1)
-mm_thread_attr_setnotify(struct mm_thread_attr *attr, mm_thread_notify_t notify);
 
 void NONNULL(1)
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable);
@@ -243,12 +236,6 @@ mm_thread_gettracecontext(struct mm_thread *thread)
  * Thread control routines.
  **********************************************************************/
 
-static inline void NONNULL(1)
-mm_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
-{
-	(thread->notify)(thread, stamp);
-}
-
 void NONNULL(1)
 mm_thread_cancel(struct mm_thread *thread);
 
@@ -332,6 +319,19 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 			mm_thread_notify(t, stamp);			\
 		return res;						\
 	} while (0)
+
+static inline void NONNULL(1, 2)
+mm_thread_assign_listener(struct mm_thread *thread, struct mm_event_listener *listener)
+{
+	ASSERT(thread->event_listener == NULL);
+	thread->event_listener = listener;
+}
+
+static inline void NONNULL(1)
+mm_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
+{
+	mm_event_listener_notify(thread->event_listener, stamp);
+}
 
 static inline bool NONNULL(1, 2)
 mm_thread_receive(struct mm_thread *thread, struct mm_request_data *rdata)
