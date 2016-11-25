@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.c - MainMemory thread domain.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -67,13 +67,6 @@ mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 }
 
 void NONNULL(1)
-mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
-			       mm_domain_notify_t notify)
-{
-	attr->domain_notify = notify;
-}
-
-void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->domain_request_queue = size;
@@ -133,11 +126,6 @@ mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
  * Domain creation routines.
  **********************************************************************/
 
-static void
-mm_domain_notify_dummy(struct mm_domain *domain UNUSED)
-{
-}
-
 struct mm_domain * NONNULL(2)
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 {
@@ -155,11 +143,8 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 			mm_fatal(0, "invalid domain attributes.");
 	}
 
-	// Set domain notification routine.
-	if (attr != NULL && attr->domain_notify != NULL)
-		domain->notify = attr->domain_notify;
-	else
-		domain->notify = mm_domain_notify_dummy;
+	// Event dispatchers are not available at thread initialization.
+	domain->event_dispatch = NULL;
 
 	// Create domain request queue if required.
 	if (attr != NULL && attr->domain_request_queue) {

@@ -27,7 +27,6 @@ struct mm_base_params
 {
 	const char *regular_name;
 
-	mm_domain_notify_t domain_notify;
 	uint32_t thread_stack_size;
 	uint32_t thread_guard_size;
 

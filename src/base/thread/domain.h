@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.h - MainMemory thread domain.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2016  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,6 +24,7 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
+#include "base/event/dispatch.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"
 #include "base/thread/thread.h"
@@ -41,9 +42,6 @@ struct mm_domain_thread_attr
 	uint32_t cpu_tag;
 };
 
-/* Domain wake-up notification routine. */
-typedef void (*mm_domain_notify_t)(struct mm_domain *domain);
-
 /* Domain creation attributes. */
 struct mm_domain_attr
 {
@@ -56,9 +54,6 @@ struct mm_domain_attr
 	/* Sizes of request queue for domain and domain's threads. */
 	uint32_t domain_request_queue;
 	uint32_t thread_request_queue;
-
-	/* Notification routine for random domain's thread. */
-	mm_domain_notify_t domain_notify;
 
 	/* Common stack parameters for domain's threads. */
 	uint32_t stack_size;
@@ -78,11 +73,11 @@ struct mm_domain
 	mm_thread_t nthreads;
 	struct mm_thread **threads;
 
-	/* Wake-up notification routine. */
-	mm_domain_notify_t notify;
-
 	/* Domain request queue. */
 	struct mm_ring_mpmc *request_queue;
+
+	/* Associated event dispatcher. */
+	struct mm_event_dispatch *event_dispatch;
 
 	/* Per-thread data. */
 	struct mm_queue per_thread_chunk_list;
@@ -113,10 +108,6 @@ mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number);
 
 void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
-
-void NONNULL(1)
-mm_domain_attr_setdomainnotify(struct mm_domain_attr *attr,
-			       mm_domain_notify_t notify);
 
 void NONNULL(1)
 mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size);
@@ -170,12 +161,6 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
  * Domain control routines.
  **********************************************************************/
 
-static inline void NONNULL(1)
-mm_domain_notify(struct mm_domain *domain)
-{
-	(domain->notify)(domain);
-}
-
 void NONNULL(1)
 mm_domain_join(struct mm_domain *domain);
 
@@ -210,6 +195,25 @@ mm_domain_join(struct mm_domain *domain);
 		return mm_ring_mpmc_put_n(d->request_queue, v,		\
 					  MM_SEND_ARGC(n));		\
 	} while (0)
+
+static inline void NONNULL(1, 2)
+mm_domain_setdispatch(struct mm_domain *domain, struct mm_event_dispatch *dispatch)
+{
+	ASSERT(domain->event_dispatch == NULL);
+	domain->event_dispatch = dispatch;
+}
+
+static inline struct mm_event_dispatch *
+mm_domain_getdispatch(struct mm_domain *domain)
+{
+	return domain->event_dispatch;
+}
+
+static inline void NONNULL(1)
+mm_domain_notify(struct mm_domain *domain)
+{
+	mm_event_dispatch_notify_waiting(domain->event_dispatch);
+}
 
 static inline bool NONNULL(1, 2)
 mm_domain_receive(struct mm_domain *domain, struct mm_request_data *rdata)

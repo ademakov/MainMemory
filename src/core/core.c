@@ -865,12 +865,6 @@ mm_core_term_single(struct mm_core *core)
 	LEAVE();
 }
 
-static void
-mm_core_domain_notify(struct mm_domain *domain UNUSED)
-{
-	mm_event_dispatch_notify_waiting(&mm_core_dispatch);
-}
-
 #if ENABLE_TRACE
 
 static struct mm_trace_context *
@@ -989,7 +983,6 @@ mm_core_start(void)
 	// Set the base library params.
 	struct mm_base_params params = {
 		.regular_name = "core",
-		.domain_notify = mm_core_domain_notify,
 		.thread_stack_size = MM_PAGE_SIZE,
 		.thread_guard_size = MM_PAGE_SIZE,
 		.thread_routine = mm_core_boot,

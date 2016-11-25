@@ -321,10 +321,16 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 	} while (0)
 
 static inline void NONNULL(1, 2)
-mm_thread_assign_listener(struct mm_thread *thread, struct mm_event_listener *listener)
+mm_thread_setlistener(struct mm_thread *thread, struct mm_event_listener *listener)
 {
 	ASSERT(thread->event_listener == NULL);
 	thread->event_listener = listener;
+}
+
+static inline struct mm_event_listener *
+mm_thread_getlistener(struct mm_thread *thread)
+{
+	return thread->event_listener;
 }
 
 static inline void NONNULL(1)

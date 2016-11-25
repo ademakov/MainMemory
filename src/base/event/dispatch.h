@@ -27,8 +27,10 @@
 #include "base/event/listener.h"
 
 /* Forward declarations. */
+struct mm_domain;
 struct mm_thread;
 
+/* Event dispatcher. */
 struct mm_event_dispatch
 {
 	/* The thread domain associated with the dispatcher. */
