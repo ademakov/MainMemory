@@ -120,7 +120,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		}
 
 		// Forget just handled change events.
-		mm_event_batch_clear(&listener->changes);
+		mm_event_listener_clear_changes(listener);
 
 		// Arm busy-wait counter if got any events.
 		if (listener->receiver.got_events)

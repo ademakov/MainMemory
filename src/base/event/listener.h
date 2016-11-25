@@ -65,7 +65,7 @@ struct mm_event_listener
 	 * platforms this discards its 2 most significant bits. However the 30
 	 * remaining bits suffice to avoid any stamp clashes in practice.
 	 */
-	uintptr_t state;
+	mm_atomic_uintptr_t state;
 #else
 	/*
 	 * The listener state.
@@ -150,6 +150,12 @@ static inline bool NONNULL(1)
 mm_event_listener_has_changes(struct mm_event_listener *listener)
 {
 	return !mm_event_batch_empty(&listener->changes);
+}
+
+static inline void NONNULL(1)
+mm_event_listener_clear_changes(struct mm_event_listener *listener)
+{
+	mm_event_batch_clear(&listener->changes);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
