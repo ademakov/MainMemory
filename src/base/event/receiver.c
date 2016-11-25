@@ -364,13 +364,24 @@ mm_event_receiver_reclaim_epoch(struct mm_event_receiver *receiver, uint32_t epo
 void NONNULL(1)
 mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
 {
+	ENTER();
+
+	// Reclaim queued event sinks associated with a past epoch.
 	uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
 	if (receiver->reclaim_epoch != epoch) {
-		ASSERT((receiver->reclaim_epoch + 1) == epoch);
+		VERIFY((receiver->reclaim_epoch + 1) == epoch);
 		mm_memory_store(receiver->reclaim_epoch, epoch);
 		mm_event_receiver_reclaim_epoch(receiver, epoch);
 		mm_event_dispatch_advance_epoch(receiver->dispatch);
 	}
+
+	// Finish reclamation if there are no more queued event sinks.
+	if (mm_event_receiver_reclaim_queue_empty(receiver)) {
+		mm_memory_store_fence();
+		mm_memory_store(receiver->reclaim_active, false);
+	}
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -499,12 +510,6 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 
 	// Advance the reclamation epoch.
 	mm_event_receiver_observe_epoch(receiver);
-
-	// Finish a reclamation-critical section.
-	if (mm_event_receiver_reclaim_queue_empty(receiver)) {
-		mm_memory_store_fence();
-		mm_memory_store(receiver->reclaim_active, false);
-	}
 
 	LEAVE();
 }

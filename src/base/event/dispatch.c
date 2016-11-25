@@ -159,7 +159,9 @@ mm_event_dispatch_observe_req(uintptr_t *arguments)
 {
 	ENTER();
 
-	mm_event_receiver_observe_epoch((struct mm_event_receiver *) arguments[0]);
+	struct mm_event_receiver *receiver = (struct mm_event_receiver *) arguments[0];
+	if (receiver->reclaim_active)
+		mm_event_receiver_observe_epoch(receiver);
 
 	LEAVE();
 }
