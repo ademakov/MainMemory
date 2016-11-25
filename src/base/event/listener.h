@@ -105,6 +105,10 @@ struct mm_event_listener
 	/* Counter for busy waiting. */
 	uint16_t busywait;
 
+	/* The number of subordinate entities potentially waiting for
+	   notifications on the listener. */
+	uint32_t nwaiters;
+
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)
@@ -156,6 +160,29 @@ static inline void NONNULL(1)
 mm_event_listener_clear_changes(struct mm_event_listener *listener)
 {
 	mm_event_batch_clear(&listener->changes);
+}
+
+/**********************************************************************
+ * Bookkeeping of notification targets.
+ **********************************************************************/
+
+static inline void NONNULL(1)
+mm_event_listener_add_waiter(struct mm_event_listener *listener)
+{
+	listener->nwaiters++;
+}
+
+static inline void NONNULL(1)
+mm_event_listener_delete_waiter(struct mm_event_listener *listener)
+{
+	VERIFY(listener->nwaiters > 0);
+	listener->nwaiters--;
+}
+
+static inline bool NONNULL(1)
+mm_event_listener_has_waiters(struct mm_event_listener *listener)
+{
+	return listener->nwaiters != 0;
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
