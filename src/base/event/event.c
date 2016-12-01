@@ -234,7 +234,7 @@ void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink)
 {
 	ENTER();
-	DEBUG("detach sink %d from %u\n", sink->fd, mm_event_target(sink));
+	DEBUG("detach sink %d from %u", sink->fd, mm_event_target(sink));
 	ASSERT(mm_event_target(sink) == mm_thread_self());
 	ASSERT(sink->attached);
 
