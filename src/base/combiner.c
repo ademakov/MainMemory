@@ -91,10 +91,13 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 {
 	ENTER();
 
+	struct mm_ring_base *const base = &combiner->ring.base;
+	struct mm_ring_node *const ring = combiner->ring.ring;
+	const mm_ring_seqno_t mask = base->mask;
+
 	// Get a request slot in the bounded MPMC queue shared between cores.
-	struct mm_ring_mpmc *ring = &combiner->ring;
-	mm_ring_seqno_t tail = mm_ring_atomic_fai(&ring->base.tail);
-	struct mm_ring_node *node = &ring->ring[tail & ring->base.mask];
+	const mm_ring_seqno_t tail = mm_ring_atomic_fai(&base->tail);
+	struct mm_ring_node *node = &ring[tail & mask];
 
 	// Wait until the slot becomes ready to accept a request.
 	uint32_t backoff = 0;
@@ -109,36 +112,35 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 	mm_memory_store(node->lock, tail + 1);
 
 	// Wait until the request is executed.
-	backoff = 0;
-	do {
-		// Check if it is actually our turn to execute the requests.
-		uintptr_t head = mm_memory_load(ring->base.head);
-		if (head == tail) {
-			uintptr_t last = tail + mm_combiner_gethandoff(combiner);
-			while (head != last) {
-				struct mm_ring_node *node = &ring->ring[head & ring->base.mask];
-				if (mm_memory_load(node->lock) != (head + 1))
-					break;
-
-				mm_memory_load_fence();
-				uintptr_t data_0 = mm_memory_load(node->data[0]);
-				uintptr_t data_1 = mm_memory_load(node->data[1]);
-				mm_memory_fence(); /* TODO: load_store fence */
-				mm_memory_store(node->lock, head + 1 + ring->base.mask);
-
-				((mm_combiner_routine_t) data_0)(data_1);
-
-				head = head + 1;
-			}
-
-			mm_memory_fence();
-			mm_memory_store(ring->base.head, head);
-			break;
-		}
-
+	mm_ring_seqno_t head = mm_memory_load(base->head);
+	for (backoff = 0; head != tail; head = mm_memory_load(base->head)) {
+		if (mm_memory_load(node->lock) != (tail + 1))
+			goto leave;
 		backoff = mm_thread_backoff(backoff);
+	}
 
-	} while (mm_memory_load(node->lock) == (tail + 1));
+	// It is actually our turn to execute requests.
+	mm_ring_seqno_t last = tail + mm_combiner_gethandoff(combiner);
+	for (; head != last; head++) {
+		// Check if there is another pending request.
+		struct mm_ring_node *node = &ring[head & mask];
+		if (mm_memory_load(node->lock) != (head + 1))
+			break;
 
+		/* Get the request. */
+		mm_memory_load_fence();
+		uintptr_t data_0 = mm_memory_load(node->data[0]);
+		uintptr_t data_1 = mm_memory_load(node->data[1]);
+		mm_memory_fence(); /* TODO: load_store fence */
+		mm_memory_store(node->lock, head + 1 + mask);
+
+		/* Execute the request. */
+		((mm_combiner_routine_t) data_0)(data_1);
+	}
+
+	mm_memory_fence();
+	mm_memory_store(base->head, head);
+
+leave:
 	LEAVE();
 }
