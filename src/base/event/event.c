@@ -200,7 +200,7 @@ mm_event_convey(struct mm_event_fd *sink, mm_event_t event)
 }
 
 void NONNULL(1)
-mm_event_detach(struct mm_event_fd *sink)
+mm_event_complete(struct mm_event_fd *sink)
 {
 	ENTER();
 	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());

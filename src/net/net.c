@@ -590,6 +590,23 @@ mm_net_init_accept_handler(void)
  **********************************************************************/
 
 static void
+mm_net_event_complete(struct mm_net_socket *sock)
+{
+	ENTER();
+
+	if ((sock->flags & (MM_NET_READER_SPAWNED | MM_NET_WRITER_SPAWNED)) != 0)
+		/* Do nothing. @suppress("Suspicious semicolon") */;
+	else if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0)
+		mm_net_close(sock);
+#if ENABLE_SMP
+	else if (sock->proto->detach != NULL && (sock->proto->detach)(sock))
+		mm_event_complete(&sock->event);
+#endif
+
+	LEAVE();
+}
+
+static void
 mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
 {
 	ENTER();
@@ -612,6 +629,8 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
 			// Submit a reader work.
 			mm_thread_t target = mm_event_target(&sock->event);
 			mm_core_post_work(target, &sock->read_work);
+		} else if (flags == 0) {
+			mm_net_event_complete(sock);
 		}
 	}
 
@@ -641,6 +660,8 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint16_t flags)
 			// Submit a writer work.
 			mm_thread_t target = mm_event_target(&sock->event);
 			mm_core_post_work(target, &sock->write_work);
+		} else if (flags == 0) {
+			mm_net_event_complete(sock);
 		}
 	}
 
@@ -670,28 +691,6 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 	if ((sock->flags & MM_NET_OUTBOUND) == 0)
 		mm_event_trigger_output(&sock->event, &mm_core_dispatch);
 
-	LEAVE();
-}
-
-static void
-mm_net_dispatch_finish(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	if ((sock->flags & (MM_NET_READER_SPAWNED | MM_NET_WRITER_SPAWNED)) != 0)
-		goto leave;
-
-	if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0) {
-		mm_net_close(sock);
-		goto leave;
-	}
-
-#if ENABLE_SMP
-	if (sock->proto->detach != NULL && (sock->proto->detach)(sock))
-		mm_event_detach(&sock->event);
-#endif
-
-leave:
 	LEAVE();
 }
 
@@ -847,7 +846,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	ASSERT((sock->flags & MM_NET_READER_SPAWNED) != 0);
 	if (mm_net_is_reader_shutdown(sock)) {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
-		mm_net_dispatch_finish(sock);
+		mm_net_event_complete(sock);
 		goto leave;
 	}
 
@@ -861,7 +860,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		mm_core_post_work(target, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
-		mm_net_dispatch_finish(sock);
+		mm_net_event_complete(sock);
 	}
 
 leave:
@@ -887,7 +886,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	ASSERT((sock->flags & MM_NET_WRITER_SPAWNED) != 0);
 	if (mm_net_is_writer_shutdown(sock)) {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		mm_net_dispatch_finish(sock);
+		mm_net_event_complete(sock);
 		goto leave;
 	}
 
@@ -901,7 +900,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		mm_core_post_work(target, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
-		mm_net_dispatch_finish(sock);
+		mm_net_event_complete(sock);
 	}
 
 leave:
