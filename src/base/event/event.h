@@ -28,7 +28,6 @@ struct mm_event_dispatch;
 
 /* Event types. */
 typedef enum {
-	MM_EVENT_NONE = -1,
 	MM_EVENT_INPUT,
 	MM_EVENT_OUTPUT,
 	MM_EVENT_INPUT_ERROR,
