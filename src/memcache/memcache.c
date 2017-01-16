@@ -186,7 +186,6 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		.create = mc_state_create,
 		.reclaim = mc_state_reclaim,
 		.destroy = mc_state_destroy,
-		.detach = mc_state_detach,
 		.reader = mc_reader_routine,
 	};
 

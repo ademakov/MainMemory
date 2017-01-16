@@ -436,11 +436,7 @@ mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 	uint16_t flags = sock->flags;
 	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
-#if ENABLE_SMP
-	mm_event_affinity_t affinity = sock->proto->detach != NULL ? MM_EVENT_AGILE : MM_EVENT_BOUND;
-#else
-	mm_event_affinity_t affinity = MM_EVENT_BOUND;
-#endif
+	mm_event_affinity_t affinity = (flags & MM_NET_BOUND_EVENTS) != 0 ? MM_EVENT_BOUND : MM_EVENT_AGILE;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid, input, output, affinity);
 }
 
@@ -599,7 +595,7 @@ mm_net_event_complete(struct mm_net_socket *sock)
 	else if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0)
 		mm_net_close(sock);
 #if ENABLE_SMP
-	else if (sock->proto->detach != NULL && (sock->proto->detach)(sock))
+	else if (sock->proto->detach == NULL || (sock->proto->detach)(sock))
 		mm_event_complete(&sock->event);
 #endif
 

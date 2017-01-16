@@ -69,11 +69,3 @@ mc_state_destroy(struct mm_net_socket *sock)
 
 	LEAVE();
 }
-
-bool NONNULL(1)
-mc_state_detach(struct mm_net_socket *sock UNUSED)
-{
-	ENTER();
-	LEAVE();
-	return true;
-}

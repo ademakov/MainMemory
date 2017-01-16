@@ -65,9 +65,6 @@ mc_state_reclaim(struct mm_net_socket *sock);
 void NONNULL(1)
 mc_state_destroy(struct mm_net_socket *sock);
 
-bool NONNULL(1)
-mc_state_detach(struct mm_net_socket *sock);
-
 /**********************************************************************
  * Command support.
  **********************************************************************/

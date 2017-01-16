@@ -48,6 +48,9 @@ struct mm_task;
 #define MM_NET_READER_SHUTDOWN	0x0020
 #define MM_NET_WRITER_SHUTDOWN	0x0040
 
+/* Socket event dispatch is bound to a certain thread. */
+#define MM_NET_BOUND_EVENTS	0x0080
+
 /* Socket I/O flags. */
 #define MM_NET_READ_READY	0x0100
 #define MM_NET_WRITE_READY	0x0200
