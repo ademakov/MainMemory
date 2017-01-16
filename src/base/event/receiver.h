@@ -29,7 +29,7 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 
-#define MM_EVENT_RECEIVER_FWDBUF_SIZE		(6)
+#define MM_EVENT_RECEIVER_FWDBUF_SIZE		(5)
 #define MM_EVENT_RECEIVER_PUBBUF_SIZE		(4)
 
 #define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
@@ -38,6 +38,7 @@ struct mm_event_dispatch;
 struct mm_event_receiver_fwdbuf
 {
 	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_FWDBUF_SIZE];
+	mm_event_t events[MM_EVENT_RECEIVER_FWDBUF_SIZE];
 	unsigned int nsinks;
 };
 
@@ -45,6 +46,7 @@ struct mm_event_receiver_fwdbuf
 struct mm_event_receiver_pubbuf
 {
 	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_PUBBUF_SIZE];
+	mm_event_t events[MM_EVENT_RECEIVER_PUBBUF_SIZE];
 	unsigned int nsinks;
 };
 
@@ -120,6 +122,12 @@ mm_event_receiver_start(struct mm_event_receiver *receiver);
 void NONNULL(1)
 mm_event_receiver_finish(struct mm_event_receiver *receiver);
 
+void NONNULL(1, 2)
+mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);
+
+void NONNULL(1, 2)
+mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+
 static inline bool NONNULL(1, 2)
 mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
@@ -131,15 +139,32 @@ mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd 
 	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_STEAL_THRESHOLD;
 }
 
-void NONNULL(1, 2)
-mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-void NONNULL(1, 2)
-mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-void NONNULL(1, 2)
-mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-void NONNULL(1, 2)
-mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-void NONNULL(1, 2)
-mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+static inline void NONNULL(1, 2)
+mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	sink->oneshot_input_trigger = false;
+	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	sink->oneshot_input_trigger = false;
+	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT_ERROR);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	sink->oneshot_output_trigger = false;
+	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	sink->oneshot_output_trigger = false;
+	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT_ERROR);
+}
 
 #endif /* BASE_EVENT_RECEIVER_H */

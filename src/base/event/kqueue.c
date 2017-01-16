@@ -21,10 +21,12 @@
 
 #if HAVE_SYS_EVENT_H
 
+#include "base/lock.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/batch.h"
+#include "base/event/dispatch.h"
 #include "base/event/event.h"
 #include "base/event/receiver.h"
 
@@ -73,7 +75,7 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 			int flags;
 			if (sink->oneshot_input) {
 				flags = EV_ADD | EV_ONESHOT;
-				sink->oneshot_input_trigger = 1;
+				sink->oneshot_input_trigger = true;
 			} else {
 				flags = EV_ADD | EV_CLEAR;
 			}
@@ -90,7 +92,7 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 			int flags;
 			if (sink->oneshot_output) {
 				flags = EV_ADD | EV_ONESHOT;
-				sink->oneshot_output_trigger = 1;
+				sink->oneshot_output_trigger = true;
 			} else {
 				flags = EV_ADD | EV_CLEAR;
 			}
@@ -127,7 +129,7 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 				return false;
 			if (unlikely(sink->changed))
 				return false;
-			sink->oneshot_input_trigger = 1;
+			sink->oneshot_input_trigger = true;
 
 			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
@@ -140,7 +142,7 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 				return false;
 			if (unlikely(sink->changed))
 				return false;
-			sink->oneshot_output_trigger = 1;
+			sink->oneshot_output_trigger = true;
 
 			struct kevent *kp = &events[nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
@@ -153,7 +155,7 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 
 	if (*pnevents != nevents) {
 		*pnevents = nevents;
-		sink->changed = 1;
+		sink->changed = true;
 	}
 
 	return true;
@@ -164,6 +166,9 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			       struct mm_event_receiver *receiver,
 			       int nevents)
 {
+	if (!nevents)
+		return;
+
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
@@ -172,6 +177,8 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 				break;
 		}
 	}
+
+	mm_regular_lock(&receiver->dispatch->event_sink_lock);
 
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
@@ -198,6 +205,8 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
 		}
 	}
+
+	mm_regular_unlock(&receiver->dispatch->event_sink_lock);
 }
 
 static void
@@ -210,7 +219,7 @@ mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
 		struct mm_event_fd *sink = change->sink;
 
 		// Reset the change flag.
-		sink->changed = 0;
+		sink->changed = false;
 
 		// Store the pertinent event.
 		if (change->kind == MM_EVENT_UNREGISTER)

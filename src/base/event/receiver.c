@@ -35,7 +35,8 @@ mm_event_receiver_forward_1(uintptr_t *arguments)
 	ENTER();
 
 	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
+	uintptr_t events = arguments[1];
+	mm_event_convey((struct mm_event_fd *) arguments[0], events & 15);
 
 	LEAVE();
 }
@@ -46,8 +47,9 @@ mm_event_receiver_forward_2(uintptr_t *arguments)
 	ENTER();
 
 	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
-	mm_event_convey((struct mm_event_fd *) arguments[1]);
+	uintptr_t events = arguments[2];
+	mm_event_convey((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[1], events >> 4);
 
 	LEAVE();
 }
@@ -58,9 +60,10 @@ mm_event_receiver_forward_3(uintptr_t *arguments)
 	ENTER();
 
 	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
-	mm_event_convey((struct mm_event_fd *) arguments[1]);
-	mm_event_convey((struct mm_event_fd *) arguments[2]);
+	uintptr_t events = arguments[3];
+	mm_event_convey((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[2], events >> 8);
 
 	LEAVE();
 }
@@ -71,10 +74,11 @@ mm_event_receiver_forward_4(uintptr_t *arguments)
 	ENTER();
 
 	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
-	mm_event_convey((struct mm_event_fd *) arguments[1]);
-	mm_event_convey((struct mm_event_fd *) arguments[2]);
-	mm_event_convey((struct mm_event_fd *) arguments[3]);
+	uintptr_t events = arguments[4];
+	mm_event_convey((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[3], events >> 12);
 
 	LEAVE();
 }
@@ -85,27 +89,12 @@ mm_event_receiver_forward_5(uintptr_t *arguments)
 	ENTER();
 
 	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
-	mm_event_convey((struct mm_event_fd *) arguments[1]);
-	mm_event_convey((struct mm_event_fd *) arguments[2]);
-	mm_event_convey((struct mm_event_fd *) arguments[3]);
-	mm_event_convey((struct mm_event_fd *) arguments[4]);
-
-	LEAVE();
-}
-
-static void
-mm_event_receiver_forward_6(uintptr_t *arguments)
-{
-	ENTER();
-
-	// Handle events.
-	mm_event_convey((struct mm_event_fd *) arguments[0]);
-	mm_event_convey((struct mm_event_fd *) arguments[1]);
-	mm_event_convey((struct mm_event_fd *) arguments[2]);
-	mm_event_convey((struct mm_event_fd *) arguments[3]);
-	mm_event_convey((struct mm_event_fd *) arguments[4]);
-	mm_event_convey((struct mm_event_fd *) arguments[5]);
+	uintptr_t events = arguments[5];
+	mm_event_convey((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[3], (events >> 12) & 15);
+	mm_event_convey((struct mm_event_fd *) arguments[4], events >> 16);
 
 	LEAVE();
 }
@@ -115,10 +104,10 @@ mm_event_receiver_forward_6(uintptr_t *arguments)
  **********************************************************************/
 
 static void
-mm_event_receiver_convey(struct mm_event_fd *sink, mm_thread_t target)
+mm_event_receiver_convey(struct mm_event_fd *sink, mm_event_t event, mm_thread_t target)
 {
 	sink->target = target;
-	mm_event_convey(sink);
+	mm_event_convey(sink, event);
 }
 
 static void
@@ -126,9 +115,11 @@ mm_event_receiver_publish_1(uintptr_t *arguments)
 {
 	ENTER();
 
-	// Handle events.
 	mm_thread_t target = mm_thread_self();
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
+
+	// Handle events.
+	uintptr_t events = arguments[1];
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events, target);
 
 	LEAVE();
 }
@@ -138,10 +129,12 @@ mm_event_receiver_publish_2(uintptr_t *arguments)
 {
 	ENTER();
 
-	// Handle events.
 	mm_thread_t target = mm_thread_self();
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
+
+	// Handle events.
+	uintptr_t events = arguments[2];
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], events >> 4, target);
 
 	LEAVE();
 }
@@ -151,11 +144,13 @@ mm_event_receiver_publish_3(uintptr_t *arguments)
 {
 	ENTER();
 
-	// Handle events.
 	mm_thread_t target = mm_thread_self();
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], target);
+
+	// Handle events.
+	uintptr_t events = arguments[3];
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], events >> 8, target);
 
 	LEAVE();
 }
@@ -165,12 +160,14 @@ mm_event_receiver_publish_4(uintptr_t *arguments)
 {
 	ENTER();
 
-	// Handle events.
 	mm_thread_t target = mm_thread_self();
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[3], target);
+
+	// Handle events.
+	uintptr_t events = arguments[4];
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], (events >> 8) & 15, target);
+	mm_event_receiver_convey((struct mm_event_fd *) arguments[3], events >> 12, target);
 
 	LEAVE();
 }
@@ -195,48 +192,53 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_thread_post_1(thread, mm_event_receiver_forward_1,
-				 (uintptr_t) buffer->sinks[0]);
+		mm_thread_post_2(thread, mm_event_receiver_forward_1,
+				 (uintptr_t) buffer->sinks[0],
+				 buffer->events[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_thread_post_2(thread, mm_event_receiver_forward_2,
+		mm_thread_post_3(thread, mm_event_receiver_forward_2,
 				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1]);
+				 (uintptr_t) buffer->sinks[1],
+				 buffer->events[0]
+				 | (buffer->events[1] << 4));
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_thread_post_3(thread, mm_event_receiver_forward_3,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2]);
-		break;
-	case 4:
-		buffer->nsinks = 0;
-		mm_thread_post_4(thread, mm_event_receiver_forward_4,
+		mm_thread_post_4(thread, mm_event_receiver_forward_3,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
-				 (uintptr_t) buffer->sinks[3]);
+				 buffer->events[0]
+				 | (buffer->events[1] << 4)
+				 | (buffer->events[2] << 8));
 		break;
-	case 5:
+	case 4:
 		buffer->nsinks = 0;
-		mm_thread_post_5(thread, mm_event_receiver_forward_5,
+		mm_thread_post_5(thread, mm_event_receiver_forward_4,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
 				 (uintptr_t) buffer->sinks[3],
-				 (uintptr_t) buffer->sinks[4]);
+				 buffer->events[0]
+				 | (buffer->events[1] << 4)
+				 | (buffer->events[2] << 8)
+				 | (buffer->events[3] << 12));
 		break;
-	case 6:
+	case 5:
 		buffer->nsinks = 0;
-		mm_thread_post_6(thread, mm_event_receiver_forward_6,
+		mm_thread_post_6(thread, mm_event_receiver_forward_5,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
 				 (uintptr_t) buffer->sinks[3],
 				 (uintptr_t) buffer->sinks[4],
-				 (uintptr_t) buffer->sinks[5]);
+				 buffer->events[0]
+				 | (buffer->events[1] << 4)
+				 | (buffer->events[2] << 8)
+				 | (buffer->events[3] << 12)
+				 | (buffer->events[4] << 16));
 		break;
 	default:
 		ABORT();
@@ -247,7 +249,7 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 
 static void
 mm_event_receiver_forward(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer,
-			  struct mm_event_fd *sink)
+			  struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
@@ -255,8 +257,10 @@ mm_event_receiver_forward(struct mm_thread *thread, struct mm_event_receiver_fwd
 	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE)
 		mm_event_receiver_forward_flush(thread, buffer);
 
-	// Add the sink to the buffer.
-	buffer->sinks[buffer->nsinks++] = sink;
+	// Add the event to the buffer.
+	unsigned int n = buffer->nsinks++;
+	buffer->sinks[n] = sink;
+	buffer->events[n] = event;
 
 	LEAVE();
 }
@@ -281,29 +285,39 @@ mm_event_receiver_publish_flush(struct mm_domain *domain, struct mm_event_receiv
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_domain_post_1(domain, mm_event_receiver_publish_1,
-				 (uintptr_t) buffer->sinks[0]);
+		mm_domain_post_2(domain, mm_event_receiver_publish_1,
+				 (uintptr_t) buffer->sinks[0],
+				 buffer->events[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_domain_post_2(domain, mm_event_receiver_publish_2,
+		mm_domain_post_3(domain, mm_event_receiver_publish_2,
 				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1]);
+				 (uintptr_t) buffer->sinks[1],
+				 buffer->events[0]
+				 | (buffer->events[1] << 4));
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_domain_post_3(domain, mm_event_receiver_publish_3,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2]);
-		break;
-	case 4:
-		buffer->nsinks = 0;
-		mm_domain_post_4(domain, mm_event_receiver_publish_4,
+		mm_domain_post_4(domain, mm_event_receiver_publish_3,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
-				 (uintptr_t) buffer->sinks[3]);
+				 buffer->events[0]
+				 | (buffer->events[1] << 4)
+				 | (buffer->events[2] << 8));
+		break;
+	case 4:
+		buffer->nsinks = 0;
+		mm_domain_post_5(domain, mm_event_receiver_publish_4,
+				 (uintptr_t) buffer->sinks[0],
+				 (uintptr_t) buffer->sinks[1],
+				 (uintptr_t) buffer->sinks[2],
+				 (uintptr_t) buffer->sinks[3],
+				 buffer->events[0]
+				 | (buffer->events[1] << 4)
+				 | (buffer->events[2] << 8)
+				 | (buffer->events[3] << 12));
 		break;
 	default:
 		ABORT();
@@ -314,7 +328,7 @@ mm_event_receiver_publish_flush(struct mm_domain *domain, struct mm_event_receiv
 
 static void
 mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pubbuf *buffer,
-			  struct mm_event_fd *sink)
+			  struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
@@ -322,8 +336,10 @@ mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pub
 	if (buffer->nsinks == MM_EVENT_RECEIVER_PUBBUF_SIZE)
 		mm_event_receiver_publish_flush(domain, buffer);
 
-	// Add the sink to the buffer.
-	buffer->sinks[buffer->nsinks++] = sink;
+	// Add the event to the buffer.
+	unsigned int n = buffer->nsinks++;
+	buffer->sinks[n] = sink;
+	buffer->events[n] = event;
 
 	LEAVE();
 }
@@ -355,9 +371,7 @@ mm_event_receiver_reclaim_epoch(struct mm_event_receiver *receiver, uint32_t epo
 	while (!mm_stack_empty(stack)) {
 		struct mm_slink *link = mm_stack_remove(stack);
 		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-		ASSERT(sink->unregister_phase == MM_EVENT_DISABLE);
-		sink->unregister_phase = MM_EVENT_RECLAIM;
-		mm_event_convey(sink);
+		mm_event_convey(sink, MM_EVENT_RECLAIM);
 	}
 }
 
@@ -515,8 +529,7 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 }
 
 static bool NONNULL(1, 2)
-mm_event_receiver_stealable(struct mm_event_receiver *receiver, struct mm_event_fd *sink,
-			    uint32_t expected_iostate, mm_thread_t target)
+mm_event_receiver_steal(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_thread_t target)
 {
 	if (target == MM_THREAD_NONE)
 		return true;
@@ -526,24 +539,18 @@ mm_event_receiver_stealable(struct mm_event_receiver *receiver, struct mm_event_
 		return false;
 	if (receiver->direct_events_estimate >= MM_EVENT_RECEIVER_STEAL_THRESHOLD)
 		return false;
-
-	uint32_t iostate = mm_memory_load(sink->io.state);
-	mm_memory_load_fence();
-	uint8_t attached = mm_memory_load(sink->attached);
-
-	return !attached && iostate == expected_iostate;
+	return !mm_event_active(sink);
 }
 
-static void NONNULL(1, 2)
-mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd *sink,
-			 uint32_t expected_iostate)
+void NONNULL(1, 2)
+mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 	ASSERT(receiver->thread == mm_thread_self());
 
 	if (sink->loose_target) {
 		// Handle the event immediately.
-		mm_event_convey(sink);
+		mm_event_convey(sink, event);
 		receiver->stats.loose_events++;
 
 	} else {
@@ -551,7 +558,7 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 
 		// If the event sink should be stolen then attach it to the
 		// control thread.
-		if (mm_event_receiver_stealable(receiver, sink, expected_iostate, target)) {
+		if (mm_event_receiver_steal(receiver, sink, target)) {
 #if 0
 			if (receiver->direct_events < 5) {
 				target = sink->target = receiver->thread;
@@ -565,18 +572,22 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 #endif
 		}
 
+		// Count the received event.
+		mm_event_update_receive_stamp(sink);
+
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (target == receiver->thread) {
-			mm_event_convey(sink);
+			mm_event_convey(sink, event);
 			receiver->direct_events++;
 
 		} else if (target != MM_THREAD_NONE) {
 			struct mm_event_dispatch *dispatch = receiver->dispatch;
 			struct mm_event_listener *listener = &dispatch->listeners[target];
 			mm_event_receiver_forward(listener->thread,
-						  &receiver->forward_buffers[target], sink);
+						  &receiver->forward_buffers[target],
+						  sink, event);
 			mm_bitset_set(&receiver->forward_targets, target);
 			receiver->forwarded_events++;
 
@@ -586,78 +597,11 @@ mm_event_receiver_handle(struct mm_event_receiver *receiver, struct mm_event_fd 
 			// This must be resolved before any production use.
 			// Therefore this is just a temporary stub !!!
 			mm_event_receiver_publish(receiver->dispatch->domain,
-						  &receiver->publish_buffer, sink);
+						  &receiver->publish_buffer,
+						  sink, event);
 			receiver->published_events++;
 		}
 	}
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	static const mm_event_iostate_t iostate = {{
-		.input = { .error = 0, .ready = 1, },
-		.output = { .error = 0, .ready = 0, },
-	}};
-
-	sink->io.input.ready = 1;
-	sink->oneshot_input_trigger = 0;
-	mm_event_receiver_handle(receiver, sink, iostate.state);
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	static const mm_event_iostate_t iostate = {{
-		.input = { .error = 1, .ready = 0, },
-		.output = { .error = 0, .ready = 0, },
-	}};
-
-	sink->io.input.error = 1;
-	sink->oneshot_input_trigger = 0;
-	mm_event_receiver_handle(receiver, sink, iostate.state);
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	static const mm_event_iostate_t iostate = {{
-		.input = { .error = 0, .ready = 0, },
-		.output = { .error = 0, .ready = 1, },
-	}};
-
-	sink->io.output.ready = 1;
-	sink->oneshot_output_trigger = 0;
-	mm_event_receiver_handle(receiver, sink, iostate.state);
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	static const mm_event_iostate_t iostate = {{
-		.input = { .error = 0, .ready = 0, },
-		.output = { .error = 1, .ready = 0, },
-	}};
-
-	sink->io.output.error = 1;
-	sink->oneshot_output_trigger = 0;
-	mm_event_receiver_handle(receiver, sink, iostate.state);
 
 	LEAVE();
 }
@@ -667,9 +611,9 @@ mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event
 {
 	ENTER();
 
-	sink->unregister_phase = MM_EVENT_DISABLE;
+	mm_event_update_receive_stamp(sink);
 	mm_event_receiver_reclaim_queue_insert(receiver, sink);
-	mm_event_convey(sink);
+	mm_event_convey(sink, MM_EVENT_DISABLE);
 
 	LEAVE();
 }

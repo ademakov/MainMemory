@@ -83,25 +83,7 @@ mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
  * I/O events support.
  **********************************************************************/
 
-typedef union {
-	struct {
-		union {
-			struct {
-				uint8_t ready;
-				uint8_t error;
-			};
-			uint16_t state;
-		} input;
-		union {
-			struct {
-				uint8_t ready;
-				uint8_t error;
-			};
-			uint16_t state;
-		} output;
-	};
-	uint32_t state;
-} mm_event_iostate_t;
+typedef uint16_t mm_event_stamp_t;
 
 /* Event sink. */
 struct mm_event_fd
@@ -112,8 +94,28 @@ struct mm_event_fd
 	/* The thread the owns the sink. */
 	mm_thread_t target;
 
+#if ENABLE_SMP
+	/* The stamp updated by poller threads on every next event received
+	   from the system. */
+	mm_event_stamp_t receive_stamp;
+	/* The stamp updated by the target thread on every next event
+	   delivered to it from poller threads. */
+	mm_event_stamp_t dispatch_stamp;
+	/* The stamp updated by the target thread when completing all
+	   the events delivered so far. When it is equal to the current
+	   receive_stamp value it will not change until another event
+	   is received and dispatched. So for a poller thread that sees
+	   such a condition it is safe to switch the sink's target thread. */
+	mm_event_stamp_t complete_stamp;
+#endif
+
 	/* Event handers. */
 	mm_event_hid_t handler;
+
+	/* Flags used by the poller thread. */
+	bool oneshot_input_trigger;
+	bool oneshot_output_trigger;
+	bool changed;
 
 	/* Immutable flags. */
 	unsigned loose_target : 1;
@@ -122,20 +124,6 @@ struct mm_event_fd
 	unsigned oneshot_input : 1;
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
-
-	/* The event sink I/O state. */
-	mm_event_iostate_t io;
-
-	/* The unregister state. */
-	mm_event_t unregister_phase;
-
-	/* Flags used by the poller thread. */
-	unsigned changed : 1;
-	unsigned oneshot_input_trigger : 1;
-	unsigned oneshot_output_trigger : 1;
-
-	/* Flags used by the owner thread. */
-	uint8_t attached;
 
 	/* Reclaim queue link. */
 	struct mm_slink reclaim_link;
@@ -147,10 +135,41 @@ mm_event_target(const struct mm_event_fd *sink)
 	return sink->target;
 }
 
-static inline bool NONNULL(1)
-mm_event_attached(const struct mm_event_fd *sink)
+static inline void
+mm_event_update_receive_stamp(struct mm_event_fd *sink UNUSED)
 {
-	return sink->attached;
+#if ENABLE_SMP
+	sink->receive_stamp++;
+#endif
+}
+
+static inline void
+mm_event_update_dispatch_stamp(struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	sink->dispatch_stamp++;
+#endif
+}
+
+static inline void
+mm_event_update_complete_stamp(struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	// TODO: release memory fence
+	mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
+#endif
+}
+
+static inline bool NONNULL(1)
+mm_event_active(const struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	// TODO: acquire memory fence
+	mm_event_stamp_t stamp = mm_memory_load(sink->complete_stamp);
+	return sink->receive_stamp != stamp;
+#else
+	return true;
+#endif
 }
 
 bool NONNULL(1)
@@ -174,7 +193,7 @@ void NONNULL(1, 2)
 mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
-mm_event_convey(struct mm_event_fd *sink);
+mm_event_convey(struct mm_event_fd *sink, mm_event_t event);
 
 void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink);

@@ -92,10 +92,20 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 
 	sink->fd = fd;
 	sink->target = MM_THREAD_NONE;
-	sink->handler = handler;
 
+#if ENABLE_SMP
+	sink->receive_stamp = 0;
+	sink->dispatch_stamp = 0;
+	sink->complete_stamp = 0;
+#endif
+
+	sink->handler = handler;
 	sink->loose_target = (target == MM_EVENT_LOOSE);
 	sink->bound_target = (target == MM_EVENT_BOUND);
+
+	sink->oneshot_input_trigger = false;
+	sink->oneshot_output_trigger = false;
+	sink->changed = false;
 
 	if (input_mode == MM_EVENT_IGNORED) {
 		sink->regular_input = false;
@@ -118,15 +128,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 		sink->regular_output = true;
 		sink->oneshot_output = false;
 	}
-
-	sink->io.state = 0;
-	sink->unregister_phase = MM_EVENT_NONE;
-
-	sink->changed = 0;
-	sink->oneshot_input_trigger = 0;
-	sink->oneshot_output_trigger = 0;
-
-	sink->attached = 0;
 
 	return true;
 }
@@ -178,34 +179,8 @@ mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *disp
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
 }
 
-static mm_event_t NONNULL(1)
-mm_event_pull(struct mm_event_fd *sink)
-{
-	mm_event_iostate_t io = mm_memory_load(sink->io);
-	if (io.state != 0) {
-		if (io.input.state != 0) {
-			if (io.input.error) {
-				sink->io.input.error = 0;
-				return MM_EVENT_INPUT_ERROR;
-			} else {
-				sink->io.input.ready = 0;
-				return MM_EVENT_INPUT;
-			}
-		} else {
-			if (io.output.error) {
-				sink->io.output.error = 0;
-				return MM_EVENT_OUTPUT_ERROR;
-			} else {
-				sink->io.output.ready = 0;
-				return MM_EVENT_OUTPUT;
-			}
-		}
-	}
-	return sink->unregister_phase;
-}
-
 void NONNULL(1)
-mm_event_convey(struct mm_event_fd *sink)
+mm_event_convey(struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
@@ -214,18 +189,12 @@ mm_event_convey(struct mm_event_fd *sink)
 	ASSERT(id < mm_event_hdesc_table_size);
 	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
 
-	// If the event sink is detached then attach it before handling
-	// any received event.
-	if (!sink->attached) {
-		mm_memory_store(sink->attached, 1);
-		mm_memory_store_fence();
-		DEBUG("attach sink %d to %d", sink->fd, mm_thread_self());
-	}
+	// Count the received event.
+	mm_event_update_dispatch_stamp(sink);
+	DEBUG("sink %d got event %u on thread %u", sink->fd, sink->dispatch_stamp, mm_thread_self());
 
-	// Handle a single received event.
-	mm_event_t event = mm_event_pull(sink);
-	if (event != MM_EVENT_NONE)
-		(hd->handler)(event, sink);
+	// Handle the received event.
+	(hd->handler)(event, sink);
 
 	LEAVE();
 }
@@ -234,13 +203,11 @@ void NONNULL(1)
 mm_event_detach(struct mm_event_fd *sink)
 {
 	ENTER();
-	DEBUG("detach sink %d from %u", sink->fd, mm_event_target(sink));
-	ASSERT(mm_event_target(sink) == mm_thread_self());
-	ASSERT(sink->attached);
+	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
 
 	// Mark the sink as detached.
-	mm_memory_store_fence();
-	mm_memory_store(sink->attached, 0);
+	mm_event_update_complete_stamp(sink);
+	DEBUG("sink %d done event %u on thread %u", sink->fd, sink->dispatch_stamp, mm_thread_self());
 
 	LEAVE();
 }

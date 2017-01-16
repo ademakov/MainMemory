@@ -50,6 +50,8 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->poller_thread = MM_THREAD_NONE;
 
+	dispatch->event_sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+
 	dispatch->reclaim_epoch = 0;
 
 	// Initialize system-specific resources.

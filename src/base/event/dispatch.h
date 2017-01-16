@@ -46,6 +46,10 @@ struct mm_event_dispatch
 	/* A lock that protects the poller thread election. */
 	mm_regular_lock_t poller_lock;
 
+	/* A coarse-grained lock that protects event sinks from
+	   concurrent updates. */
+	mm_regular_lock_t event_sink_lock;
+
 	/* The event sink reclamation epoch. */
 	uint32_t reclaim_epoch;
 
