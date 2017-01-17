@@ -142,28 +142,24 @@ mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd 
 static inline void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
-	sink->oneshot_input_trigger = false;
 	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
-	sink->oneshot_input_trigger = false;
 	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT_ERROR);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
-	sink->oneshot_output_trigger = false;
 	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
-	sink->oneshot_output_trigger = false;
 	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT_ERROR);
 }
 

@@ -21,10 +21,12 @@
 
 #if HAVE_SYS_EPOLL_H
 
+#include "base/lock.h"
 #include "base/logger.h"
 #include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/event.h"
+#include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
 #include "base/event/receiver.h"
 
@@ -116,16 +118,16 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 
 	switch (change->kind) {
 	case MM_EVENT_REGISTER:
-		ee.events = 0;
+		ee.events = EPOLLET;
 		if (sink->regular_input || sink->oneshot_input)
-			ee.events |= EPOLLIN | EPOLLET | EPOLLRDHUP;
+			ee.events |= EPOLLIN | EPOLLRDHUP;
 		if (sink->regular_output || sink->oneshot_output)
-			ee.events |= EPOLLOUT | EPOLLET | EPOLLRDHUP;
+			ee.events |= EPOLLOUT;
 
 		if (sink->oneshot_input)
-			sink->oneshot_input_trigger = 1;
+			sink->oneshot_input_trigger = true;
 		if (sink->oneshot_output)
-			sink->oneshot_output_trigger = 1;
+			sink->oneshot_output_trigger = true;
 
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
 		if (unlikely(rc < 0))
@@ -142,28 +144,44 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 		break;
 
 	case MM_EVENT_TRIGGER_INPUT:
+		// There is race condition here with access to trigger values. Another thread
+		// might be clearing them concurrently (while setting should not be a problem
+		// as only the owner thread is allowed to call the mm_event_trigger_input()
+		// and mm_event_trigger_output() functions). But this should be recoverable.
+		// See comments in the mm_event_epoll_receive_events() function.
 		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
-			sink->oneshot_input_trigger = 1;
+			sink->oneshot_input_trigger = true;
 
-			ee.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
+			ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
 			if (sink->regular_output || sink->oneshot_output_trigger)
 				ee.events |= EPOLLOUT;
 
-			rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+			if (sink->regular_output || sink->oneshot_output)
+				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+			else
+				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
 			if (unlikely(rc < 0))
 				mm_error(errno, "epoll_ctl");
 		}
 		break;
 
 	case MM_EVENT_TRIGGER_OUTPUT:
+		// There is race condition here with access to trigger values. Another thread
+		// might be clearing them concurrently (while setting should not be a problem
+		// as only the owner thread is allowed to call the mm_event_trigger_input()
+		// and mm_event_trigger_output() functions). But this should be recoverable.
+		// See comments in the mm_event_epoll_receive_events() function.
 		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
-			sink->oneshot_output_trigger = 1;
+			sink->oneshot_output_trigger = true;
 
-			ee.events = EPOLLOUT | EPOLLET | EPOLLRDHUP;
+			ee.events = EPOLLET | EPOLLOUT;
 			if (sink->regular_input || sink->oneshot_input_trigger)
-				ee.events |= EPOLLIN;
+				ee.events |= EPOLLIN | EPOLLRDHUP;
 
-			rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+			if (sink->regular_input || sink->oneshot_input)
+				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+			else
+				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
 			if (unlikely(rc < 0))
 				mm_error(errno, "epoll_ctl");
 		}
@@ -180,6 +198,8 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			      struct mm_event_receiver *receiver,
 			      int nevents)
 {
+	struct epoll_event ee;
+
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
@@ -194,46 +214,116 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 		}
 	}
 
+	bool locked = false;
+
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
-		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			mm_event_receiver_input_error(receiver, sink);
-
-		} else if ((event->events & EPOLLIN) != 0) {
+		if ((event->events & EPOLLIN) != 0) {
 			if (sink->oneshot_input) {
-				struct epoll_event ee;
-				ee.data.ptr = sink;
-				ee.events = EPOLLET | EPOLLRDHUP;
-				if (sink->regular_output || sink->oneshot_output_trigger)
-					ee.events |= EPOLLOUT;
+				if (locked) {
+					locked = false;
+					mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+				}
 
-				int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD,
-						      sink->fd, &ee);
+				// TODO: If the event sink had both input and output in the
+				// oneshot_trigger mode then there is a race condition here.
+				// It looks harmless though. The event at hand is about to
+				// cause some I/O which will discover the actual I/O state
+				// and re-arm for it if needed. For the opposite I/O event
+				// we keep it armed.
+				// TODO: Delete it from epoll altogether if able to verify
+				// that the opposite I/O event must be off too. However for
+				// oneshot events this would take extra synchronization.
+
+				int rc;
+				if (sink->regular_output || sink->oneshot_output) {
+					ee.data.ptr = sink;
+					ee.events = EPOLLET | EPOLLOUT;
+					rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+				} else {
+					rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
+				}
 				if (unlikely(rc < 0))
 					mm_error(errno, "epoll_ctl");
 			}
 
+			if (!locked) {
+				locked = true;
+				mm_regular_lock(&receiver->dispatch->event_sink_lock);
+			}
+
+			sink->oneshot_input_trigger = false;
 			mm_event_receiver_input(receiver, sink);
 		}
 
 		if ((event->events & EPOLLOUT) != 0) {
 			if (sink->oneshot_output) {
-				struct epoll_event ee;
-				ee.data.ptr = sink;
-				ee.events = EPOLLET | EPOLLRDHUP;
-				if (sink->regular_input || sink->oneshot_input_trigger)
-					ee.events |= EPOLLIN;
+				if (locked) {
+					locked = false;
+					mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+				}
 
-				int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD,
-						      sink->fd, &ee);
+				// TODO: If the event sink had both input and output in the
+				// oneshot_trigger mode then there is a race condition here.
+				// It looks harmless though. The event at hand is about to
+				// cause some I/O which will discover the actual I/O state
+				// and re-arm for it if needed. For the opposite I/O event
+				// we keep it armed.
+				// TODO: Delete it from epoll altogether if able to verify
+				// that the opposite I/O event must be off too. However for
+				// oneshot events this would take extra synchronization.
+
+				int rc;
+				if (sink->regular_input || sink->oneshot_input) {
+					ee.data.ptr = sink;
+					ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
+					rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
+				} else {
+					rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
+				}
 				if (unlikely(rc < 0))
 					mm_error(errno, "epoll_ctl");
 			}
 
+			if (!locked) {
+				locked = true;
+				mm_regular_lock(&receiver->dispatch->event_sink_lock);
+			}
+
+			sink->oneshot_output_trigger = false;
 			mm_event_receiver_output(receiver, sink);
 		}
+
+		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			bool enable_input = sink->regular_input || sink->oneshot_input_trigger;
+			bool enable_output = sink->regular_output || sink->oneshot_output_trigger;
+
+			if (enable_input) {
+				if (!locked) {
+					locked = true;
+					mm_regular_lock(&receiver->dispatch->event_sink_lock);
+				}
+
+				sink->oneshot_input_trigger = false;
+				mm_event_receiver_input_error(receiver, sink);
+			}
+
+			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0) {
+				if (!locked) {
+					locked = true;
+					mm_regular_lock(&receiver->dispatch->event_sink_lock);
+				}
+
+				sink->oneshot_output_trigger = false;
+				mm_event_receiver_output_error(receiver, sink);
+			}
+		}
+	}
+
+	if (locked) {
+		mm_regular_unlock(&receiver->dispatch->event_sink_lock);
 	}
 }
 
