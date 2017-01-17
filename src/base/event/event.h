@@ -111,7 +111,7 @@ struct mm_event_fd
 	/* Event handers. */
 	mm_event_hid_t handler;
 
-	/* Flags used by the poller thread. */
+	/* Flags used by poller threads. */
 	bool oneshot_input_trigger;
 	bool oneshot_output_trigger;
 	bool changed;
