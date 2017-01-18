@@ -339,43 +339,10 @@ mm_core_worker_execute(struct mm_work *work)
 	LEAVE();
 }
 
-static void NONNULL(1, 2)
-mm_core_worker_attach(struct mm_task *task, struct mm_event_listener *listener)
-{
-	ENTER();
-
-	if (unlikely((task->flags & MM_TASK_ATTACHED) != 0))
-		ABORT();
-
-	task->flags |= MM_TASK_ATTACHED;
-	mm_event_listener_add_waiter(listener);
-
-	LEAVE();
-}
-
-static void NONNULL(1, 2)
-mm_core_worker_detach(struct mm_task *task, struct mm_event_listener *listener)
-{
-	ENTER();
-
-	if (unlikely((task->flags & MM_TASK_ATTACHED) == 0))
-		return;
-
-	task->flags &= ~MM_TASK_ATTACHED;
-	mm_event_listener_delete_waiter(listener);
-
-	LEAVE();
-}
-
 static void
 mm_core_worker_cleanup(uintptr_t arg UNUSED)
 {
 	struct mm_core *core = mm_core_selfptr();
-	struct mm_task *task = mm_task_selfptr();
-
-	// Unregister the worker as a target for event listener notifications.
-	struct mm_event_listener *listener = mm_thread_getlistener(core->thread);
-	mm_core_worker_detach(task, listener);
 
 	// Wake up the master possibly waiting for worker availability.
 	if (core->nworkers == core->nworkers_max)
@@ -398,11 +365,6 @@ mm_core_worker(mm_value_t arg)
 	// the code emitted for the loop below on platforms with emulated
 	// thread specific data (that is on Darwin).
 	struct mm_core *core = mm_core_selfptr();
-	struct mm_task *task = mm_task_selfptr();
-
-	// Register the worker as a target for event listener notifications.
-	struct mm_event_listener *listener = mm_thread_getlistener(core->thread);
-	mm_core_worker_attach(task, listener);
 
 	// Take the work item supplied by the master.
 	struct mm_work *work = (struct mm_work *) arg;
@@ -412,9 +374,7 @@ mm_core_worker(mm_value_t arg)
 		// Check to see if there is outstanding work.
 		while (!mm_core_has_work(core)) {
 			// Wait for work standing at the front of the idle queue.
-			mm_core_worker_detach(task, listener);
 			mm_core_idle(core, false);
-			mm_core_worker_attach(task, listener);
 		}
 
 		// Take the first available work item.

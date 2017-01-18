@@ -79,8 +79,6 @@ typedef enum {
 #endif
 #define MM_TASK_WAITING			0x0040
 #define MM_TASK_COMBINING		0x0080
-/* The task is attached to an event listener. */
-#define MM_TASK_ATTACHED		0x4000
 /* The task is a bootstrap task. */
 #define MM_TASK_BOOT			0x8000
 
