@@ -382,8 +382,9 @@ mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
 
 	// Reclaim queued event sinks associated with a past epoch.
 	uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
-	if (receiver->reclaim_epoch != epoch) {
-		VERIFY((receiver->reclaim_epoch + 1) == epoch);
+	uint32_t local = receiver->reclaim_epoch;
+	if (local != epoch) {
+		VERIFY((local + 1) == epoch);
 		mm_memory_store(receiver->reclaim_epoch, epoch);
 		mm_event_receiver_reclaim_epoch(receiver, epoch);
 		mm_event_dispatch_advance_epoch(receiver->dispatch);
@@ -409,8 +410,8 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	ENTER();
 
 	// Initialize the reclamation data.
+	receiver->reclaim_epoch = 0;
 	receiver->reclaim_active = false;
-	receiver->reclaim_epoch = dispatch->reclaim_epoch;
 	mm_stack_prepare(&receiver->reclaim_queue[0]);
 	mm_stack_prepare(&receiver->reclaim_queue[1]);
 
@@ -470,7 +471,7 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 	// Start a reclamation-critical section.
 	if (!receiver->reclaim_active) {
 		mm_memory_store(receiver->reclaim_active, true);
-		mm_memory_store_fence();
+		mm_memory_strict_fence();
 		// Catch up with the current reclamation epoch.
 		uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
 		mm_memory_store(receiver->reclaim_epoch, epoch);

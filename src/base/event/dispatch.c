@@ -179,13 +179,12 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &listeners[i];
 		struct mm_event_receiver *receiver = &listener->receiver;
-		uint32_t local = mm_memory_load(receiver->reclaim_epoch);
-		if (local == epoch)
-			continue;
 
+		uint32_t local = mm_memory_load(receiver->reclaim_epoch);
 		mm_memory_load_fence();
 		bool active = mm_memory_load(receiver->reclaim_active);
-		if (active) {
+
+		if (active && local != epoch) {
 			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
 					 (uintptr_t) receiver);
 			rc = false;
