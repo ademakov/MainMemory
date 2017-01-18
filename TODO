@@ -2,7 +2,6 @@
 ASAP:
 * beautify netbuf interface
 * minimize memcache locks or non-blocking memcache table
-* verify event sink reclamation correctness
 * optimize events again
 * add more config options
 
