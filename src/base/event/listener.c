@@ -76,7 +76,10 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	listener->thread = thread;
 	listener->busywait = 0;
+
+#if ENABLE_WAITER_COUNT
 	listener->nwaiters = 0;
+#endif
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
