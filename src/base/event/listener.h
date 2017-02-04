@@ -33,8 +33,6 @@
 
 #define ENABLE_NOTIFY_STAMP	1
 
-#define ENABLE_WAITER_COUNT	0
-
 #if ENABLE_LINUX_FUTEX
 /* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
@@ -107,12 +105,6 @@ struct mm_event_listener
 	/* Counter for busy waiting. */
 	uint16_t busywait;
 
-#if ENABLE_WAITER_COUNT
-	/* The number of subordinate entities potentially waiting for
-	   notifications on the listener. */
-	uint32_t nwaiters;
-#endif
-
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)
@@ -164,37 +156,6 @@ static inline void NONNULL(1)
 mm_event_listener_clear_changes(struct mm_event_listener *listener)
 {
 	mm_event_batch_clear(&listener->changes);
-}
-
-/**********************************************************************
- * Bookkeeping of notification targets.
- **********************************************************************/
-
-static inline void NONNULL(1)
-mm_event_listener_add_waiter(struct mm_event_listener *listener UNUSED)
-{
-#if ENABLE_WAITER_COUNT
-	listener->nwaiters++;
-#endif
-}
-
-static inline void NONNULL(1)
-mm_event_listener_delete_waiter(struct mm_event_listener *listener UNUSED)
-{
-#if ENABLE_WAITER_COUNT
-	VERIFY(listener->nwaiters > 0);
-	listener->nwaiters--;
-#endif
-}
-
-static inline bool NONNULL(1)
-mm_event_listener_has_waiters(struct mm_event_listener *listener UNUSED)
-{
-#if ENABLE_WAITER_COUNT
-	return listener->nwaiters != 0;
-#else
-	return false;
-#endif
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
