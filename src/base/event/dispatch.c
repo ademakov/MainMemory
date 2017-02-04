@@ -84,14 +84,17 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
+	bool has_changes = mm_event_listener_has_changes(listener);
+	if (has_changes) {
+		// There may be changes that need to be immediately acknowledged.
+		timeout = 0;
+	}
+
 	if (listener->busywait) {
 		// Presume that if there were incoming events moments ago then
 		// there is a chance to get some more immediately. Spin a little
 		// bit to avoid context switches.
 		listener->busywait--;
-		timeout = 0;
-	} else if (mm_event_listener_has_changes(listener)) {
-		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
 	}
 
@@ -107,8 +110,8 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		mm_regular_unlock(&dispatch->poller_lock);
 	}
 
-	if (timeout == 0 || is_poller_thread) {
-		if (timeout != 0)
+	if (is_poller_thread || timeout == 0) {
+		if (has_changes || timeout != 0)
 			mm_event_dispatch_advance_epoch(dispatch);
 
 		// Wait for incoming events or timeout expiration.
