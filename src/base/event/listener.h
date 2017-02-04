@@ -31,8 +31,6 @@
 # define ENABLE_MACH_SEMAPHORE	1
 #endif
 
-#define ENABLE_NOTIFY_STAMP	1
-
 #if ENABLE_LINUX_FUTEX
 /* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
@@ -56,7 +54,6 @@ typedef enum
 
 struct mm_event_listener
 {
-#if ENABLE_NOTIFY_STAMP
 	/*
 	 * The listener state.
 	 *
@@ -66,24 +63,6 @@ struct mm_event_listener
 	 * remaining bits suffice to avoid any stamp clashes in practice.
 	 */
 	mm_atomic_uintptr_t state;
-#else
-	/*
-	 * The listener state.
-	 *
-	 * The two least-significant bits contain a mm_event_listener_status_t
-	 * value. The rest of the bits contain the listen cycle counter.
-	 */
-	uint32_t listen_stamp;
-
-	/*
-	 * The listener notification state.
-	 *
-	 * The two least-significant bits always contain a zero value.
-	 * The rest of the bits is matched against the listen_stamp
-	 * to detect a pending notification.
-	 */
-	uint32_t notify_stamp;
-#endif
 
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
@@ -126,13 +105,8 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 static inline mm_event_listener_status_t NONNULL(1)
 mm_event_listener_getstate(struct mm_event_listener *listener)
 {
-#if ENABLE_NOTIFY_STAMP
 	uintptr_t state = mm_memory_load(listener->state);
 	return (state & MM_EVENT_LISTENER_STATUS);
-#else
-	uint32_t stamp = mm_memory_load(listener->listen_stamp);
-	return (stamp & MM_EVENT_LISTENER_STATUS);
-#endif
 }
 
 /**********************************************************************
