@@ -224,7 +224,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (sink->oneshot_input) {
 				if (locked) {
 					locked = false;
-					mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+					mm_event_receiver_dispatch_finish(receiver);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -251,7 +251,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_regular_lock(&receiver->dispatch->event_sink_lock);
+				mm_event_receiver_dispatch_start(receiver);
 			}
 
 			sink->oneshot_input_trigger = false;
@@ -262,7 +262,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (sink->oneshot_output) {
 				if (locked) {
 					locked = false;
-					mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+					mm_event_receiver_dispatch_finish(receiver);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -289,7 +289,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_regular_lock(&receiver->dispatch->event_sink_lock);
+				mm_event_receiver_dispatch_start(receiver);
 			}
 
 			sink->oneshot_output_trigger = false;
@@ -303,7 +303,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_input) {
 				if (!locked) {
 					locked = true;
-					mm_regular_lock(&receiver->dispatch->event_sink_lock);
+					mm_event_receiver_dispatch_start(receiver);
 				}
 
 				sink->oneshot_input_trigger = false;
@@ -313,7 +313,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0) {
 				if (!locked) {
 					locked = true;
-					mm_regular_lock(&receiver->dispatch->event_sink_lock);
+					mm_event_receiver_dispatch_start(receiver);
 				}
 
 				sink->oneshot_output_trigger = false;
@@ -323,7 +323,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 	}
 
 	if (locked) {
-		mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+		mm_event_receiver_dispatch_finish(receiver);
 	}
 }
 

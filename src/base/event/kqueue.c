@@ -178,7 +178,7 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 		}
 	}
 
-	mm_regular_lock(&receiver->dispatch->event_sink_lock);
+	mm_event_receiver_dispatch_start(receiver);
 
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
@@ -210,7 +210,7 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 		}
 	}
 
-	mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+	mm_event_receiver_dispatch_finish(receiver);
 }
 
 static void

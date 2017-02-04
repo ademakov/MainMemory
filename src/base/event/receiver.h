@@ -118,9 +118,14 @@ void NONNULL(1)
 mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver);
 
 void NONNULL(1)
-mm_event_receiver_start(struct mm_event_receiver *receiver);
+mm_event_receiver_poll_start(struct mm_event_receiver *receiver);
 void NONNULL(1)
-mm_event_receiver_finish(struct mm_event_receiver *receiver);
+mm_event_receiver_poll_finish(struct mm_event_receiver *receiver);
+
+void NONNULL(1)
+mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver);
+void NONNULL(1)
+mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver);
 
 void NONNULL(1, 2)
 mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);

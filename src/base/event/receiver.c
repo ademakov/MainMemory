@@ -456,7 +456,7 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 }
 
 void NONNULL(1)
-mm_event_receiver_start(struct mm_event_receiver *receiver)
+mm_event_receiver_poll_start(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
@@ -481,7 +481,7 @@ mm_event_receiver_start(struct mm_event_receiver *receiver)
 }
 
 void NONNULL(1)
-mm_event_receiver_finish(struct mm_event_receiver *receiver)
+mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
@@ -525,6 +525,26 @@ mm_event_receiver_finish(struct mm_event_receiver *receiver)
 
 	// Advance the reclamation epoch.
 	mm_event_receiver_observe_epoch(receiver);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
+	mm_regular_lock(&receiver->dispatch->event_sink_lock);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
+	mm_regular_unlock(&receiver->dispatch->event_sink_lock);
 
 	LEAVE();
 }

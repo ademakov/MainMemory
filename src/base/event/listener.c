@@ -208,7 +208,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	ENTER();
 
 	// Prepare to receive events.
-	mm_event_receiver_start(&listener->receiver);
+	mm_event_receiver_poll_start(&listener->receiver);
 
 	// Get the next expected notify stamp.
 	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
@@ -236,7 +236,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
 
 	// Flush received events.
-	mm_event_receiver_finish(&listener->receiver);
+	mm_event_receiver_poll_finish(&listener->receiver);
 
 	LEAVE();
 }
