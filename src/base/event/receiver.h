@@ -30,7 +30,6 @@
 struct mm_event_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE		(5)
-#define MM_EVENT_RECEIVER_PUBBUF_SIZE		(4)
 
 #define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
 
@@ -42,22 +41,14 @@ struct mm_event_receiver_fwdbuf
 	unsigned int nsinks;
 };
 
-/* Event sink publish buffer. */
-struct mm_event_receiver_pubbuf
-{
-	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_PUBBUF_SIZE];
-	mm_event_t events[MM_EVENT_RECEIVER_PUBBUF_SIZE];
-	unsigned int nsinks;
-};
-
 /* Event receiver statistics. */
 struct mm_event_receiver_stats
 {
 	uint64_t loose_events;
 	uint64_t direct_events;
-	uint64_t stolen_events;
+	uint64_t enqueued_events;
+	uint64_t dequeued_events;
 	uint64_t forwarded_events;
-	uint64_t published_events;
 };
 
 struct mm_event_receiver
@@ -81,20 +72,13 @@ struct mm_event_receiver
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
 
-	/* Per-domain temporary store for sinks of received events. */
-	struct mm_event_receiver_pubbuf publish_buffer;
-
-	/* The number of locally handled events found while adjusting
-	   the receiver for appropriate event dispatch strategy. */
-	uint32_t direct_events_estimate;
-
 	/* The number of directly handled events. */
 	uint32_t direct_events;
-	uint32_t stolen_events;
+	/* The number of events published in the sink queue. */
+	uint32_t enqueued_events;
+	uint32_t dequeued_events;
 	/* The number of events forwarded to other listeners. */
 	uint32_t forwarded_events;
-	/* The number of events published in the domain request queue. */
-	uint32_t published_events;
 
 	/* Event statistics. */
 	struct mm_event_receiver_stats stats;
@@ -123,7 +107,7 @@ void NONNULL(1)
 mm_event_receiver_poll_finish(struct mm_event_receiver *receiver);
 
 void NONNULL(1)
-mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver);
+mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t nevents);
 void NONNULL(1)
 mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver);
 
@@ -132,17 +116,6 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
-
-static inline bool NONNULL(1, 2)
-mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	if (!sink->loose_target) {
-		mm_thread_t target = mm_event_target(sink);
-		if (target == receiver->thread || target == MM_THREAD_NONE)
-			receiver->direct_events_estimate++;
-	}
-	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_STEAL_THRESHOLD;
-}
 
 static inline void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)

@@ -50,6 +50,12 @@ struct mm_event_dispatch
 	   concurrent updates. */
 	mm_regular_lock_t event_sink_lock;
 
+	/* A queue of event sinks waiting for an owner thread. */
+	struct mm_event_fd **sink_queue;
+	uint32_t sink_queue_size;
+	uint32_t sink_queue_head;
+	uint32_t sink_queue_tail;
+
 	/* The event sink reclamation epoch. */
 	uint32_t reclaim_epoch;
 

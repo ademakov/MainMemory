@@ -47,6 +47,12 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 		mm_thread_setlistener(threads[i], &dispatch->listeners[i]);
 	}
 
+	// Prepare the sink queue.
+	dispatch->sink_queue_head = 0;
+	dispatch->sink_queue_tail = 0;
+	dispatch->sink_queue_size = 2 * MM_EVENT_BACKEND_NEVENTS;
+	dispatch->sink_queue = mm_common_calloc(dispatch->sink_queue_size, sizeof(dispatch->sink_queue[0]));
+
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->poller_thread = MM_THREAD_NONE;
 
@@ -72,6 +78,9 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
+
+	// Release the sink queue.
+	mm_common_free(dispatch->sink_queue);
 
 	LEAVE();
 }
@@ -232,12 +241,12 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 		struct mm_event_receiver *receiver = &listener->receiver;
 		struct mm_event_receiver_stats *stats = &receiver->stats;
 
-		mm_log_fmt("listener %d: loose=%llu, direct=%llu/%llu, forwarded=%llu, published=%llu\n", i,
+		mm_log_fmt("listener %d: loose=%llu, direct=%llu, queued=%llu/%llu, forwarded=%llu\n", i,
 			   (unsigned long long) stats->loose_events,
 			   (unsigned long long) stats->direct_events,
-			   (unsigned long long) stats->stolen_events,
-			   (unsigned long long) stats->forwarded_events,
-			   (unsigned long long) stats->published_events);
+			   (unsigned long long) stats->enqueued_events,
+			   (unsigned long long) stats->dequeued_events,
+			   (unsigned long long) stats->forwarded_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->receiver.storage.storage.nevents_stats[j];

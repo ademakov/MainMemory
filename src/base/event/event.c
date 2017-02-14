@@ -98,6 +98,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 	sink->dispatch_stamp = 0;
 	sink->complete_stamp = 0;
 #endif
+	sink->queued_events = 0;
 
 	sink->handler = handler;
 	sink->loose_target = (target == MM_EVENT_LOOSE);

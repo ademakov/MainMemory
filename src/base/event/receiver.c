@@ -19,6 +19,7 @@
 
 #include "base/event/receiver.h"
 
+#include "base/bitops.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/memory/memory.h"
@@ -100,79 +101,6 @@ mm_event_receiver_forward_5(uintptr_t *arguments)
 }
 
 /**********************************************************************
- * Event publish request handlers.
- **********************************************************************/
-
-static void
-mm_event_receiver_convey(struct mm_event_fd *sink, mm_event_t event, mm_thread_t target)
-{
-	sink->target = target;
-	mm_event_convey(sink, event);
-}
-
-static void
-mm_event_receiver_publish_1(uintptr_t *arguments)
-{
-	ENTER();
-
-	mm_thread_t target = mm_thread_self();
-
-	// Handle events.
-	uintptr_t events = arguments[1];
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events, target);
-
-	LEAVE();
-}
-
-static void
-mm_event_receiver_publish_2(uintptr_t *arguments)
-{
-	ENTER();
-
-	mm_thread_t target = mm_thread_self();
-
-	// Handle events.
-	uintptr_t events = arguments[2];
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], events >> 4, target);
-
-	LEAVE();
-}
-
-static void
-mm_event_receiver_publish_3(uintptr_t *arguments)
-{
-	ENTER();
-
-	mm_thread_t target = mm_thread_self();
-
-	// Handle events.
-	uintptr_t events = arguments[3];
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], events >> 8, target);
-
-	LEAVE();
-}
-
-static void
-mm_event_receiver_publish_4(uintptr_t *arguments)
-{
-	ENTER();
-
-	mm_thread_t target = mm_thread_self();
-
-	// Handle events.
-	uintptr_t events = arguments[4];
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[0], events & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[1], (events >> 4) & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[2], (events >> 8) & 15, target);
-	mm_event_receiver_convey((struct mm_event_fd *) arguments[3], events >> 12, target);
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Event forwarding.
  **********************************************************************/
 
@@ -248,100 +176,73 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 }
 
 static void
-mm_event_receiver_forward(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer,
-			  struct mm_event_fd *sink, mm_event_t event)
+mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
+	mm_thread_t target = sink->target;
+	struct mm_event_dispatch *dispatch = receiver->dispatch;
+	struct mm_event_listener *listener = &dispatch->listeners[target];
+	struct mm_event_receiver_fwdbuf *buffer = &receiver->forward_buffers[target];
+
 	// Flush the buffer if it is full.
 	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE)
-		mm_event_receiver_forward_flush(thread, buffer);
+		mm_event_receiver_forward_flush(listener->thread, buffer);
 
 	// Add the event to the buffer.
 	unsigned int n = buffer->nsinks++;
 	buffer->sinks[n] = sink;
 	buffer->events[n] = event;
+
+	// Account for it.
+	mm_bitset_set(&receiver->forward_targets, target);
+	receiver->forwarded_events++;
 
 	LEAVE();
 }
 
 /**********************************************************************
- * Event publishing.
+ * Event sink queue.
  **********************************************************************/
 
 static void
-mm_event_receiver_pubbuf_prepare(struct mm_event_receiver_pubbuf *buffer)
+mm_event_receiver_enqueue(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event)
 {
-	buffer->nsinks = 0;
-}
+	uint8_t bit = 1 << event;
+	if (sink->queued_events == 0) {
+		sink->queued_events = bit;
+		receiver->enqueued_events++;
 
-static void
-mm_event_receiver_publish_flush(struct mm_domain *domain, struct mm_event_receiver_pubbuf *buffer)
-{
-	ENTER();
+		struct mm_event_dispatch *dispatch = receiver->dispatch;
+		uint32_t mask = dispatch->sink_queue_size - 1;
+		uint32_t index = dispatch->sink_queue_tail++ & mask;
+		dispatch->sink_queue[index] = sink;
 
-	switch (buffer->nsinks) {
-	case 0:
-		break;
-	case 1:
-		buffer->nsinks = 0;
-		mm_domain_post_2(domain, mm_event_receiver_publish_1,
-				 (uintptr_t) buffer->sinks[0],
-				 buffer->events[0]);
-		break;
-	case 2:
-		buffer->nsinks = 0;
-		mm_domain_post_3(domain, mm_event_receiver_publish_2,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4));
-		break;
-	case 3:
-		buffer->nsinks = 0;
-		mm_domain_post_4(domain, mm_event_receiver_publish_3,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4)
-				 | (buffer->events[2] << 8));
-		break;
-	case 4:
-		buffer->nsinks = 0;
-		mm_domain_post_5(domain, mm_event_receiver_publish_4,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2],
-				 (uintptr_t) buffer->sinks[3],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4)
-				 | (buffer->events[2] << 8)
-				 | (buffer->events[3] << 12));
-		break;
-	default:
-		ABORT();
+	} else if ((sink->queued_events & bit) == 0) {
+		sink->queued_events |= bit;
+		receiver->enqueued_events++;
 	}
-
-	LEAVE();
 }
 
 static void
-mm_event_receiver_publish(struct mm_domain *domain, struct mm_event_receiver_pubbuf *buffer,
-			  struct mm_event_fd *sink, mm_event_t event)
+mm_event_receiver_restore(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
-	ENTER();
+	sink->target = receiver->thread;
+	while (sink->queued_events) {
+		mm_event_t event = mm_ctz(sink->queued_events);
+		sink->queued_events ^= 1 << event;
+		mm_event_convey(sink, event);
+		receiver->dequeued_events++;
+	}
+}
 
-	// Flush the buffer if it is full.
-	if (buffer->nsinks == MM_EVENT_RECEIVER_PUBBUF_SIZE)
-		mm_event_receiver_publish_flush(domain, buffer);
-
-	// Add the event to the buffer.
-	unsigned int n = buffer->nsinks++;
-	buffer->sinks[n] = sink;
-	buffer->events[n] = event;
-
-	LEAVE();
+static void
+mm_event_receiver_dequeue(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
+{
+	uint32_t mask = dispatch->sink_queue_size - 1;
+	uint32_t index = dispatch->sink_queue_head++ & mask;
+	struct mm_event_fd *sink = dispatch->sink_queue[index];
+	mm_event_receiver_restore(receiver, sink);
 }
 
 /**********************************************************************
@@ -427,15 +328,12 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
 			  dispatch->nlisteners);
 
-	// Prepare the publish buffer.
-	mm_event_receiver_pubbuf_prepare(&receiver->publish_buffer);
-
 	// Initialize event statistics.
 	receiver->stats.loose_events = 0;
 	receiver->stats.direct_events = 0;
-	receiver->stats.stolen_events = 0;
+	receiver->stats.enqueued_events = 0;
+	receiver->stats.dequeued_events = 0;
 	receiver->stats.forwarded_events = 0;
-	receiver->stats.published_events = 0;
 
 	// Initialize private event storage.
 	mm_event_backend_storage_prepare(&receiver->storage);
@@ -462,11 +360,10 @@ mm_event_receiver_poll_start(struct mm_event_receiver *receiver)
 
 	// No events arrived yet.
 	receiver->got_events = false;
-	receiver->direct_events_estimate = 0;
 	receiver->direct_events = 0;
-	receiver->stolen_events = 0;
+	receiver->enqueued_events = 0;
+	receiver->dequeued_events = 0;
 	receiver->forwarded_events = 0;
-	receiver->published_events = 0;
 
 	// Start a reclamation-critical section.
 	if (!receiver->reclaim_active) {
@@ -488,20 +385,12 @@ mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
 	// Count directly handled events.
-	if (receiver->direct_events) {
+	if (receiver->direct_events || receiver->stats.dequeued_events)
 		receiver->got_events = true;
-		receiver->stats.direct_events += receiver->direct_events;
-		receiver->stats.stolen_events += receiver->stolen_events;
-	}
 
-	// Flush and count published events.
-	if (receiver->published_events) {
-		receiver->got_events = true;
-		receiver->stats.published_events += receiver->published_events;
-
-		mm_event_receiver_publish_flush(dispatch->domain, &receiver->publish_buffer);
-		mm_event_dispatch_notify_waiting(dispatch);
-	}
+	receiver->stats.direct_events += receiver->direct_events;
+	receiver->stats.enqueued_events += receiver->enqueued_events;
+	receiver->stats.dequeued_events += receiver->dequeued_events;
 
 	// Flush and count forwarded events.
 	if (receiver->forwarded_events) {
@@ -530,11 +419,21 @@ mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 }
 
 void NONNULL(1)
-mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver)
+mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t nevents)
 {
 	ENTER();
 
+	struct mm_event_dispatch *dispatch = receiver->dispatch;
+
 	mm_regular_lock(&receiver->dispatch->event_sink_lock);
+
+	uint32_t nr = receiver->direct_events + receiver->dequeued_events;
+	uint32_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
+	while ((nq + nevents) > dispatch->sink_queue_size || (nq > 0 && nr < MM_EVENT_RECEIVER_STEAL_THRESHOLD)) {
+		mm_event_receiver_dequeue(receiver, dispatch);
+		nr++;
+		nq--;
+	}
 
 	LEAVE();
 }
@@ -549,20 +448,6 @@ mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver)
 	LEAVE();
 }
 
-static bool NONNULL(1, 2)
-mm_event_receiver_steal(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_thread_t target)
-{
-	if (target == MM_THREAD_NONE)
-		return true;
-	if (target == receiver->thread || sink->bound_target)
-		return false;
-	if (receiver->direct_events >= MM_EVENT_RECEIVER_STEAL_THRESHOLD)
-		return false;
-	if (receiver->direct_events_estimate >= MM_EVENT_RECEIVER_STEAL_THRESHOLD)
-		return false;
-	return !mm_event_active(sink);
-}
-
 void NONNULL(1, 2)
 mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event)
 {
@@ -575,26 +460,23 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 		receiver->stats.loose_events++;
 
 	} else {
-		mm_thread_t target = mm_event_target(sink);
-
-		// If the event sink should be stolen then attach it to the
-		// control thread.
-		if (mm_event_receiver_steal(receiver, sink, target)) {
-#if 0
-			if (receiver->direct_events < 5) {
-				target = sink->target = receiver->thread;
-				receiver->stolen_events++;
-			} else {
-				target = sink->target = MM_THREAD_NONE;
-			}
-#else
-			target = sink->target = receiver->thread;
-			receiver->stolen_events++;
-#endif
-		}
+		// If the event sink can be detached then do it now.
+		if (!sink->bound_target && !mm_event_active(sink))
+			sink->target = MM_THREAD_NONE;
 
 		// Count the received event.
 		mm_event_update_receive_stamp(sink);
+
+		// If the event sink is detached perhaps the current thread
+		// deserves to steal it.
+		mm_thread_t target = mm_event_target(sink);
+		if (target == MM_THREAD_NONE) {
+			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
+			if (nr < MM_EVENT_RECEIVER_STEAL_THRESHOLD) {
+				mm_event_receiver_restore(receiver, sink);
+				target = sink->target;
+			}
+		}
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
@@ -602,25 +484,10 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 		if (target == receiver->thread) {
 			mm_event_convey(sink, event);
 			receiver->direct_events++;
-
-		} else if (target != MM_THREAD_NONE) {
-			struct mm_event_dispatch *dispatch = receiver->dispatch;
-			struct mm_event_listener *listener = &dispatch->listeners[target];
-			mm_event_receiver_forward(listener->thread,
-						  &receiver->forward_buffers[target],
-						  sink, event);
-			mm_bitset_set(&receiver->forward_targets, target);
-			receiver->forwarded_events++;
-
+		} else if (target == MM_THREAD_NONE) {
+			mm_event_receiver_enqueue(receiver, sink, event);
 		} else {
-			// TODO: BUG!!! If this is done more than once for
-			// a single sink then there might be a big problem.
-			// This must be resolved before any production use.
-			// Therefore this is just a temporary stub !!!
-			mm_event_receiver_publish(receiver->dispatch->domain,
-						  &receiver->publish_buffer,
-						  sink, event);
-			receiver->published_events++;
+			mm_event_receiver_forward(receiver, sink, event);
 		}
 	}
 

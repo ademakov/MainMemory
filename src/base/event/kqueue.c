@@ -166,19 +166,7 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			       struct mm_event_receiver *receiver,
 			       int nevents)
 {
-	if (!nevents)
-		return;
-
-	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &storage->events[i];
-		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
-			struct mm_event_fd *sink = event->udata;
-			if (!mm_event_receiver_adjust(receiver, sink))
-				break;
-		}
-	}
-
-	mm_event_receiver_dispatch_start(receiver);
+	mm_event_receiver_dispatch_start(receiver, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];

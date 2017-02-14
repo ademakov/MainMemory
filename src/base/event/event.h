@@ -108,6 +108,9 @@ struct mm_event_fd
 	mm_event_stamp_t complete_stamp;
 #endif
 
+	/* Pending events for sinks in the dispatch queue. */
+	uint8_t queued_events;
+
 	/* Event handers. */
 	mm_event_hid_t handler;
 
