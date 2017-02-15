@@ -198,27 +198,13 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			      struct mm_event_receiver *receiver,
 			      int nevents)
 {
-	struct epoll_event ee;
+	bool locked = true;
+	mm_event_receiver_dispatch_start(receiver, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
-
-		if ((event->events & EPOLLIN) != 0) {
-			if (!mm_event_receiver_adjust(receiver, sink))
-				break;
-		}
-		if ((event->events & EPOLLOUT) != 0) {
-			if (!mm_event_receiver_adjust(receiver, sink))
-				break;
-		}
-	}
-
-	bool locked = false;
-
-	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &storage->events[i];
-		struct mm_event_fd *sink = event->data.ptr;
+		struct epoll_event ee;
 
 		if ((event->events & EPOLLIN) != 0) {
 			if (sink->oneshot_input) {
@@ -251,7 +237,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_receiver_dispatch_start(receiver);
+				mm_event_receiver_dispatch_start(receiver, nevents - i);
 			}
 
 			sink->oneshot_input_trigger = false;
@@ -289,7 +275,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_receiver_dispatch_start(receiver);
+				mm_event_receiver_dispatch_start(receiver, nevents - i);
 			}
 
 			sink->oneshot_output_trigger = false;
@@ -303,7 +289,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_input) {
 				if (!locked) {
 					locked = true;
-					mm_event_receiver_dispatch_start(receiver);
+					mm_event_receiver_dispatch_start(receiver, nevents - i);
 				}
 
 				sink->oneshot_input_trigger = false;
@@ -313,7 +299,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0) {
 				if (!locked) {
 					locked = true;
-					mm_event_receiver_dispatch_start(receiver);
+					mm_event_receiver_dispatch_start(receiver, nevents - i);
 				}
 
 				sink->oneshot_output_trigger = false;
