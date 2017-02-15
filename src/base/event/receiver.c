@@ -181,13 +181,14 @@ mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd
 	ENTER();
 
 	mm_thread_t target = sink->target;
-	struct mm_event_dispatch *dispatch = receiver->dispatch;
-	struct mm_event_listener *listener = &dispatch->listeners[target];
 	struct mm_event_receiver_fwdbuf *buffer = &receiver->forward_buffers[target];
 
 	// Flush the buffer if it is full.
-	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE)
+	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE) {
+		struct mm_event_dispatch *dispatch = receiver->dispatch;
+		struct mm_event_listener *listener = &dispatch->listeners[target];
 		mm_event_receiver_forward_flush(listener->thread, buffer);
+	}
 
 	// Add the event to the buffer.
 	unsigned int n = buffer->nsinks++;
