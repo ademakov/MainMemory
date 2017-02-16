@@ -137,7 +137,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		mm_event_listener_clear_changes(listener);
 
 		// Arm busy-wait counter if got any events.
-		if (listener->receiver.got_events)
+		if (mm_event_receiver_got_events(&listener->receiver))
 			listener->busywait += mm_events_busywait;
 	} else {
 		// Wait for forwarded events or timeout expiration.

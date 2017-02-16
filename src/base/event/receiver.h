@@ -57,9 +57,6 @@ struct mm_event_receiver
 	uint32_t reclaim_epoch;
 	bool reclaim_active;
 
-	/* The flag indicating that some events were received. */
-	bool got_events;
-
 	/* The thread that owns the receiver. */
 	mm_thread_t thread;
 
@@ -139,6 +136,12 @@ static inline void NONNULL(1, 2)
 mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
 {
 	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT_ERROR);
+}
+
+static inline bool NONNULL(1)
+mm_event_receiver_got_events(struct mm_event_receiver *receiver)
+{
+	return receiver->direct_events || receiver->enqueued_events || receiver->forwarded_events;
 }
 
 #endif /* BASE_EVENT_RECEIVER_H */

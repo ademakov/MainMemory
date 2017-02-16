@@ -360,7 +360,6 @@ mm_event_receiver_poll_start(struct mm_event_receiver *receiver)
 	ENTER();
 
 	// No events arrived yet.
-	receiver->got_events = false;
 	receiver->direct_events = 0;
 	receiver->enqueued_events = 0;
 	receiver->dequeued_events = 0;
@@ -385,17 +384,12 @@ mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
-	// Count directly handled events.
-	if (receiver->direct_events || receiver->dequeued_events)
-		receiver->got_events = true;
-
 	receiver->stats.direct_events += receiver->direct_events;
 	receiver->stats.enqueued_events += receiver->enqueued_events;
 	receiver->stats.dequeued_events += receiver->dequeued_events;
 
 	// Flush and count forwarded events.
 	if (receiver->forwarded_events) {
-		receiver->got_events = true;
 		receiver->stats.forwarded_events += receiver->forwarded_events;
 
 		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
