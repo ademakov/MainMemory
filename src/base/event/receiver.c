@@ -386,7 +386,7 @@ mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
 	// Count directly handled events.
-	if (receiver->direct_events || receiver->stats.dequeued_events)
+	if (receiver->direct_events || receiver->dequeued_events)
 		receiver->got_events = true;
 
 	receiver->stats.direct_events += receiver->direct_events;
