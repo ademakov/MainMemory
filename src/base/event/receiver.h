@@ -29,16 +29,17 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 
-#define MM_EVENT_RECEIVER_FWDBUF_SIZE		(5)
-
-#define MM_EVENT_RECEIVER_STEAL_THRESHOLD	(4)
+#define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
+#define MM_EVENT_RECEIVER_RETAIN_MIN	(4)
+#define MM_EVENT_RECEIVER_FORWARD_MIN	MM_EVENT_RECEIVER_FWDBUF_SIZE
 
 /* Event sink forward buffer. */
 struct mm_event_receiver_fwdbuf
 {
 	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_FWDBUF_SIZE];
 	mm_event_t events[MM_EVENT_RECEIVER_FWDBUF_SIZE];
-	unsigned int nsinks;
+	uint8_t nsinks;
+	uint8_t ntotal;
 };
 
 /* Event receiver statistics. */

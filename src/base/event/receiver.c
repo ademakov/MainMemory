@@ -108,6 +108,7 @@ static void
 mm_event_receiver_fwdbuf_prepare(struct mm_event_receiver_fwdbuf *buffer)
 {
 	buffer->nsinks = 0;
+	buffer->ntotal = 0;
 }
 
 static void
@@ -194,6 +195,7 @@ mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd
 	unsigned int n = buffer->nsinks++;
 	buffer->sinks[n] = sink;
 	buffer->events[n] = event;
+	buffer->ntotal++;
 
 	// Account for it.
 	mm_bitset_set(&receiver->forward_targets, target);
@@ -226,8 +228,12 @@ mm_event_receiver_enqueue(struct mm_event_receiver *receiver, struct mm_event_fd
 }
 
 static void
-mm_event_receiver_restore(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+mm_event_receiver_dequeue(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
 {
+	uint32_t mask = dispatch->sink_queue_size - 1;
+	uint32_t index = dispatch->sink_queue_head++ & mask;
+	struct mm_event_fd *sink = dispatch->sink_queue[index];
+
 	sink->target = receiver->thread;
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
@@ -235,15 +241,6 @@ mm_event_receiver_restore(struct mm_event_receiver *receiver, struct mm_event_fd
 		mm_event_convey(sink, event);
 		receiver->dequeued_events++;
 	}
-}
-
-static void
-mm_event_receiver_dequeue(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
-{
-	uint32_t mask = dispatch->sink_queue_size - 1;
-	uint32_t index = dispatch->sink_queue_head++ & mask;
-	struct mm_event_fd *sink = dispatch->sink_queue[index];
-	mm_event_receiver_restore(receiver, sink);
 }
 
 /**********************************************************************
@@ -395,8 +392,9 @@ mm_event_receiver_poll_finish(struct mm_event_receiver *receiver)
 		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
 		while (target != MM_THREAD_NONE) {
 			struct mm_event_listener *listener = &dispatch->listeners[target];
-			mm_event_receiver_forward_flush(listener->thread,
-							&receiver->forward_buffers[target]);
+			struct mm_event_receiver_fwdbuf *buffer = &receiver->forward_buffers[target];
+			mm_event_receiver_forward_flush(listener->thread, buffer);
+			buffer->ntotal = 0;
 
 			if (++target < mm_bitset_size(&receiver->forward_targets))
 				target = mm_bitset_find(&receiver->forward_targets, target);
@@ -424,7 +422,7 @@ mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t ne
 
 	uint32_t nr = receiver->direct_events + receiver->dequeued_events;
 	uint32_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
-	while ((nq + nevents) > dispatch->sink_queue_size || (nq > 0 && nr < MM_EVENT_RECEIVER_STEAL_THRESHOLD)) {
+	while ((nq + nevents) > dispatch->sink_queue_size || (nq > 0 && nr < MM_EVENT_RECEIVER_RETAIN_MIN)) {
 		mm_event_receiver_dequeue(receiver, dispatch);
 		nr++;
 		nq--;
@@ -449,29 +447,27 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 	ENTER();
 	ASSERT(receiver->thread == mm_thread_self());
 
-	if (sink->loose_target) {
+	if (unlikely(sink->loose_target)) {
 		// Handle the event immediately.
 		mm_event_convey(sink, event);
 		receiver->stats.loose_events++;
 
 	} else {
-		// If the event sink can be detached then do it now.
-		if (!sink->bound_target && !mm_event_active(sink))
-			sink->target = MM_THREAD_NONE;
+		mm_thread_t target = mm_event_target(sink);
+
+		// If the event sink can be detached from its target thread
+		// then do it now. But make sure the target thread has some
+		// minimal amount if work.
+		if (!sink->bound_target && !mm_event_active(sink)) {
+			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
+			if (nr < MM_EVENT_RECEIVER_RETAIN_MIN)
+				sink->target = target = receiver->thread;
+			else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_RECEIVER_FORWARD_MIN)
+				sink->target = target = MM_THREAD_NONE;
+		}
 
 		// Count the received event.
 		mm_event_update_receive_stamp(sink);
-
-		// If the event sink is detached perhaps the current thread
-		// deserves to steal it.
-		mm_thread_t target = mm_event_target(sink);
-		if (target == MM_THREAD_NONE) {
-			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
-			if (nr < MM_EVENT_RECEIVER_STEAL_THRESHOLD) {
-				mm_event_receiver_restore(receiver, sink);
-				target = sink->target;
-			}
-		}
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
