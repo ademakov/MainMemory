@@ -31,7 +31,7 @@ struct mm_event_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
 #define MM_EVENT_RECEIVER_RETAIN_MIN	(3)
-#define MM_EVENT_RECEIVER_RETAIN_MAX	(10)
+#define MM_EVENT_RECEIVER_RETAIN_MAX	(6)
 #define MM_EVENT_RECEIVER_FORWARD_MAX	MM_EVENT_RECEIVER_FWDBUF_SIZE
 
 /* Event sink forward buffer. */

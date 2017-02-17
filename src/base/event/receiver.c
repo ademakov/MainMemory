@@ -427,7 +427,7 @@ mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t ne
 
 		if ((nq + nevents) <= dispatch->sink_queue_size) {
 			uint16_t nr = receiver->direct_events + receiver->dequeued_events;
-			if (nr >= MM_EVENT_RECEIVER_RETAIN_MIN)
+			if (nr >= MM_EVENT_RECEIVER_RETAIN_MAX)
 				break;
 		}
 
