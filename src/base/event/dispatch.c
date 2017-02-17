@@ -48,6 +48,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	}
 
 	// Prepare the sink queue.
+	dispatch->sink_queue_num = 0;
 	dispatch->sink_queue_head = 0;
 	dispatch->sink_queue_tail = 0;
 	dispatch->sink_queue_size = 2 * MM_EVENT_BACKEND_NEVENTS;
@@ -93,11 +94,10 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
+	// There may be changes that need to be immediately acknowledged.
 	bool has_changes = mm_event_listener_has_changes(listener);
-	if (has_changes) {
-		// There may be changes that need to be immediately acknowledged.
+	if (has_changes)
 		timeout = 0;
-	}
 
 	if (listener->busywait) {
 		// Presume that if there were incoming events moments ago then
@@ -105,6 +105,15 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		// bit to avoid context switches.
 		listener->busywait--;
 		timeout = 0;
+	}
+
+	if (timeout) {
+		// Check if there are immediately available events in the queue.
+		// This check does not have to be precise so there is no need to
+		// use event_sink_lock here.
+		uint16_t queued_sinks = mm_memory_load(dispatch->sink_queue_num);
+		if (queued_sinks)
+			timeout = 0;
 	}
 
 	// The first arrived thread that is going to sleep is elected to conduct

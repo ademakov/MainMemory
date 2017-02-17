@@ -36,6 +36,13 @@ struct mm_event_dispatch
 	/* The thread domain associated with the dispatcher. */
 	struct mm_domain *domain;
 
+	/* A queue of event sinks waiting for an owner thread. */
+	struct mm_event_fd **sink_queue;
+	uint16_t sink_queue_size;
+	uint16_t sink_queue_head;
+	uint16_t sink_queue_tail;
+	uint16_t sink_queue_num;
+
 	/* Event listeners. */
 	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
@@ -49,12 +56,6 @@ struct mm_event_dispatch
 	/* A coarse-grained lock that protects event sinks from
 	   concurrent updates. */
 	mm_regular_lock_t event_sink_lock;
-
-	/* A queue of event sinks waiting for an owner thread. */
-	struct mm_event_fd **sink_queue;
-	uint32_t sink_queue_size;
-	uint32_t sink_queue_head;
-	uint32_t sink_queue_tail;
 
 	/* The event sink reclamation epoch. */
 	uint32_t reclaim_epoch;

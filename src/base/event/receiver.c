@@ -217,8 +217,8 @@ mm_event_receiver_enqueue(struct mm_event_receiver *receiver, struct mm_event_fd
 		receiver->enqueued_events++;
 
 		struct mm_event_dispatch *dispatch = receiver->dispatch;
-		uint32_t mask = dispatch->sink_queue_size - 1;
-		uint32_t index = dispatch->sink_queue_tail++ & mask;
+		uint16_t mask = dispatch->sink_queue_size - 1;
+		uint16_t index = dispatch->sink_queue_tail++ & mask;
 		dispatch->sink_queue[index] = sink;
 
 	} else if ((sink->queued_events & bit) == 0) {
@@ -230,8 +230,8 @@ mm_event_receiver_enqueue(struct mm_event_receiver *receiver, struct mm_event_fd
 static void
 mm_event_receiver_dequeue(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
 {
-	uint32_t mask = dispatch->sink_queue_size - 1;
-	uint32_t index = dispatch->sink_queue_head++ & mask;
+	uint16_t mask = dispatch->sink_queue_size - 1;
+	uint16_t index = dispatch->sink_queue_head++ & mask;
 	struct mm_event_fd *sink = dispatch->sink_queue[index];
 
 	sink->target = receiver->thread;
@@ -420,12 +420,18 @@ mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t ne
 
 	mm_regular_lock(&receiver->dispatch->event_sink_lock);
 
-	uint32_t nr = receiver->direct_events + receiver->dequeued_events;
-	uint32_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
-	while ((nq + nevents) > dispatch->sink_queue_size || (nq > 0 && nr < MM_EVENT_RECEIVER_RETAIN_MIN)) {
+	for (;;) {
+		uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
+		if (nq == 0)
+			break;
+
+		if ((nq + nevents) <= dispatch->sink_queue_size) {
+			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
+			if (nr >= MM_EVENT_RECEIVER_RETAIN_MIN)
+				break;
+		}
+
 		mm_event_receiver_dequeue(receiver, dispatch);
-		nr++;
-		nq--;
 	}
 
 	LEAVE();
@@ -436,7 +442,14 @@ mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver)
 {
 	ENTER();
 
+	struct mm_event_dispatch *dispatch = receiver->dispatch;
+	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
+	mm_memory_store(dispatch->sink_queue_num, nq);
+
 	mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+
+	if (receiver->enqueued_events > MM_EVENT_RECEIVER_RETAIN_MIN)
+		mm_event_dispatch_notify_waiting(dispatch);
 
 	LEAVE();
 }
