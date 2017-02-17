@@ -426,7 +426,7 @@ mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t ne
 			break;
 
 		if ((nq + nevents) <= dispatch->sink_queue_size) {
-			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
+			uint16_t nr = receiver->direct_events + receiver->dequeued_events;
 			if (nr >= MM_EVENT_RECEIVER_RETAIN_MIN)
 				break;
 		}
@@ -472,11 +472,16 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 		// then do it now. But make sure the target thread has some
 		// minimal amount if work.
 		if (!sink->bound_target && !mm_event_active(sink)) {
-			uint32_t nr = receiver->direct_events + receiver->dequeued_events;
-			if (nr < MM_EVENT_RECEIVER_RETAIN_MIN)
-				sink->target = target = receiver->thread;
-			else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_RECEIVER_FORWARD_MIN)
-				sink->target = target = MM_THREAD_NONE;
+			uint16_t nr = receiver->direct_events + receiver->dequeued_events;
+			if (target == receiver->thread) {
+				if (nr >= MM_EVENT_RECEIVER_RETAIN_MAX)
+					sink->target = target = MM_THREAD_NONE;
+			} else {
+				if (nr < MM_EVENT_RECEIVER_RETAIN_MIN)
+					sink->target = target = receiver->thread;
+				else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_RECEIVER_FORWARD_MAX)
+					sink->target = target = MM_THREAD_NONE;
+			}
 		}
 
 		// Count the received event.

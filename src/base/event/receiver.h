@@ -30,8 +30,9 @@
 struct mm_event_dispatch;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
-#define MM_EVENT_RECEIVER_RETAIN_MIN	(4)
-#define MM_EVENT_RECEIVER_FORWARD_MIN	MM_EVENT_RECEIVER_FWDBUF_SIZE
+#define MM_EVENT_RECEIVER_RETAIN_MIN	(3)
+#define MM_EVENT_RECEIVER_RETAIN_MAX	(10)
+#define MM_EVENT_RECEIVER_FORWARD_MAX	(10)
 
 /* Event sink forward buffer. */
 struct mm_event_receiver_fwdbuf
@@ -71,12 +72,12 @@ struct mm_event_receiver
 	struct mm_event_receiver_fwdbuf *forward_buffers;
 
 	/* The number of directly handled events. */
-	uint32_t direct_events;
+	uint16_t direct_events;
 	/* The number of events published in the sink queue. */
-	uint32_t enqueued_events;
-	uint32_t dequeued_events;
+	uint16_t enqueued_events;
+	uint16_t dequeued_events;
 	/* The number of events forwarded to other listeners. */
-	uint32_t forwarded_events;
+	uint16_t forwarded_events;
 
 	/* Event statistics. */
 	struct mm_event_receiver_stats stats;
