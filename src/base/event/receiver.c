@@ -357,6 +357,7 @@ mm_event_receiver_poll_start(struct mm_event_receiver *receiver)
 	ENTER();
 
 	// No events arrived yet.
+	receiver->direct_events_estimate = 0;
 	receiver->direct_events = 0;
 	receiver->enqueued_events = 0;
 	receiver->dequeued_events = 0;
@@ -472,11 +473,13 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 		// then do it now. But make sure the target thread has some
 		// minimal amount if work.
 		if (!sink->bound_target && !mm_event_active(sink)) {
-			uint16_t nr = receiver->direct_events + receiver->dequeued_events;
+			uint16_t nr = receiver->dequeued_events;
 			if (target == receiver->thread) {
+				nr += receiver->direct_events;
 				if (nr >= MM_EVENT_RECEIVER_RETAIN_MAX)
 					sink->target = target = MM_THREAD_NONE;
 			} else {
+				nr += max(receiver->direct_events, receiver->direct_events_estimate);
 				if (nr < MM_EVENT_RECEIVER_RETAIN_MIN)
 					sink->target = target = receiver->thread;
 				else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_RECEIVER_FORWARD_MAX)

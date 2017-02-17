@@ -198,6 +198,15 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			      struct mm_event_receiver *receiver,
 			      int nevents)
 {
+	for (int i = 0; i < nevents; i++) {
+		struct epoll_event *event = &storage->events[i];
+		struct mm_event_fd *sink = event->data.ptr;
+		if ((event->events & EPOLLIN) != 0 && !mm_event_receiver_adjust(receiver, sink))
+			break;
+		if ((event->events & EPOLLOUT) != 0 && !mm_event_receiver_adjust(receiver, sink))
+			break;
+	}
+
 	bool locked = true;
 	mm_event_receiver_dispatch_start(receiver, nevents);
 

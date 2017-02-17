@@ -62,14 +62,9 @@ struct mm_event_receiver
 	/* The thread that owns the receiver. */
 	mm_thread_t thread;
 
-	/* The top-level event dispatch data. */
-	struct mm_event_dispatch *dispatch;
-
-	/* Target threads that have received events. */
-	struct mm_bitset forward_targets;
-
-	/* Per-thread temporary store for sinks of received events. */
-	struct mm_event_receiver_fwdbuf *forward_buffers;
+	/* The number of locally handled events found while adjusting
+	   the receiver for appropriate dispatch strategy. */
+	uint16_t direct_events_estimate;
 
 	/* The number of directly handled events. */
 	uint16_t direct_events;
@@ -78,6 +73,15 @@ struct mm_event_receiver
 	uint16_t dequeued_events;
 	/* The number of events forwarded to other listeners. */
 	uint16_t forwarded_events;
+
+	/* The top-level event dispatch data. */
+	struct mm_event_dispatch *dispatch;
+
+	/* Target threads that have received events. */
+	struct mm_bitset forward_targets;
+
+	/* Per-thread temporary store for sinks of received events. */
+	struct mm_event_receiver_fwdbuf *forward_buffers;
 
 	/* Event statistics. */
 	struct mm_event_receiver_stats stats;
@@ -115,6 +119,14 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
+
+static inline bool NONNULL(1, 2)
+mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
+{
+	if (!sink->loose_target && mm_event_target(sink) == receiver->thread)
+		receiver->direct_events_estimate++;
+	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_RETAIN_MIN;
+}
 
 static inline void NONNULL(1, 2)
 mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
