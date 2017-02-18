@@ -24,8 +24,6 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
-static uint16_t mm_events_busywait = 5;
-
 void NONNULL(1, 2, 4)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 			  struct mm_domain *domain,
@@ -99,13 +97,11 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	if (has_changes)
 		timeout = 0;
 
-	if (listener->busywait) {
-		// Presume that if there were incoming events moments ago then
-		// there is a chance to get some more immediately. Spin a little
-		// bit to avoid context switches.
-		listener->busywait--;
+	// Presume that if there were incoming events moments ago then
+	// there is a chance to get some more immediately. Don't sleep
+	// to avoid a context switch.
+	if (mm_event_receiver_got_events(&listener->receiver))
 		timeout = 0;
-	}
 
 	if (timeout) {
 		// Check if there are immediately available events in the queue.
@@ -145,9 +141,6 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		// Forget just handled change events.
 		mm_event_listener_clear_changes(listener);
 
-		// Arm busy-wait counter if got any events.
-		if (mm_event_receiver_got_events(&listener->receiver))
-			listener->busywait += mm_events_busywait;
 	} else {
 		// Wait for forwarded events or timeout expiration.
 		mm_event_listener_wait(listener, timeout);

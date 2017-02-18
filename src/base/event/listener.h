@@ -81,9 +81,6 @@ struct mm_event_listener
 	/* Listener's helper to receive events. */
 	struct mm_event_receiver receiver;
 
-	/* Counter for busy waiting. */
-	uint16_t busywait;
-
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)
