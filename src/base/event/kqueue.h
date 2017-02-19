@@ -36,7 +36,7 @@
 /* Forward declarations. */
 struct mm_event_batch;
 struct mm_event_change;
-struct mm_event_receiver;
+struct mm_event_listener;
 
 /* Common data for kqueue support. */
 struct mm_event_kqueue
@@ -68,7 +68,7 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
 void NONNULL(1, 2, 3)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		       struct mm_event_batch *changes,
-		       struct mm_event_receiver *receiver,
+		       struct mm_event_listener *listener,
 		       mm_timeout_t timeout);
 
 void NONNULL(1, 2)

@@ -28,7 +28,7 @@
 #include "base/event/batch.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
-#include "base/event/receiver.h"
+#include "base/event/listener.h"
 
 #include <time.h>
 
@@ -324,10 +324,11 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 void NONNULL(1, 2, 3)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		       struct mm_event_batch *changes,
-		       struct mm_event_receiver *receiver,
+		       struct mm_event_listener *listener,
 		       mm_timeout_t timeout)
 {
 	ENTER();
+	struct mm_event_receiver *receiver = &listener->receiver;
 	struct mm_event_kqueue_storage *storage = &receiver->storage.storage;
 
 	// Make event changes.

@@ -28,7 +28,7 @@
 #include "base/event/event.h"
 #include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
-#include "base/event/receiver.h"
+#include "base/event/listener.h"
 
 #if HAVE_SYS_EVENTFD_H
 # include <sys/eventfd.h>
@@ -396,10 +396,11 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage)
 void NONNULL(1, 2, 3)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
 		      struct mm_event_batch *changes,
-		      struct mm_event_receiver *receiver,
+		      struct mm_event_listener *listener,
 		      mm_timeout_t timeout)
 {
 	ENTER();
+	struct mm_event_receiver *receiver = &listener->receiver;
 	struct mm_event_epoll_storage *storage = &receiver->storage.storage;
 
 	// Make event changes.
