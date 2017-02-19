@@ -31,9 +31,6 @@ struct mm_event_dispatch;
 struct mm_thread;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
-#define MM_EVENT_RECEIVER_RETAIN_MIN	(3)
-#define MM_EVENT_RECEIVER_RETAIN_MAX	(6)
-#define MM_EVENT_RECEIVER_FORWARD_MAX	MM_EVENT_RECEIVER_FWDBUF_SIZE
 
 /* Event sink forward buffer. */
 struct mm_event_receiver_fwdbuf
@@ -103,15 +100,10 @@ void NONNULL(1)
 mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver);
 
 void
+mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);
+
+void
 mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer);
-
-void NONNULL(1)
-mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t nevents);
-void NONNULL(1)
-mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver);
-
-void NONNULL(1, 2)
-mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);
 
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);

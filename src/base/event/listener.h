@@ -43,6 +43,10 @@
 struct mm_event_dispatch;
 struct mm_thread;
 
+#define MM_EVENT_LISTENER_RETAIN_MIN	(3)
+#define MM_EVENT_LISTENER_RETAIN_MAX	(6)
+#define MM_EVENT_LISTENER_FORWARD_MAX	MM_EVENT_RECEIVER_FWDBUF_SIZE
+
 #define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
 
 typedef enum
@@ -145,19 +149,46 @@ mm_event_listener_got_events(struct mm_event_listener *listener)
 }
 
 /**********************************************************************
- * Backend interface.
+ * Event backend interface.
  **********************************************************************/
 
-static inline void NONNULL(1)
-mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t nevents)
+void NONNULL(1)
+mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t nevents);
+
+void NONNULL(1)
+mm_event_listener_dispatch_finish(struct mm_event_listener *listener);
+
+void NONNULL(1, 2)
+mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event);
+
+static inline void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_receiver_dispatch_start(&listener->receiver, nevents);
+	mm_event_listener_dispatch(listener, sink, MM_EVENT_INPUT);
 }
 
-static inline void NONNULL(1)
-mm_event_listener_dispatch_finish(struct mm_event_listener *listener)
+static inline void NONNULL(1, 2)
+mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_receiver_dispatch_finish(&listener->receiver);
+	mm_event_listener_dispatch(listener, sink, MM_EVENT_INPUT_ERROR);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_dispatch(listener, sink, MM_EVENT_OUTPUT);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_dispatch(listener, sink, MM_EVENT_OUTPUT_ERROR);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_unregister(&listener->receiver, sink);
 }
 
 static inline bool NONNULL(1, 2)
@@ -166,37 +197,7 @@ mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd 
 	struct mm_event_receiver *receiver = &listener->receiver;
 	if (!sink->loose_target && mm_event_target(sink) == receiver->thread)
 		receiver->direct_events_estimate++;
-	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_RETAIN_MIN;
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_INPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_INPUT_ERROR);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_OUTPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_OUTPUT_ERROR);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_unregister(&listener->receiver, sink);
+	return receiver->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
