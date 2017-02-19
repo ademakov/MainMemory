@@ -205,6 +205,18 @@ mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t sta
 	LEAVE();
 }
 
+static inline void NONNULL(1)
+mm_event_listener_poll_start(struct mm_event_listener *listener)
+{
+	mm_event_receiver_poll_start(&listener->receiver);
+}
+
+static inline void NONNULL(1)
+mm_event_listener_poll_finish(struct mm_event_listener *listener)
+{
+	mm_event_receiver_poll_finish(&listener->receiver);
+}
+
 void NONNULL(1)
 mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
@@ -215,7 +227,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	listener->zero_poll_calls += (timeout == 0);
 
 	// Prepare to receive events.
-	mm_event_receiver_poll_start(&listener->receiver);
+	mm_event_listener_poll_start(listener);
 
 	if (timeout != 0) {
 		// Get the next expected notify stamp.
@@ -243,7 +255,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
 
 	// Flush received events.
-	mm_event_receiver_poll_finish(&listener->receiver);
+	mm_event_listener_poll_finish(listener);
 
 	// Forget just handled change events.
 	mm_event_listener_clear_changes(listener);

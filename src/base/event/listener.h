@@ -134,4 +134,59 @@ mm_event_listener_clear_changes(struct mm_event_listener *listener)
 	mm_event_batch_clear(&listener->changes);
 }
 
+/**********************************************************************
+ * Backend interface.
+ **********************************************************************/
+
+static inline void NONNULL(1)
+mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t nevents)
+{
+	mm_event_receiver_dispatch_start(&listener->receiver, nevents);
+}
+
+static inline void NONNULL(1)
+mm_event_listener_dispatch_finish(struct mm_event_listener *listener)
+{
+	mm_event_receiver_dispatch_finish(&listener->receiver);
+}
+
+static inline bool NONNULL(1, 2)
+mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	struct mm_event_receiver *receiver = &listener->receiver;
+	if (!sink->loose_target && mm_event_target(sink) == receiver->thread)
+		receiver->direct_events_estimate++;
+	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_RETAIN_MIN;
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_INPUT);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_INPUT_ERROR);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_OUTPUT);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_dispatch(&listener->receiver, sink, MM_EVENT_OUTPUT_ERROR);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_receiver_unregister(&listener->receiver, sink);
+}
+
 #endif /* BASE_EVENT_LISTENER_H */
