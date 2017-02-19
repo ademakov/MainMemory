@@ -141,11 +141,11 @@ mm_event_listener_poll_start(struct mm_event_listener *listener)
 	struct mm_event_receiver *receiver = &listener->receiver;
 
 	// No events arrived yet.
-	receiver->direct_events_estimate = 0;
-	receiver->direct_events = 0;
-	receiver->enqueued_events = 0;
-	receiver->dequeued_events = 0;
-	receiver->forwarded_events = 0;
+	listener->direct_events_estimate = 0;
+	listener->direct_events = 0;
+	listener->enqueued_events = 0;
+	listener->dequeued_events = 0;
+	listener->forwarded_events = 0;
 
 	// Start a reclamation-critical section.
 	if (!receiver->reclaim_active) {
@@ -167,13 +167,13 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 	struct mm_event_receiver *receiver = &listener->receiver;
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
-	listener->stats.direct_events += receiver->direct_events;
-	listener->stats.enqueued_events += receiver->enqueued_events;
-	listener->stats.dequeued_events += receiver->dequeued_events;
+	listener->stats.direct_events += listener->direct_events;
+	listener->stats.enqueued_events += listener->enqueued_events;
+	listener->stats.dequeued_events += listener->dequeued_events;
 
 	// Flush and count forwarded events.
-	if (receiver->forwarded_events) {
-		listener->stats.forwarded_events += receiver->forwarded_events;
+	if (listener->forwarded_events) {
+		listener->stats.forwarded_events += listener->forwarded_events;
 
 		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
 		while (target != MM_THREAD_NONE) {
@@ -209,7 +209,7 @@ mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_eve
 	uint8_t bit = 1 << event;
 	if (sink->queued_events == 0) {
 		sink->queued_events = bit;
-		receiver->enqueued_events++;
+		listener->enqueued_events++;
 
 		struct mm_event_dispatch *dispatch = receiver->dispatch;
 		uint16_t mask = dispatch->sink_queue_size - 1;
@@ -218,25 +218,23 @@ mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_eve
 
 	} else if ((sink->queued_events & bit) == 0) {
 		sink->queued_events |= bit;
-		receiver->enqueued_events++;
+		listener->enqueued_events++;
 	}
 }
 
 static void
 mm_event_listener_dequeue_sink(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch)
 {
-	struct mm_event_receiver *receiver = &listener->receiver;
-
 	uint16_t mask = dispatch->sink_queue_size - 1;
 	uint16_t index = dispatch->sink_queue_head++ & mask;
 	struct mm_event_fd *sink = dispatch->sink_queue[index];
 
-	sink->target = receiver->thread;
+	sink->target = listener->target;
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
 		mm_event_convey(sink, event);
-		receiver->dequeued_events++;
+		listener->dequeued_events++;
 	}
 }
 
@@ -252,7 +250,7 @@ mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t ne
 	struct mm_event_receiver *receiver = &listener->receiver;
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
-	mm_regular_lock(&receiver->dispatch->sink_lock);
+	mm_regular_lock(&dispatch->sink_lock);
 
 	for (;;) {
 		uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
@@ -260,7 +258,7 @@ mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t ne
 			break;
 
 		if ((nq + nevents) <= dispatch->sink_queue_size) {
-			uint16_t nr = receiver->direct_events + receiver->dequeued_events;
+			uint16_t nr = listener->direct_events + listener->dequeued_events;
 			if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
 				break;
 		}
@@ -284,7 +282,7 @@ mm_event_listener_dispatch_finish(struct mm_event_listener *listener)
 
 	mm_regular_unlock(&dispatch->sink_lock);
 
-	if (receiver->enqueued_events > MM_EVENT_LISTENER_RETAIN_MIN)
+	if (listener->enqueued_events > MM_EVENT_LISTENER_RETAIN_MIN)
 		mm_event_dispatch_notify_waiting(dispatch);
 
 	LEAVE();
@@ -302,7 +300,6 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 
 	} else {
 		struct mm_event_receiver *receiver = &listener->receiver;
-		ASSERT(receiver->thread == mm_thread_self());
 
 		mm_thread_t target = mm_event_target(sink);
 
@@ -310,15 +307,15 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		// then do it now. But make sure the target thread has some
 		// minimal amount if work.
 		if (!sink->bound_target && !mm_event_active(sink)) {
-			uint16_t nr = receiver->dequeued_events;
-			if (target == receiver->thread) {
-				nr += receiver->direct_events;
+			uint16_t nr = listener->dequeued_events;
+			if (target == listener->target) {
+				nr += listener->direct_events;
 				if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
 					sink->target = target = MM_THREAD_NONE;
 			} else {
-				nr += max(receiver->direct_events, receiver->direct_events_estimate);
+				nr += max(listener->direct_events, listener->direct_events_estimate);
 				if (nr < MM_EVENT_LISTENER_RETAIN_MIN)
-					sink->target = target = receiver->thread;
+					sink->target = target = listener->target;
 				else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
 					sink->target = target = MM_THREAD_NONE;
 			}
@@ -330,13 +327,14 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
-		if (target == receiver->thread) {
+		if (target == listener->target) {
 			mm_event_convey(sink, event);
-			receiver->direct_events++;
+			listener->direct_events++;
 		} else if (target == MM_THREAD_NONE) {
 			mm_event_listener_enqueue_sink(listener, sink, event);
 		} else {
 			mm_event_receiver_forward(receiver, sink, event);
+			listener->forwarded_events++;
 		}
 	}
 
@@ -354,6 +352,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	ENTER();
 
 	listener->state = 0;
+
+	mm_thread_t thread_number = listener - dispatch->listeners;
+	listener->target = thread_number;
 	listener->thread = thread;
 
 #if ENABLE_LINUX_FUTEX
@@ -368,8 +369,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 #endif
 
 	// Initialize the receiver.
-	mm_thread_t thread_number = listener - dispatch->listeners;
-	mm_event_receiver_prepare(&listener->receiver, dispatch, thread_number);
+	mm_event_receiver_prepare(&listener->receiver, dispatch);
 
 	// Initialize change event storage.
 	mm_event_batch_prepare(&listener->changes, 256);

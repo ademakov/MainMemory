@@ -235,15 +235,14 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 	struct mm_event_listener *listeners = dispatch->listeners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &listeners[i];
-		struct mm_event_receiver *receiver = &listener->receiver;
-		struct mm_event_receiver_stats *stats = &receiver->stats;
+		struct mm_event_listener_stats *stats = &listener->stats;
 
 		mm_log_fmt("listener %d: "
 			   "wait=%llu poll=%llu/%llu "
 			   "loose=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n", i,
-			   (unsigned long long) listener->wait_calls,
-			   (unsigned long long) listener->poll_calls,
-			   (unsigned long long) listener->zero_poll_calls,
+			   (unsigned long long) stats->wait_calls,
+			   (unsigned long long) stats->poll_calls,
+			   (unsigned long long) stats->zero_poll_calls,
 			   (unsigned long long) stats->loose_events,
 			   (unsigned long long) stats->direct_events,
 			   (unsigned long long) stats->enqueued_events,

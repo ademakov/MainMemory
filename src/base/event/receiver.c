@@ -198,7 +198,6 @@ mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd
 
 	// Account for it.
 	mm_bitset_set(&receiver->forward_targets, target);
-	receiver->forwarded_events++;
 
 	LEAVE();
 }
@@ -263,8 +262,7 @@ mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
-			  mm_thread_t thread)
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
@@ -275,7 +273,6 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	mm_stack_prepare(&receiver->reclaim_queue[1]);
 
 	// Remember the owners.
-	receiver->thread = thread;
 	receiver->dispatch = dispatch;
 
 	// Prepare forward buffers.

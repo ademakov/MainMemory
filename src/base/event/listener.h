@@ -23,6 +23,7 @@
 #include "common.h"
 #include "base/ring.h"
 #include "base/event/batch.h"
+#include "base/event/backend.h"
 #include "base/event/receiver.h"
 
 #if HAVE_LINUX_FUTEX_H
@@ -90,7 +91,19 @@ struct mm_event_listener
 	struct mm_thread_monitor monitor;
 #endif
 
+	/* The number of locally handled events found while adjusting
+	   the receiver for appropriate dispatch strategy. */
+	uint16_t direct_events_estimate;
+	/* The number of directly handled events. */
+	uint16_t direct_events;
+	/* The number of events published in the sink queue. */
+	uint16_t enqueued_events;
+	uint16_t dequeued_events;
+	/* The number of events forwarded to other listeners. */
+	uint16_t forwarded_events;
+
 	/* Associated thread. */
+	mm_thread_t target;
 	struct mm_thread *thread;
 
 	/* Listener's private change events store. */
@@ -156,8 +169,7 @@ mm_event_listener_clear_changes(struct mm_event_listener *listener)
 static inline bool NONNULL(1)
 mm_event_listener_got_events(struct mm_event_listener *listener)
 {
-	struct mm_event_receiver *receiver = &listener->receiver;
-	return receiver->direct_events || receiver->enqueued_events || receiver->forwarded_events;
+	return listener->direct_events || listener->enqueued_events || listener->forwarded_events;
 }
 
 /**********************************************************************
@@ -206,10 +218,9 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 static inline bool NONNULL(1, 2)
 mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	struct mm_event_receiver *receiver = &listener->receiver;
-	if (!sink->loose_target && mm_event_target(sink) == receiver->thread)
-		receiver->direct_events_estimate++;
-	return receiver->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
+	if (!sink->loose_target && mm_event_target(sink) == listener->target)
+		listener->direct_events_estimate++;
+	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
 }
 
 #endif /* BASE_EVENT_LISTENER_H */

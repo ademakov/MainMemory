@@ -23,7 +23,6 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/list.h"
-#include "base/event/backend.h"
 #include "base/event/event.h"
 
 /* Forward declarations. */
@@ -47,21 +46,6 @@ struct mm_event_receiver
 	uint32_t reclaim_epoch;
 	bool reclaim_active;
 
-	/* The thread that owns the receiver. */
-	mm_thread_t thread;
-
-	/* The number of locally handled events found while adjusting
-	   the receiver for appropriate dispatch strategy. */
-	uint16_t direct_events_estimate;
-
-	/* The number of directly handled events. */
-	uint16_t direct_events;
-	/* The number of events published in the sink queue. */
-	uint16_t enqueued_events;
-	uint16_t dequeued_events;
-	/* The number of events forwarded to other listeners. */
-	uint16_t forwarded_events;
-
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
@@ -77,8 +61,7 @@ struct mm_event_receiver
 };
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
-			  mm_thread_t thread);
+mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
