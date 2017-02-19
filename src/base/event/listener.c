@@ -252,6 +252,7 @@ void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
+	ASSERT(timeout != 0);
 
 	// Update statistics.
 	listener->wait_calls++;
