@@ -82,6 +82,11 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	// Initialize change event storage.
 	mm_event_batch_prepare(&listener->changes, 256);
 
+	// Initialize the statistic counters.
+	listener->poll_calls = 0;
+	listener->zero_poll_calls = 0;
+	listener->wait_calls = 0;
+
 	LEAVE();
 }
 
@@ -205,13 +210,17 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
+	// Update statistics.
+	listener->poll_calls++;
+	listener->zero_poll_calls += (timeout == 0);
+
 	// Prepare to receive events.
 	mm_event_receiver_poll_start(&listener->receiver);
 
-	// Get the next expected notify stamp.
-	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
-
 	if (timeout != 0) {
+		// Get the next expected notify stamp.
+		const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
+
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(&listener->receiver.dispatch->backend);
 
@@ -244,20 +253,21 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
+	// Update statistics.
+	listener->wait_calls++;
+
 	// Get the next expected notify stamp.
 	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
 
-	if (timeout != 0) {
-		// Advertise that the thread is about to sleep.
-		uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_WAITING;
-		mm_memory_store(listener->state, state);
-		mm_memory_strict_fence(); // TODO: store_load fence
+	// Advertise that the thread is about to sleep.
+	uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_WAITING;
+	mm_memory_store(listener->state, state);
+	mm_memory_strict_fence(); // TODO: store_load fence
 
-		// Wait for a wake-up notification or timeout unless
-		// an already pending notification is detected.
-		if (stamp == mm_event_listener_enqueue_stamp(listener))
-			mm_event_listener_timedwait(listener, stamp, timeout);
-	}
+	// Wait for a wake-up notification or timeout unless
+	// an already pending notification is detected.
+	if (stamp == mm_event_listener_enqueue_stamp(listener))
+		mm_event_listener_timedwait(listener, stamp, timeout);
 
 	// Advertise the start of another working cycle.
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);

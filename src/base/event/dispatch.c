@@ -92,24 +92,20 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
-	// There may be changes that need to be immediately acknowledged.
-	bool has_changes = mm_event_listener_has_changes(listener);
-	if (has_changes)
+	const bool has_changes = mm_event_listener_has_changes(listener);
+	if (has_changes) {
+		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
-
-	// Presume that if there were incoming events moments ago then
-	// there is a chance to get some more immediately. Don't sleep
-	// to avoid a context switch.
-	if (mm_event_receiver_got_events(&listener->receiver))
-		timeout = 0;
-
-	if (timeout) {
+	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
 		// Check if there are immediately available events in the queue.
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
-		uint16_t queued_sinks = mm_memory_load(dispatch->sink_queue_num);
-		if (queued_sinks)
-			timeout = 0;
+		timeout = 0;
+	} else if (mm_event_receiver_got_events(&listener->receiver)) {
+		// Presume that if there were incoming events moments ago then
+		// there is a chance to get some more immediately. Don't sleep
+		// to avoid a context switch.
+		timeout = 0;
 	}
 
 	// The first arrived thread that is going to sleep is elected to conduct
@@ -243,7 +239,12 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 		struct mm_event_receiver *receiver = &listener->receiver;
 		struct mm_event_receiver_stats *stats = &receiver->stats;
 
-		mm_log_fmt("listener %d: loose=%llu, direct=%llu, queued=%llu/%llu, forwarded=%llu\n", i,
+		mm_log_fmt("listener %d: "
+			   "wait=%llu poll=%llu/%llu "
+			   "loose=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n", i,
+			   (unsigned long long) listener->wait_calls,
+			   (unsigned long long) listener->poll_calls,
+			   (unsigned long long) listener->zero_poll_calls,
 			   (unsigned long long) stats->loose_events,
 			   (unsigned long long) stats->direct_events,
 			   (unsigned long long) stats->enqueued_events,

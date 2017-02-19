@@ -81,6 +81,11 @@ struct mm_event_listener
 	/* Listener's helper to receive events. */
 	struct mm_event_receiver receiver;
 
+	/* Statistics. */
+	uint64_t poll_calls;
+	uint64_t zero_poll_calls;
+	uint64_t wait_calls;
+
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)
