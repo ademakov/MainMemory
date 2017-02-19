@@ -36,32 +36,32 @@ struct mm_event_dispatch
 	/* The thread domain associated with the dispatcher. */
 	struct mm_domain *domain;
 
+	/* Event listeners. */
+	struct mm_event_listener *listeners;
+	mm_thread_t nlisteners;
+
+	/* A system-specific event backend. */
+	struct mm_event_backend backend;
+
+	/* The event sink reclamation epoch. */
+	uint32_t reclaim_epoch;
+
+	/* A lock that protects the poller thread election. */
+	mm_regular_lock_t poller_lock CACHE_ALIGN;
+
+	/* Counter for poller thread busy waiting. */
+	uint16_t poller_spin;
+
+	/* A coarse-grained lock that protects event sinks from
+	   concurrent updates. */
+	mm_regular_lock_t event_sink_lock CACHE_ALIGN;
+
 	/* A queue of event sinks waiting for an owner thread. */
 	struct mm_event_fd **sink_queue;
 	uint16_t sink_queue_size;
 	uint16_t sink_queue_head;
 	uint16_t sink_queue_tail;
 	uint16_t sink_queue_num;
-
-	/* Event listeners. */
-	struct mm_event_listener *listeners;
-	mm_thread_t nlisteners;
-
-	/* A thread elected to conduct the next event poll. */
-	mm_thread_t poller_thread;
-
-	/* A lock that protects the poller thread election. */
-	mm_regular_lock_t poller_lock;
-
-	/* A coarse-grained lock that protects event sinks from
-	   concurrent updates. */
-	mm_regular_lock_t event_sink_lock;
-
-	/* The event sink reclamation epoch. */
-	uint32_t reclaim_epoch;
-
-	/* A system-specific event backend. */
-	struct mm_event_backend backend;
 };
 
 void NONNULL(1, 2, 4)

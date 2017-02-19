@@ -45,22 +45,20 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 		mm_thread_setlistener(threads[i], &dispatch->listeners[i]);
 	}
 
+	// Initialize system-specific resources.
+	mm_event_backend_prepare(&dispatch->backend);
+
+	dispatch->reclaim_epoch = 0;
+	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	dispatch->poller_spin = false;
+
 	// Prepare the sink queue.
+	dispatch->event_sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->sink_queue_num = 0;
 	dispatch->sink_queue_head = 0;
 	dispatch->sink_queue_tail = 0;
 	dispatch->sink_queue_size = 2 * MM_EVENT_BACKEND_NEVENTS;
 	dispatch->sink_queue = mm_common_calloc(dispatch->sink_queue_size, sizeof(dispatch->sink_queue[0]));
-
-	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-	dispatch->poller_thread = MM_THREAD_NONE;
-
-	dispatch->event_sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-
-	dispatch->reclaim_epoch = 0;
-
-	// Initialize system-specific resources.
-	mm_event_backend_prepare(&dispatch->backend);
 
 	LEAVE();
 }
@@ -108,31 +106,36 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		timeout = 0;
 	}
 
-	// The first arrived thread that is going to sleep is elected to conduct
-	// the next event poll.
-	bool is_poller_thread = false;
-	if (timeout != 0) {
-		mm_regular_lock(&dispatch->poller_lock);
-		if (dispatch->poller_thread == MM_THREAD_NONE) {
-			dispatch->poller_thread = thread;
-			is_poller_thread = true;
-		}
-		mm_regular_unlock(&dispatch->poller_lock);
-	}
+	// Try to advance the event sink reclamation epoch if needed.
+	if ((has_changes || timeout != 0) && listener->receiver.reclaim_active)
+		mm_event_dispatch_advance_epoch(dispatch);
 
-	if (is_poller_thread || timeout == 0) {
-		if (has_changes || timeout != 0)
-			mm_event_dispatch_advance_epoch(dispatch);
+	// The first arrived thread that is elected to conduct the next event poll.
+	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
+	if (is_poller_thread) {
+		// If the previous poller thread received some events then keep
+		// spinning for a while to avoid extra context switches.
+		if (dispatch->poller_spin) {
+			dispatch->poller_spin--;
+			timeout = 0;
+		}
 
 		// Wait for incoming events or timeout expiration.
 		mm_event_listener_poll(listener, timeout);
 
+		// Reset the poller spin counter.
+		if (mm_event_receiver_got_events(&listener->receiver))
+			dispatch->poller_spin = 10;
+
 		// Give up the poller thread role.
-		if (is_poller_thread) {
-			mm_regular_lock(&dispatch->poller_lock);
-			dispatch->poller_thread = MM_THREAD_NONE;
-			mm_regular_unlock(&dispatch->poller_lock);
-		}
+		mm_regular_unlock(&dispatch->poller_lock);
+
+		// Forget just handled change events.
+		mm_event_listener_clear_changes(listener);
+
+	} else if (timeout == 0) {
+		// Poll for immediately available events.
+		mm_event_listener_poll(listener, 0);
 
 		// Forget just handled change events.
 		mm_event_listener_clear_changes(listener);
