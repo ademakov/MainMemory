@@ -398,7 +398,7 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 		      mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_epoll_storage *storage = &listener->receiver.storage.storage;
+	struct mm_event_epoll_storage *storage = &listener->storage.storage;
 
 	// Make event changes.
 	for (unsigned int i = 0; i < changes->nchanges; i++) {

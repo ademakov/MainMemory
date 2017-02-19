@@ -328,7 +328,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		       mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_kqueue_storage *storage = &listener->receiver.storage.storage;
+	struct mm_event_kqueue_storage *storage = &listener->storage.storage;
 
 	// Make event changes.
 	unsigned int first = 0, next = 0;

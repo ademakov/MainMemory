@@ -86,6 +86,9 @@ struct mm_event_listener
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
 
+	/* Private event storage. */
+	struct mm_event_backend_storage storage;
+
 } CACHE_ALIGN;
 
 void NONNULL(1, 2, 3)

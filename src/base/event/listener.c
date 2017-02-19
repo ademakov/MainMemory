@@ -87,6 +87,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->zero_poll_calls = 0;
 	listener->wait_calls = 0;
 
+	// Initialize private event storage.
+	mm_event_backend_storage_prepare(&listener->storage);
+
 	LEAVE();
 }
 
