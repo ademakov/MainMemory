@@ -286,13 +286,6 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
 			  dispatch->nlisteners);
 
-	// Initialize event statistics.
-	receiver->stats.loose_events = 0;
-	receiver->stats.direct_events = 0;
-	receiver->stats.enqueued_events = 0;
-	receiver->stats.dequeued_events = 0;
-	receiver->stats.forwarded_events = 0;
-
 	LEAVE();
 }
 

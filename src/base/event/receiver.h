@@ -41,16 +41,6 @@ struct mm_event_receiver_fwdbuf
 	uint8_t ntotal;
 };
 
-/* Event receiver statistics. */
-struct mm_event_receiver_stats
-{
-	uint64_t loose_events;
-	uint64_t direct_events;
-	uint64_t enqueued_events;
-	uint64_t dequeued_events;
-	uint64_t forwarded_events;
-};
-
 struct mm_event_receiver
 {
 	/* A local snapshot of the event sink reclamation epoch. */
@@ -80,9 +70,6 @@ struct mm_event_receiver
 
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
-
-	/* Event statistics. */
-	struct mm_event_receiver_stats stats;
 
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];

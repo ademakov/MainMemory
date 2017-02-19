@@ -56,6 +56,20 @@ typedef enum
 	MM_EVENT_LISTENER_WAITING = 2,
 } mm_event_listener_status_t;
 
+/* Event listener statistics. */
+struct mm_event_listener_stats
+{
+	uint64_t poll_calls;
+	uint64_t zero_poll_calls;
+	uint64_t wait_calls;
+
+	uint64_t loose_events;
+	uint64_t direct_events;
+	uint64_t enqueued_events;
+	uint64_t dequeued_events;
+	uint64_t forwarded_events;
+};
+
 struct mm_event_listener
 {
 	/*
@@ -86,9 +100,7 @@ struct mm_event_listener
 	struct mm_event_receiver receiver;
 
 	/* Statistics. */
-	uint64_t poll_calls;
-	uint64_t zero_poll_calls;
-	uint64_t wait_calls;
+	struct mm_event_listener_stats stats;
 
 	/* Private event storage. */
 	struct mm_event_backend_storage storage;

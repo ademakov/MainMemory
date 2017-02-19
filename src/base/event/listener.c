@@ -167,13 +167,13 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 	struct mm_event_receiver *receiver = &listener->receiver;
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
-	receiver->stats.direct_events += receiver->direct_events;
-	receiver->stats.enqueued_events += receiver->enqueued_events;
-	receiver->stats.dequeued_events += receiver->dequeued_events;
+	listener->stats.direct_events += receiver->direct_events;
+	listener->stats.enqueued_events += receiver->enqueued_events;
+	listener->stats.dequeued_events += receiver->dequeued_events;
 
 	// Flush and count forwarded events.
 	if (receiver->forwarded_events) {
-		receiver->stats.forwarded_events += receiver->forwarded_events;
+		listener->stats.forwarded_events += receiver->forwarded_events;
 
 		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
 		while (target != MM_THREAD_NONE) {
@@ -295,15 +295,15 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 {
 	ENTER();
 
-	struct mm_event_receiver *receiver = &listener->receiver;
-	ASSERT(receiver->thread == mm_thread_self());
-
 	if (unlikely(sink->loose_target)) {
 		// Handle the event immediately.
 		mm_event_convey(sink, event);
-		receiver->stats.loose_events++;
+		listener->stats.loose_events++;
 
 	} else {
+		struct mm_event_receiver *receiver = &listener->receiver;
+		ASSERT(receiver->thread == mm_thread_self());
+
 		mm_thread_t target = mm_event_target(sink);
 
 		// If the event sink can be detached from its target thread
@@ -375,9 +375,14 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	mm_event_batch_prepare(&listener->changes, 256);
 
 	// Initialize the statistic counters.
-	listener->poll_calls = 0;
-	listener->zero_poll_calls = 0;
-	listener->wait_calls = 0;
+	listener->stats.poll_calls = 0;
+	listener->stats.zero_poll_calls = 0;
+	listener->stats.wait_calls = 0;
+	listener->stats.loose_events = 0;
+	listener->stats.direct_events = 0;
+	listener->stats.enqueued_events = 0;
+	listener->stats.dequeued_events = 0;
+	listener->stats.forwarded_events = 0;
 
 	// Initialize private event storage.
 	mm_event_backend_storage_prepare(&listener->storage);
@@ -441,8 +446,8 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	ENTER();
 
 	// Update statistics.
-	listener->poll_calls++;
-	listener->zero_poll_calls += (timeout == 0);
+	listener->stats.poll_calls++;
+	listener->stats.zero_poll_calls += (timeout == 0);
 
 	// Prepare to receive events.
 	mm_event_listener_poll_start(listener);
@@ -488,7 +493,7 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 	ASSERT(timeout != 0);
 
 	// Update statistics.
-	listener->wait_calls++;
+	listener->stats.wait_calls++;
 
 	// Get the next expected notify stamp.
 	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
