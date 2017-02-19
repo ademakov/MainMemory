@@ -163,19 +163,19 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 
 static void
 mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
-			       struct mm_event_receiver *receiver,
+			       struct mm_event_listener *listener,
 			       int nevents)
 {
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
 			struct mm_event_fd *sink = event->udata;
-			if (!mm_event_receiver_adjust(receiver, sink))
+			if (!mm_event_listener_adjust(listener, sink))
 				break;
 		}
 	}
 
-	mm_event_receiver_dispatch_start(receiver, nevents);
+	mm_event_listener_dispatch_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
@@ -187,9 +187,9 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			sink->oneshot_input_trigger = false;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_receiver_input_error(receiver, sink);
+				mm_event_listener_input_error(listener, sink);
 			else
-				mm_event_receiver_input(receiver, sink);
+				mm_event_listener_input(listener, sink);
 
 		} else if (event->filter == EVFILT_WRITE) {
 			DEBUG("write event");
@@ -198,21 +198,21 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			sink->oneshot_output_trigger = false;
 
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
-				mm_event_receiver_output_error(receiver, sink);
+				mm_event_listener_output_error(listener, sink);
 			else
-				mm_event_receiver_output(receiver, sink);
+				mm_event_listener_output(listener, sink);
 
 		} else if (event->filter == EVFILT_USER) {
 			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
 		}
 	}
 
-	mm_event_receiver_dispatch_finish(receiver);
+	mm_event_listener_dispatch_finish(listener);
 }
 
 static void
 mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
-				    struct mm_event_receiver *receiver,
+				    struct mm_event_listener *listener,
 				    unsigned int first, unsigned int last)
 {
 	for (unsigned int i = first; i < last; i++) {
@@ -224,7 +224,7 @@ mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
 
 		// Store the pertinent event.
 		if (change->kind == MM_EVENT_UNREGISTER)
-			mm_event_receiver_unregister(receiver, sink);
+			mm_event_listener_unregister(listener, sink);
 	}
 }
 
@@ -328,8 +328,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		       mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_receiver *receiver = &listener->receiver;
-	struct mm_event_kqueue_storage *storage = &receiver->storage.storage;
+	struct mm_event_kqueue_storage *storage = &listener->receiver.storage.storage;
 
 	// Make event changes.
 	unsigned int first = 0, next = 0;
@@ -343,7 +342,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 			mm_event_kqueue_commit_changes(backend, storage);
 
 			// Store unregister events.
-			mm_event_kqueue_postprocess_changes(changes, receiver, first, next);
+			mm_event_kqueue_postprocess_changes(changes, listener, first, next);
 
 			// Proceed with more change events if any.
 			first = next;
@@ -355,10 +354,10 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 	int n = mm_event_kqueue_poll(backend, storage, timeout);
 
 	// Store incoming events.
-	mm_event_kqueue_receive_events(storage, receiver, n);
+	mm_event_kqueue_receive_events(storage, listener, n);
 
 	// Store unregister events.
-	mm_event_kqueue_postprocess_changes(changes, receiver, first, changes->nchanges);
+	mm_event_kqueue_postprocess_changes(changes, listener, first, changes->nchanges);
 
 	LEAVE();
 }
