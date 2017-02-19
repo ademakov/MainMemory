@@ -137,6 +137,13 @@ mm_event_listener_clear_changes(struct mm_event_listener *listener)
 	mm_event_batch_clear(&listener->changes);
 }
 
+static inline bool NONNULL(1)
+mm_event_listener_got_events(struct mm_event_listener *listener)
+{
+	struct mm_event_receiver *receiver = &listener->receiver;
+	return receiver->direct_events || receiver->enqueued_events || receiver->forwarded_events;
+}
+
 /**********************************************************************
  * Backend interface.
  **********************************************************************/

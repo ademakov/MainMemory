@@ -101,7 +101,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
 		timeout = 0;
-	} else if (mm_event_receiver_got_events(&listener->receiver)) {
+	} else if (mm_event_listener_got_events(listener)) {
 		// Presume that if there were incoming events moments ago then
 		// there is a chance to get some more immediately. Don't sleep
 		// to avoid a context switch.
@@ -126,7 +126,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		mm_event_listener_poll(listener, timeout);
 
 		// Reset the poller spin counter.
-		if (mm_event_receiver_got_events(&listener->receiver))
+		if (mm_event_listener_got_events(listener))
 			dispatch->poller_spin = MM_EVENT_DISPATCH_POLLER_SPIN;
 
 		// Give up the poller thread role.

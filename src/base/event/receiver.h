@@ -116,10 +116,4 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 
-static inline bool NONNULL(1)
-mm_event_receiver_got_events(struct mm_event_receiver *receiver)
-{
-	return receiver->direct_events || receiver->enqueued_events || receiver->forwarded_events;
-}
-
 #endif /* BASE_EVENT_RECEIVER_H */
