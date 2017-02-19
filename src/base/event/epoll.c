@@ -108,7 +108,7 @@ mm_event_epoll_init(void)
 
 static void
 mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change *change,
-			  struct mm_event_receiver *receiver)
+			  struct mm_event_listener *listener)
 {
 	struct mm_event_fd *sink = change->sink;
 
@@ -138,9 +138,7 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
-
-		if (receiver != NULL)
-			mm_event_receiver_unregister(receiver, sink);
+		mm_event_listener_unregister(listener, sink);
 		break;
 
 	case MM_EVENT_TRIGGER_INPUT:
@@ -195,20 +193,20 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 static void
 mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			      struct mm_event_epoll_storage *storage,
-			      struct mm_event_receiver *receiver,
+			      struct mm_event_listener *listener,
 			      int nevents)
 {
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
-		if ((event->events & EPOLLIN) != 0 && !mm_event_receiver_adjust(receiver, sink))
+		if ((event->events & EPOLLIN) != 0 && !mm_event_listener_adjust(listener, sink))
 			break;
-		if ((event->events & EPOLLOUT) != 0 && !mm_event_receiver_adjust(receiver, sink))
+		if ((event->events & EPOLLOUT) != 0 && !mm_event_listener_adjust(listener, sink))
 			break;
 	}
 
 	bool locked = true;
-	mm_event_receiver_dispatch_start(receiver, nevents);
+	mm_event_listener_dispatch_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
@@ -219,7 +217,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (sink->oneshot_input) {
 				if (locked) {
 					locked = false;
-					mm_event_receiver_dispatch_finish(receiver);
+					mm_event_listener_dispatch_finish(listener);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -246,18 +244,18 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_receiver_dispatch_start(receiver, nevents - i);
+				mm_event_listener_dispatch_start(listener, nevents - i);
 			}
 
 			sink->oneshot_input_trigger = false;
-			mm_event_receiver_input(receiver, sink);
+			mm_event_listener_input(listener, sink);
 		}
 
 		if ((event->events & EPOLLOUT) != 0) {
 			if (sink->oneshot_output) {
 				if (locked) {
 					locked = false;
-					mm_event_receiver_dispatch_finish(receiver);
+					mm_event_listener_dispatch_finish(listener);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -284,11 +282,11 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_receiver_dispatch_start(receiver, nevents - i);
+				mm_event_listener_dispatch_start(listener, nevents - i);
 			}
 
 			sink->oneshot_output_trigger = false;
-			mm_event_receiver_output(receiver, sink);
+			mm_event_listener_output(listener, sink);
 		}
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
@@ -298,27 +296,27 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_input) {
 				if (!locked) {
 					locked = true;
-					mm_event_receiver_dispatch_start(receiver, nevents - i);
+					mm_event_listener_dispatch_start(listener, nevents - i);
 				}
 
 				sink->oneshot_input_trigger = false;
-				mm_event_receiver_input_error(receiver, sink);
+				mm_event_listener_input_error(listener, sink);
 			}
 
 			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0) {
 				if (!locked) {
 					locked = true;
-					mm_event_receiver_dispatch_start(receiver, nevents - i);
+					mm_event_listener_dispatch_start(listener, nevents - i);
 				}
 
 				sink->oneshot_output_trigger = false;
-				mm_event_receiver_output_error(receiver, sink);
+				mm_event_listener_output_error(listener, sink);
 			}
 		}
 	}
 
 	if (locked) {
-		mm_event_receiver_dispatch_finish(receiver);
+		mm_event_listener_dispatch_finish(listener);
 	}
 }
 
@@ -400,20 +398,19 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 		      mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_receiver *receiver = &listener->receiver;
-	struct mm_event_epoll_storage *storage = &receiver->storage.storage;
+	struct mm_event_epoll_storage *storage = &listener->receiver.storage.storage;
 
 	// Make event changes.
 	for (unsigned int i = 0; i < changes->nchanges; i++) {
 		struct mm_event_change *change = &changes->changes[i];
-		mm_event_epoll_add_change(backend, change, receiver);
+		mm_event_epoll_add_change(backend, change, listener);
 	}
 
 	// Poll for incoming events.
 	int n = mm_event_epoll_poll(backend, storage, timeout);
 
 	// Store incoming events.
-	mm_event_epoll_receive_events(backend, storage, receiver, n);
+	mm_event_epoll_receive_events(backend, storage, listener, n);
 
 	LEAVE();
 }
