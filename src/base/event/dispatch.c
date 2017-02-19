@@ -24,6 +24,8 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
+#define MM_EVENT_DISPATCH_POLLER_SPIN	(4)
+
 void NONNULL(1, 2, 4)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 			  struct mm_domain *domain,
@@ -125,7 +127,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 
 		// Reset the poller spin counter.
 		if (mm_event_receiver_got_events(&listener->receiver))
-			dispatch->poller_spin = 10;
+			dispatch->poller_spin = MM_EVENT_DISPATCH_POLLER_SPIN;
 
 		// Give up the poller thread role.
 		mm_regular_unlock(&dispatch->poller_lock);
