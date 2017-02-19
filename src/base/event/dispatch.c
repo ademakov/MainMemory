@@ -55,7 +55,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	dispatch->poller_spin = false;
 
 	// Prepare the sink queue.
-	dispatch->event_sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->sink_queue_num = 0;
 	dispatch->sink_queue_head = 0;
 	dispatch->sink_queue_tail = 0;

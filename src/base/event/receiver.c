@@ -419,7 +419,7 @@ mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t ne
 
 	struct mm_event_dispatch *dispatch = receiver->dispatch;
 
-	mm_regular_lock(&receiver->dispatch->event_sink_lock);
+	mm_regular_lock(&receiver->dispatch->sink_lock);
 
 	for (;;) {
 		uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
@@ -447,7 +447,7 @@ mm_event_receiver_dispatch_finish(struct mm_event_receiver *receiver)
 	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
 	mm_memory_store(dispatch->sink_queue_num, nq);
 
-	mm_regular_unlock(&receiver->dispatch->event_sink_lock);
+	mm_regular_unlock(&receiver->dispatch->sink_lock);
 
 	if (receiver->enqueued_events > MM_EVENT_RECEIVER_RETAIN_MIN)
 		mm_event_dispatch_notify_waiting(dispatch);
