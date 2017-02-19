@@ -117,38 +117,6 @@ mm_event_receiver_dispatch(struct mm_event_receiver *receiver, struct mm_event_f
 void NONNULL(1, 2)
 mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 
-static inline bool NONNULL(1, 2)
-mm_event_receiver_adjust(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	if (!sink->loose_target && mm_event_target(sink) == receiver->thread)
-		receiver->direct_events_estimate++;
-	return receiver->direct_events_estimate < MM_EVENT_RECEIVER_RETAIN_MIN;
-}
-
-static inline void NONNULL(1, 2)
-mm_event_receiver_input(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_receiver_input_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_INPUT_ERROR);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_receiver_output(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_receiver_output_error(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	mm_event_receiver_dispatch(receiver, sink, MM_EVENT_OUTPUT_ERROR);
-}
-
 static inline bool NONNULL(1)
 mm_event_receiver_got_events(struct mm_event_receiver *receiver)
 {
