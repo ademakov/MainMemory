@@ -35,6 +35,10 @@
 # include "base/clock.h"
 #endif
 
+/**********************************************************************
+ * Event listener sleep and wake up helpers.
+ **********************************************************************/
+
 static uintptr_t
 mm_event_listener_enqueue_stamp(struct mm_event_listener *listener)
 {
@@ -54,62 +58,6 @@ mm_event_listener_futex(struct mm_event_listener *listener)
 	return (uintptr_t) &listener->thread->request_queue->base.tail;
 }
 #endif
-
-void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_thread *thread)
-{
-	ENTER();
-
-	listener->state = 0;
-	listener->thread = thread;
-
-#if ENABLE_LINUX_FUTEX
-	// Nothing to do for futexes.
-#elif ENABLE_MACH_SEMAPHORE
-	kern_return_t r = semaphore_create(mach_task_self(), &listener->semaphore,
-					   SYNC_POLICY_FIFO, 0);
-	if (r != KERN_SUCCESS)
-		mm_fatal(0, "semaphore_create");
-#else
-	mm_thread_monitor_prepare(&listener->monitor);
-#endif
-
-	// Initialize the receiver.
-	mm_thread_t thread_number = listener - dispatch->listeners;
-	mm_event_receiver_prepare(&listener->receiver, dispatch, thread_number);
-
-	// Initialize change event storage.
-	mm_event_batch_prepare(&listener->changes, 256);
-
-	// Initialize the statistic counters.
-	listener->poll_calls = 0;
-	listener->zero_poll_calls = 0;
-	listener->wait_calls = 0;
-
-	// Initialize private event storage.
-	mm_event_backend_storage_prepare(&listener->storage);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_listener_cleanup(struct mm_event_listener *listener)
-{
-	ENTER();
-
-#if ENABLE_LINUX_FUTEX
-	// Nothing to do for futexes.
-#elif ENABLE_MACH_SEMAPHORE
-	semaphore_destroy(mach_task_self(), listener->semaphore);
-#else
-	mm_thread_monitor_cleanup(&listener->monitor);
-#endif
-
-	mm_event_batch_cleanup(&listener->changes);
-
-	LEAVE();
-}
 
 static void NONNULL(1)
 mm_event_listener_signal(struct mm_event_listener *listener)
@@ -180,6 +128,86 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
 	LEAVE();
 }
 
+/**********************************************************************
+ * Event listener poll helpers.
+ **********************************************************************/
+
+static inline void NONNULL(1)
+mm_event_listener_poll_start(struct mm_event_listener *listener)
+{
+	mm_event_receiver_poll_start(&listener->receiver);
+}
+
+static inline void NONNULL(1)
+mm_event_listener_poll_finish(struct mm_event_listener *listener)
+{
+	mm_event_receiver_poll_finish(&listener->receiver);
+}
+
+/**********************************************************************
+ * Event listener initialization and cleanup.
+ **********************************************************************/
+
+void NONNULL(1, 2, 3)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
+			  struct mm_thread *thread)
+{
+	ENTER();
+
+	listener->state = 0;
+	listener->thread = thread;
+
+#if ENABLE_LINUX_FUTEX
+	// Nothing to do for futexes.
+#elif ENABLE_MACH_SEMAPHORE
+	kern_return_t r = semaphore_create(mach_task_self(), &listener->semaphore,
+					   SYNC_POLICY_FIFO, 0);
+	if (r != KERN_SUCCESS)
+		mm_fatal(0, "semaphore_create");
+#else
+	mm_thread_monitor_prepare(&listener->monitor);
+#endif
+
+	// Initialize the receiver.
+	mm_thread_t thread_number = listener - dispatch->listeners;
+	mm_event_receiver_prepare(&listener->receiver, dispatch, thread_number);
+
+	// Initialize change event storage.
+	mm_event_batch_prepare(&listener->changes, 256);
+
+	// Initialize the statistic counters.
+	listener->poll_calls = 0;
+	listener->zero_poll_calls = 0;
+	listener->wait_calls = 0;
+
+	// Initialize private event storage.
+	mm_event_backend_storage_prepare(&listener->storage);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_listener_cleanup(struct mm_event_listener *listener)
+{
+	ENTER();
+
+#if ENABLE_LINUX_FUTEX
+	// Nothing to do for futexes.
+#elif ENABLE_MACH_SEMAPHORE
+	semaphore_destroy(mach_task_self(), listener->semaphore);
+#else
+	mm_thread_monitor_cleanup(&listener->monitor);
+#endif
+
+	mm_event_batch_cleanup(&listener->changes);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Event listener main functionality -- listening and notification.
+ **********************************************************************/
+
 void NONNULL(1)
 mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t stamp UNUSED)
 {
@@ -206,18 +234,6 @@ mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t sta
 	}
 
 	LEAVE();
-}
-
-static inline void NONNULL(1)
-mm_event_listener_poll_start(struct mm_event_listener *listener)
-{
-	mm_event_receiver_poll_start(&listener->receiver);
-}
-
-static inline void NONNULL(1)
-mm_event_listener_poll_finish(struct mm_event_listener *listener)
-{
-	mm_event_receiver_poll_finish(&listener->receiver);
 }
 
 void NONNULL(1)
