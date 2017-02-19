@@ -28,6 +28,7 @@
 
 /* Forward declarations. */
 struct mm_event_dispatch;
+struct mm_thread;
 
 #define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
 #define MM_EVENT_RECEIVER_RETAIN_MIN	(3)
@@ -101,10 +102,8 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 void NONNULL(1)
 mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver);
 
-void NONNULL(1)
-mm_event_receiver_poll_start(struct mm_event_receiver *receiver);
-void NONNULL(1)
-mm_event_receiver_poll_finish(struct mm_event_receiver *receiver);
+void
+mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer);
 
 void NONNULL(1)
 mm_event_receiver_dispatch_start(struct mm_event_receiver *receiver, uint32_t nevents);

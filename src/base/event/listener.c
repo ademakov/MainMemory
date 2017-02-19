@@ -135,13 +135,65 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
 static inline void NONNULL(1)
 mm_event_listener_poll_start(struct mm_event_listener *listener)
 {
-	mm_event_receiver_poll_start(&listener->receiver);
+	ENTER();
+
+	struct mm_event_receiver *receiver = &listener->receiver;
+
+	// No events arrived yet.
+	receiver->direct_events_estimate = 0;
+	receiver->direct_events = 0;
+	receiver->enqueued_events = 0;
+	receiver->dequeued_events = 0;
+	receiver->forwarded_events = 0;
+
+	// Start a reclamation-critical section.
+	if (!receiver->reclaim_active) {
+		mm_memory_store(receiver->reclaim_active, true);
+		mm_memory_strict_fence();
+		// Catch up with the current reclamation epoch.
+		uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
+		mm_memory_store(receiver->reclaim_epoch, epoch);
+	}
+
+	LEAVE();
 }
 
 static inline void NONNULL(1)
 mm_event_listener_poll_finish(struct mm_event_listener *listener)
 {
-	mm_event_receiver_poll_finish(&listener->receiver);
+	ENTER();
+
+	struct mm_event_receiver *receiver = &listener->receiver;
+	struct mm_event_dispatch *dispatch = receiver->dispatch;
+
+	receiver->stats.direct_events += receiver->direct_events;
+	receiver->stats.enqueued_events += receiver->enqueued_events;
+	receiver->stats.dequeued_events += receiver->dequeued_events;
+
+	// Flush and count forwarded events.
+	if (receiver->forwarded_events) {
+		receiver->stats.forwarded_events += receiver->forwarded_events;
+
+		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
+		while (target != MM_THREAD_NONE) {
+			struct mm_event_listener *listener = &dispatch->listeners[target];
+			struct mm_event_receiver_fwdbuf *buffer = &receiver->forward_buffers[target];
+			mm_event_receiver_forward_flush(listener->thread, buffer);
+			buffer->ntotal = 0;
+
+			if (++target < mm_bitset_size(&receiver->forward_targets))
+				target = mm_bitset_find(&receiver->forward_targets, target);
+			else
+				target = MM_THREAD_NONE;
+		}
+
+		mm_bitset_clear_all(&receiver->forward_targets);
+	}
+
+	// Advance the reclamation epoch.
+	mm_event_receiver_observe_epoch(receiver);
+
+	LEAVE();
 }
 
 /**********************************************************************
