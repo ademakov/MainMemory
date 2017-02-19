@@ -112,7 +112,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	if ((has_changes || timeout != 0) && listener->receiver.reclaim_active)
 		mm_event_dispatch_advance_epoch(dispatch);
 
-	// The first arrived thread that is elected to conduct the next event poll.
+	// The first arrived thread is elected to conduct the next event poll.
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
 	if (is_poller_thread) {
 		// If the previous poller thread received some events then keep
@@ -132,15 +132,9 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		// Give up the poller thread role.
 		mm_regular_unlock(&dispatch->poller_lock);
 
-		// Forget just handled change events.
-		mm_event_listener_clear_changes(listener);
-
 	} else if (timeout == 0) {
 		// Poll for immediately available events.
 		mm_event_listener_poll(listener, 0);
-
-		// Forget just handled change events.
-		mm_event_listener_clear_changes(listener);
 
 	} else {
 		// Wait for forwarded events or timeout expiration.

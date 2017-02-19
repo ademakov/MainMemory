@@ -245,6 +245,9 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	// Flush received events.
 	mm_event_receiver_poll_finish(&listener->receiver);
 
+	// Forget just handled change events.
+	mm_event_listener_clear_changes(listener);
+
 	LEAVE();
 }
 
