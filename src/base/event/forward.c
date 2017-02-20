@@ -1,5 +1,5 @@
 /*
- * base/event/receiver.c - MainMemory event receiver.
+ * base/event/forward.c - MainMemory event forwarding.
  *
  * Copyright (C) 2015-2016  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/event/receiver.h"
+#include "base/event/forward.h"
 
 #include "base/report.h"
 #include "base/event/dispatch.h"
@@ -103,15 +103,38 @@ mm_event_receiver_forward_5(uintptr_t *arguments)
  * Event forwarding.
  **********************************************************************/
 
-static void
-mm_event_receiver_fwdbuf_prepare(struct mm_event_receiver_fwdbuf *buffer)
+void NONNULL(1, 2)
+mm_event_forward_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
 {
-	buffer->nsinks = 0;
-	buffer->ntotal = 0;
+	ENTER();
+
+	receiver->forward_buffers = mm_common_calloc(dispatch->nlisteners,
+						     sizeof(receiver->forward_buffers[0]));
+	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++) {
+		receiver->forward_buffers[i].nsinks = 0;
+		receiver->forward_buffers[i].ntotal = 0;
+	}
+
+	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
+			  dispatch->nlisteners);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_forward_cleanup(struct mm_event_receiver *receiver)
+{
+	ENTER();
+
+	// Release forward buffers.
+	mm_common_free(receiver->forward_buffers);
+	mm_bitset_cleanup(&receiver->forward_targets, &mm_common_space.xarena);
+
+	LEAVE();
 }
 
 void
-mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer)
+mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer *buffer)
 {
 	ENTER();
 
@@ -176,18 +199,18 @@ mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiv
 }
 
 void
-mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event)
+mm_event_forward(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
+		 struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
 	mm_thread_t target = sink->target;
-	struct mm_event_receiver_fwdbuf *buffer = &receiver->forward_buffers[target];
+	struct mm_event_forward_buffer *buffer = &receiver->forward_buffers[target];
 
 	// Flush the buffer if it is full.
-	if (buffer->nsinks == MM_EVENT_RECEIVER_FWDBUF_SIZE) {
-		struct mm_event_dispatch *dispatch = receiver->dispatch;
+	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE) {
 		struct mm_event_listener *listener = &dispatch->listeners[target];
-		mm_event_receiver_forward_flush(listener->thread, buffer);
+		mm_event_forward_flush(listener->thread, buffer);
 	}
 
 	// Add the event to the buffer.
@@ -198,41 +221,6 @@ mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd
 
 	// Account for it.
 	mm_bitset_set(&receiver->forward_targets, target);
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Event receiver.
- **********************************************************************/
-
-void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
-{
-	ENTER();
-
-	// Remember the owners.
-	receiver->dispatch = dispatch;
-
-	// Prepare forward buffers.
-	receiver->forward_buffers = mm_common_calloc(dispatch->nlisteners,
-						     sizeof(struct mm_event_receiver_fwdbuf));
-	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
-		mm_event_receiver_fwdbuf_prepare(&receiver->forward_buffers[i]);
-	mm_bitset_prepare(&receiver->forward_targets, &mm_common_space.xarena,
-			  dispatch->nlisteners);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
-{
-	ENTER();
-
-	// Release forward buffers.
-	mm_common_free(receiver->forward_buffers);
-	mm_bitset_cleanup(&receiver->forward_targets, &mm_common_space.xarena);
 
 	LEAVE();
 }

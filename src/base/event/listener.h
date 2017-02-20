@@ -24,7 +24,7 @@
 #include "base/ring.h"
 #include "base/event/batch.h"
 #include "base/event/backend.h"
-#include "base/event/receiver.h"
+#include "base/event/forward.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -46,7 +46,7 @@ struct mm_thread;
 
 #define MM_EVENT_LISTENER_RETAIN_MIN	(3)
 #define MM_EVENT_LISTENER_RETAIN_MAX	(6)
-#define MM_EVENT_LISTENER_FORWARD_MAX	MM_EVENT_RECEIVER_FWDBUF_SIZE
+#define MM_EVENT_LISTENER_FORWARD_MAX	MM_EVENT_FORWARD_BUFFER_SIZE
 
 #define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
 
@@ -106,6 +106,9 @@ struct mm_event_listener
 	mm_thread_t target;
 	struct mm_thread *thread;
 
+	/* The top-level event dispatch data. */
+	struct mm_event_dispatch *dispatch;
+
 	/* A local snapshot of the event sink reclamation epoch. */
 	uint32_t reclaim_epoch;
 	bool reclaim_active;
@@ -116,7 +119,7 @@ struct mm_event_listener
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
 
-	/* Listener's helper to receive events. */
+	/* Listener's helper to forward events. */
 	struct mm_event_receiver receiver;
 
 	/* Statistics. */
@@ -166,8 +169,7 @@ mm_event_listener_getstate(struct mm_event_listener *listener)
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
-mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink,
-		      mm_event_change_t event)
+mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_change_t event)
 {
 	mm_event_batch_add(&listener->changes, event, sink);
 }

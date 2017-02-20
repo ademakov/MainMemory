@@ -1,5 +1,5 @@
 /*
- * base/event/receiver.h - MainMemory event receiver.
+ * base/event/forward.h - MainMemory event forwarding.
  *
  * Copyright (C) 2015-2016  Aleksey Demakov
  *
@@ -17,51 +17,48 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_EVENT_RECEIVER_H
-#define BASE_EVENT_RECEIVER_H
+#ifndef BASE_EVENT_FORWARD_H
+#define BASE_EVENT_FORWARD_H
 
 #include "common.h"
 #include "base/bitset.h"
-#include "base/list.h"
 #include "base/event/event.h"
 
 /* Forward declarations. */
 struct mm_event_dispatch;
 struct mm_thread;
 
-#define MM_EVENT_RECEIVER_FWDBUF_SIZE	(5)
+#define MM_EVENT_FORWARD_BUFFER_SIZE	(5)
 
 /* Event sink forward buffer. */
-struct mm_event_receiver_fwdbuf
+struct mm_event_forward_buffer
 {
-	struct mm_event_fd *sinks[MM_EVENT_RECEIVER_FWDBUF_SIZE];
-	mm_event_t events[MM_EVENT_RECEIVER_FWDBUF_SIZE];
 	uint8_t nsinks;
 	uint8_t ntotal;
+	mm_event_t events[MM_EVENT_FORWARD_BUFFER_SIZE];
+	struct mm_event_fd *sinks[MM_EVENT_FORWARD_BUFFER_SIZE];
 };
 
 struct mm_event_receiver
 {
-	/* The top-level event dispatch data. */
-	struct mm_event_dispatch *dispatch;
-
 	/* Target threads that have received events. */
 	struct mm_bitset forward_targets;
 
 	/* Per-thread temporary store for sinks of received events. */
-	struct mm_event_receiver_fwdbuf *forward_buffers;
+	struct mm_event_forward_buffer *forward_buffers;
 };
 
 void NONNULL(1, 2)
-mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch);
+mm_event_forward_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
-mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
+mm_event_forward_cleanup(struct mm_event_receiver *receiver);
 
 void
-mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);
+mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer *buffer);
 
 void
-mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer);
+mm_event_forward(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
+		 struct mm_event_fd *sink, mm_event_t event);
 
-#endif /* BASE_EVENT_RECEIVER_H */
+#endif /* BASE_EVENT_FORWARD_H */
