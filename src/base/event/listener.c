@@ -200,15 +200,6 @@ mm_event_listener_poll_start(struct mm_event_listener *listener)
 	listener->dequeued_events = 0;
 	listener->forwarded_events = 0;
 
-	// Start a reclamation-critical section.
-	if (!listener->reclaim_active) {
-		mm_memory_store(listener->reclaim_active, true);
-		mm_memory_strict_fence();
-		// Catch up with the current reclamation epoch.
-		uint32_t epoch = mm_memory_load(listener->dispatch->reclaim_epoch);
-		mm_memory_store(listener->reclaim_epoch, epoch);
-	}
-
 	LEAVE();
 }
 
@@ -226,9 +217,6 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 		listener->stats.forwarded_events += listener->forwarded_events;
 		mm_event_forward_flush(&listener->forward);
 	}
-
-	// Advance the reclamation epoch.
-	mm_event_listener_observe_epoch(listener);
 
 	LEAVE();
 }
@@ -504,22 +492,52 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	// Prepare to receive events.
 	mm_event_listener_poll_start(listener);
 
-	if (timeout != 0) {
+	// Determine if a reclamation critical section needs to be started.
+	bool reclaim_activate = !listener->reclaim_active;
+
+	if (timeout == 0) {
+		// Advertise a reclamation critical section if needed.
+		if (reclaim_activate) {
+#if 1
+			// TODO: atomic_store(..., mo_seq_cst)
+			mm_atomic_uint8_fetch_and_set(&listener->reclaim_active, true);
+#else
+			mm_memory_store(listener->reclaim_active, true);
+			mm_memory_strict_fence();
+#endif
+		}
+	} else {
 		// Get the next expected notify stamp.
 		const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
 
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(&listener->dispatch->backend);
 
+		// Advertise a reclamation critical section if needed.
+		if (reclaim_activate) {
+			mm_memory_store(listener->reclaim_active, true);
+		}
+
 		// Advertise that the thread is about to sleep.
 		uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_POLLING;
+#if 1
+		// TODO: atomic_store(..., mo_seq_cst)
+		mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+#else
 		mm_memory_store(listener->state, state);
 		mm_memory_strict_fence(); // TODO: store_load fence
+#endif
 
 		// Wait for a wake-up notification or timeout unless
-		// an already pending notification is detected.
+		// a pending notification is detected.
 		if (stamp != mm_event_listener_enqueue_stamp(listener))
 			timeout = 0;
+	}
+
+	// Catch up with the current reclamation epoch if needed.
+	if (reclaim_activate) {
+		uint32_t epoch = mm_memory_load(listener->dispatch->reclaim_epoch);
+		mm_memory_store(listener->reclaim_epoch, epoch);
 	}
 
 	// Check incoming events and wait for notification/timeout.
@@ -531,6 +549,9 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 
 	// Flush received events.
 	mm_event_listener_poll_finish(listener);
+
+	// Advance the reclamation epoch.
+	mm_event_listener_observe_epoch(listener);
 
 	// Forget just handled change events.
 	mm_event_listener_clear_changes(listener);
@@ -552,11 +573,16 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 
 	// Advertise that the thread is about to sleep.
 	uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_WAITING;
+#if 1
+	// TODO: atomic_store(..., mo_seq_cst)
+	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+#else
 	mm_memory_store(listener->state, state);
 	mm_memory_strict_fence(); // TODO: store_load fence
+#endif
 
 	// Wait for a wake-up notification or timeout unless
-	// an already pending notification is detected.
+	// a pending notification is detected.
 	if (stamp == mm_event_listener_enqueue_stamp(listener))
 		mm_event_listener_timedwait(listener, stamp, timeout);
 

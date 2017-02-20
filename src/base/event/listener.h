@@ -111,7 +111,7 @@ struct mm_event_listener
 
 	/* A local snapshot of the event sink reclamation epoch. */
 	uint32_t reclaim_epoch;
-	bool reclaim_active;
+	mm_atomic_uint8_t reclaim_active;
 
 	/* Event sinks with delayed reclamation. */
 	struct mm_stack reclaim_queue[2];
