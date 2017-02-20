@@ -224,24 +224,7 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 	// Flush and count forwarded events.
 	if (listener->forwarded_events) {
 		listener->stats.forwarded_events += listener->forwarded_events;
-
-		struct mm_event_dispatch *dispatch = listener->dispatch;
-		struct mm_event_forward_cache *cache = &listener->forward;
-
-		mm_thread_t target = mm_bitset_find(&cache->targets, 0);
-		while (target != MM_THREAD_NONE) {
-			struct mm_event_listener *target_listener = &dispatch->listeners[target];
-			struct mm_event_forward_buffer *buffer = &cache->buffers[target];
-			mm_event_forward_flush(target_listener->thread, buffer);
-			buffer->ntotal = 0;
-
-			if (++target < mm_bitset_size(&cache->targets))
-				target = mm_bitset_find(&cache->targets, target);
-			else
-				target = MM_THREAD_NONE;
-		}
-
-		mm_bitset_clear_all(&cache->targets);
+		mm_event_forward_flush(&listener->forward);
 	}
 
 	// Advance the reclamation epoch.
@@ -382,7 +365,7 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		} else if (target == MM_THREAD_NONE) {
 			mm_event_listener_enqueue_sink(listener, sink, event);
 		} else {
-			mm_event_forward(&listener->forward, listener->dispatch, sink, event);
+			mm_event_forward(&listener->forward, sink, event);
 			listener->forwarded_events++;
 		}
 	}

@@ -54,11 +54,10 @@ mm_event_forward_prepare(struct mm_event_forward_cache *cache, mm_thread_t ntarg
 void NONNULL(1)
 mm_event_forward_cleanup(struct mm_event_forward_cache *cache);
 
-void
-mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer *buffer);
+void NONNULL(1)
+mm_event_forward_flush(struct mm_event_forward_cache *cache);
 
-void
-mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_dispatch *dispatch,
-		 struct mm_event_fd *sink, mm_event_t event);
+void NONNULL(1, 2)
+mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_t event);
 
 #endif /* BASE_EVENT_FORWARD_H */

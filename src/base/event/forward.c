@@ -100,41 +100,17 @@ mm_event_forward_5(uintptr_t *arguments)
 }
 
 /**********************************************************************
- * Event forwarding.
+ * Event forwarding request posting.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_forward_prepare(struct mm_event_forward_cache *cache, mm_thread_t ntargets)
+static void NONNULL(1, 3)
+mm_event_forward_post(struct mm_event_dispatch *dispatch, mm_thread_t target,
+		      struct mm_event_forward_buffer *buffer)
 {
 	ENTER();
 
-	cache->buffers = mm_common_calloc(ntargets, sizeof(cache->buffers[0]));
-	for (mm_thread_t i = 0; i < ntargets; i++) {
-		cache->buffers[i].nsinks = 0;
-		cache->buffers[i].ntotal = 0;
-	}
-
-	mm_bitset_prepare(&cache->targets, &mm_common_space.xarena, ntargets);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_forward_cleanup(struct mm_event_forward_cache *cache)
-{
-	ENTER();
-
-	// Release forward buffers.
-	mm_common_free(cache->buffers);
-	mm_bitset_cleanup(&cache->targets, &mm_common_space.xarena);
-
-	LEAVE();
-}
-
-void
-mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer *buffer)
-{
-	ENTER();
+	struct mm_event_listener *listener = &dispatch->listeners[target];
+	struct mm_thread *thread = listener->thread;
 
 	switch (buffer->nsinks) {
 	case 0:
@@ -196,23 +172,79 @@ mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer 
 	LEAVE();
 }
 
-void
-mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_dispatch *dispatch,
-		 struct mm_event_fd *sink, mm_event_t event)
+/**********************************************************************
+ * Event forwarding.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_forward_prepare(struct mm_event_forward_cache *cache, mm_thread_t ntargets)
 {
 	ENTER();
 
-	mm_thread_t target = sink->target;
+	cache->buffers = mm_common_calloc(ntargets, sizeof(cache->buffers[0]));
+	for (mm_thread_t i = 0; i < ntargets; i++) {
+		cache->buffers[i].nsinks = 0;
+		cache->buffers[i].ntotal = 0;
+	}
+
+	mm_bitset_prepare(&cache->targets, &mm_common_space.xarena, ntargets);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_forward_cleanup(struct mm_event_forward_cache *cache)
+{
+	ENTER();
+
+	// Release forward buffers.
+	mm_common_free(cache->buffers);
+	mm_bitset_cleanup(&cache->targets, &mm_common_space.xarena);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_forward_flush(struct mm_event_forward_cache *cache)
+{
+	ENTER();
+
+	struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
+	struct mm_event_dispatch *dispatch = listener->dispatch;
+
+	mm_thread_t target = mm_bitset_find(&cache->targets, 0);
+	while (target != MM_THREAD_NONE) {
+		struct mm_event_forward_buffer *buffer = &cache->buffers[target];
+		mm_event_forward_post(dispatch, target, buffer);
+		buffer->ntotal = 0;
+
+		if (++target < mm_bitset_size(&cache->targets))
+			target = mm_bitset_find(&cache->targets, target);
+		else
+			target = MM_THREAD_NONE;
+	}
+
+	mm_bitset_clear_all(&cache->targets);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_t event)
+{
+	ENTER();
+
+	mm_thread_t target = mm_event_target(sink);
 	struct mm_event_forward_buffer *buffer = &cache->buffers[target];
 
 	// Flush the buffer if it is full.
 	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE) {
-		struct mm_event_listener *listener = &dispatch->listeners[target];
-		mm_event_forward_flush(listener->thread, buffer);
+		struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
+		mm_event_forward_post(listener->dispatch, target, buffer);
 	}
 
 	// Add the event to the buffer.
-	unsigned int n = buffer->nsinks++;
+	uint8_t n = buffer->nsinks++;
 	buffer->sinks[n] = sink;
 	buffer->events[n] = event;
 	buffer->ntotal++;
