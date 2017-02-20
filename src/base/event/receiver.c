@@ -203,61 +203,6 @@ mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd
 }
 
 /**********************************************************************
- * Event sink reclamation.
- **********************************************************************/
-
-static bool
-mm_event_receiver_reclaim_queue_empty(struct mm_event_receiver *receiver)
-{
-	return (mm_stack_empty(&receiver->reclaim_queue[0])
-		&& mm_stack_empty(&receiver->reclaim_queue[1]));
-}
-
-static void
-mm_event_receiver_reclaim_queue_insert(struct mm_event_receiver *receiver,
-				       struct mm_event_fd *sink)
-{
-	uint32_t epoch = receiver->reclaim_epoch;
-	struct mm_stack *stack = &receiver->reclaim_queue[epoch & 1];
-	mm_stack_insert(stack, &sink->reclaim_link);
-}
-
-static void
-mm_event_receiver_reclaim_epoch(struct mm_event_receiver *receiver, uint32_t epoch)
-{
-	struct mm_stack *stack = &receiver->reclaim_queue[epoch & 1];
-	while (!mm_stack_empty(stack)) {
-		struct mm_slink *link = mm_stack_remove(stack);
-		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-		mm_event_convey(sink, MM_EVENT_RECLAIM);
-	}
-}
-
-void NONNULL(1)
-mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver)
-{
-	ENTER();
-
-	// Reclaim queued event sinks associated with a past epoch.
-	uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
-	uint32_t local = receiver->reclaim_epoch;
-	if (local != epoch) {
-		VERIFY((local + 1) == epoch);
-		mm_memory_store(receiver->reclaim_epoch, epoch);
-		mm_event_receiver_reclaim_epoch(receiver, epoch);
-		mm_event_dispatch_advance_epoch(receiver->dispatch);
-	}
-
-	// Finish reclamation if there are no more queued event sinks.
-	if (mm_event_receiver_reclaim_queue_empty(receiver)) {
-		mm_memory_store_fence();
-		mm_memory_store(receiver->reclaim_active, false);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Event receiver.
  **********************************************************************/
 
@@ -265,12 +210,6 @@ void NONNULL(1, 2)
 mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch)
 {
 	ENTER();
-
-	// Initialize the reclamation data.
-	receiver->reclaim_epoch = 0;
-	receiver->reclaim_active = false;
-	mm_stack_prepare(&receiver->reclaim_queue[0]);
-	mm_stack_prepare(&receiver->reclaim_queue[1]);
 
 	// Remember the owners.
 	receiver->dispatch = dispatch;
@@ -294,18 +233,6 @@ mm_event_receiver_cleanup(struct mm_event_receiver *receiver)
 	// Release forward buffers.
 	mm_common_free(receiver->forward_buffers);
 	mm_bitset_cleanup(&receiver->forward_targets, &mm_common_space.xarena);
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	mm_event_update_receive_stamp(sink);
-	mm_event_receiver_reclaim_queue_insert(receiver, sink);
-	mm_event_convey(sink, MM_EVENT_DISABLE);
 
 	LEAVE();
 }

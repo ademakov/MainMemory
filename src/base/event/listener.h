@@ -106,6 +106,13 @@ struct mm_event_listener
 	mm_thread_t target;
 	struct mm_thread *thread;
 
+	/* A local snapshot of the event sink reclamation epoch. */
+	uint32_t reclaim_epoch;
+	bool reclaim_active;
+
+	/* Event sinks with delayed reclamation. */
+	struct mm_stack reclaim_queue[2];
+
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
 
@@ -126,6 +133,17 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
+
+/**********************************************************************
+ * Event sink reclamation.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_listener_observe_epoch(struct mm_event_listener *listener);
+
+/**********************************************************************
+ * Event listener main functionality -- listening and notification.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t stamp);
@@ -185,6 +203,9 @@ mm_event_listener_dispatch_finish(struct mm_event_listener *listener);
 void NONNULL(1, 2)
 mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event);
 
+void NONNULL(1, 2)
+mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink);
+
 static inline void NONNULL(1, 2)
 mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
@@ -207,12 +228,6 @@ static inline void NONNULL(1, 2)
 mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	mm_event_listener_dispatch(listener, sink, MM_EVENT_OUTPUT_ERROR);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_receiver_unregister(&listener->receiver, sink);
 }
 
 static inline bool NONNULL(1, 2)

@@ -130,6 +130,63 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
 }
 
 /**********************************************************************
+ * Event sink reclamation.
+ **********************************************************************/
+
+static bool
+mm_event_listener_reclaim_queue_empty(struct mm_event_listener *listener)
+{
+	return (mm_stack_empty(&listener->reclaim_queue[0])
+		&& mm_stack_empty(&listener->reclaim_queue[1]));
+}
+
+static void
+mm_event_listener_reclaim_queue_insert(struct mm_event_listener *listener,
+				       struct mm_event_fd *sink)
+{
+	uint32_t epoch = listener->reclaim_epoch;
+	struct mm_stack *stack = &listener->reclaim_queue[epoch & 1];
+	mm_stack_insert(stack, &sink->reclaim_link);
+}
+
+static void
+mm_event_listener_reclaim_epoch(struct mm_event_listener *listener, uint32_t epoch)
+{
+	struct mm_stack *stack = &listener->reclaim_queue[epoch & 1];
+	while (!mm_stack_empty(stack)) {
+		struct mm_slink *link = mm_stack_remove(stack);
+		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
+		mm_event_convey(sink, MM_EVENT_RECLAIM);
+	}
+}
+
+void NONNULL(1)
+mm_event_listener_observe_epoch(struct mm_event_listener *listener)
+{
+	ENTER();
+
+	struct mm_event_receiver *receiver = &listener->receiver;
+
+	// Reclaim queued event sinks associated with a past epoch.
+	uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
+	uint32_t local = listener->reclaim_epoch;
+	if (local != epoch) {
+		VERIFY((local + 1) == epoch);
+		mm_memory_store(listener->reclaim_epoch, epoch);
+		mm_event_listener_reclaim_epoch(listener, epoch);
+		mm_event_dispatch_advance_epoch(receiver->dispatch);
+	}
+
+	// Finish reclamation if there are no more queued event sinks.
+	if (mm_event_listener_reclaim_queue_empty(listener)) {
+		mm_memory_store_fence();
+		mm_memory_store(listener->reclaim_active, false);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Event listener poll helpers.
  **********************************************************************/
 
@@ -148,12 +205,12 @@ mm_event_listener_poll_start(struct mm_event_listener *listener)
 	listener->forwarded_events = 0;
 
 	// Start a reclamation-critical section.
-	if (!receiver->reclaim_active) {
-		mm_memory_store(receiver->reclaim_active, true);
+	if (!listener->reclaim_active) {
+		mm_memory_store(listener->reclaim_active, true);
 		mm_memory_strict_fence();
 		// Catch up with the current reclamation epoch.
 		uint32_t epoch = mm_memory_load(receiver->dispatch->reclaim_epoch);
-		mm_memory_store(receiver->reclaim_epoch, epoch);
+		mm_memory_store(listener->reclaim_epoch, epoch);
 	}
 
 	LEAVE();
@@ -192,7 +249,7 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 	}
 
 	// Advance the reclamation epoch.
-	mm_event_receiver_observe_epoch(receiver);
+	mm_event_listener_observe_epoch(listener);
 
 	LEAVE();
 }
@@ -341,6 +398,18 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 	LEAVE();
 }
 
+void NONNULL(1, 2)
+mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	ENTER();
+
+	mm_event_update_receive_stamp(sink);
+	mm_event_listener_reclaim_queue_insert(listener, sink);
+	mm_event_convey(sink, MM_EVENT_DISABLE);
+
+	LEAVE();
+}
+
 /**********************************************************************
  * Event listener initialization and cleanup.
  **********************************************************************/
@@ -373,6 +442,12 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Initialize change event storage.
 	mm_event_batch_prepare(&listener->changes, 256);
+
+	// Initialize the reclamation data.
+	listener->reclaim_epoch = 0;
+	listener->reclaim_active = false;
+	mm_stack_prepare(&listener->reclaim_queue[0]);
+	mm_stack_prepare(&listener->reclaim_queue[1]);
 
 	// Initialize the statistic counters.
 	listener->stats.poll_calls = 0;

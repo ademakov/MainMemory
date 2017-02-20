@@ -109,7 +109,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	}
 
 	// Try to advance the event sink reclamation epoch if needed.
-	if ((has_changes || timeout != 0) && listener->receiver.reclaim_active)
+	if ((has_changes || timeout != 0) && listener->reclaim_active)
 		mm_event_dispatch_advance_epoch(dispatch);
 
 	// The first arrived thread is elected to conduct the next event poll.
@@ -170,9 +170,9 @@ mm_event_dispatch_observe_req(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_receiver *receiver = (struct mm_event_receiver *) arguments[0];
-	if (receiver->reclaim_active)
-		mm_event_receiver_observe_epoch(receiver);
+	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
+	if (listener->reclaim_active)
+		mm_event_listener_observe_epoch(listener);
 
 	LEAVE();
 }
@@ -187,15 +187,14 @@ mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch
 	struct mm_event_listener *listeners = dispatch->listeners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &listeners[i];
-		struct mm_event_receiver *receiver = &listener->receiver;
 
-		uint32_t local = mm_memory_load(receiver->reclaim_epoch);
+		uint32_t local = mm_memory_load(listener->reclaim_epoch);
 		mm_memory_load_fence();
-		bool active = mm_memory_load(receiver->reclaim_active);
+		bool active = mm_memory_load(listener->reclaim_active);
 
 		if (active && local != epoch) {
 			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
-					 (uintptr_t) receiver);
+					 (uintptr_t) listener);
 			rc = false;
 			break;
 		}

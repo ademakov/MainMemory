@@ -42,10 +42,6 @@ struct mm_event_receiver_fwdbuf
 
 struct mm_event_receiver
 {
-	/* A local snapshot of the event sink reclamation epoch. */
-	uint32_t reclaim_epoch;
-	bool reclaim_active;
-
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
@@ -54,10 +50,6 @@ struct mm_event_receiver
 
 	/* Per-thread temporary store for sinks of received events. */
 	struct mm_event_receiver_fwdbuf *forward_buffers;
-
-	/* Event sinks with delayed reclamation. */
-	struct mm_stack reclaim_queue[2];
-
 };
 
 void NONNULL(1, 2)
@@ -66,16 +58,10 @@ mm_event_receiver_prepare(struct mm_event_receiver *receiver, struct mm_event_di
 void NONNULL(1)
 mm_event_receiver_cleanup(struct mm_event_receiver *receiver);
 
-void NONNULL(1)
-mm_event_receiver_observe_epoch(struct mm_event_receiver *receiver);
-
 void
 mm_event_receiver_forward(struct mm_event_receiver *receiver, struct mm_event_fd *sink, mm_event_t event);
 
 void
 mm_event_receiver_forward_flush(struct mm_thread *thread, struct mm_event_receiver_fwdbuf *buffer);
-
-void NONNULL(1, 2)
-mm_event_receiver_unregister(struct mm_event_receiver *receiver, struct mm_event_fd *sink);
 
 #endif /* BASE_EVENT_RECEIVER_H */
