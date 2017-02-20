@@ -226,22 +226,22 @@ mm_event_listener_poll_finish(struct mm_event_listener *listener)
 		listener->stats.forwarded_events += listener->forwarded_events;
 
 		struct mm_event_dispatch *dispatch = listener->dispatch;
-		struct mm_event_receiver *receiver = &listener->receiver;
+		struct mm_event_forward_cache *cache = &listener->forward;
 
-		mm_thread_t target = mm_bitset_find(&receiver->forward_targets, 0);
+		mm_thread_t target = mm_bitset_find(&cache->targets, 0);
 		while (target != MM_THREAD_NONE) {
 			struct mm_event_listener *target_listener = &dispatch->listeners[target];
-			struct mm_event_forward_buffer *buffer = &receiver->forward_buffers[target];
+			struct mm_event_forward_buffer *buffer = &cache->buffers[target];
 			mm_event_forward_flush(target_listener->thread, buffer);
 			buffer->ntotal = 0;
 
-			if (++target < mm_bitset_size(&receiver->forward_targets))
-				target = mm_bitset_find(&receiver->forward_targets, target);
+			if (++target < mm_bitset_size(&cache->targets))
+				target = mm_bitset_find(&cache->targets, target);
 			else
 				target = MM_THREAD_NONE;
 		}
 
-		mm_bitset_clear_all(&receiver->forward_targets);
+		mm_bitset_clear_all(&cache->targets);
 	}
 
 	// Advance the reclamation epoch.
@@ -349,14 +349,13 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		listener->stats.loose_events++;
 
 	} else {
-		struct mm_event_receiver *receiver = &listener->receiver;
-
 		mm_thread_t target = mm_event_target(sink);
 
 		// If the event sink can be detached from its target thread
 		// then do it now. But make sure the target thread has some
 		// minimal amount if work.
 		if (!sink->bound_target && !mm_event_active(sink)) {
+			ASSERT(target != MM_THREAD_NONE);
 			uint16_t nr = listener->dequeued_events;
 			if (target == listener->target) {
 				nr += listener->direct_events;
@@ -366,7 +365,7 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 				nr += max(listener->direct_events, listener->direct_events_estimate);
 				if (nr < MM_EVENT_LISTENER_RETAIN_MIN)
 					sink->target = target = listener->target;
-				else if (receiver->forward_buffers[target].ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
+				else if (listener->forward.buffers[target].ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
 					sink->target = target = MM_THREAD_NONE;
 			}
 		}
@@ -383,7 +382,7 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		} else if (target == MM_THREAD_NONE) {
 			mm_event_listener_enqueue_sink(listener, sink, event);
 		} else {
-			mm_event_forward(receiver, listener->dispatch, sink, event);
+			mm_event_forward(&listener->forward, listener->dispatch, sink, event);
 			listener->forwarded_events++;
 		}
 	}
@@ -433,7 +432,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 #endif
 
 	// Initialize event forwarding data.
-	mm_event_forward_prepare(&listener->receiver, dispatch);
+	mm_event_forward_prepare(&listener->forward, dispatch->nlisteners);
 
 	// Initialize change event storage.
 	mm_event_batch_prepare(&listener->changes, 256);

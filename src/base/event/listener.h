@@ -92,7 +92,7 @@ struct mm_event_listener
 #endif
 
 	/* The number of locally handled events found while adjusting
-	   the receiver for appropriate dispatch strategy. */
+	   the listener for appropriate event forwarding strategy. */
 	uint16_t direct_events_estimate;
 	/* The number of directly handled events. */
 	uint16_t direct_events;
@@ -120,7 +120,7 @@ struct mm_event_listener
 	struct mm_event_batch changes;
 
 	/* Listener's helper to forward events. */
-	struct mm_event_receiver receiver;
+	struct mm_event_forward_cache forward;
 
 	/* Statistics. */
 	struct mm_event_listener_stats stats;

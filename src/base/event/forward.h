@@ -1,7 +1,7 @@
 /*
  * base/event/forward.h - MainMemory event forwarding.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -39,26 +39,26 @@ struct mm_event_forward_buffer
 	struct mm_event_fd *sinks[MM_EVENT_FORWARD_BUFFER_SIZE];
 };
 
-struct mm_event_receiver
+struct mm_event_forward_cache
 {
 	/* Target threads that have received events. */
-	struct mm_bitset forward_targets;
+	struct mm_bitset targets;
 
 	/* Per-thread temporary store for sinks of received events. */
-	struct mm_event_forward_buffer *forward_buffers;
+	struct mm_event_forward_buffer *buffers;
 };
 
-void NONNULL(1, 2)
-mm_event_forward_prepare(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch);
+void NONNULL(1)
+mm_event_forward_prepare(struct mm_event_forward_cache *cache, mm_thread_t ntargets);
 
 void NONNULL(1)
-mm_event_forward_cleanup(struct mm_event_receiver *receiver);
+mm_event_forward_cleanup(struct mm_event_forward_cache *cache);
 
 void
 mm_event_forward_flush(struct mm_thread *thread, struct mm_event_forward_buffer *buffer);
 
 void
-mm_event_forward(struct mm_event_receiver *receiver, struct mm_event_dispatch *dispatch,
+mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_dispatch *dispatch,
 		 struct mm_event_fd *sink, mm_event_t event);
 
 #endif /* BASE_EVENT_FORWARD_H */
