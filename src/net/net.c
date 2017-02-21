@@ -728,7 +728,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 
 	case MM_EVENT_DISABLE:
 		// Close the socket.
-		// TODO: set linger off and/or close concurrently to avoid stalls.
 		ASSERT(sock->event.fd >= 0);
 		mm_close(sock->event.fd);
 		sock->event.fd = -1;
