@@ -80,7 +80,18 @@ For the later option, run the configure script as follows:
 > ./configure --enable-smp
 ```
 
-# Development Builds
+## What Build to Use
+
+The single-threaded version does not use the synchronization mechanisms of
+the multi-threaded version. Therefore it performs better (with higher
+throughput and smaller latency) until it hits the single-core execution
+limits.
+
+As a rule of thumb if the required throughput of the server is less than
+about 100k requests per second then it might be beneficial to use the
+single-threaded build. Otherwise the multi-threaded build is preferred.
+
+## Development Builds
 
 There are a few other configure options that might be useful during
 development. The following options enable collection and output (in
@@ -96,14 +107,3 @@ was helpful however in the early days of the project):
 ```
 > ./configure --enable-debug --enbale-trace
 ```
-
-## What Build to Use
-
-The single-threaded version does not use the synchronization mechanisms of
-the multi-threaded version. Therefore it performs better (with higher
-throughput and smaller latency) until it hits the single-core execution
-limits.
-
-As a rule of thumb if the required throughput of the server is less than
-about 100k requests per second then it might be beneficial to use the
-single-threaded build. Otherwise the multi-threaded build is preferred.
