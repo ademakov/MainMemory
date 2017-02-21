@@ -63,9 +63,6 @@ struct mm_event_epoll_storage
 #endif
 };
 
-void
-mm_event_epoll_init(void);
-
 void NONNULL(1)
 mm_event_epoll_prepare(struct mm_event_epoll *backend);
 

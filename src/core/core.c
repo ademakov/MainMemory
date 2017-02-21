@@ -897,7 +897,6 @@ mm_core_init(void)
 	else
 		mm_brief("running on %d cores.", mm_core_num);
 
-	mm_event_init();
 	mm_net_init();
 
 	mm_task_init();

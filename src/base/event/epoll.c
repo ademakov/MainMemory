@@ -36,11 +36,8 @@
 
 #if MM_EVENT_NATIVE_NOTIFY
 
-/* Event poll notification handler ID. */
-static mm_event_hid_t mm_event_epoll_notify_handler;
-
 static void
-mm_event_epoll_handle_notify(mm_event_t event UNUSED, void *data)
+mm_event_epoll_notify_handler(mm_event_t event UNUSED, void *data)
 {
 	ENTER();
 
@@ -92,19 +89,6 @@ mm_eventfd(unsigned int value, int flags)
 # define mm_eventfd		eventfd
 
 #endif
-
-void
-mm_event_epoll_init(void)
-{
-	ENTER();
-
-#if MM_EVENT_NATIVE_NOTIFY
-	// Register the notify event handler.
-	mm_event_epoll_notify_handler = mm_event_register_handler(mm_event_epoll_handle_notify);
-#endif
-
-	LEAVE();
-}
 
 static void
 mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change *change,
