@@ -3,7 +3,7 @@ SUBDIRS = arch base memcache
 
 AM_CFLAGS = -Wall -Wextra
 
-bin_PROGRAMS = mmem
+bin_PROGRAMS = mmd
 
 lib_LTLIBRARIES = libmm.la
 
@@ -28,5 +28,5 @@ net_sources = \
 libmm_la_SOURCES = $(core_sources) $(net_sources)
 libmm_la_LIBADD = base/libmmbase.la arch/libmmarch.la
 
-mmem_SOURCES = main.c
-mmem_LDADD = memcache/libmemcache.a libmm.la
+mmd_SOURCES = main.c
+mmd_LDADD = memcache/libmemcache.a libmm.la
