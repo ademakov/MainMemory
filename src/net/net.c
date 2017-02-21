@@ -583,7 +583,7 @@ mm_net_event_complete(struct mm_net_socket *sock)
 		mm_net_close(sock);
 #if ENABLE_SMP
 	else if (sock->proto->detach == NULL || (sock->proto->detach)(sock))
-		mm_event_complete(&sock->event);
+		mm_event_handle_complete(&sock->event);
 #endif
 
 	LEAVE();

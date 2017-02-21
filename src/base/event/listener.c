@@ -1,7 +1,7 @@
 /*
  * base/event/listener.c - MainMemory event listener.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -149,7 +149,7 @@ mm_event_listener_reclaim_epoch(struct mm_event_listener *listener, uint32_t epo
 	while (!mm_stack_empty(stack)) {
 		struct mm_slink *link = mm_stack_remove(stack);
 		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-		mm_event_convey(sink, MM_EVENT_RECLAIM);
+		mm_event_handle(sink, MM_EVENT_RECLAIM);
 	}
 }
 
@@ -212,7 +212,7 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
-		mm_event_convey(sink, event);
+		mm_event_handle(sink, event);
 		listener->dequeued_events++;
 	}
 }
@@ -222,7 +222,7 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t nevents)
+mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents)
 {
 	ENTER();
 
@@ -248,7 +248,7 @@ mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t ne
 }
 
 void NONNULL(1)
-mm_event_listener_dispatch_finish(struct mm_event_listener *listener)
+mm_event_listener_handle_finish(struct mm_event_listener *listener)
 {
 	ENTER();
 
@@ -266,13 +266,13 @@ mm_event_listener_dispatch_finish(struct mm_event_listener *listener)
 }
 
 void NONNULL(1, 2)
-mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
+mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
 	if (unlikely(sink->loose_target)) {
 		// Handle the event immediately.
-		mm_event_convey(sink, event);
+		mm_event_handle(sink, event);
 
 #if ENABLE_EVENT_STATS
 		listener->stats.loose_events++;
@@ -307,7 +307,7 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (target == listener->target) {
-			mm_event_convey(sink, event);
+			mm_event_handle(sink, event);
 			listener->direct_events++;
 		} else if (target != MM_THREAD_NONE) {
 			mm_event_forward(&listener->forward, sink, event);
@@ -327,7 +327,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 
 	mm_event_update_receive_stamp(sink);
 	mm_event_listener_reclaim_queue_insert(listener, sink);
-	mm_event_convey(sink, MM_EVENT_DISABLE);
+	mm_event_handle(sink, MM_EVENT_DISABLE);
 
 	LEAVE();
 }

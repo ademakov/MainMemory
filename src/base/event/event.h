@@ -52,12 +52,6 @@ typedef enum {
 typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
 
 /**********************************************************************
- * Event subsystem statistics.
- **********************************************************************/
-
-void mm_event_stats(void);
-
-/**********************************************************************
  * I/O events support.
  **********************************************************************/
 
@@ -173,10 +167,20 @@ mm_event_trigger_input(struct mm_event_fd *sink, struct mm_event_dispatch *dispa
 void NONNULL(1, 2)
 mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
 
-void NONNULL(1)
-mm_event_convey(struct mm_event_fd *sink, mm_event_t event);
+static inline void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+	// Count the received event.
+	mm_event_update_dispatch_stamp(sink);
+	// Handle the received event.
+	(sink->handler)(event, sink);
+}
 
-void NONNULL(1)
-mm_event_complete(struct mm_event_fd *sink);
+static inline void NONNULL(1)
+mm_event_handle_complete(struct mm_event_fd *sink)
+{
+	// Mark the sink as detached.
+	mm_event_update_complete_stamp(sink);
+}
 
 #endif /* BASE_EVENT_EVENT_H */

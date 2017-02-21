@@ -1,7 +1,7 @@
 /*
  * base/event/epoll.c - MainMemory epoll support.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -190,7 +190,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 	}
 
 	bool locked = true;
-	mm_event_listener_dispatch_start(listener, nevents);
+	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
@@ -201,7 +201,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (sink->oneshot_input) {
 				if (locked) {
 					locked = false;
-					mm_event_listener_dispatch_finish(listener);
+					mm_event_listener_handle_finish(listener);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -228,7 +228,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_listener_dispatch_start(listener, nevents - i);
+				mm_event_listener_handle_start(listener, nevents - i);
 			}
 
 			sink->oneshot_input_trigger = false;
@@ -239,7 +239,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (sink->oneshot_output) {
 				if (locked) {
 					locked = false;
-					mm_event_listener_dispatch_finish(listener);
+					mm_event_listener_handle_finish(listener);
 				}
 
 				// TODO: If the event sink had both input and output in the
@@ -266,7 +266,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 
 			if (!locked) {
 				locked = true;
-				mm_event_listener_dispatch_start(listener, nevents - i);
+				mm_event_listener_handle_start(listener, nevents - i);
 			}
 
 			sink->oneshot_output_trigger = false;
@@ -280,7 +280,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_input) {
 				if (!locked) {
 					locked = true;
-					mm_event_listener_dispatch_start(listener, nevents - i);
+					mm_event_listener_handle_start(listener, nevents - i);
 				}
 
 				sink->oneshot_input_trigger = false;
@@ -290,7 +290,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0) {
 				if (!locked) {
 					locked = true;
-					mm_event_listener_dispatch_start(listener, nevents - i);
+					mm_event_listener_handle_start(listener, nevents - i);
 				}
 
 				sink->oneshot_output_trigger = false;
@@ -300,7 +300,7 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 	}
 
 	if (locked) {
-		mm_event_listener_dispatch_finish(listener);
+		mm_event_listener_handle_finish(listener);
 	}
 }
 

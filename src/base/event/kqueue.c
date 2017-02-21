@@ -1,7 +1,7 @@
 /*
  * base/event/kqueue.c - MainMemory kqueue support.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by 
@@ -175,7 +175,7 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 		}
 	}
 
-	mm_event_listener_dispatch_start(listener, nevents);
+	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
@@ -207,7 +207,7 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 		}
 	}
 
-	mm_event_listener_dispatch_finish(listener);
+	mm_event_listener_handle_finish(listener);
 }
 
 static void

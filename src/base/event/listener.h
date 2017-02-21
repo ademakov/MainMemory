@@ -1,7 +1,7 @@
 /*
  * base/event/listener.h - MainMemory event listener.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -201,13 +201,13 @@ mm_event_listener_got_events(struct mm_event_listener *listener)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_dispatch_start(struct mm_event_listener *listener, uint32_t nevents);
+mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents);
 
 void NONNULL(1)
-mm_event_listener_dispatch_finish(struct mm_event_listener *listener);
+mm_event_listener_handle_finish(struct mm_event_listener *listener);
 
 void NONNULL(1, 2)
-mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event);
+mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event);
 
 void NONNULL(1, 2)
 mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink);
@@ -215,25 +215,25 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 static inline void NONNULL(1, 2)
 mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_dispatch(listener, sink, MM_EVENT_INPUT);
+	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_dispatch(listener, sink, MM_EVENT_INPUT_ERROR);
+	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT_ERROR);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_dispatch(listener, sink, MM_EVENT_OUTPUT);
+	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT);
 }
 
 static inline void NONNULL(1, 2)
 mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_dispatch(listener, sink, MM_EVENT_OUTPUT_ERROR);
+	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
 }
 
 static inline bool NONNULL(1, 2)
