@@ -71,13 +71,30 @@ MainMemory can be built in one of the two configurations:
 For the former option, run the configure script as follows:
 
 ```
-> ./configure
+> ./configure --disable-smp
 ```
 
 For the later option, run the configure script as follows:
 
 ```
 > ./configure --enable-smp
+```
+
+# Development Builds
+
+There are a few other configure options that might be useful during
+development. The following options enable collection and output (in
+somewhat cryptic format) of event loop and locking statistics:
+
+```
+> ./configure --enable-event-stats --enbale-lock-stats
+```
+
+The following options enable lots and lots of useless output (it
+was helpful however in the early days of the project):
+
+```
+> ./configure --enable-debug --enbale-trace
 ```
 
 ## What Build to Use
