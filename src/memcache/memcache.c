@@ -115,7 +115,7 @@ parse:
 			state->command = NULL;
 		}
 		if (state->trash) {
-			mm_netbuf_close(&state->sock);
+			mm_netbuf_reset(&state->sock);
 			mm_warning(0, "disconnect an odd client");
 			goto leave;
 		}

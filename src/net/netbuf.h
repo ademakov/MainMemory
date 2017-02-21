@@ -125,6 +125,12 @@ mm_netbuf_close(struct mm_netbuf_socket *sock)
 	mm_net_close(&sock->sock);
 }
 
+static inline void NONNULL(1)
+mm_netbuf_reset(struct mm_netbuf_socket *sock)
+{
+	mm_net_reset(&sock->sock);
+}
+
 /**********************************************************************
  * Receive buffer in-place parsing support.
  **********************************************************************/
