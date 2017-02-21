@@ -1,7 +1,7 @@
 /*
  * base/event/selfpipe.h - MainMemory self-pipe trick.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,16 +31,6 @@ struct mm_selfpipe
 
 	bool read_ready;
 };
-
-/**********************************************************************
- * Self-pipe subsystem initialization.
- **********************************************************************/
-
-void mm_selfpipe_init(void);
-
-/**********************************************************************
- * Self-pipe instance routines.
- **********************************************************************/
 
 void NONNULL(1)
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe);

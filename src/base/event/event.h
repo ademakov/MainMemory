@@ -1,7 +1,7 @@
 /*
  * base/event/event.h - MainMemory event loop.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -48,6 +48,9 @@ typedef enum {
 	MM_EVENT_AGILE,
 } mm_event_affinity_t;
 
+/* Event handler routine. */
+typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
+
 /**********************************************************************
  * Event subsystem initialization.
  **********************************************************************/
@@ -59,24 +62,6 @@ void mm_event_init(void);
  **********************************************************************/
 
 void mm_event_stats(void);
-
-/**********************************************************************
- * Event handlers.
- **********************************************************************/
-
-/* Event handler identifier. */
-typedef uint8_t mm_event_hid_t;
-
-/* Event handler routine. */
-typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
-
-/* Event handler descriptor. */
-struct mm_event_hdesc
-{
-	mm_event_handler_t handler;
-};
-
-mm_event_hid_t mm_event_register_handler(mm_event_handler_t handler);
 
 /**********************************************************************
  * I/O events support.
@@ -111,9 +96,6 @@ struct mm_event_fd
 	/* Pending events for sinks in the dispatch queue. */
 	uint8_t queued_events;
 
-	/* Event handers. */
-	mm_event_hid_t handler;
-
 	/* Flags used by poller threads. */
 	bool oneshot_input_trigger;
 	bool oneshot_output_trigger;
@@ -126,6 +108,9 @@ struct mm_event_fd
 	unsigned oneshot_input : 1;
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
+
+	/* The event hander. */
+	mm_event_handler_t handler;
 
 	/* Reclaim queue link. */
 	struct mm_slink reclaim_link;
@@ -174,8 +159,8 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 #endif
 }
 
-bool NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
+bool NONNULL(1, 3)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
 		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
 		    mm_event_affinity_t target);
 

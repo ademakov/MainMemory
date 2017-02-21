@@ -1,7 +1,7 @@
 /*
  * base/event/event.c - MainMemory event loop.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,64 +25,11 @@
 #include "base/thread/thread.h"
 
 /**********************************************************************
- * Event handlers.
- **********************************************************************/
-
-/* Event handler table size. */
-#define MM_EVENT_HANDLER_MAX	(255)
-
-/* Event handler table. */
-static struct mm_event_hdesc mm_event_hdesc_table[MM_EVENT_HANDLER_MAX];
-
-/* The number of registered event handlers. */
-static int mm_event_hdesc_table_size;
-
-// A dummy event handler.
-static void
-mm_event_dummy(mm_event_t event UNUSED, void *data UNUSED)
-{
-	DEBUG("hmm, dummy event handler invoked.");
-}
-
-// Initialize the event handler table.
-static void
-mm_event_init_handlers(void)
-{
-	ENTER();
-	ASSERT(MM_EVENT_HANDLER_MAX < 256);
-
-	// Register dummy handler with zero id.
-	ASSERT(mm_event_hdesc_table_size == 0);
-	(void) mm_event_register_handler(mm_event_dummy);
-	ASSERT(mm_event_hdesc_table_size == 1);
-
-	LEAVE();
-}
-
-/* Register an event handler in the table. */
-mm_event_hid_t
-mm_event_register_handler(mm_event_handler_t handler)
-{
-	ENTER();
-
-	ASSERT(handler != NULL);
-	ASSERT(mm_event_hdesc_table_size < MM_EVENT_HANDLER_MAX);
-
-	mm_event_hid_t id = mm_event_hdesc_table_size++;
-	mm_event_hdesc_table[id].handler = handler;
-
-	DEBUG("registered event handler %d", id);
-
-	LEAVE();
-	return id;
-}
-
-/**********************************************************************
  * I/O events support.
  **********************************************************************/
 
 bool NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
 		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
 		    mm_event_affinity_t target)
 {
@@ -92,6 +39,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 
 	sink->fd = fd;
 	sink->target = MM_THREAD_NONE;
+	sink->handler = handler;
 
 #if ENABLE_SMP
 	sink->receive_stamp = 0;
@@ -100,7 +48,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_hid_t handler,
 #endif
 	sink->queued_events = 0;
 
-	sink->handler = handler;
 	sink->loose_target = (target == MM_EVENT_LOOSE);
 	sink->bound_target = (target == MM_EVENT_BOUND);
 
@@ -186,16 +133,12 @@ mm_event_convey(struct mm_event_fd *sink, mm_event_t event)
 	ENTER();
 	ASSERT(sink->loose_target || mm_event_target(sink) == mm_thread_self());
 
-	mm_event_hid_t id = sink->handler;
-	ASSERT(id < mm_event_hdesc_table_size);
-	struct mm_event_hdesc *hd = &mm_event_hdesc_table[id];
-
 	// Count the received event.
 	mm_event_update_dispatch_stamp(sink);
 	DEBUG("sink %d got event %u on thread %u", sink->fd, sink->dispatch_stamp, mm_thread_self());
 
 	// Handle the received event.
-	(hd->handler)(event, sink);
+	(sink->handler)(event, sink);
 
 	LEAVE();
 }
@@ -221,10 +164,6 @@ void
 mm_event_init(void)
 {
 	ENTER();
-
-	// Initialize generic data.
-	mm_event_init_handlers();
-	mm_selfpipe_init();
 
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_init();

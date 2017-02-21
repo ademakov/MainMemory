@@ -1,7 +1,7 @@
 /*
  * base/event/selfpipe.c - MainMemory self-pipe trick.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,15 +28,8 @@
 
 #include <unistd.h>
 
-/**********************************************************************
- * Self-pipe Handler.
- **********************************************************************/
-
-/* Self-pipe event handler ID. */
-static mm_event_hid_t mm_selfpipe_handler;
-
 static void
-mm_selfpipe_ready(mm_event_t event UNUSED, void *data)
+mm_selfpipe_handler(mm_event_t event UNUSED, void *data)
 {
 	ENTER();
 
@@ -46,25 +39,6 @@ mm_selfpipe_ready(mm_event_t event UNUSED, void *data)
 
 	LEAVE();
 }
-
-/**********************************************************************
- * Self-pipe Initialization.
- **********************************************************************/
-
-void
-mm_selfpipe_init(void)
-{
-	ENTER();
-
-	// Register the self-pipe event handler.
-	mm_selfpipe_handler = mm_event_register_handler(mm_selfpipe_ready);
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Self-pipe instance.
- **********************************************************************/
 
 void NONNULL(1)
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)

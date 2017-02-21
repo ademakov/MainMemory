@@ -38,12 +38,6 @@
 #include <netinet/tcp.h>
 #include <unistd.h>
 
-// Accept event handler cookie.
-static mm_event_hid_t mm_net_accept_hid;
-
-// Client socket I/O event handler ID.
-static mm_event_hid_t mm_net_socket_hid;
-
 /**********************************************************************
  * Network address manipulation routines.
  **********************************************************************/
@@ -401,6 +395,7 @@ leave:
  * Socket initialization and cleanup.
  **********************************************************************/
 
+static void mm_net_socket_handler(mm_event_t event, void *data);
 static mm_value_t mm_net_register_routine(mm_value_t arg);
 static mm_value_t mm_net_reader_routine(mm_value_t arg);
 static mm_value_t mm_net_writer_routine(mm_value_t arg);
@@ -440,7 +435,7 @@ mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_affinity_t affinity = (flags & MM_NET_BOUND_EVENTS) != 0 ? MM_EVENT_BOUND : MM_EVENT_AGILE;
-	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid, input, output, affinity);
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_handler, input, output, affinity);
 }
 
 static void
@@ -573,17 +568,6 @@ mm_net_accept_handler(mm_event_t event, void *data)
 	LEAVE();
 }
 
-static void
-mm_net_init_accept_handler(void)
-{
-	ENTER();
-
-	// Register I/O handlers.
-	mm_net_accept_hid = mm_event_register_handler(mm_net_accept_handler);
-
-	LEAVE();
-}
-
 /**********************************************************************
  * Socket I/O state.
  **********************************************************************/
@@ -694,7 +678,7 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 }
 
 /**********************************************************************
- * Socket I/O event handlers.
+ * Socket I/O event handler.
  **********************************************************************/
 
 static void
@@ -746,17 +730,6 @@ mm_net_socket_handler(mm_event_t event, void *data)
 	default:
 		break;
 	}
-
-	LEAVE();
-}
-
-void
-mm_net_init_socket_handler()
-{
-	ENTER();
-
-	// Allocate an event handler IDs.
-	mm_net_socket_hid = mm_event_register_handler(mm_net_socket_handler);
 
 	LEAVE();
 }
@@ -1004,8 +977,6 @@ mm_net_init(void)
 	mm_core_hook_stop(mm_net_socket_pool_stop);
 
 	mm_net_init_server_table();
-	mm_net_init_accept_handler();
-	mm_net_init_socket_handler();
 
 	mm_net_initialized = 1;
 
@@ -1139,7 +1110,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_hid,
+	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
 	mm_core_post(srv_core, mm_net_register_server, (mm_value_t) srv);
 
@@ -1254,7 +1225,7 @@ retry:
 	sock->flags |= MM_NET_CONNECTING;
 
 	// Register the socket in the event loop.
-	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_hid,
+	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_handler,
 			    MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_BOUND);
 	mm_event_register_fd(&sock->event, &mm_core_dispatch);
 
