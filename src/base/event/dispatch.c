@@ -92,25 +92,31 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	ASSERT(thread < dispatch->nlisteners);
 	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 
-	const bool has_changes = mm_event_listener_has_changes(listener);
-	if (has_changes) {
-		// There may be changes that need to be immediately acknowledged.
+	if (mm_event_listener_got_events(listener)) {
+		// Presume that if there were incoming events moments ago then
+		// there is a chance to get some more immediately. Don't sleep
+		// to avoid a context switch.
 		timeout = 0;
 	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
 		// Check if there are immediately available events in the queue.
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
 		timeout = 0;
-	} else if (mm_event_listener_got_events(listener)) {
-		// Presume that if there were incoming events moments ago then
-		// there is a chance to get some more immediately. Don't sleep
-		// to avoid a context switch.
-		timeout = 0;
 	}
 
-	// Try to advance the event sink reclamation epoch if needed.
-	if ((has_changes || timeout != 0) && listener->reclaim_active)
-		mm_event_dispatch_advance_epoch(dispatch);
+	if (mm_event_listener_has_changes(listener)) {
+		// There may be changes that need to be immediately acknowledged.
+		timeout = 0;
+
+		// Try to advance the event sink reclamation epoch if needed.
+		if (listener->reclaim_active)
+			mm_event_dispatch_advance_epoch(dispatch);
+
+	} else if (timeout != 0) {
+		// Try to advance the event sink reclamation epoch if needed.
+		if (listener->reclaim_active)
+			mm_event_dispatch_advance_epoch(dispatch);
+	}
 
 	// The first arrived thread is elected to conduct the next event poll.
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
@@ -226,10 +232,11 @@ mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 {
 	ENTER();
 
+#if ENABLE_EVENT_STATS
 	mm_thread_t n = dispatch->nlisteners;
 	struct mm_event_listener *listeners = dispatch->listeners;
 	for (mm_thread_t i = 0; i < n; i++) {
@@ -256,6 +263,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch)
 		}
 		mm_log_str("\n");
 	}
+#endif
 
 	LEAVE();
 }

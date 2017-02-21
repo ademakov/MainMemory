@@ -56,8 +56,11 @@ struct mm_event_epoll_storage
 {
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
+
+#if ENABLE_EVENT_STATS
 	/* Statistics. */
 	uint64_t nevents_stats[MM_EVENT_EPOLL_NEVENTS + 1];
+#endif
 };
 
 void

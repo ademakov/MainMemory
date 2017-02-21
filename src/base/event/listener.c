@@ -133,13 +133,6 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t 
  * Event sink reclamation.
  **********************************************************************/
 
-static bool
-mm_event_listener_reclaim_queue_empty(struct mm_event_listener *listener)
-{
-	return (mm_stack_empty(&listener->reclaim_queue[0])
-		&& mm_stack_empty(&listener->reclaim_queue[1]));
-}
-
 static void
 mm_event_listener_reclaim_queue_insert(struct mm_event_listener *listener,
 				       struct mm_event_fd *sink)
@@ -176,46 +169,9 @@ mm_event_listener_observe_epoch(struct mm_event_listener *listener)
 	}
 
 	// Finish reclamation if there are no more queued event sinks.
-	if (mm_event_listener_reclaim_queue_empty(listener)) {
+	if (mm_stack_empty(&listener->reclaim_queue[0]) && mm_stack_empty(&listener->reclaim_queue[1])) {
 		mm_memory_store_fence();
 		mm_memory_store(listener->reclaim_active, false);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Event listener poll helpers.
- **********************************************************************/
-
-static inline void NONNULL(1)
-mm_event_listener_poll_start(struct mm_event_listener *listener)
-{
-	ENTER();
-
-	// No events arrived yet.
-	listener->direct_events_estimate = 0;
-	listener->direct_events = 0;
-	listener->enqueued_events = 0;
-	listener->dequeued_events = 0;
-	listener->forwarded_events = 0;
-
-	LEAVE();
-}
-
-static inline void NONNULL(1)
-mm_event_listener_poll_finish(struct mm_event_listener *listener)
-{
-	ENTER();
-
-	listener->stats.direct_events += listener->direct_events;
-	listener->stats.enqueued_events += listener->enqueued_events;
-	listener->stats.dequeued_events += listener->dequeued_events;
-
-	// Flush and count forwarded events.
-	if (listener->forwarded_events) {
-		listener->stats.forwarded_events += listener->forwarded_events;
-		mm_event_forward_flush(&listener->forward);
 	}
 
 	LEAVE();
@@ -317,7 +273,10 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 	if (unlikely(sink->loose_target)) {
 		// Handle the event immediately.
 		mm_event_convey(sink, event);
+
+#if ENABLE_EVENT_STATS
 		listener->stats.loose_events++;
+#endif
 
 	} else {
 		mm_thread_t target = mm_event_target(sink);
@@ -350,11 +309,11 @@ mm_event_listener_dispatch(struct mm_event_listener *listener, struct mm_event_f
 		if (target == listener->target) {
 			mm_event_convey(sink, event);
 			listener->direct_events++;
-		} else if (target == MM_THREAD_NONE) {
-			mm_event_listener_enqueue_sink(listener, sink, event);
-		} else {
+		} else if (target != MM_THREAD_NONE) {
 			mm_event_forward(&listener->forward, sink, event);
 			listener->forwarded_events++;
+		} else {
+			mm_event_listener_enqueue_sink(listener, sink, event);
 		}
 	}
 
@@ -414,6 +373,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	mm_stack_prepare(&listener->reclaim_queue[0]);
 	mm_stack_prepare(&listener->reclaim_queue[1]);
 
+#if ENABLE_EVENT_STATS
 	// Initialize the statistic counters.
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
@@ -423,6 +383,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.enqueued_events = 0;
 	listener->stats.dequeued_events = 0;
 	listener->stats.forwarded_events = 0;
+#endif
 
 	// Initialize private event storage.
 	mm_event_backend_storage_prepare(&listener->storage);
@@ -485,12 +446,18 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
+#if ENABLE_EVENT_STATS
 	// Update statistics.
 	listener->stats.poll_calls++;
 	listener->stats.zero_poll_calls += (timeout == 0);
+#endif
 
-	// Prepare to receive events.
-	mm_event_listener_poll_start(listener);
+	// Reset event counters.
+	listener->direct_events_estimate = 0;
+	listener->direct_events = 0;
+	listener->enqueued_events = 0;
+	listener->dequeued_events = 0;
+	listener->forwarded_events = 0;
 
 	// Determine if a reclamation critical section needs to be started.
 	bool reclaim_activate = !listener->reclaim_active;
@@ -503,8 +470,11 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 			mm_atomic_uint8_fetch_and_set(&listener->reclaim_active, true);
 #else
 			mm_memory_store(listener->reclaim_active, true);
-			mm_memory_strict_fence();
+			mm_memory_strict_fence(); // TODO: store_load fence
 #endif
+			// Catch up with the current reclamation epoch.
+			uint32_t epoch = mm_memory_load(listener->dispatch->reclaim_epoch);
+			mm_memory_store(listener->reclaim_epoch, epoch);
 		}
 	} else {
 		// Get the next expected notify stamp.
@@ -528,16 +498,16 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_memory_strict_fence(); // TODO: store_load fence
 #endif
 
+		// Catch up with the current reclamation epoch if needed.
+		if (reclaim_activate) {
+			uint32_t epoch = mm_memory_load(listener->dispatch->reclaim_epoch);
+			mm_memory_store(listener->reclaim_epoch, epoch);
+		}
+
 		// Wait for a wake-up notification or timeout unless
 		// a pending notification is detected.
 		if (stamp != mm_event_listener_enqueue_stamp(listener))
 			timeout = 0;
-	}
-
-	// Catch up with the current reclamation epoch if needed.
-	if (reclaim_activate) {
-		uint32_t epoch = mm_memory_load(listener->dispatch->reclaim_epoch);
-		mm_memory_store(listener->reclaim_epoch, epoch);
 	}
 
 	// Check incoming events and wait for notification/timeout.
@@ -547,11 +517,20 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	// Advertise the start of another working cycle.
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
 
-	// Flush received events.
-	mm_event_listener_poll_finish(listener);
+	// Flush forwarded events.
+	if (listener->forwarded_events)
+		mm_event_forward_flush(&listener->forward);
 
 	// Advance the reclamation epoch.
 	mm_event_listener_observe_epoch(listener);
+
+#if ENABLE_EVENT_STATS
+	// Update event statistics.
+	listener->stats.direct_events += listener->direct_events;
+	listener->stats.enqueued_events += listener->enqueued_events;
+	listener->stats.dequeued_events += listener->dequeued_events;
+	listener->stats.forwarded_events += listener->forwarded_events;
+#endif
 
 	// Forget just handled change events.
 	mm_event_listener_clear_changes(listener);
@@ -565,8 +544,10 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 	ENTER();
 	ASSERT(timeout != 0);
 
+#if ENABLE_EVENT_STATS
 	// Update statistics.
 	listener->stats.wait_calls++;
+#endif
 
 	// Get the next expected notify stamp.
 	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);

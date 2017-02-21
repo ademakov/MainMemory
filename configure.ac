@@ -97,6 +97,13 @@ if test "x$inline_syscalls" = "xyes"; then
 	AC_DEFINE([ENABLE_INLINE_SYSCALLS], 1, [Define to 1 to enable inline syscalls.])
 fi
 
+AC_ARG_ENABLE([event-stats],
+	[AS_HELP_STRING([--enable-event-stats], [enable event statistics (default=no)])],
+	[event_stats="$enableval"], [event_stats=no])
+if test "x$event_stats" = "xyes"; then
+	AC_DEFINE([ENABLE_EVENT_STATS], 1, [Define to 1 to enable event statistics.])
+fi
+
 AC_ARG_ENABLE([lock-stats],
 	[AS_HELP_STRING([--enable-lock-stats], [enable lock statistics (default=no)])],
 	[lock_stats="$enableval"], [lock_stats=no])

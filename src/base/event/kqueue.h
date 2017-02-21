@@ -52,8 +52,11 @@ struct mm_event_kqueue_storage
 	int nevents;
 	/* The kevent list. */
 	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
+
+#if ENABLE_EVENT_STATS
 	/* Statistics. */
 	uint64_t nevents_stats[MM_EVENT_KQUEUE_NEVENTS + 1];
+#endif
 };
 
 void NONNULL(1)

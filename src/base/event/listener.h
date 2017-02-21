@@ -57,6 +57,7 @@ typedef enum
 	MM_EVENT_LISTENER_WAITING = 2,
 } mm_event_listener_status_t;
 
+#if ENABLE_EVENT_STATS
 /* Event listener statistics. */
 struct mm_event_listener_stats
 {
@@ -70,6 +71,7 @@ struct mm_event_listener_stats
 	uint64_t dequeued_events;
 	uint64_t forwarded_events;
 };
+#endif
 
 struct mm_event_listener
 {
@@ -122,11 +124,13 @@ struct mm_event_listener
 	/* Listener's helper to forward events. */
 	struct mm_event_forward_cache forward;
 
-	/* Statistics. */
-	struct mm_event_listener_stats stats;
-
 	/* Private event storage. */
 	struct mm_event_backend_storage storage;
+
+#if ENABLE_EVENT_STATS
+	/* Statistics. */
+	struct mm_event_listener_stats stats;
+#endif
 
 } CACHE_ALIGN;
 

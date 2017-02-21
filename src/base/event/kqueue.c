@@ -277,8 +277,11 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend,
 			mm_error(errno, "kevent");
 		n = 0;
 	}
-	storage->nevents_stats[n]++;
 	storage->nevents = 0;
+
+#if ENABLE_EVENT_STATS
+	storage->nevents_stats[n]++;
+#endif
 
 	LEAVE();
 	return n;
@@ -315,8 +318,10 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 
 	storage->nevents = 0;
 
+#if ENABLE_EVENT_STATS
 	for (size_t i = 0; i <= MM_EVENT_KQUEUE_NEVENTS; i++)
 		storage->nevents_stats[i] = 0;
+#endif
 
 	LEAVE();
 }
