@@ -84,8 +84,8 @@ AC_CHECK_FUNCS(pthread_yield)
 dnl Check command line arguments
 
 AC_ARG_ENABLE([smp],
-	[AS_HELP_STRING([--enable-smp], [enable SMP support (default=no)])],
-	[smp="$enableval"], [smp=no])
+	[AS_HELP_STRING([--enable-smp], [enable SMP support (default=yes)])],
+	[smp="$enableval"], [smp=yes])
 if test "x$smp" = "xyes"; then
 	AC_DEFINE([ENABLE_SMP], 1, [Define to 1 to enable SMP support.])
 fi
