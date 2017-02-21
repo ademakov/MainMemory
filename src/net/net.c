@@ -1,7 +1,7 @@
 /*
  * net/net.c - MainMemory networking.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -161,13 +161,16 @@ mm_net_open_server_socket(struct mm_net_addr *addr, int backlog)
 }
 
 static void
-mm_net_set_socket_options(int fd)
+mm_net_set_socket_options(int fd, uint32_t flags)
 {
 	// Set the socket options.
 	int val = 1;
-	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
+	struct linger lin = { .l_onoff = 0, .l_linger = 0 };
+	if (setsockopt(fd, SOL_SOCKET, SO_LINGER, &lin, sizeof lin) < 0)
+		mm_error(errno, "setsockopt(..., SO_LINGER, ...)");
+	if ((flags & MM_NET_KEEPALIVE) != 0 && setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof val) < 0)
 		mm_error(errno, "setsockopt(..., SO_KEEPALIVE, ...)");
-	if (setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
+	if ((flags & MM_NET_NODELAY) != 0 && setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &val, sizeof val) < 0)
 		mm_error(errno, "setsockopt(..., TCP_NODELAY, ...)");
 
 	// Make the socket non-blocking.
@@ -416,7 +419,7 @@ mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 
 static void
 mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto,
-			    uint16_t flags, mm_thread_t thread)
+			    uint32_t flags, mm_thread_t thread)
 {
 	// Invalidate the event sink.
 	sock->event.fd = -1;
@@ -433,7 +436,7 @@ mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *pro
 static void
 mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 {
-	uint16_t flags = sock->flags;
+	uint32_t flags = sock->flags;
 	mm_event_occurrence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_occurrence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_affinity_t affinity = (flags & MM_NET_BOUND_EVENTS) != 0 ? MM_EVENT_BOUND : MM_EVENT_AGILE;
@@ -446,7 +449,7 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	ASSERT(thread == mm_thread_self());
 
 	// Figure out the required flags.
-	uint16_t flags = proto->flags & (MM_NET_INBOUND | MM_NET_OUTBOUND);
+	uint32_t flags = proto->flags & (MM_NET_INBOUND | MM_NET_OUTBOUND);
 	if (flags == 0) {
 		if (proto->reader != NULL)
 			flags |= MM_NET_INBOUND;
@@ -504,7 +507,7 @@ retry:
 	}
 
 	// Set common socket options.
-	mm_net_set_socket_options(fd);
+	mm_net_set_socket_options(fd, srv->proto->flags);
 
 	// Allocate a new socket structure.
 	struct mm_net_socket *sock = mm_net_socket_create(srv->proto);
@@ -603,7 +606,7 @@ mm_net_event_complete(struct mm_net_socket *sock)
 }
 
 static void
-mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
+mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -634,7 +637,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint16_t flags)
 }
 
 static void
-mm_net_set_write_ready(struct mm_net_socket *sock, uint16_t flags)
+mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 {
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
@@ -847,7 +850,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	}
 
 	// Check to see if a new reader should be spawned.
-	uint16_t fd_flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
+	uint32_t fd_flags = sock->flags & (MM_NET_READ_READY | MM_NET_READ_ERROR);
 	if ((sock->flags & MM_NET_READER_PENDING) != 0 && fd_flags != 0) {
 		if ((sock->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
@@ -887,7 +890,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	}
 
 	// Check to see if a new writer should be spawned.
-	uint16_t fd_flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
+	uint32_t fd_flags = sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR);
 	if ((sock->flags & MM_NET_WRITER_PENDING) != 0 && fd_flags != 0) {
 		if ((sock->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
@@ -1230,7 +1233,7 @@ mm_net_connect(struct mm_net_socket *sock, const struct mm_net_addr *addr)
 	}
 
 	// Set common socket options.
-	mm_net_set_socket_options(fd);
+	mm_net_set_socket_options(fd, 0);
 
 	// Initiate the connection.
 	socklen_t salen = mm_net_sockaddr_len(addr->addr.sa_family);
@@ -1633,6 +1636,29 @@ mm_net_close(struct mm_net_socket *sock)
 
 	// Mark the socket as closed.
 	sock->flags |= MM_NET_CLOSED;
+
+	// Remove the socket from the event loop.
+	mm_event_unregister_fd(&sock->event, &mm_core_dispatch);
+
+leave:
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_net_reset(struct mm_net_socket *sock)
+{
+	ENTER();
+	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+
+	if (mm_net_is_closed(sock))
+		goto leave;
+
+	// Mark the socket as closed.
+	sock->flags |= MM_NET_CLOSED;
+
+	struct linger lin = { .l_onoff = 1, .l_linger = 0 };
+	if (setsockopt(sock->event.fd, SOL_SOCKET, SO_LINGER, &lin, sizeof lin) < 0)
+		mm_error(errno, "setsockopt(..., SO_LINGER, ...)");
 
 	// Remove the socket from the event loop.
 	mm_event_unregister_fd(&sock->event, &mm_core_dispatch);

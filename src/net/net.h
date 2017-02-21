@@ -1,7 +1,7 @@
 /*
  * net/net.h - MainMemory networking.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,30 +36,34 @@
 struct mm_task;
 
 /* Protocol flags. */
-#define MM_NET_INBOUND		0x0001
-#define MM_NET_OUTBOUND		0x0002
+#define MM_NET_INBOUND		0x000001
+#define MM_NET_OUTBOUND		0x000002
 
 /* Client flags. */
-#define MM_NET_CLIENT		0x0004
-#define MM_NET_CONNECTING	0x0008
+#define MM_NET_CLIENT		0x000004
+#define MM_NET_CONNECTING	0x000008
 
 /* Socket close flags. */
-#define MM_NET_CLOSED		0x0010
-#define MM_NET_READER_SHUTDOWN	0x0020
-#define MM_NET_WRITER_SHUTDOWN	0x0040
+#define MM_NET_CLOSED		0x000010
+#define MM_NET_READER_SHUTDOWN	0x000020
+#define MM_NET_WRITER_SHUTDOWN	0x000040
 
 /* Socket event dispatch is bound to a certain thread. */
-#define MM_NET_BOUND_EVENTS	0x0080
+#define MM_NET_BOUND_EVENTS	0x000080
 
-/* Socket I/O flags. */
-#define MM_NET_READ_READY	0x0100
-#define MM_NET_WRITE_READY	0x0200
-#define MM_NET_READ_ERROR	0x0400
-#define MM_NET_WRITE_ERROR	0x0800
-#define MM_NET_READER_SPAWNED	0x1000
-#define MM_NET_WRITER_SPAWNED	0x2000
-#define MM_NET_READER_PENDING	0x4000
-#define MM_NET_WRITER_PENDING	0x8000
+/* Socket I/O status flags. */
+#define MM_NET_READ_READY	0x000100
+#define MM_NET_WRITE_READY	0x000200
+#define MM_NET_READ_ERROR	0x000400
+#define MM_NET_WRITE_ERROR	0x000800
+#define MM_NET_READER_SPAWNED	0x001000
+#define MM_NET_WRITER_SPAWNED	0x002000
+#define MM_NET_READER_PENDING	0x004000
+#define MM_NET_WRITER_PENDING	0x008000
+
+/* Connection options. */
+#define MM_NET_KEEPALIVE	0x010000
+#define MM_NET_NODELAY		0x020000
 
 /* Socket address. */
 struct mm_net_addr
@@ -123,7 +127,7 @@ struct mm_net_socket
 	mm_timeout_t write_timeout;
 
 	/* Socket flags. */
-	uint16_t flags;
+	uint32_t flags;
 
 	/* The socket destruction thread. */
 	mm_thread_t destroy_thread;
@@ -151,7 +155,7 @@ struct mm_net_socket
 /* Protocol handler. */
 struct mm_net_proto
 {
-	uint16_t flags;
+	uint32_t flags;
 
 	struct mm_net_socket * (*create)(void);
 	void (*reclaim)(struct mm_net_socket *);
@@ -268,6 +272,8 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, s
 
 void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock);
+void NONNULL(1)
+mm_net_reset(struct mm_net_socket *sock);
 
 void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock);
