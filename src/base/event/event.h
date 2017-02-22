@@ -23,9 +23,6 @@
 #include "common.h"
 #include "base/list.h"
 
-/* Forward declarations. */
-struct mm_event_dispatch;
-
 /* Event types. */
 typedef enum {
 	MM_EVENT_INPUT,
@@ -110,6 +107,8 @@ mm_event_target(const struct mm_event_fd *sink)
 	return sink->target;
 }
 
+/* Mark a sink as having a pending event after it is received from
+   the system. */
 static inline void
 mm_event_update_receive_stamp(struct mm_event_fd *sink UNUSED)
 {
@@ -118,19 +117,26 @@ mm_event_update_receive_stamp(struct mm_event_fd *sink UNUSED)
 #endif
 }
 
-static inline void
-mm_event_update_dispatch_stamp(struct mm_event_fd *sink UNUSED)
+/* Start processing of an event after it is delivered to the target
+   thread. */
+static inline void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 {
 #if ENABLE_SMP
+	/* Count the received event. */
 	sink->dispatch_stamp++;
 #endif
+	/* Handle the received event. */
+	(sink->handler)(event, sink);
 }
 
-static inline void
-mm_event_update_complete_stamp(struct mm_event_fd *sink UNUSED)
+/* Mark a sink as having completed the processing of all the events
+   delivered so far. */
+static inline void NONNULL(1)
+mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 {
 #if ENABLE_SMP
-	// TODO: release memory fence
+	/* TODO: release memory fence */
 	mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
 #endif
 }
@@ -152,35 +158,19 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
 		    mm_event_affinity_t target);
 
-void NONNULL(1, 2)
-mm_event_register_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
+void NONNULL(1)
+mm_event_register_fd(struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
+void NONNULL(1)
+mm_event_unregister_fd(struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_unregister_faulty_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
+void NONNULL(1)
+mm_event_unregister_faulty_fd(struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_trigger_input(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
+void NONNULL(1)
+mm_event_trigger_input(struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch);
-
-static inline void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-	// Count the received event.
-	mm_event_update_dispatch_stamp(sink);
-	// Handle the received event.
-	(sink->handler)(event, sink);
-}
-
-static inline void NONNULL(1)
-mm_event_handle_complete(struct mm_event_fd *sink)
-{
-	// Mark the sink as detached.
-	mm_event_update_complete_stamp(sink);
-}
+void NONNULL(1)
+mm_event_trigger_output(struct mm_event_fd *sink);
 
 #endif /* BASE_EVENT_EVENT_H */

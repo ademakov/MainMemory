@@ -59,7 +59,7 @@ __thread struct mm_core *__mm_core_self;
 static struct mm_bitset mm_core_event_affinity;
 
 // Common event dispatch.
-struct mm_event_dispatch mm_core_dispatch;
+static struct mm_event_dispatch mm_core_dispatch;
 
 /**********************************************************************
  * Yield routine for backoff on busy waiting.

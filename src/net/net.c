@@ -529,7 +529,7 @@ retry:
 	// Register the socket for event dispatch.
 	mm_thread_t target = mm_event_target(&sock->event);
 	if (target == MM_THREAD_NONE || target == thread)
-		mm_event_register_fd(&sock->event, &mm_core_dispatch);
+		mm_event_register_fd(&sock->event);
 	else
 		mm_core_post(target, mm_net_register_routine, (mm_value_t) sock);
 
@@ -659,7 +659,7 @@ mm_net_reset_read_ready(struct mm_net_socket *sock)
 
 	sock->flags &= ~MM_NET_READ_READY;
 	if ((sock->flags & MM_NET_INBOUND) == 0)
-		mm_event_trigger_input(&sock->event, &mm_core_dispatch);
+		mm_event_trigger_input(&sock->event);
 
 	LEAVE();
 }
@@ -672,7 +672,7 @@ mm_net_reset_write_ready(struct mm_net_socket *sock)
 
 	sock->flags &= ~MM_NET_WRITE_READY;
 	if ((sock->flags & MM_NET_OUTBOUND) == 0)
-		mm_event_trigger_output(&sock->event, &mm_core_dispatch);
+		mm_event_trigger_output(&sock->event);
 
 	LEAVE();
 }
@@ -935,7 +935,7 @@ mm_net_register_routine(mm_value_t arg)
 	ASSERT(!mm_net_is_closed(sock));
 
 	// Register the socket with the event loop.
-	mm_event_register_fd(&sock->event, &mm_core_dispatch);
+	mm_event_register_fd(&sock->event);
 
 	LEAVE();
 	return 0;
@@ -1078,7 +1078,7 @@ mm_net_register_server(mm_value_t arg)
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
 	ASSERT(srv->event.fd >= 0);
 
-	mm_event_register_fd(&srv->event, &mm_core_dispatch);
+	mm_event_register_fd(&srv->event);
 
 	LEAVE();
 	return 0;
@@ -1127,7 +1127,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 	mm_brief("stop server: %s", srv->name);
 
 	// Unregister the socket.
-	mm_event_unregister_fd(&srv->event, &mm_core_dispatch);
+	mm_event_unregister_fd(&srv->event);
 
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->event.fd);
@@ -1227,7 +1227,7 @@ retry:
 	// Register the socket in the event loop.
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_handler,
 			    MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_BOUND);
-	mm_event_register_fd(&sock->event, &mm_core_dispatch);
+	mm_event_register_fd(&sock->event);
 
 	// Block the task waiting for connection completion.
 	sock->writer = mm_task_selfptr();
@@ -1246,7 +1246,7 @@ retry:
 		if (conn_errno == 0) {
 			rc = 0;
 		} else {
-			mm_event_unregister_faulty_fd(&sock->event, &mm_core_dispatch);
+			mm_event_unregister_faulty_fd(&sock->event);
 			sock->event.fd = -1;
 			mm_close(fd);
 			errno = conn_errno;
@@ -1608,7 +1608,7 @@ mm_net_close(struct mm_net_socket *sock)
 	sock->flags |= MM_NET_CLOSED;
 
 	// Remove the socket from the event loop.
-	mm_event_unregister_fd(&sock->event, &mm_core_dispatch);
+	mm_event_unregister_fd(&sock->event);
 
 leave:
 	LEAVE();
@@ -1631,7 +1631,7 @@ mm_net_reset(struct mm_net_socket *sock)
 		mm_error(errno, "setsockopt(..., SO_LINGER, ...)");
 
 	// Remove the socket from the event loop.
-	mm_event_unregister_fd(&sock->event, &mm_core_dispatch);
+	mm_event_unregister_fd(&sock->event);
 
 leave:
 	LEAVE();

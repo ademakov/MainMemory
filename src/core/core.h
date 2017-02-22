@@ -172,9 +172,6 @@ extern struct mm_core *mm_core_set;
 
 extern __thread struct mm_core *__mm_core_self;
 
-/* Common event dispatch. */
-extern struct mm_event_dispatch mm_core_dispatch;
-
 static inline struct mm_core *
 mm_core_selfptr(void)
 {

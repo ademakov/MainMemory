@@ -22,6 +22,7 @@
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/selfpipe.h"
+#include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
 /**********************************************************************
@@ -80,49 +81,52 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	return true;
 }
 
-void NONNULL(1, 2)
-mm_event_register_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+void NONNULL(1)
+mm_event_register_fd(struct mm_event_fd *sink)
 {
-	mm_thread_t thread = mm_event_target(sink);
-	if (thread == MM_THREAD_NONE) {
-		thread = sink->target = mm_thread_self();
+	struct mm_thread *thread = mm_thread_selfptr();
+	struct mm_event_listener *listener = mm_thread_getlistener(thread);
+	mm_thread_t target = mm_event_target(sink);
+	if (target == MM_THREAD_NONE) {
+		sink->target = listener->target;
 	} else {
-		ASSERT(mm_event_target(sink) == thread);
+		VERIFY(target == listener->target);
 	}
-	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
 	mm_event_listener_add(listener, sink, MM_EVENT_REGISTER);
 }
 
-void NONNULL(1, 2)
-mm_event_unregister_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+void NONNULL(1)
+mm_event_unregister_fd(struct mm_event_fd *sink)
 {
-	mm_thread_t thread = mm_event_target(sink);
-	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
+	struct mm_thread *thread = mm_thread_selfptr();
+	struct mm_event_listener *listener = mm_thread_getlistener(thread);
+	VERIFY(mm_event_target(sink) == listener->target);
 	mm_event_listener_add(listener, sink, MM_EVENT_UNREGISTER);
 }
 
-void NONNULL(1, 2)
-mm_event_unregister_faulty_fd(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+void NONNULL(1)
+mm_event_unregister_faulty_fd(struct mm_event_fd *sink)
 {
 	struct mm_event_change change = { .kind = MM_EVENT_UNREGISTER, .sink = sink };
+	struct mm_domain *domain = mm_domain_selfptr();
+	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
 	mm_event_backend_change(&dispatch->backend, &change);
 }
 
-void NONNULL(1, 2)
-mm_event_trigger_input(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+void NONNULL(1)
+mm_event_trigger_input(struct mm_event_fd *sink)
 {
-	mm_thread_t thread = mm_event_target(sink);
-	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
+	struct mm_thread *thread = mm_thread_selfptr();
+	struct mm_event_listener *listener = mm_thread_getlistener(thread);
+	VERIFY(mm_event_target(sink) == listener->target);
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_INPUT);
 }
 
-void NONNULL(1, 2)
-mm_event_trigger_output(struct mm_event_fd *sink, struct mm_event_dispatch *dispatch)
+void NONNULL(1)
+mm_event_trigger_output(struct mm_event_fd *sink)
 {
-	mm_thread_t thread = mm_event_target(sink);
-	ASSERT(thread == mm_thread_self());
-	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
+	struct mm_thread *thread = mm_thread_selfptr();
+	struct mm_event_listener *listener = mm_thread_getlistener(thread);
+	VERIFY(mm_event_target(sink) == listener->target);
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
 }
