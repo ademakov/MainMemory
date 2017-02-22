@@ -35,8 +35,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		    mm_event_affinity_t target)
 {
 	ASSERT(fd >= 0);
-	ASSERT(handler > 0);
-	ASSERT(handler < mm_event_hdesc_table_size);
+	// It is forbidden to have both input and output ignored.
+	VERIFY(input_mode != MM_EVENT_IGNORED || output_mode != MM_EVENT_IGNORED);
 
 	sink->fd = fd;
 	sink->target = MM_THREAD_NONE;
@@ -60,6 +60,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->regular_input = false;
 		sink->oneshot_input = false;
 	} else if (input_mode == MM_EVENT_ONESHOT) {
+		// Oneshot state cannot be properly managed for loose sinks.
+		ASSERT(!sink->loose_target);
 		sink->regular_input = false;
 		sink->oneshot_input = true;
 	} else {
@@ -71,6 +73,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->regular_output = false;
 		sink->oneshot_output = false;
 	} else if (output_mode == MM_EVENT_ONESHOT) {
+		// Oneshot state cannot be properly managed for loose sinks.
+		ASSERT(!sink->loose_target);
 		sink->regular_output = false;
 		sink->oneshot_output = true;
 	} else {
