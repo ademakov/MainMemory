@@ -57,6 +57,12 @@ struct mm_event_epoll_storage
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
 
+ 	/* Oneshot I/O reset buffers. */
+	int input_reset_num;
+	int output_reset_num;
+	struct mm_event_fd *input_reset[MM_EVENT_EPOLL_NEVENTS];
+	struct mm_event_fd *output_reset[MM_EVENT_EPOLL_NEVENTS];
+
 #if ENABLE_EVENT_STATS
 	/* Statistics. */
 	uint64_t nevents_stats[MM_EVENT_EPOLL_NEVENTS + 1];
@@ -80,6 +86,43 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 
 void NONNULL(1, 2)
 mm_event_epoll_change(struct mm_event_epoll *backend, struct mm_event_change *change);
+
+void NONNULL(1)
+mm_event_epoll_reset_input_low(struct mm_event_fd *sink);
+void NONNULL(1)
+mm_event_epoll_reset_output_low(struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_epoll_reset_poller_input_low(struct mm_event_fd *sink, struct mm_event_listener *listener);
+void NONNULL(1, 2)
+mm_event_epoll_reset_poller_output_low(struct mm_event_fd *sink, struct mm_event_listener *listener);
+
+static inline void NONNULL(1)
+mm_event_epoll_reset_input(struct mm_event_fd *sink)
+{
+	if (sink->oneshot_input_trigger)
+		mm_event_epoll_reset_input_low(sink);
+}
+
+static inline void NONNULL(1)
+mm_event_epoll_reset_output(struct mm_event_fd *sink)
+{
+	if (sink->oneshot_output_trigger)
+		mm_event_epoll_reset_output_low(sink);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener)
+{
+	if (sink->oneshot_input_trigger)
+		mm_event_epoll_reset_poller_input_low(sink, listener);
+}
+
+static inline void NONNULL(1, 2)
+mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener)
+{
+	if (sink->oneshot_output_trigger)
+		mm_event_epoll_reset_poller_output_low(sink, listener);
+}
 
 #if MM_EVENT_NATIVE_NOTIFY
 

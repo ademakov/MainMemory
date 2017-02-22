@@ -213,7 +213,7 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
-		mm_event_handle_poller_io(sink, event);
+		mm_event_handle_poller_io(listener, sink, event);
 		listener->dequeued_events++;
 	}
 }
@@ -308,7 +308,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (target == listener->target) {
-			mm_event_handle_poller_io(sink, event);
+			mm_event_handle_poller_io(listener, sink, event);
 			listener->direct_events++;
 		} else if (target != MM_THREAD_NONE) {
 			mm_event_forward(&listener->forward, sink, event);

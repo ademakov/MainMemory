@@ -119,18 +119,40 @@ mm_event_backend_dampen(struct mm_event_backend *backend)
 }
 
 static inline void NONNULL(1)
-mm_event_backend_reset_input(struct mm_event_fd *sink UNUSED)
+mm_event_backend_reset_input(struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_reset_input(sink);
 #elif HAVE_SYS_EVENT_H
 	sink->oneshot_input_trigger = false;
 #endif
 }
 
 static inline void NONNULL(1)
-mm_event_backend_reset_output(struct mm_event_fd *sink UNUSED)
+mm_event_backend_reset_output(struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_reset_output(sink);
+#elif HAVE_SYS_EVENT_H
+	sink->oneshot_output_trigger = false;
+#endif
+}
+
+static inline void NONNULL(1)
+mm_event_backend_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_reset_poller_input(sink, listener);
+#elif HAVE_SYS_EVENT_H
+	sink->oneshot_input_trigger = false;
+#endif
+}
+
+static inline void NONNULL(1)
+mm_event_backend_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_reset_poller_output(sink, listener);
 #elif HAVE_SYS_EVENT_H
 	sink->oneshot_output_trigger = false;
 #endif

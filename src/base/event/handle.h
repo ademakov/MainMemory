@@ -76,16 +76,16 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 /* Start processing of an event after it is delivered to the target
    thread. The event must be an I/O event and the call must be made
    by a poller thread. */
-static inline void NONNULL(1)
-mm_event_handle_poller_io(struct mm_event_fd *sink, mm_event_t event)
+static inline void NONNULL(1, 2)
+mm_event_handle_poller_io(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
 {
 	/* Start processing the event. */
 	mm_event_handle_basic(sink, event);
 	/* Perform backend-specific I/O state reset. */
 	if (event < MM_EVENT_OUTPUT)
-		mm_event_backend_reset_input(sink);
+		mm_event_backend_reset_poller_input(sink, listener);
 	else
-		mm_event_backend_reset_output(sink);
+		mm_event_backend_reset_poller_output(sink, listener);
 }
 
 #endif /* BASE_EVENT_HANDLE_H */
