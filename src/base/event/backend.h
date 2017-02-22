@@ -69,23 +69,6 @@ mm_event_backend_cleanup(struct mm_event_backend *backend);
 void NONNULL(1)
 mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
 
-/*
- * Tell if the backend requires all change events to be serialized.
- *
- * The existing backends (epoll and kqueue) do not require this. So
- * this is just a stub for possible future implementation of select
- * or poll backends.
- */
-static inline bool NONNULL(1)
-mm_event_backend_serial(struct mm_event_backend *backend UNUSED)
-{
-#if HAVE_SYS_EPOLL_H
-	return false;
-#elif HAVE_SYS_EVENT_H
-	return false;
-#endif
-}
-
 static inline void NONNULL(1, 2, 3)
 mm_event_backend_listen(struct mm_event_backend *backend,
 			struct mm_event_batch *changes,
@@ -133,6 +116,18 @@ mm_event_backend_dampen(struct mm_event_backend *backend)
 		return;
 #endif
 	mm_selfpipe_drain(&backend->selfpipe);
+}
+
+static inline void NONNULL(1)
+mm_event_backend_handle(struct mm_event_fd *sink UNUSED, mm_event_t event UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+#elif HAVE_SYS_EVENT_H
+	if (event == MM_EVENT_INPUT || event == MM_EVENT_INPUT_ERROR)
+		sink->oneshot_input_trigger = false;
+	else if (event == MM_EVENT_OUTPUT || event == MM_EVENT_OUTPUT_ERROR)
+		sink->oneshot_output_trigger = false;
+#endif
 }
 
 #endif /* BASE_EVENT_BACKEND_H */

@@ -42,6 +42,8 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	/* Count the received event. */
 	sink->dispatch_stamp++;
 #endif
+	/* Perform backend-specific actions. */
+	mm_event_backend_handle(sink, event);
 	/* Handle the received event. */
 	(sink->handler)(event, sink);
 }

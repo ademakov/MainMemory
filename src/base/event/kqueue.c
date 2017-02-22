@@ -184,8 +184,6 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			DEBUG("read event");
 
 			struct mm_event_fd *sink = event->udata;
-			sink->oneshot_input_trigger = false;
-
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
 				mm_event_listener_input_error(listener, sink);
 			else
@@ -195,8 +193,6 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			DEBUG("write event");
 
 			struct mm_event_fd *sink = event->udata;
-			sink->oneshot_output_trigger = false;
-
 			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
 				mm_event_listener_output_error(listener, sink);
 			else
