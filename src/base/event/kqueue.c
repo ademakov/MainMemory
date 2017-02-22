@@ -424,6 +424,6 @@ mm_event_kqueue_notify(struct mm_event_kqueue *backend)
 	LEAVE();
 }
 
-#endif
+#endif /* MM_EVENT_NATIVE_NOTIFY */
 
 #endif /* HAVE_SYS_EVENT_H */
