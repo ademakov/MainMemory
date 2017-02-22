@@ -19,9 +19,6 @@
 
 #include "base/event/selfpipe.h"
 
-#include "arch/atomic.h"
-#include "arch/memory.h"
-#include "base/logger.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/nonblock.h"
