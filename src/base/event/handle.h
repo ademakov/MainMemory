@@ -33,21 +33,7 @@ mm_event_update(struct mm_event_fd *sink UNUSED)
 #endif
 }
 
-/* Start processing of an event after it is delivered to the target
-   thread. */
-static inline void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-#if ENABLE_SMP
-	/* Count the received event. */
-	sink->dispatch_stamp++;
-#endif
-	/* Perform backend-specific actions. */
-	mm_event_backend_handle(sink, event);
-	/* Handle the received event. */
-	(sink->handler)(event, sink);
-}
-
+/* Check if a sink has some not yet fully processed events. */
 static inline bool NONNULL(1)
 mm_event_active(const struct mm_event_fd *sink UNUSED)
 {
@@ -58,6 +44,48 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 #else
 	return true;
 #endif
+}
+
+/* Start processing of an event after it is delivered to the target
+   thread. */
+static inline void NONNULL(1)
+mm_event_handle_basic(struct mm_event_fd *sink, mm_event_t event)
+{
+#if ENABLE_SMP
+	/* Count the received event. */
+	sink->dispatch_stamp++;
+#endif
+	/* Schedule it for processing. */
+	(sink->handler)(event, sink);
+}
+
+/* Start processing of an event after it is delivered to the target
+   thread. Also reset oneshot I/O state if needed. */
+static inline void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+	/* Start processing the event. */
+	mm_event_handle_basic(sink, event);
+	/* Perform backend-specific I/O state reset. */
+	if (event < MM_EVENT_OUTPUT)
+		mm_event_backend_reset_input(sink);
+	else if (event < MM_EVENT_DISABLE)
+		mm_event_backend_reset_output(sink);
+}
+
+/* Start processing of an event after it is delivered to the target
+   thread. The event must be an I/O event and the call must be made
+   by a poller thread. */
+static inline void NONNULL(1)
+mm_event_handle_poller_io(struct mm_event_fd *sink, mm_event_t event)
+{
+	/* Start processing the event. */
+	mm_event_handle_basic(sink, event);
+	/* Perform backend-specific I/O state reset. */
+	if (event < MM_EVENT_OUTPUT)
+		mm_event_backend_reset_input(sink);
+	else
+		mm_event_backend_reset_output(sink);
 }
 
 #endif /* BASE_EVENT_HANDLE_H */

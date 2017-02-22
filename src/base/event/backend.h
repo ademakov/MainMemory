@@ -119,14 +119,20 @@ mm_event_backend_dampen(struct mm_event_backend *backend)
 }
 
 static inline void NONNULL(1)
-mm_event_backend_handle(struct mm_event_fd *sink UNUSED, mm_event_t event UNUSED)
+mm_event_backend_reset_input(struct mm_event_fd *sink UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
 #elif HAVE_SYS_EVENT_H
-	if (event == MM_EVENT_INPUT || event == MM_EVENT_INPUT_ERROR)
-		sink->oneshot_input_trigger = false;
-	else if (event == MM_EVENT_OUTPUT || event == MM_EVENT_OUTPUT_ERROR)
-		sink->oneshot_output_trigger = false;
+	sink->oneshot_input_trigger = false;
+#endif
+}
+
+static inline void NONNULL(1)
+mm_event_backend_reset_output(struct mm_event_fd *sink UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+#elif HAVE_SYS_EVENT_H
+	sink->oneshot_output_trigger = false;
 #endif
 }
 

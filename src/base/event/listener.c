@@ -150,7 +150,7 @@ mm_event_listener_reclaim_epoch(struct mm_event_listener *listener, uint32_t epo
 	while (!mm_stack_empty(stack)) {
 		struct mm_slink *link = mm_stack_remove(stack);
 		struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-		mm_event_handle(sink, MM_EVENT_RECLAIM);
+		mm_event_handle_basic(sink, MM_EVENT_RECLAIM);
 	}
 }
 
@@ -213,7 +213,7 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
-		mm_event_handle(sink, event);
+		mm_event_handle_poller_io(sink, event);
 		listener->dequeued_events++;
 	}
 }
@@ -273,7 +273,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 
 	if (unlikely(sink->loose_target)) {
 		// Handle the event immediately.
-		mm_event_handle(sink, event);
+		mm_event_handle_basic(sink, event);
 
 #if ENABLE_EVENT_STATS
 		listener->stats.loose_events++;
@@ -308,7 +308,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (target == listener->target) {
-			mm_event_handle(sink, event);
+			mm_event_handle_poller_io(sink, event);
 			listener->direct_events++;
 		} else if (target != MM_THREAD_NONE) {
 			mm_event_forward(&listener->forward, sink, event);
@@ -331,7 +331,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 	// Queue it for reclamation.
 	mm_event_listener_reclaim_queue_insert(listener, sink);
 	// Let close the file descriptor.
-	mm_event_handle(sink, MM_EVENT_DISABLE);
+	mm_event_handle_basic(sink, MM_EVENT_DISABLE);
 
 	LEAVE();
 }
