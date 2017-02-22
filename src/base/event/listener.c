@@ -326,8 +326,11 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 {
 	ENTER();
 
+	// Count the received event.
 	mm_event_update(sink);
+	// Queue it for reclamation.
 	mm_event_listener_reclaim_queue_insert(listener, sink);
+	// Let close the file descriptor.
 	mm_event_handle(sink, MM_EVENT_DISABLE);
 
 	LEAVE();
