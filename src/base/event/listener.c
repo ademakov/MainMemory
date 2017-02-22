@@ -23,6 +23,7 @@
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
+#include "base/event/handle.h"
 #include "base/memory/memory.h"
 
 #if ENABLE_LINUX_FUTEX
@@ -301,7 +302,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		}
 
 		// Count the received event.
-		mm_event_update_receive_stamp(sink);
+		mm_event_update(sink);
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
@@ -325,7 +326,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 {
 	ENTER();
 
-	mm_event_update_receive_stamp(sink);
+	mm_event_update(sink);
 	mm_event_listener_reclaim_queue_insert(listener, sink);
 	mm_event_handle(sink, MM_EVENT_DISABLE);
 
