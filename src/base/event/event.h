@@ -106,6 +106,7 @@ mm_event_target(const struct mm_event_fd *sink)
 {
 	return sink->target;
 }
+
 /* Mark a sink as having completed the processing of all the events
    delivered so far. */
 static inline void NONNULL(1)
