@@ -515,8 +515,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 	}
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&listener->dispatch->backend,
-				&listener->changes, listener, timeout);
+	mm_event_backend_listen(&listener->dispatch->backend, listener, timeout);
 
 	// Advertise the start of another working cycle.
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);

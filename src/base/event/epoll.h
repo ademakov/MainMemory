@@ -78,9 +78,8 @@ mm_event_epoll_cleanup(struct mm_event_epoll *backend);
 void NONNULL(1)
 mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage);
 
-void NONNULL(1, 2, 3)
+void NONNULL(1, 2)
 mm_event_epoll_listen(struct mm_event_epoll *backend,
-		      struct mm_event_batch *changes,
 		      struct mm_event_listener *listener,
 		      mm_timeout_t timeout);
 
