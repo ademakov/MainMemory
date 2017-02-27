@@ -83,9 +83,9 @@ mm_event_handle_poller_io(struct mm_event_listener *listener, struct mm_event_fd
 	mm_event_handle_basic(sink, event);
 	/* Perform backend-specific I/O state reset. */
 	if (event < MM_EVENT_OUTPUT)
-		mm_event_backend_reset_poller_input(sink, listener);
+		mm_event_backend_reset_poller_input(listener, sink);
 	else
-		mm_event_backend_reset_poller_output(sink, listener);
+		mm_event_backend_reset_poller_output(listener, sink);
 }
 
 #endif /* BASE_EVENT_HANDLE_H */

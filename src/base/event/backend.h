@@ -138,7 +138,7 @@ mm_event_backend_reset_output(struct mm_event_fd *sink)
 }
 
 static inline void NONNULL(1)
-mm_event_backend_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener UNUSED)
+mm_event_backend_reset_poller_input(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_reset_poller_input(sink, listener);
@@ -148,7 +148,7 @@ mm_event_backend_reset_poller_input(struct mm_event_fd *sink, struct mm_event_li
 }
 
 static inline void NONNULL(1)
-mm_event_backend_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener UNUSED)
+mm_event_backend_reset_poller_output(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_reset_poller_output(sink, listener);
