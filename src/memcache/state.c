@@ -29,8 +29,6 @@ mc_state_create(void)
 	struct mc_state *state = mm_regular_alloc(sizeof(struct mc_state));
 
 	state->command = NULL;
-	state->command_head = NULL;
-	state->command_tail = NULL;
 	state->protocol = MC_PROTOCOL_INIT;
 	state->error = false;
 	state->trash = false;
@@ -42,29 +40,13 @@ mc_state_create(void)
 }
 
 void NONNULL(1)
-mc_state_reclaim(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
-
-	while (state->command_head != NULL) {
-		struct mc_command *command = state->command_head;
-		state->command_head = command->next;
-		mc_command_destroy(command);
-	}
-
-	mm_netbuf_cleanup(&state->sock);
-
-	LEAVE();
-}
-
-void NONNULL(1)
 mc_state_destroy(struct mm_net_socket *sock)
 {
 	ENTER();
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
+
+	mm_netbuf_cleanup(&state->sock);
 	mm_regular_free(state);
 
 	LEAVE();

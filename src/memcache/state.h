@@ -40,10 +40,6 @@ struct mc_state
 	/* Currently constructed command. */
 	struct mc_command *command;
 
-	/* Command processing queue. */
-	struct mc_command *command_head;
-	struct mc_command *command_tail;
-
 	/* Memcache protocol. */
 	uint8_t protocol;
 
@@ -58,9 +54,6 @@ struct mc_state
 
 struct mm_net_socket *
 mc_state_create(void);
-
-void NONNULL(1)
-mc_state_reclaim(struct mm_net_socket *sock);
 
 void NONNULL(1)
 mc_state_destroy(struct mm_net_socket *sock);
@@ -86,19 +79,6 @@ mc_getprotocol(struct mc_state *state)
 		state->protocol = protocol;
 	}
 	return protocol;
-}
-
-static inline void NONNULL(1, 2, 3)
-mc_queue_command(struct mc_state *state,
-		 struct mc_command *first,
-		 struct mc_command *last)
-{
-	if (state->command_head == NULL) {
-		state->command_head = first;
-	} else {
-		state->command_tail->next = first;
-	}
-	state->command_tail = last;
 }
 
 #endif /* MEMCACHE_STATE_H */
