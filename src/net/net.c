@@ -244,7 +244,6 @@ mm_net_alloc_server(void)
 
 	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
 	srv->event.fd = -1;
-	srv->client_count = 0;
 
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
 
@@ -289,29 +288,12 @@ mm_net_socket_destroy(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT((sock->flags & MM_NET_CLIENT) == 0);
 
-	mm_list_delete(&sock->clients);
-
 	if (sock->proto->destroy != NULL)
 		(sock->proto->destroy)(sock);
 	else
 		mm_net_socket_free(sock);
 
 	LEAVE();
-}
-
-static mm_value_t
-mm_net_destroy_routine(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(mm_net_is_closed(sock));
-
-	// Remove the socket from the server lists.
-	mm_net_socket_destroy(sock);
-
-	LEAVE();
-	return 0;
 }
 
 static mm_value_t
@@ -334,20 +316,14 @@ mm_net_reclaim_routine(mm_value_t arg)
 		mm_task_yield();
 	}
 
-	// The client connection is destroyed by its own destruction routine.
+	// Destroy the socket.
+	ASSERT(mm_net_is_closed(sock));
 	if ((sock->flags & MM_NET_CLIENT) != 0) {
 		(sock->destroy)(sock);
-		goto leave;
+	} else {
+		mm_net_socket_destroy(sock);
 	}
 
-	// Run the protocol handler destruction routine.
-	mm_thread_t thread = sock->destroy_thread;
-	if (thread != MM_THREAD_NONE && thread != mm_event_target(&sock->event))
-		mm_core_post(thread, mm_net_destroy_routine, (mm_value_t) sock);
-	else
-		mm_net_socket_destroy(sock);
-
-leave:
 	LEAVE();
 	return 0;
 }
@@ -374,8 +350,7 @@ mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 }
 
 static void
-mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto,
-			    uint32_t flags, mm_thread_t thread)
+mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto, uint32_t flags)
 {
 	// Invalidate the event sink.
 	sock->event.fd = -1;
@@ -386,7 +361,6 @@ mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *pro
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 	sock->reader = NULL;
 	sock->writer = NULL;
-	sock->destroy_thread = thread;
 }
 
 static void
@@ -400,7 +374,7 @@ mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 }
 
 static void
-mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd, mm_thread_t thread)
+mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd)
 {
 	ASSERT(thread == mm_thread_self());
 
@@ -423,7 +397,7 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 		flags |= MM_NET_WRITER_PENDING;
 
 	// Initialize basic fields.
-	mm_net_socket_prepare_basic(sock, proto, flags, thread);
+	mm_net_socket_prepare_basic(sock, proto, flags);
 	// Initialize the event sink.
 	mm_net_socket_prepare_event(sock, fd);
 
@@ -474,8 +448,7 @@ retry:
 	}
 
 	// Initialize the socket structure.
-	mm_thread_t thread = mm_event_target(&srv->event);
-	mm_net_socket_prepare(sock, srv->proto, fd, thread);
+	mm_net_socket_prepare(sock, srv->proto, fd);
 	if (sa.ss_family == AF_INET)
 		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
 	else if (sa.ss_family == AF_INET6)
@@ -483,13 +456,9 @@ retry:
 	else
 		sock->peer.addr.sa_family = sa.ss_family;
 
-	// Register with the server.
-	mm_list_append(&srv->clients, &sock->clients);
-	srv->client_count++;
-
 	// Register the socket for event dispatch.
 	mm_thread_t target = mm_event_target(&sock->event);
-	if (target == MM_THREAD_NONE || target == thread)
+	if (target == MM_THREAD_NONE || target == mm_event_target(&srv->event))
 		mm_event_register_fd(&sock->event);
 	else
 		mm_core_post(target, mm_net_register_routine, (mm_value_t) sock);
@@ -1057,9 +1026,6 @@ mm_net_start_server(struct mm_net_server *srv)
 		mm_fatal(0, "the server cannot be bound to any core");
 	size_t srv_core = mm_bitset_find(&srv->affinity, 0);
 
-	// Initialize the clients list.
-	mm_list_prepare(&srv->clients);
-
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
@@ -1104,7 +1070,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket 
 	ENTER();
 
 	// Initialize common fields.
-	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto, MM_NET_CLIENT, MM_THREAD_NONE);
+	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto, MM_NET_CLIENT);
 	// Initialize the destruction routine.
 	sock->destroy = destroy;
 	// Initialize the required work items.

@@ -97,12 +97,6 @@ struct mm_net_server
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* A list of all client sockets. */
-	struct mm_list clients;
-
-	/* Number of connections from the start. */
-	uint64_t client_count;
-
 	/* Core affinity. */
 	struct mm_bitset affinity;
 
@@ -129,9 +123,6 @@ struct mm_net_socket
 	/* Socket flags. */
 	uint32_t flags;
 
-	/* The socket destruction thread. */
-	mm_thread_t destroy_thread;
-
 	/* Work items for I/O tasks. */
 	struct mm_work read_work;
 	struct mm_work write_work;
@@ -140,13 +131,8 @@ struct mm_net_socket
 	/* Socket protocol handlers. */
 	struct mm_net_proto *proto;
 
-	union {
-		/* A link in the server's list of all client sockets. */
-		struct mm_link clients;
-
-		/* A client socket destruction routine. */
-		void (*destroy)(struct mm_net_socket *);
-	};
+	/* A client socket destruction routine. */
+	void (*destroy)(struct mm_net_socket *);
 
 	/* Client address. */
 	struct mm_net_peer_addr peer;
