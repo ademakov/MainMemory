@@ -158,7 +158,6 @@ struct mm_net_proto
 	uint32_t flags;
 
 	struct mm_net_socket * (*create)(void);
-	void (*reclaim)(struct mm_net_socket *);
 	void (*destroy)(struct mm_net_socket *);
 
 	bool (*detach)(struct mm_net_socket *);

@@ -340,10 +340,6 @@ mm_net_reclaim_routine(mm_value_t arg)
 		goto leave;
 	}
 
-	// Run the protocol handler reclamation routine.
-	if (sock->proto->reclaim != NULL)
-		(sock->proto->reclaim)(sock);
-
 	// Run the protocol handler destruction routine.
 	mm_thread_t thread = sock->destroy_thread;
 	if (thread != MM_THREAD_NONE && thread != mm_event_target(&sock->event))
