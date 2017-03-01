@@ -253,55 +253,20 @@ mm_net_alloc_server(void)
 }
 
 /**********************************************************************
- * Socket pool.
- **********************************************************************/
-
-static struct mm_pool mm_net_socket_pool;
-
-static void
-mm_net_socket_pool_start(void)
-{
-	ENTER();
-
-	mm_pool_prepare_shared(&mm_net_socket_pool, "net-socket", sizeof(struct mm_net_socket));
-
-	LEAVE();
-}
-
-static void
-mm_net_socket_pool_stop(void)
-{
-	ENTER();
-
-	mm_pool_cleanup(&mm_net_socket_pool);
-
-	LEAVE();
-}
-
-static struct mm_net_socket *
-mm_net_socket_pool_alloc(void)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = mm_pool_alloc(&mm_net_socket_pool);
-
-	LEAVE();
-	return sock;
-}
-
-static void
-mm_net_socket_pool_free(struct mm_net_socket *sock)
-{
-	ENTER();
-
-	mm_pool_free(&mm_net_socket_pool, sock);
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Socket create and destroy routines.
  **********************************************************************/
+
+static struct mm_net_socket *
+mm_net_socket_alloc(void)
+{
+	return mm_regular_alloc(sizeof(struct mm_net_socket));
+}
+
+static void
+mm_net_socket_free(struct mm_net_socket *sock)
+{
+	mm_regular_free(sock);
+}
 
 static struct mm_net_socket *
 mm_net_socket_create(struct mm_net_proto *proto)
@@ -312,7 +277,7 @@ mm_net_socket_create(struct mm_net_proto *proto)
 	if (proto->create != NULL)
 		sock = (proto->create)();
 	else
-		sock = mm_net_socket_pool_alloc();
+		sock = mm_net_socket_alloc();
 
 	LEAVE();
 	return sock;
@@ -329,7 +294,7 @@ mm_net_socket_destroy(struct mm_net_socket *sock)
 	if (sock->proto->destroy != NULL)
 		(sock->proto->destroy)(sock);
 	else
-		mm_net_socket_pool_free(sock);
+		mm_net_socket_free(sock);
 
 	LEAVE();
 }
@@ -973,9 +938,6 @@ mm_net_init(void)
 
 	mm_atexit(mm_net_exit_cleanup);
 
-	mm_core_hook_start(mm_net_socket_pool_start);
-	mm_core_hook_stop(mm_net_socket_pool_stop);
-
 	mm_net_init_server_table();
 
 	mm_net_initialized = 1;
@@ -992,11 +954,8 @@ mm_net_term(void)
 
 	for (uint32_t i = 0; i < mm_srv_count; i++) {
 		struct mm_net_server *srv = &mm_srv_table[i];
-		if (srv->event.fd >= 0) {
+		if (srv->event.fd >= 0)
 			mm_net_close_server_socket(&srv->addr, srv->event.fd);
-		}
-
-		// TODO: close client sockets
 	}
 
 	mm_net_free_server_table();
@@ -1164,9 +1123,9 @@ mm_net_create(void)
 	ENTER();
 
 	// Create the socket.
-	struct mm_net_socket *sock = mm_net_socket_pool_alloc();
+	struct mm_net_socket *sock = mm_net_socket_alloc();
 	// Initialize the socket basic fields.
-	mm_net_prepare(sock, mm_net_socket_pool_free);
+	mm_net_prepare(sock, mm_net_socket_free);
 
 	LEAVE();
 	return sock;
