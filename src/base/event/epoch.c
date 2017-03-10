@@ -83,6 +83,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 
 		// Remain in the critical section but amend the local epoch.
 		mm_memory_store(local->epoch, epoch);
+		local->index = 0;
 	}
 
 	// Put the retired sinks aside for future reclamation.
@@ -94,10 +95,10 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		mm_queue_prepare(&local->queue);
 	}
 
-	//  Check if the global epoch can be advanced.
+	// Check to see if the global epoch can be advanced.
 	struct mm_event_dispatch *dispatch = containerof(global, struct mm_event_dispatch, global_epoch);
-	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++) {
-		struct mm_event_listener *listener = &dispatch->listeners[i];
+	while (local->index < dispatch->nlisteners) {
+		struct mm_event_listener *listener = &dispatch->listeners[local->index];
 		mm_event_epoch_snapshot_t listener_epoch = mm_memory_load(listener->epoch.epoch);
 		if (listener_epoch != epoch && listener_epoch != 0) {
 			if (local->count > MM_EVENT_EPOCH_POST_COUNT)
@@ -105,9 +106,10 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 						 (uintptr_t) listener);
 			goto leave;
 		}
+		local->index++;
 	}
 
-	// Update the global epoch.
+	// Advance the global epoch.
 	mm_atomic_uint32_cas(&dispatch->global_epoch, epoch, epoch + 2);
 	DEBUG("advance epoch %u", epoch + 2);
 

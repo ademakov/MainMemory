@@ -36,7 +36,10 @@ struct mm_event_epoch_local
 	mm_event_epoch_snapshot_t epoch;
 
 	/* Number of event sinks put aside for reclamation. */
-	uint32_t count;
+	uint16_t count;
+
+	/* The next listener to check while advancing the epoch. */
+	mm_thread_t index;
 
 	/* Event sinks retired within the ongoing critical section. */
 	struct mm_queue queue;
@@ -66,6 +69,7 @@ mm_event_epoch_enter(struct mm_event_epoch_local *local, mm_event_epoch_t *globa
 		mm_event_epoch_snapshot_t epoch = mm_memory_load(*global);
 		mm_memory_fence(); // TODO: load_store fence
 		mm_memory_store(local->epoch, epoch);
+		local->index = 0;
 	}
 }
 
@@ -86,7 +90,8 @@ mm_event_epoch_leave(struct mm_event_epoch_local *local, mm_event_epoch_t *globa
 static inline void NONNULL(1, 2)
 mm_event_epoch_retire(struct mm_event_epoch_local *local, struct mm_event_fd *sink)
 {
-	ASSERT((local->epoch & 1) != 0); /* Must be within a critical section. */
+	ASSERT((local->epoch & 1) != 0);
+	VERIFY(local->count < UINT16_MAX);
 	mm_queue_append(&local->queue, &sink->retire_link);
 	local->count++;
 }
