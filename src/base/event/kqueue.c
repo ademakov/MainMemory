@@ -163,6 +163,8 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 			       struct mm_event_listener *listener,
 			       int nevents)
 {
+	mm_event_listener_adjust_start(listener);
+
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &storage->events[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
@@ -225,8 +227,6 @@ static void
 mm_event_kqueue_commit_changes(struct mm_event_kqueue *backend,
 			       struct mm_event_kqueue_storage *storage)
 {
-	ENTER();
-
 	// Submit change events.
 	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
 			  NULL, 0, NULL);
@@ -234,8 +234,6 @@ mm_event_kqueue_commit_changes(struct mm_event_kqueue *backend,
 	if (unlikely(n < 0))
 		mm_error(errno, "kevent");
 	storage->nevents = 0;
-
-	LEAVE();
 }
 
 static int
@@ -243,12 +241,9 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend,
 		     struct mm_event_kqueue_storage *storage,
 		     mm_timeout_t timeout)
 {
-	ENTER();
-	DEBUG("poll: changes: %d, timeout: %lu", storage->nevents, (unsigned long) timeout);
-
+	// Calculate the event wait timeout.
 	struct timespec ts;
 	if (timeout) {
-		// Calculate the event wait timeout.
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
 	} else {
@@ -273,7 +268,6 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend,
 	storage->nevents_stats[n]++;
 #endif
 
-	LEAVE();
 	return n;
 }
 
@@ -345,8 +339,18 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 		}
 	}
 
+	// Announce that the thread is about to sleep.
+	if (timeout) {
+		mm_stamp_t stamp = mm_event_listener_polling(listener);
+		if (!mm_event_listener_restful(listener, stamp))
+			timeout = 0;
+	}
+
 	// Poll for incoming events.
 	int n = mm_event_kqueue_poll(backend, storage, timeout);
+
+	// Announce the start of another working cycle.
+	mm_event_listener_running(listener);
 
 	// Store incoming events.
 	mm_event_kqueue_receive_events(storage, listener, n);

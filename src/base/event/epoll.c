@@ -205,6 +205,8 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 			      struct mm_event_listener *listener,
 			      int nevents)
 {
+	mm_event_listener_adjust_start(listener);
+
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &storage->events[i];
 		struct mm_event_fd *sink = event->data.ptr;
@@ -335,8 +337,18 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 		mm_event_epoll_add_change(backend, change, listener);
 	}
 
+	// Announce that the thread is about to sleep.
+	if (timeout) {
+		mm_stamp_t stamp = mm_event_listener_polling(listener);
+		if (!mm_event_listener_restful(listener, stamp))
+			timeout = 0;
+	}
+
 	// Poll for incoming events.
 	int n = mm_event_epoll_poll(backend, storage, timeout);
+
+	// Announce the start of another working cycle.
+	mm_event_listener_running(listener);
 
 	// Store incoming events.
 	mm_event_epoll_receive_events(backend, storage, listener, n);

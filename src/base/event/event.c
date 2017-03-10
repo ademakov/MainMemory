@@ -177,49 +177,22 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	listener->stats.zero_poll_calls += (timeout == 0);
 #endif
 
-	// Reset event counters.
-	listener->direct_events_estimate = 0;
-	listener->direct_events = 0;
-	listener->enqueued_events = 0;
-	listener->dequeued_events = 0;
-	listener->forwarded_events = 0;
-
-	// Start a reclamation critical section.
-	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
-
-	if (timeout != 0) {
+	if (timeout) {
 		// Cleanup stale event notifications.
 		mm_event_backend_dampen(&dispatch->backend);
 
 		// Publish the log before a possible sleep.
 		mm_log_relay();
-
-		// Announce that the thread is about to sleep.
-		mm_stamp_t stamp = mm_event_listener_polling(listener);
-		if (!mm_event_listener_restful(listener, stamp))
-			timeout = 0;
 	}
+
+	// Start a reclamation critical section.
+	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Check incoming events and wait for notification/timeout.
 	mm_event_backend_listen(&dispatch->backend, listener, timeout);
 
-	// Announce the start of another working cycle.
-	mm_event_listener_running(listener);
-
 	// End a reclamation critical section.
 	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
-
-	// Flush forwarded events.
-	if (listener->forwarded_events)
-		mm_event_forward_flush(&listener->forward);
-
-#if ENABLE_EVENT_STATS
-	// Update event statistics.
-	listener->stats.direct_events += listener->direct_events;
-	listener->stats.enqueued_events += listener->enqueued_events;
-	listener->stats.dequeued_events += listener->dequeued_events;
-	listener->stats.forwarded_events += listener->forwarded_events;
-#endif
 
 	// Forget just handled change events.
 	mm_event_listener_clear_changes(listener);

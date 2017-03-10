@@ -311,6 +311,12 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
 }
 
+static inline void NONNULL(1)
+mm_event_listener_adjust_start(struct mm_event_listener *listener)
+{
+	listener->direct_events_estimate = 0;
+}
+
 static inline bool NONNULL(1, 2)
 mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {

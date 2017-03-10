@@ -81,8 +81,16 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 
+	// Reset event counters.
+	listener->direct_events = 0;
+	listener->enqueued_events = 0;
+	listener->dequeued_events = 0;
+	listener->forwarded_events = 0;
+
+	// Acquire coarse-grained event sink lock.
 	mm_regular_lock(&dispatch->sink_lock);
 
+	// Try to pull events from the event sink queue.
 	for (;;) {
 		uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
 		if (nq == 0)
@@ -110,10 +118,23 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
 	mm_memory_store(dispatch->sink_queue_num, nq);
 
+	// Release coarse-grained event sink lock.
 	mm_regular_unlock(&dispatch->sink_lock);
 
+	// Flush forwarded events.
+	if (listener->forwarded_events)
+		mm_event_forward_flush(&listener->forward);
 	if (listener->enqueued_events > MM_EVENT_LISTENER_RETAIN_MIN)
 		mm_event_notify_any(dispatch);
+
+	// TODO: at this point it might miss disable and reclaim events.
+#if ENABLE_EVENT_STATS
+	// Update event statistics.
+	listener->stats.direct_events += listener->direct_events;
+	listener->stats.enqueued_events += listener->enqueued_events;
+	listener->stats.dequeued_events += listener->dequeued_events;
+	listener->stats.forwarded_events += listener->forwarded_events;
+#endif
 
 	LEAVE();
 }
