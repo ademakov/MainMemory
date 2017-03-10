@@ -61,6 +61,9 @@ typedef uint16_t mm_event_stamp_t;
 /* Event sink. */
 struct mm_event_fd
 {
+	/* The event handler routine. */
+	mm_event_handler_t handler;
+
 	/* The file descriptor to watch. */
 	int fd;
 
@@ -98,9 +101,6 @@ struct mm_event_fd
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
 
-	/* The event hander. */
-	mm_event_handler_t handler;
-
 	/* Reclaim queue link. */
 	union {
 		struct mm_qlink retire_link;
@@ -124,6 +124,10 @@ mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 	mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
 #endif
 }
+
+/**********************************************************************
+ * I/O events control.
+ **********************************************************************/
 
 bool NONNULL(1, 3)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
@@ -150,7 +154,7 @@ mm_event_trigger_output(struct mm_event_fd *sink);
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
+mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp);

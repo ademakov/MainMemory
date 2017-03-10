@@ -22,12 +22,11 @@
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
-#include "base/event/selfpipe.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
 /**********************************************************************
- * I/O events support.
+ * I/O events control.
  **********************************************************************/
 
 bool NONNULL(1)
@@ -143,11 +142,11 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 #define MM_EVENT_POLLER_SPIN	(4)
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
+mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(thread < dispatch->nlisteners);
-	struct mm_event_listener *listener = &dispatch->listeners[thread];
+
+	struct mm_event_dispatch *dispatch = listener->dispatch;
 
 	if (mm_event_listener_got_events(listener)) {
 		// Presume that if there were incoming events moments ago then
