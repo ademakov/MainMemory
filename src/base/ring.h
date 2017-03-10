@@ -390,13 +390,13 @@ mm_ring_mpmc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
 	mm_ring_mpmc_dequeue_n(ring, data, 1);
 }
 
-static inline uintptr_t NONNULL(1)
+static inline mm_stamp_t NONNULL(1)
 mm_ring_mpmc_enqueue_stamp(struct mm_ring_mpmc *ring)
 {
 	return mm_memory_load(ring->base.tail);
 }
 
-static inline uintptr_t NONNULL(1)
+static inline mm_stamp_t NONNULL(1)
 mm_ring_mpmc_dequeue_stamp(struct mm_ring_mpmc *ring)
 {
 	return mm_memory_load(ring->base.head);
@@ -513,13 +513,13 @@ mm_ring_mpsc_dequeue(struct mm_ring_mpmc *ring, uintptr_t *restrict data)
 	mm_ring_mpsc_dequeue_n(ring, data, 1);
 }
 
-static inline uintptr_t NONNULL(1)
+static inline mm_stamp_t NONNULL(1)
 mm_ring_spmc_enqueue_stamp(struct mm_ring_mpmc *ring)
 {
 	return ring->base.tail;
 }
 
-static inline uintptr_t NONNULL(1)
+static inline mm_stamp_t NONNULL(1)
 mm_ring_mpsc_dequeue_stamp(struct mm_ring_mpmc *ring)
 {
 	return ring->base.head;

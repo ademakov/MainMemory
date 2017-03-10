@@ -25,6 +25,7 @@
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
+#include "base/thread/thread.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -33,11 +34,14 @@
 #endif
 
 #if ENABLE_LINUX_FUTEX
-/* Nothing for futexes. */
+# include "arch/syscall.h"
+# include <linux/futex.h>
+# include <sys/syscall.h>
 #elif ENABLE_MACH_SEMAPHORE
 # include <mach/semaphore.h>
 #else
 # include "base/thread/monitor.h"
+# include "base/clock.h"
 #endif
 
 /* Forward declarations. */
@@ -138,23 +142,101 @@ void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
 
 /**********************************************************************
- * Event listener main functionality -- listening and notification.
+ * Event listener sleep and wake up helpers.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout);
-
-void NONNULL(1)
-mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
-
-void NONNULL(1)
-mm_event_listener_signal(struct mm_event_listener *listener);
-
-static inline mm_event_listener_status_t NONNULL(1)
-mm_event_listener_getstate(struct mm_event_listener *listener)
+static inline mm_stamp_t NONNULL(1)
+mm_event_listener_stamp(struct mm_event_listener *listener)
 {
-	uintptr_t state = mm_memory_load(listener->state);
-	return (state & MM_EVENT_LISTENER_STATUS);
+	return mm_ring_mpsc_dequeue_stamp(listener->thread->request_queue);
+}
+
+/* Announce that the event listener is running. */
+static inline void NONNULL(1)
+mm_event_listener_running(struct mm_event_listener *listener)
+{
+	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
+}
+
+/* Announce that the event listener is about to enter the waiting state. */
+static inline void NONNULL(1)
+mm_event_listener_polling(struct mm_event_listener *listener, mm_stamp_t stamp)
+{
+	uintptr_t state = (((uintptr_t) stamp << 2)) | MM_EVENT_LISTENER_POLLING;
+	// TODO: atomic_store(..., mo_seq_cst)
+	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+}
+
+/* Announce that the event listener is about to enter the waiting state. */
+static inline void NONNULL(1)
+mm_event_listener_waiting(struct mm_event_listener *listener, mm_stamp_t stamp)
+{
+	uintptr_t state = (((uintptr_t) stamp << 2)) | MM_EVENT_LISTENER_WAITING;
+	// TODO: atomic_store(..., mo_seq_cst)
+	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+}
+
+/* Verify that the event listener has nothing to do but sleep. */
+static inline bool NONNULL(1)
+mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
+{
+	return stamp == mm_ring_mpmc_enqueue_stamp(listener->thread->request_queue);
+}
+
+#if ENABLE_LINUX_FUTEX
+static inline uintptr_t NONNULL(1)
+mm_event_listener_futex(struct mm_event_listener *listener)
+{
+	return (uintptr_t) &listener->thread->request_queue->base.tail;
+}
+#endif
+
+static inline void NONNULL(1)
+mm_event_listener_signal(struct mm_event_listener *listener)
+{
+#if ENABLE_LINUX_FUTEX
+	mm_syscall_3(SYS_futex,
+		     mm_event_listener_futex(listener),
+		     FUTEX_WAKE_PRIVATE, 1);
+#elif ENABLE_MACH_SEMAPHORE
+	semaphore_signal(listener->semaphore);
+#else
+	mm_thread_monitor_lock(&listener->monitor);
+	mm_thread_monitor_signal(&listener->monitor);
+	mm_thread_monitor_unlock(&listener->monitor);
+#endif
+}
+
+static inline void NONNULL(1)
+mm_event_listener_timedwait(struct mm_event_listener *listener, mm_stamp_t stamp UNUSED,
+			    mm_timeout_t timeout)
+{
+#if ENABLE_LINUX_FUTEX
+	struct timespec ts;
+	ts.tv_sec = (timeout / 1000000);
+	ts.tv_nsec = (timeout % 1000000) * 1000;
+
+	int rc = mm_syscall_4(SYS_futex,
+			      mm_event_listener_futex(listener),
+			      FUTEX_WAIT_PRIVATE, stamp, (uintptr_t) &ts);
+	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
+		mm_fatal(errno, "futex");
+#elif ENABLE_MACH_SEMAPHORE
+	mach_timespec_t ts;
+	ts.tv_sec = (timeout / 1000000);
+	ts.tv_nsec = (timeout % 1000000) * 1000;
+
+	kern_return_t r = semaphore_timedwait(listener->semaphore, ts);
+	if (r != KERN_SUCCESS && unlikely(r != KERN_OPERATION_TIMED_OUT))
+		mm_fatal(0, "semaphore_timedwait");
+#else
+	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
+
+	mm_thread_monitor_lock(&listener->monitor);
+	if (mm_event_listener_restful(listener, stamp))
+		mm_thread_monitor_timedwait(&listener->monitor, time);
+	mm_thread_monitor_unlock(&listener->monitor);
+#endif
 }
 
 /**********************************************************************

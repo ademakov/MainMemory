@@ -21,11 +21,9 @@
 
 #if HAVE_SYS_EPOLL_H
 
-#include "base/lock.h"
-#include "base/logger.h"
+#include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/batch.h"
-#include "base/event/event.h"
 #include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
@@ -258,9 +256,6 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	if (timeout) {
 		// Calculate the event wait timeout.
 		timeout /= 1000;
-
-		// Publish the log before a possible sleep.
-		mm_log_relay();
 	}
 
 	// Poll the system for events.

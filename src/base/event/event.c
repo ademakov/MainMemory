@@ -19,6 +19,7 @@
 
 #include "base/event/event.h"
 
+#include "base/logger.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
@@ -141,6 +142,108 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 
 #define MM_EVENT_POLLER_SPIN	(4)
 
+static void NONNULL(1)
+mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
+	      mm_timeout_t timeout)
+{
+	ENTER();
+	ASSERT(timeout != 0);
+
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	listener->stats.wait_calls++;
+#endif
+
+	// Try to reclaim some pending event sinks before sleeping.
+	if (mm_event_epoch_active(&listener->epoch))
+		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
+
+	// Publish the log before a possible sleep.
+	mm_log_relay();
+
+	// Get the next expected notify stamp.
+	const mm_stamp_t stamp = mm_event_listener_stamp(listener);
+	// Announce that the thread is about to sleep.
+	mm_event_listener_waiting(listener, stamp);
+
+	// Wait for a wake-up notification or timeout unless a pending
+	// notification is detected.
+	if (mm_event_listener_restful(listener, stamp))
+		mm_event_listener_timedwait(listener, stamp, timeout);
+
+	// Announce the start of another working cycle.
+	mm_event_listener_running(listener);
+
+	LEAVE();
+}
+
+static void NONNULL(1)
+mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
+	      mm_timeout_t timeout)
+{
+	ENTER();
+
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	listener->stats.poll_calls++;
+	listener->stats.zero_poll_calls += (timeout == 0);
+#endif
+
+	// Reset event counters.
+	listener->direct_events_estimate = 0;
+	listener->direct_events = 0;
+	listener->enqueued_events = 0;
+	listener->dequeued_events = 0;
+	listener->forwarded_events = 0;
+
+	// Start a reclamation critical section.
+	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
+
+	if (timeout != 0) {
+		// Cleanup stale event notifications.
+		mm_event_backend_dampen(&dispatch->backend);
+
+		// Publish the log before a possible sleep.
+		mm_log_relay();
+
+		// Get the next expected notify stamp.
+		const mm_stamp_t stamp = mm_event_listener_stamp(listener);
+		// Advertise that the thread is about to sleep.
+		mm_event_listener_polling(listener, stamp);
+
+		// Wait for a wake-up notification or timeout unless a pending
+		// notification is detected.
+		if (!mm_event_listener_restful(listener, stamp))
+			timeout = 0;
+	}
+
+	// Check incoming events and wait for notification/timeout.
+	mm_event_backend_listen(&dispatch->backend, listener, timeout);
+
+	// Announce the start of another working cycle.
+	mm_event_listener_running(listener);
+
+	// End a reclamation critical section.
+	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
+
+	// Flush forwarded events.
+	if (listener->forwarded_events)
+		mm_event_forward_flush(&listener->forward);
+
+#if ENABLE_EVENT_STATS
+	// Update event statistics.
+	listener->stats.direct_events += listener->direct_events;
+	listener->stats.enqueued_events += listener->enqueued_events;
+	listener->stats.dequeued_events += listener->dequeued_events;
+	listener->stats.forwarded_events += listener->forwarded_events;
+#endif
+
+	// Forget just handled change events.
+	mm_event_listener_clear_changes(listener);
+
+	LEAVE();
+}
+
 void NONNULL(1)
 mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
@@ -174,7 +277,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		}
 
 		// Wait for incoming events or timeout expiration.
-		mm_event_listener_poll(listener, timeout);
+		mm_event_poll(listener, dispatch, timeout);
 
 		// Reset the poller spin counter.
 		if (mm_event_listener_got_events(listener))
@@ -185,11 +288,11 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 
 	} else if (timeout == 0) {
 		// Poll for immediately available events.
-		mm_event_listener_poll(listener, 0);
+		mm_event_poll(listener, dispatch, 0);
 
 	} else {
 		// Wait for forwarded events or timeout expiration.
-		mm_event_listener_wait(listener, timeout);
+		mm_event_wait(listener, dispatch, timeout);
 	}
 
 	LEAVE();
@@ -201,7 +304,7 @@ mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
 	ENTER();
 
 	uintptr_t state = mm_memory_load(listener->state);
-	if ((stamp << 2) == (state & ~MM_EVENT_LISTENER_STATUS)) {
+	if ((((uintptr_t) stamp) << 2) == (state & ~MM_EVENT_LISTENER_STATUS)) {
 		// Get the current status of the listener. It might
 		// become obsolete by the time the notification is
 		// sent. This is not a problem however as it implies
@@ -231,7 +334,9 @@ mm_event_notify_any(struct mm_event_dispatch *dispatch)
 	mm_thread_t n = dispatch->nlisteners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &dispatch->listeners[i];
-		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
+		uintptr_t state = mm_memory_load(listener->state);
+		mm_event_listener_status_t status = state & MM_EVENT_LISTENER_STATUS;
+		if (status == MM_EVENT_LISTENER_WAITING) {
 			mm_thread_wakeup(listener->thread);
 			break;
 		}

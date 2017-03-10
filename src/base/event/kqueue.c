@@ -21,13 +21,10 @@
 
 #if HAVE_SYS_EVENT_H
 
-#include "base/lock.h"
-#include "base/logger.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/batch.h"
 #include "base/event/dispatch.h"
-#include "base/event/event.h"
 #include "base/event/listener.h"
 
 #include <time.h>
@@ -254,9 +251,6 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend,
 		// Calculate the event wait timeout.
 		ts.tv_sec = timeout / 1000000;
 		ts.tv_nsec = (timeout % 1000000) * 1000;
-
-		// Publish the log before a possible sleep.
-		mm_log_relay();
 	} else {
 		ts.tv_sec = 0;
 		ts.tv_nsec = 0;

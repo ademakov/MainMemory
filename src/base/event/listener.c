@@ -20,116 +20,15 @@
 #include "base/event/listener.h"
 
 #include "base/bitops.h"
-#include "base/logger.h"
 #include "base/report.h"
-#include "base/ring.h"
 #include "base/event/dispatch.h"
 #include "base/event/handle.h"
 #include "base/memory/memory.h"
 
-#if ENABLE_LINUX_FUTEX
-# include "arch/syscall.h"
-# include <linux/futex.h>
-# include <sys/syscall.h>
-#elif ENABLE_MACH_SEMAPHORE
+#if ENABLE_MACH_SEMAPHORE
 # include <mach/mach_init.h>
 # include <mach/task.h>
-#else
-# include "base/clock.h"
 #endif
-
-/**********************************************************************
- * Event listener sleep and wake up helpers.
- **********************************************************************/
-
-static uintptr_t
-mm_event_listener_enqueue_stamp(struct mm_event_listener *listener)
-{
-	return mm_ring_mpmc_enqueue_stamp(listener->thread->request_queue);
-}
-
-static uintptr_t
-mm_event_listener_dequeue_stamp(struct mm_event_listener *listener)
-{
-	return mm_ring_mpsc_dequeue_stamp(listener->thread->request_queue);
-}
-
-#if ENABLE_LINUX_FUTEX
-static uintptr_t
-mm_event_listener_futex(struct mm_event_listener *listener)
-{
-	return (uintptr_t) &listener->thread->request_queue->base.tail;
-}
-#endif
-
-void NONNULL(1)
-mm_event_listener_signal(struct mm_event_listener *listener)
-{
-	ENTER();
-
-#if ENABLE_LINUX_FUTEX
-	mm_syscall_3(SYS_futex,
-		     mm_event_listener_futex(listener),
-		     FUTEX_WAKE_PRIVATE, 1);
-#elif ENABLE_MACH_SEMAPHORE
-	semaphore_signal(listener->semaphore);
-#else
-	mm_thread_monitor_lock(&listener->monitor);
-	mm_thread_monitor_signal(&listener->monitor);
-	mm_thread_monitor_unlock(&listener->monitor);
-#endif
-
-	LEAVE();
-}
-
-static void NONNULL(1)
-mm_event_listener_timedwait(struct mm_event_listener *listener, mm_stamp_t stamp,
-			    mm_timeout_t timeout)
-{
-	ENTER();
-
-#if ENABLE_LINUX_FUTEX
-	struct timespec ts;
-	ts.tv_sec = (timeout / 1000000);
-	ts.tv_nsec = (timeout % 1000000) * 1000;
-
-	// Publish the log before a sleep.
-	mm_log_relay();
-
-	int rc = mm_syscall_4(SYS_futex,
-			      mm_event_listener_futex(listener),
-			      FUTEX_WAIT_PRIVATE, stamp, (uintptr_t) &ts);
-	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
-		mm_fatal(errno, "futex");
-#elif ENABLE_MACH_SEMAPHORE
-	(void) stamp;
-
-	mach_timespec_t ts;
-	ts.tv_sec = (timeout / 1000000);
-	ts.tv_nsec = (timeout % 1000000) * 1000;
-
-	// Publish the log before a sleep.
-	mm_log_relay();
-
-	kern_return_t r = semaphore_timedwait(listener->semaphore, ts);
-	if (r != KERN_SUCCESS && unlikely(r != KERN_OPERATION_TIMED_OUT))
-		mm_fatal(0, "semaphore_timedwait");
-#else
-	mm_timeval_t time = mm_clock_gettime_realtime() + timeout;
-
-	mm_thread_monitor_lock(&listener->monitor);
-#if ENABLE_NOTIFY_STAMP
-	if (stamp == mm_event_listener_enqueue_stamp(listener))
-		mm_thread_monitor_timedwait(&listener->monitor, time);
-#else
-	if (listener->notify_stamp == stamp)
-		mm_thread_monitor_timedwait(&listener->monitor, time);
-#endif
-	mm_thread_monitor_unlock(&listener->monitor);
-#endif
-
-	LEAVE();
-}
 
 /**********************************************************************
  * Event sink queue.
@@ -359,110 +258,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 #endif
 
 	mm_event_batch_cleanup(&listener->changes);
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Event listener main functionality -- listening and notification.
- **********************************************************************/
-
-void NONNULL(1)
-mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
-{
-	ENTER();
-
-#if ENABLE_EVENT_STATS
-	// Update statistics.
-	listener->stats.poll_calls++;
-	listener->stats.zero_poll_calls += (timeout == 0);
-#endif
-
-	// Reset event counters.
-	listener->direct_events_estimate = 0;
-	listener->direct_events = 0;
-	listener->enqueued_events = 0;
-	listener->dequeued_events = 0;
-	listener->forwarded_events = 0;
-
-	struct mm_event_dispatch *const dispatch = listener->dispatch;
-
-	// Start a reclamation critical section.
-	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
-
-	if (timeout != 0) {
-		// Cleanup stale event notifications.
-		mm_event_backend_dampen(&dispatch->backend);
-
-		// Get the next expected notify stamp.
-		const mm_stamp_t stamp = mm_event_listener_dequeue_stamp(listener);
-		// Advertise that the thread is about to sleep.
-		uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_POLLING;
-		// TODO: atomic_store(..., mo_seq_cst)
-		mm_atomic_uintptr_fetch_and_set(&listener->state, state);
-
-		// Wait for a wake-up notification or timeout unless a pending
-		// notification is detected.
-		if (stamp != mm_event_listener_enqueue_stamp(listener))
-			timeout = 0;
-	}
-
-	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&dispatch->backend, listener, timeout);
-
-	// Advertise the start of another working cycle.
-	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
-
-	// End a reclamation critical section.
-	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
-
-	// Flush forwarded events.
-	if (listener->forwarded_events)
-		mm_event_forward_flush(&listener->forward);
-
-#if ENABLE_EVENT_STATS
-	// Update event statistics.
-	listener->stats.direct_events += listener->direct_events;
-	listener->stats.enqueued_events += listener->enqueued_events;
-	listener->stats.dequeued_events += listener->dequeued_events;
-	listener->stats.forwarded_events += listener->forwarded_events;
-#endif
-
-	// Forget just handled change events.
-	mm_event_listener_clear_changes(listener);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT(timeout != 0);
-
-#if ENABLE_EVENT_STATS
-	// Update statistics.
-	listener->stats.wait_calls++;
-#endif
-
-	// Try to reclaim some pending event sinks before sleeping.
-	if (mm_event_epoch_active(&listener->epoch))
-		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
-
-	// Get the next expected notify stamp.
-	const mm_stamp_t stamp = mm_event_listener_dequeue_stamp(listener);
-	// Advertise that the thread is about to sleep.
-	uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_WAITING;
-	// TODO: atomic_store(..., mo_seq_cst)
-	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
-
-	// Wait for a wake-up notification or timeout unless a pending
-	// notification is detected.
-	if (stamp == mm_event_listener_enqueue_stamp(listener))
-		mm_event_listener_timedwait(listener, stamp, timeout);
-
-	// Advertise the start of another working cycle.
-	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
 
 	LEAVE();
 }
