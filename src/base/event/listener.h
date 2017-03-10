@@ -24,6 +24,7 @@
 #include "base/ring.h"
 #include "base/event/batch.h"
 #include "base/event/backend.h"
+#include "base/event/epoch.h"
 #include "base/event/forward.h"
 
 #if HAVE_LINUX_FUTEX_H
@@ -111,12 +112,8 @@ struct mm_event_listener
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
-	/* A local snapshot of the event sink reclamation epoch. */
-	uint32_t reclaim_epoch;
-	mm_atomic_uint8_t reclaim_active;
-
-	/* Event sinks with delayed reclamation. */
-	struct mm_stack reclaim_queue[2];
+	/* Event sink reclamation data. */
+	struct mm_event_epoch_local epoch;
 
 	/* Listener's private change events store. */
 	struct mm_event_batch changes;
@@ -140,13 +137,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
-
-/**********************************************************************
- * Event sink reclamation.
- **********************************************************************/
-
-void NONNULL(1)
-mm_event_listener_observe_epoch(struct mm_event_listener *listener);
 
 /**********************************************************************
  * Event listener main functionality -- listening and notification.

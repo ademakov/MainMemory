@@ -24,10 +24,11 @@
 #include "base/lock.h"
 #include "base/report.h"
 #include "base/event/backend.h"
-#include "base/event/listener.h"
+#include "base/event/epoch.h"
 
 /* Forward declarations. */
 struct mm_domain;
+struct mm_event_listener;
 struct mm_thread;
 
 /* Event dispatcher. */
@@ -44,7 +45,7 @@ struct mm_event_dispatch
 	struct mm_event_backend backend;
 
 	/* The event sink reclamation epoch. */
-	uint32_t reclaim_epoch;
+	mm_event_epoch_t global_epoch;
 
 	/* A lock that protects the poller thread election. */
 	mm_regular_lock_t poller_lock CACHE_ALIGN;
@@ -73,26 +74,12 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 void NONNULL(1)
 mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
 
-static inline struct mm_event_listener * NONNULL(1)
-mm_event_dispatch_listener(struct mm_event_dispatch *dispatch, mm_thread_t thread)
-{
-	ASSERT(thread < dispatch->nlisteners);
-	return &dispatch->listeners[thread];
-}
-
 void NONNULL(1)
 mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 			 mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch);
-
-/**********************************************************************
- * Reclamation epoch maintenance.
- **********************************************************************/
-
-bool NONNULL(1)
-mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch);
 
 /**********************************************************************
  * Event statistics.

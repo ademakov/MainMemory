@@ -376,8 +376,6 @@ mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 static void
 mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd)
 {
-	ASSERT(thread == mm_thread_self());
-
 	// Figure out the required flags.
 	uint32_t flags = proto->flags & (MM_NET_INBOUND | MM_NET_OUTBOUND);
 	if (flags == 0) {

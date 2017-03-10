@@ -35,9 +35,12 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	ENTER();
 	ASSERT(nthreads > 0);
 
-	// Store associated domain.
+	// Store the associated domain.
 	dispatch->domain = domain;
 	mm_domain_setdispatch(domain, dispatch);
+
+	// Initialize event sink reclamation data.
+	mm_event_epoch_prepare(&dispatch->global_epoch);
 
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
@@ -50,11 +53,11 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend);
 
-	dispatch->reclaim_epoch = 0;
+	// Initialize poller thread data.
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-	dispatch->poller_spin = false;
+	dispatch->poller_spin = 0;
 
-	// Prepare the sink queue.
+	// Initialize the sink queue.
 	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->sink_queue_num = 0;
 	dispatch->sink_queue_head = 0;
@@ -90,7 +93,7 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 {
 	ENTER();
 	ASSERT(thread < dispatch->nlisteners);
-	struct mm_event_listener *listener = mm_event_dispatch_listener(dispatch, thread);
+	struct mm_event_listener *listener = &dispatch->listeners[thread];
 
 	if (mm_event_listener_got_events(listener)) {
 		// Presume that if there were incoming events moments ago then
@@ -102,20 +105,12 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
 		timeout = 0;
-	}
-
-	if (mm_event_listener_has_changes(listener)) {
+	} else if (mm_event_listener_has_changes(listener)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
-
-		// Try to advance the event sink reclamation epoch if needed.
-		if (listener->reclaim_active)
-			mm_event_dispatch_advance_epoch(dispatch);
-
-	} else if (timeout != 0) {
-		// Try to advance the event sink reclamation epoch if needed.
-		if (listener->reclaim_active)
-			mm_event_dispatch_advance_epoch(dispatch);
+	} else if (mm_event_epoch_active(&listener->epoch)) {
+		// Have to try to advance the event sink reclamation epoch.
+		timeout = 0;
 	}
 
 	// The first arrived thread is elected to conduct the next event poll.
@@ -165,66 +160,6 @@ mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch)
 	}
 
 	LEAVE();
-}
-
-/**********************************************************************
- * Reclamation epoch maintenance.
- **********************************************************************/
-
-static void
-mm_event_dispatch_observe_req(uintptr_t *arguments)
-{
-	ENTER();
-
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	if (listener->reclaim_active)
-		mm_event_listener_observe_epoch(listener);
-
-	LEAVE();
-}
-
-static bool
-mm_event_dispatch_check_epoch(struct mm_event_dispatch *dispatch, uint32_t epoch)
-{
-	ENTER();
-	bool rc = true;
-
-	mm_thread_t n = dispatch->nlisteners;
-	struct mm_event_listener *listeners = dispatch->listeners;
-	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_event_listener *listener = &listeners[i];
-
-		uint32_t local = mm_memory_load(listener->reclaim_epoch);
-		mm_memory_load_fence();
-		bool active = mm_memory_load(listener->reclaim_active);
-
-		if (active && local != epoch) {
-			mm_thread_post_1(listener->thread, mm_event_dispatch_observe_req,
-					 (uintptr_t) listener);
-			rc = false;
-			break;
-		}
-	}
-
-	LEAVE();
-	return rc;
-}
-
-bool NONNULL(1)
-mm_event_dispatch_advance_epoch(struct mm_event_dispatch *dispatch)
-{
-	ENTER();
-
-	uint32_t epoch = mm_memory_load(dispatch->reclaim_epoch);
-	bool rc = mm_event_dispatch_check_epoch(dispatch, epoch);
-	if (rc) {
-		mm_memory_fence(); // TODO: load_store fence
-		mm_memory_store(dispatch->reclaim_epoch, epoch + 1);
-		DEBUG("advance epoch %u", epoch + 1);
-	}
-
-	LEAVE();
-	return rc;
 }
 
 /**********************************************************************

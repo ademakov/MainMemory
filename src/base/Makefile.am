@@ -34,6 +34,7 @@ libmmbase_la_SOURCES = \
 	event/backend.c event/backend.h \
 	event/batch.c event/batch.h \
 	event/dispatch.c event/dispatch.h \
+	event/epoch.c event/epoch.h \
 	event/epoll.c event/epoll.h \
 	event/event.c event/event.h \
 	event/forward.c event/forward.h \

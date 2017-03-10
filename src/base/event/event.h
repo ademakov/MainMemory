@@ -98,7 +98,10 @@ struct mm_event_fd
 	mm_event_handler_t handler;
 
 	/* Reclaim queue link. */
-	struct mm_slink reclaim_link;
+	union {
+		struct mm_qlink retire_link;
+		struct mm_slink reclaim_link;
+	};
 };
 
 static inline mm_thread_t NONNULL(1)
