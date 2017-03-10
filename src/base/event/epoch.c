@@ -32,8 +32,8 @@ mm_event_epoch_observe_req(uintptr_t *arguments)
 	ENTER();
 
 	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
-	if (listener->epoch.epoch)
-		mm_event_epoch_leave(&listener->epoch, &listener->dispatch->global_epoch);
+	if (mm_event_epoch_active(&listener->epoch))
+		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
 
 	LEAVE();
 }

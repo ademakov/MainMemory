@@ -472,6 +472,10 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 	listener->stats.wait_calls++;
 #endif
 
+	// Try to reclaim some pending event sinks before sleeping.
+	if (mm_event_epoch_active(&listener->epoch))
+		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
+
 	// Get the next expected notify stamp.
 	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
 	// Advertise that the thread is about to sleep.

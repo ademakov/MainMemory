@@ -91,10 +91,11 @@ mm_event_epoch_retire(struct mm_event_epoch_local *local, struct mm_event_fd *si
 	local->count++;
 }
 
+/* Check if there any pending event sinks. */
 static inline bool NONNULL(1)
 mm_event_epoch_active(struct mm_event_epoch_local *local)
 {
-	return local->count > 0;
+	return local->count != 0;
 }
 
 #endif /* BASE_EVENT_EPOCH_H */

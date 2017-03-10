@@ -108,9 +108,6 @@ mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
 	} else if (mm_event_listener_has_changes(listener)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
-	} else if (mm_event_epoch_active(&listener->epoch)) {
-		// Have to try to advance the event sink reclamation epoch.
-		timeout = 0;
 	}
 
 	// The first arrived thread is elected to conduct the next event poll.
