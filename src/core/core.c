@@ -512,8 +512,7 @@ mm_core_halt(struct mm_core *core)
 		}
 
 		// Halt the core waiting for incoming events.
-		mm_event_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
-					 timeout);
+		mm_event_listen(&mm_core_dispatch, mm_core_getid(core), timeout);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);
@@ -523,8 +522,7 @@ mm_core_halt(struct mm_core *core)
 
 	} else {
 		// Halt the core waiting for incoming events.
-		mm_event_dispatch_listen(&mm_core_dispatch, mm_core_getid(core),
-					 MM_CORE_HALT_TIMEOUT);
+		mm_event_listen(&mm_core_dispatch, mm_core_getid(core), MM_CORE_HALT_TIMEOUT);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&core->time_manager);

@@ -74,13 +74,6 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 void NONNULL(1)
 mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
 
-void NONNULL(1)
-mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
-			 mm_timeout_t timeout);
-
-void NONNULL(1)
-mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch);
-
 /**********************************************************************
  * Event statistics.
  **********************************************************************/

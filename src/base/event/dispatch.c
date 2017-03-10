@@ -20,11 +20,10 @@
 #include "base/event/dispatch.h"
 
 #include "base/logger.h"
+#include "base/event/listener.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
-
-#define MM_EVENT_DISPATCH_POLLER_SPIN	(4)
 
 void NONNULL(1, 2, 4)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
@@ -83,78 +82,6 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 
 	// Release the sink queue.
 	mm_common_free(dispatch->sink_queue);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_dispatch_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread,
-			 mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT(thread < dispatch->nlisteners);
-	struct mm_event_listener *listener = &dispatch->listeners[thread];
-
-	if (mm_event_listener_got_events(listener)) {
-		// Presume that if there were incoming events moments ago then
-		// there is a chance to get some more immediately. Don't sleep
-		// to avoid a context switch.
-		timeout = 0;
-	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
-		// Check if there are immediately available events in the queue.
-		// This check does not have to be precise so there is no need to
-		// use event_sink_lock here.
-		timeout = 0;
-	} else if (mm_event_listener_has_changes(listener)) {
-		// There may be changes that need to be immediately acknowledged.
-		timeout = 0;
-	}
-
-	// The first arrived thread is elected to conduct the next event poll.
-	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
-	if (is_poller_thread) {
-		// If the previous poller thread received some events then keep
-		// spinning for a while to avoid extra context switches.
-		if (dispatch->poller_spin) {
-			dispatch->poller_spin--;
-			timeout = 0;
-		}
-
-		// Wait for incoming events or timeout expiration.
-		mm_event_listener_poll(listener, timeout);
-
-		// Reset the poller spin counter.
-		if (mm_event_listener_got_events(listener))
-			dispatch->poller_spin = MM_EVENT_DISPATCH_POLLER_SPIN;
-
-		// Give up the poller thread role.
-		mm_regular_unlock(&dispatch->poller_lock);
-
-	} else if (timeout == 0) {
-		// Poll for immediately available events.
-		mm_event_listener_poll(listener, 0);
-
-	} else {
-		// Wait for forwarded events or timeout expiration.
-		mm_event_listener_wait(listener, timeout);
-	}
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_dispatch_notify_waiting(struct mm_event_dispatch *dispatch)
-{
-	ENTER();
-
-	mm_thread_t n = dispatch->nlisteners;
-	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_event_listener *listener = &dispatch->listeners[i];
-		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
-			mm_thread_wakeup(listener->thread);
-			break;
-		}
-	}
 
 	LEAVE();
 }

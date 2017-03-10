@@ -62,7 +62,7 @@ mm_event_listener_futex(struct mm_event_listener *listener)
 }
 #endif
 
-static void NONNULL(1)
+void NONNULL(1)
 mm_event_listener_signal(struct mm_event_listener *listener)
 {
 	ENTER();
@@ -214,7 +214,7 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	mm_regular_unlock(&dispatch->sink_lock);
 
 	if (listener->enqueued_events > MM_EVENT_LISTENER_RETAIN_MIN)
-		mm_event_dispatch_notify_waiting(dispatch);
+		mm_event_notify_any(dispatch);
 
 	LEAVE();
 }
@@ -366,34 +366,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 /**********************************************************************
  * Event listener main functionality -- listening and notification.
  **********************************************************************/
-
-void NONNULL(1)
-mm_event_listener_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
-{
-	ENTER();
-
-	uintptr_t state = mm_memory_load(listener->state);
-	if ((stamp << 2) == (state & ~MM_EVENT_LISTENER_STATUS)) {
-		// Get the current status of the listener. It might
-		// become obsolete by the time the notification is
-		// sent. This is not a problem however as it implies
-		// the listener thread has woken up on its own and
-		// seen all the sent data.
-		//
-		// Sometimes this might lead to an extra listener
-		// wake up (if the listener makes a full cycle) or
-		// a wrong listener being waken (if another listener
-		// becomes polling). So listeners should be prepared
-		// to get spurious wake up notifications.
-		mm_event_listener_status_t status = state & MM_EVENT_LISTENER_STATUS;
-		if (status == MM_EVENT_LISTENER_WAITING)
-			mm_event_listener_signal(listener);
-		else if (status == MM_EVENT_LISTENER_POLLING)
-			mm_event_backend_notify(&listener->dispatch->backend);
-	}
-
-	LEAVE();
-}
 
 void NONNULL(1)
 mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)

@@ -23,7 +23,7 @@
 #include "common.h"
 #include "base/list.h"
 #include "base/report.h"
-#include "base/event/listener.h"
+#include "base/event/event.h"
 #include "base/memory/space.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"
@@ -336,7 +336,7 @@ mm_thread_getlistener(struct mm_thread *thread)
 static inline void NONNULL(1)
 mm_thread_notify(struct mm_thread *thread, mm_stamp_t stamp)
 {
-	mm_event_listener_notify(thread->event_listener, stamp);
+	mm_event_notify(mm_thread_getlistener(thread), stamp);
 }
 
 static inline bool NONNULL(1, 2)

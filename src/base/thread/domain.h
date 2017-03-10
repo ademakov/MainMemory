@@ -24,7 +24,6 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
-#include "base/event/dispatch.h"
 #include "base/thread/barrier.h"
 #include "base/thread/request.h"
 #include "base/thread/thread.h"
@@ -212,7 +211,7 @@ mm_domain_getdispatch(struct mm_domain *domain)
 static inline void NONNULL(1)
 mm_domain_notify(struct mm_domain *domain)
 {
-	mm_event_dispatch_notify_waiting(domain->event_dispatch);
+	mm_event_notify_any(mm_domain_getdispatch(domain));
 }
 
 static inline bool NONNULL(1, 2)

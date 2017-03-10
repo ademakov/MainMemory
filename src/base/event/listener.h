@@ -142,13 +142,13 @@ mm_event_listener_cleanup(struct mm_event_listener *listener);
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
-
-void NONNULL(1)
 mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout);
+
+void NONNULL(1)
+mm_event_listener_signal(struct mm_event_listener *listener);
 
 static inline mm_event_listener_status_t NONNULL(1)
 mm_event_listener_getstate(struct mm_event_listener *listener)

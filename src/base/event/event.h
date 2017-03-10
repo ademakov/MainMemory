@@ -23,6 +23,10 @@
 #include "common.h"
 #include "base/list.h"
 
+/* Forward declarations. */
+struct mm_event_dispatch;
+struct mm_event_listener;
+
 /* Event types. */
 typedef enum {
 	MM_EVENT_INPUT,
@@ -140,5 +144,18 @@ mm_event_trigger_input(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink);
+
+/**********************************************************************
+ * Event listening and notification.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout);
+
+void NONNULL(1)
+mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
+
+void NONNULL(1)
+mm_event_notify_any(struct mm_event_dispatch *dispatch);
 
 #endif /* BASE_EVENT_EVENT_H */

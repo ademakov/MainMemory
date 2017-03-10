@@ -21,6 +21,7 @@
 
 #include "base/report.h"
 #include "base/event/dispatch.h"
+#include "base/event/listener.h"
 #include "base/event/selfpipe.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
@@ -133,4 +134,109 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	struct mm_event_listener *listener = mm_thread_getlistener(thread);
 	VERIFY(mm_event_target(sink) == listener->target);
 	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
+}
+
+/**********************************************************************
+ * Event listening and notification.
+ **********************************************************************/
+
+#define MM_EVENT_POLLER_SPIN	(4)
+
+void NONNULL(1)
+mm_event_listen(struct mm_event_dispatch *dispatch, mm_thread_t thread, mm_timeout_t timeout)
+{
+	ENTER();
+	ASSERT(thread < dispatch->nlisteners);
+	struct mm_event_listener *listener = &dispatch->listeners[thread];
+
+	if (mm_event_listener_got_events(listener)) {
+		// Presume that if there were incoming events moments ago then
+		// there is a chance to get some more immediately. Don't sleep
+		// to avoid a context switch.
+		timeout = 0;
+	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
+		// Check if there are immediately available events in the queue.
+		// This check does not have to be precise so there is no need to
+		// use event_sink_lock here.
+		timeout = 0;
+	} else if (mm_event_listener_has_changes(listener)) {
+		// There may be changes that need to be immediately acknowledged.
+		timeout = 0;
+	}
+
+	// The first arrived thread is elected to conduct the next event poll.
+	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
+	if (is_poller_thread) {
+		// If the previous poller thread received some events then keep
+		// spinning for a while to avoid extra context switches.
+		if (dispatch->poller_spin) {
+			dispatch->poller_spin--;
+			timeout = 0;
+		}
+
+		// Wait for incoming events or timeout expiration.
+		mm_event_listener_poll(listener, timeout);
+
+		// Reset the poller spin counter.
+		if (mm_event_listener_got_events(listener))
+			dispatch->poller_spin = MM_EVENT_POLLER_SPIN;
+
+		// Give up the poller thread role.
+		mm_regular_unlock(&dispatch->poller_lock);
+
+	} else if (timeout == 0) {
+		// Poll for immediately available events.
+		mm_event_listener_poll(listener, 0);
+
+	} else {
+		// Wait for forwarded events or timeout expiration.
+		mm_event_listener_wait(listener, timeout);
+	}
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
+{
+	ENTER();
+
+	uintptr_t state = mm_memory_load(listener->state);
+	if ((stamp << 2) == (state & ~MM_EVENT_LISTENER_STATUS)) {
+		// Get the current status of the listener. It might
+		// become obsolete by the time the notification is
+		// sent. This is not a problem however as it implies
+		// the listener thread has woken up on its own and
+		// seen all the sent data.
+		//
+		// Sometimes this might lead to an extra listener
+		// wake up (if the listener makes a full cycle) or
+		// a wrong listener being waken (if another listener
+		// becomes polling). So listeners should be prepared
+		// to get spurious wake up notifications.
+		mm_event_listener_status_t status = state & MM_EVENT_LISTENER_STATUS;
+		if (status == MM_EVENT_LISTENER_WAITING)
+			mm_event_listener_signal(listener);
+		else if (status == MM_EVENT_LISTENER_POLLING)
+			mm_event_backend_notify(&listener->dispatch->backend);
+	}
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_notify_any(struct mm_event_dispatch *dispatch)
+{
+	ENTER();
+
+	mm_thread_t n = dispatch->nlisteners;
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_event_listener *listener = &dispatch->listeners[i];
+		if (mm_event_listener_getstate(listener) == MM_EVENT_LISTENER_WAITING) {
+			mm_thread_wakeup(listener->thread);
+			break;
+		}
+	}
+
+	LEAVE();
 }
