@@ -21,7 +21,6 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
-#include "base/ring.h"
 #include "base/event/batch.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
@@ -143,7 +142,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener);
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t stamp);
+mm_event_listener_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
 
 void NONNULL(1)
 mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout);

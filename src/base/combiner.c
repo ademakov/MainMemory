@@ -93,10 +93,10 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 
 	struct mm_ring_base *const base = &combiner->ring.base;
 	struct mm_ring_node *const ring = combiner->ring.ring;
-	const mm_ring_seqno_t mask = base->mask;
+	const mm_stamp_t mask = base->mask;
 
 	// Get a request slot in the bounded MPMC queue shared between cores.
-	const mm_ring_seqno_t tail = mm_ring_atomic_fai(&base->tail);
+	const mm_stamp_t tail = mm_ring_atomic_fai(&base->tail);
 	struct mm_ring_node *node = &ring[tail & mask];
 
 	// Wait until the slot becomes ready to accept a request.
@@ -112,7 +112,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 	mm_memory_store(node->lock, tail + 1);
 
 	// Wait until the request is executed.
-	mm_ring_seqno_t head = mm_memory_load(base->head);
+	mm_stamp_t head = mm_memory_load(base->head);
 	for (backoff = 0; head != tail; head = mm_memory_load(base->head)) {
 		if (mm_memory_load(node->lock) != (tail + 1))
 			goto leave;
@@ -124,7 +124,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 	}
 
 	// It is actually our turn to execute requests.
-	mm_ring_seqno_t last = tail + mm_combiner_gethandoff(combiner);
+	mm_stamp_t last = tail + mm_combiner_gethandoff(combiner);
 #if 1
 	for (; head != last; head++) {
 		// Check if there is another pending request.
@@ -143,7 +143,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 		((mm_combiner_routine_t) data_0)(data_1);
 	}
 #else
-	mm_ring_seqno_t next = tail + 1;
+	mm_stamp_t next = tail + 1;
 	do {
 		// Execute pending requests.
 		for (; head != next; head++) {

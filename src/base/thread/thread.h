@@ -280,7 +280,7 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 
 #define MM_THREAD_POST(n, t, ...)					\
 	do {								\
-		mm_ring_seqno_t stamp;					\
+		mm_stamp_t stamp;					\
 		MM_POST_ARGV(v, __VA_ARGS__);				\
 		mm_ring_mpmc_enqueue_sn(t->request_queue, &stamp, v,	\
 					MM_POST_ARGC(n));		\
@@ -290,7 +290,7 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 #define MM_THREAD_TRYPOST(n, t, ...)					\
 	do {								\
 		bool res;						\
-		mm_ring_seqno_t stamp;					\
+		mm_stamp_t stamp;					\
 		MM_POST_ARGV(v, __VA_ARGS__);				\
 		res = mm_ring_mpmc_put_sn(t->request_queue, &stamp, v,	\
 					  MM_POST_ARGC(n));		\
@@ -301,7 +301,7 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 
 #define MM_THREAD_SEND(n, t, ...)					\
 	do {								\
-		mm_ring_seqno_t stamp;					\
+		mm_stamp_t stamp;					\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
 		mm_ring_mpmc_enqueue_sn(t->request_queue, &stamp, v,	\
 					MM_SEND_ARGC(n));		\
@@ -311,7 +311,7 @@ mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
 #define MM_THREAD_TRYSEND(n, t, ...)					\
 	do {								\
 		bool res;						\
-		mm_ring_seqno_t stamp;					\
+		mm_stamp_t stamp;					\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
 		res = mm_ring_mpmc_put_sn(t->request_queue, &stamp, v,	\
 					  MM_SEND_ARGC(n));		\
@@ -334,7 +334,7 @@ mm_thread_getlistener(struct mm_thread *thread)
 }
 
 static inline void NONNULL(1)
-mm_thread_notify(struct mm_thread *thread, mm_ring_seqno_t stamp)
+mm_thread_notify(struct mm_thread *thread, mm_stamp_t stamp)
 {
 	mm_event_listener_notify(thread->event_listener, stamp);
 }

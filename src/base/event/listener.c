@@ -22,6 +22,7 @@
 #include "base/bitops.h"
 #include "base/logger.h"
 #include "base/report.h"
+#include "base/ring.h"
 #include "base/event/dispatch.h"
 #include "base/event/handle.h"
 #include "base/memory/memory.h"
@@ -82,7 +83,7 @@ mm_event_listener_signal(struct mm_event_listener *listener)
 }
 
 static void NONNULL(1)
-mm_event_listener_timedwait(struct mm_event_listener *listener, mm_ring_seqno_t stamp,
+mm_event_listener_timedwait(struct mm_event_listener *listener, mm_stamp_t stamp,
 			    mm_timeout_t timeout)
 {
 	ENTER();
@@ -367,7 +368,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_notify(struct mm_event_listener *listener, mm_ring_seqno_t stamp UNUSED)
+mm_event_listener_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
 	ENTER();
 
@@ -422,7 +423,7 @@ mm_event_listener_poll(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_backend_dampen(&dispatch->backend);
 
 		// Get the next expected notify stamp.
-		const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
+		const mm_stamp_t stamp = mm_event_listener_dequeue_stamp(listener);
 		// Advertise that the thread is about to sleep.
 		uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_POLLING;
 		// TODO: atomic_store(..., mo_seq_cst)
@@ -477,7 +478,7 @@ mm_event_listener_wait(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
 
 	// Get the next expected notify stamp.
-	const mm_ring_seqno_t stamp = mm_event_listener_dequeue_stamp(listener);
+	const mm_stamp_t stamp = mm_event_listener_dequeue_stamp(listener);
 	// Advertise that the thread is about to sleep.
 	uintptr_t state = (stamp << 2) | MM_EVENT_LISTENER_WAITING;
 	// TODO: atomic_store(..., mo_seq_cst)

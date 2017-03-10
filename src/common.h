@@ -1,7 +1,7 @@
 /*
  * common.h - MainMemory common definitions.
  *
- * Copyright (C) 2012-2014  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -125,6 +125,9 @@ typedef int64_t			mm_timeval_t;
 
 /* Timeout (in microseconds). */
 typedef uint32_t		mm_timeout_t;
+
+/* Sequence number for data updates. */
+typedef uint32_t		mm_stamp_t;
 
 /* Thread ID. */
 typedef uint16_t 		mm_thread_t;
