@@ -145,12 +145,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener);
  * Event listener sleep and wake up helpers.
  **********************************************************************/
 
-static inline mm_stamp_t NONNULL(1)
-mm_event_listener_stamp(struct mm_event_listener *listener)
-{
-	return mm_ring_mpsc_dequeue_stamp(listener->thread->request_queue);
-}
-
 /* Announce that the event listener is running. */
 static inline void NONNULL(1)
 mm_event_listener_running(struct mm_event_listener *listener)
@@ -158,22 +152,27 @@ mm_event_listener_running(struct mm_event_listener *listener)
 	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
 }
 
-/* Announce that the event listener is about to enter the waiting state. */
-static inline void NONNULL(1)
-mm_event_listener_polling(struct mm_event_listener *listener, mm_stamp_t stamp)
+/* Prepare the event listener to one of the sleeping states. */
+static inline mm_stamp_t NONNULL(1)
+mm_event_listener_standby(struct mm_event_listener *listener, mm_event_listener_status_t status)
 {
-	uintptr_t state = (((uintptr_t) stamp << 2)) | MM_EVENT_LISTENER_POLLING;
-	// TODO: atomic_store(..., mo_seq_cst)
-	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->thread->request_queue);
+	mm_atomic_uintptr_fetch_and_set(&listener->state, (((uintptr_t) stamp) << 2) | status);
+	return stamp;
 }
 
-/* Announce that the event listener is about to enter the waiting state. */
-static inline void NONNULL(1)
-mm_event_listener_waiting(struct mm_event_listener *listener, mm_stamp_t stamp)
+/* Prepare the event listener for polling. */
+static inline mm_stamp_t NONNULL(1)
+mm_event_listener_polling(struct mm_event_listener *listener)
 {
-	uintptr_t state = (((uintptr_t) stamp << 2)) | MM_EVENT_LISTENER_WAITING;
-	// TODO: atomic_store(..., mo_seq_cst)
-	mm_atomic_uintptr_fetch_and_set(&listener->state, state);
+	return mm_event_listener_standby(listener, MM_EVENT_LISTENER_POLLING);
+}
+
+/* Prepare the event listener for waiting. */
+static inline mm_stamp_t NONNULL(1)
+mm_event_listener_waiting(struct mm_event_listener *listener)
+{
+	return mm_event_listener_standby(listener, MM_EVENT_LISTENER_WAITING);
 }
 
 /* Verify that the event listener has nothing to do but sleep. */
@@ -195,9 +194,7 @@ static inline void NONNULL(1)
 mm_event_listener_signal(struct mm_event_listener *listener)
 {
 #if ENABLE_LINUX_FUTEX
-	mm_syscall_3(SYS_futex,
-		     mm_event_listener_futex(listener),
-		     FUTEX_WAKE_PRIVATE, 1);
+	mm_syscall_3(SYS_futex, mm_event_listener_futex(listener), FUTEX_WAKE_PRIVATE, 1);
 #elif ENABLE_MACH_SEMAPHORE
 	semaphore_signal(listener->semaphore);
 #else
@@ -208,17 +205,20 @@ mm_event_listener_signal(struct mm_event_listener *listener)
 }
 
 static inline void NONNULL(1)
-mm_event_listener_timedwait(struct mm_event_listener *listener, mm_stamp_t stamp UNUSED,
-			    mm_timeout_t timeout)
+mm_event_listener_timedwait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
+	/* Announce that the thread is about to sleep. */
+	mm_stamp_t stamp = mm_event_listener_waiting(listener);
+	if (!mm_event_listener_restful(listener, stamp))
+		goto leave;
+
 #if ENABLE_LINUX_FUTEX
 	struct timespec ts;
 	ts.tv_sec = (timeout / 1000000);
 	ts.tv_nsec = (timeout % 1000000) * 1000;
 
-	int rc = mm_syscall_4(SYS_futex,
-			      mm_event_listener_futex(listener),
-			      FUTEX_WAIT_PRIVATE, stamp, (uintptr_t) &ts);
+	int rc = mm_syscall_4(SYS_futex, mm_event_listener_futex(listener), FUTEX_WAIT_PRIVATE,
+			      stamp, (uintptr_t) &ts);
 	if (rc != 0 && errno != EWOULDBLOCK && errno != ETIMEDOUT)
 		mm_fatal(errno, "futex");
 #elif ENABLE_MACH_SEMAPHORE
@@ -237,6 +237,10 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_stamp_t stamp
 		mm_thread_monitor_timedwait(&listener->monitor, time);
 	mm_thread_monitor_unlock(&listener->monitor);
 #endif
+
+leave:
+	// Announce the start of another working cycle.
+	mm_event_listener_running(listener);
 }
 
 /**********************************************************************

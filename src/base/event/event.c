@@ -143,8 +143,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 #define MM_EVENT_POLLER_SPIN	(4)
 
 static void NONNULL(1)
-mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-	      mm_timeout_t timeout)
+mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
 {
 	ENTER();
 	ASSERT(timeout != 0);
@@ -161,25 +160,14 @@ mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	// Publish the log before a possible sleep.
 	mm_log_relay();
 
-	// Get the next expected notify stamp.
-	const mm_stamp_t stamp = mm_event_listener_stamp(listener);
-	// Announce that the thread is about to sleep.
-	mm_event_listener_waiting(listener, stamp);
-
-	// Wait for a wake-up notification or timeout unless a pending
-	// notification is detected.
-	if (mm_event_listener_restful(listener, stamp))
-		mm_event_listener_timedwait(listener, stamp, timeout);
-
-	// Announce the start of another working cycle.
-	mm_event_listener_running(listener);
+	// Wait for a wake-up notification or timeout.
+	mm_event_listener_timedwait(listener, timeout);
 
 	LEAVE();
 }
 
 static void NONNULL(1)
-mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-	      mm_timeout_t timeout)
+mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
 {
 	ENTER();
 
@@ -206,13 +194,8 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 		// Publish the log before a possible sleep.
 		mm_log_relay();
 
-		// Get the next expected notify stamp.
-		const mm_stamp_t stamp = mm_event_listener_stamp(listener);
-		// Advertise that the thread is about to sleep.
-		mm_event_listener_polling(listener, stamp);
-
-		// Wait for a wake-up notification or timeout unless a pending
-		// notification is detected.
+		// Announce that the thread is about to sleep.
+		mm_stamp_t stamp = mm_event_listener_polling(listener);
 		if (!mm_event_listener_restful(listener, stamp))
 			timeout = 0;
 	}
