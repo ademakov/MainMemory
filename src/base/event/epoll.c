@@ -218,8 +218,8 @@ mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *listener, int nevents)
 {
-	storage->input_reset_num = 0;
-	storage->output_reset_num = 0;
+	listener->storage.storage.input_reset_num = 0;
+	listener->storage.storage.output_reset_num = 0;
 
 	mm_event_listener_handle_start(listener, nevents);
 
@@ -245,10 +245,10 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
 
 	mm_event_listener_handle_finish(listener);
 
-	for (int i = 0; i < storage->input_reset_num; i++)
-		mm_event_epoll_del_in(backend, &listener->storage.storage.input_reset[i]);
-	for (int i = 0; i < storage->output_reset_num; i++)
-		mm_event_epoll_del_out(backend, &listener->storage.storage.output_reset[i]);
+	for (int i = 0; i < listener->storage.storage.input_reset_num; i++)
+		mm_event_epoll_del_in(backend, listener->storage.storage.input_reset[i]);
+	for (int i = 0; i < listener->storage.storage.output_reset_num; i++)
+		mm_event_epoll_del_out(backend, listener->storage.storage.output_reset[i]);
 }
 
 static void
