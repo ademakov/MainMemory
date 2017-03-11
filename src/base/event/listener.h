@@ -154,25 +154,11 @@ mm_event_listener_running(struct mm_event_listener *listener)
 
 /* Prepare the event listener to one of the sleeping states. */
 static inline mm_stamp_t NONNULL(1)
-mm_event_listener_standby(struct mm_event_listener *listener, mm_event_listener_status_t status)
+mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_status_t status)
 {
 	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->thread->request_queue);
 	mm_atomic_uintptr_fetch_and_set(&listener->state, (((uintptr_t) stamp) << 2) | status);
 	return stamp;
-}
-
-/* Prepare the event listener for polling. */
-static inline mm_stamp_t NONNULL(1)
-mm_event_listener_polling(struct mm_event_listener *listener)
-{
-	return mm_event_listener_standby(listener, MM_EVENT_LISTENER_POLLING);
-}
-
-/* Prepare the event listener for waiting. */
-static inline mm_stamp_t NONNULL(1)
-mm_event_listener_waiting(struct mm_event_listener *listener)
-{
-	return mm_event_listener_standby(listener, MM_EVENT_LISTENER_WAITING);
 }
 
 /* Verify that the event listener has nothing to do but sleep. */
@@ -180,6 +166,13 @@ static inline bool NONNULL(1)
 mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
 	return stamp == mm_ring_mpmc_enqueue_stamp(listener->thread->request_queue);
+}
+
+/* Prepare the event listener for polling. */
+static inline mm_stamp_t NONNULL(1)
+mm_event_listener_polling(struct mm_event_listener *listener)
+{
+	return mm_event_listener_posture(listener, MM_EVENT_LISTENER_POLLING);
 }
 
 #if ENABLE_LINUX_FUTEX
@@ -208,7 +201,7 @@ static inline void NONNULL(1)
 mm_event_listener_timedwait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	/* Announce that the thread is about to sleep. */
-	mm_stamp_t stamp = mm_event_listener_waiting(listener);
+	mm_stamp_t stamp = mm_event_listener_posture(listener, MM_EVENT_LISTENER_WAITING);
 	if (!mm_event_listener_restful(listener, stamp))
 		goto leave;
 
