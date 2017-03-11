@@ -206,7 +206,7 @@ mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.storage.events[i];
+		struct epoll_event *event = &listener->storage.storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 		if ((event->events & EPOLLIN) != 0 && !mm_event_listener_adjust(listener, sink))
 			return;
@@ -224,7 +224,7 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.storage.events[i];
+		struct epoll_event *event = &listener->storage.storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
 		if ((event->events & EPOLLIN) != 0)
