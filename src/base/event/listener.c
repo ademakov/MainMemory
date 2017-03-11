@@ -81,12 +81,6 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 
-	// Reset event counters.
-	listener->direct_events = 0;
-	listener->enqueued_events = 0;
-	listener->dequeued_events = 0;
-	listener->forwarded_events = 0;
-
 	// Acquire coarse-grained event sink lock.
 	mm_regular_lock(&dispatch->sink_lock);
 

@@ -200,29 +200,31 @@ mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change
 }
 
 static void
-mm_event_epoll_receive_events(struct mm_event_epoll *backend,
-			      struct mm_event_epoll_storage *storage,
-			      struct mm_event_listener *listener,
-			      int nevents)
+mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 {
-	mm_event_listener_adjust_start(listener);
+	if (!mm_event_listener_adjust_start(listener, nevents))
+		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &storage->events[i];
+		struct kevent *event = &listener->storage.storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 		if ((event->events & EPOLLIN) != 0 && !mm_event_listener_adjust(listener, sink))
-			break;
+			return;
 		if ((event->events & EPOLLOUT) != 0 && !mm_event_listener_adjust(listener, sink))
-			break;
+			return;
 	}
+}
 
+static void
+mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *listener, int nevents)
+{
 	storage->input_reset_num = 0;
 	storage->output_reset_num = 0;
 
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &storage->events[i];
+		struct kevent *event = &listener->storage.storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
 		if ((event->events & EPOLLIN) != 0)
@@ -244,17 +246,30 @@ mm_event_epoll_receive_events(struct mm_event_epoll *backend,
 	mm_event_listener_handle_finish(listener);
 
 	for (int i = 0; i < storage->input_reset_num; i++)
-		mm_event_epoll_del_in(backend, storage->input_reset[i]);
+		mm_event_epoll_del_in(backend, &listener->storage.storage.input_reset[i]);
 	for (int i = 0; i < storage->output_reset_num; i++)
-		mm_event_epoll_del_out(backend, storage->output_reset[i]);
+		mm_event_epoll_del_out(backend, &listener->storage.storage.output_reset[i]);
+}
+
+static void
+mm_event_epoll_process_events(struct mm_event_epoll *backend,
+			      struct mm_event_listener *listener,
+			      int nevents)
+{
+	mm_event_listener_clear_events(listener);
+	if (nevents != 0) {
+		mm_event_epoll_adjust(listener, nevents);
+		mm_event_epoll_handle(backend, listener, nevents);
+	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
+		mm_event_listener_adjust_start(listener, 0);
+		mm_event_epoll_handle(backend, listener, 0);
+	}
 }
 
 static int
 mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
 		    mm_timeout_t timeout)
 {
-	ENTER();
-
 	if (timeout) {
 		// Calculate the event wait timeout.
 		timeout /= 1000;
@@ -275,7 +290,6 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	storage->nevents_stats[n]++;
 #endif
 
-	LEAVE();
 	return n;
 }
 
@@ -350,8 +364,8 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
 
-	// Store incoming events.
-	mm_event_epoll_receive_events(backend, storage, listener, n);
+	// Handle incoming events.
+	mm_event_epoll_process_events(backend, listener, n);
 
 	LEAVE();
 }

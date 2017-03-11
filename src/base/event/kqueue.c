@@ -159,25 +159,28 @@ mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event
 }
 
 static void
-mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
-			       struct mm_event_listener *listener,
-			       int nevents)
+mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 {
-	mm_event_listener_adjust_start(listener);
+	if (!mm_event_listener_adjust_start(listener, nevents))
+		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &storage->events[i];
+		struct kevent *event = &listener->storage.storage.events[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
 			struct mm_event_fd *sink = event->udata;
 			if (!mm_event_listener_adjust(listener, sink))
-				break;
+				return;
 		}
 	}
+}
 
+static void
+mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
+{
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &storage->events[i];
+		struct kevent *event = &listener->storage.storage.events[i];
 
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event");
@@ -203,6 +206,20 @@ mm_event_kqueue_receive_events(struct mm_event_kqueue_storage *storage,
 	}
 
 	mm_event_listener_handle_finish(listener);
+}
+
+static void
+mm_event_kqueue_process_events(struct mm_event_listener *listener, int nevents)
+{
+	mm_event_listener_clear_events(listener);
+	if (nevents != 0) {
+		mm_event_kqueue_adjust(listener, nevents);
+		mm_event_kqueue_handle(listener, nevents);
+	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
+		mm_event_listener_adjust_start(listener, 0);
+		mm_event_listener_handle_start(listener, 0);
+		mm_event_listener_handle_finish(listener);
+	}
 }
 
 static void
@@ -352,8 +369,8 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
 
-	// Store incoming events.
-	mm_event_kqueue_receive_events(storage, listener, n);
+	// Handle incoming events.
+	mm_event_kqueue_process_events(listener, n);
 
 	// Store unregister events.
 	mm_event_kqueue_postprocess_changes(changes, listener, first, changes->nchanges);

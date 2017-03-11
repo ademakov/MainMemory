@@ -265,6 +265,20 @@ mm_event_listener_clear_changes(struct mm_event_listener *listener)
 	mm_event_batch_clear(&listener->changes);
 }
 
+/**********************************************************************
+ * Event counters.
+ **********************************************************************/
+
+/* Reset event counters. */
+static inline void NONNULL(1)
+mm_event_listener_clear_events(struct mm_event_listener *listener)
+{
+	listener->direct_events = 0;
+	listener->enqueued_events = 0;
+	listener->dequeued_events = 0;
+	listener->forwarded_events = 0;
+}
+
 static inline bool NONNULL(1)
 mm_event_listener_got_events(struct mm_event_listener *listener)
 {
@@ -272,7 +286,26 @@ mm_event_listener_got_events(struct mm_event_listener *listener)
 }
 
 /**********************************************************************
- * Event backend interface.
+ * Interface for estimating incoming events.
+ **********************************************************************/
+
+static inline bool NONNULL(1)
+mm_event_listener_adjust_start(struct mm_event_listener *listener, uint32_t nevents)
+{
+	listener->direct_events_estimate = 0;
+	return nevents > MM_EVENT_LISTENER_RETAIN_MIN;
+}
+
+static inline bool NONNULL(1, 2)
+mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	if (mm_event_target(sink) == listener->target && !sink->loose_target)
+		listener->direct_events_estimate++;
+	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
+}
+
+/**********************************************************************
+ * Interface for handling incoming events.
  **********************************************************************/
 
 void NONNULL(1)
@@ -309,20 +342,6 @@ static inline void NONNULL(1, 2)
 mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
-}
-
-static inline void NONNULL(1)
-mm_event_listener_adjust_start(struct mm_event_listener *listener)
-{
-	listener->direct_events_estimate = 0;
-}
-
-static inline bool NONNULL(1, 2)
-mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	if (!sink->loose_target && mm_event_target(sink) == listener->target)
-		listener->direct_events_estimate++;
-	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
 }
 
 #endif /* BASE_EVENT_LISTENER_H */
