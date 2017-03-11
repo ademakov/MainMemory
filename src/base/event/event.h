@@ -37,12 +37,14 @@ typedef enum {
 	MM_EVENT_RECLAIM,
 } mm_event_t;
 
+/* I/O event repeat modes. */
 typedef enum {
 	MM_EVENT_IGNORED,
 	MM_EVENT_REGULAR,
 	MM_EVENT_ONESHOT,
-} mm_event_occurrence_t;
+} mm_event_sequence_t;
 
+/* Event sink thread affinity. */
 typedef enum {
 	MM_EVENT_LOOSE,
 	MM_EVENT_BOUND,
@@ -61,7 +63,7 @@ typedef uint16_t mm_event_stamp_t;
 /* Event sink. */
 struct mm_event_fd
 {
-	/* The event handler routine. */
+	/* Event handler routine. */
 	mm_event_handler_t handler;
 
 	/* The file descriptor to watch. */
@@ -131,7 +133,7 @@ mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 
 bool NONNULL(1, 3)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
-		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
+		    mm_event_sequence_t input, mm_event_sequence_t output,
 		    mm_event_affinity_t target);
 
 void NONNULL(1)

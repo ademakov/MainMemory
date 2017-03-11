@@ -32,7 +32,7 @@
 
 bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
-		    mm_event_occurrence_t input_mode, mm_event_occurrence_t output_mode,
+		    mm_event_sequence_t input_mode, mm_event_sequence_t output_mode,
 		    mm_event_affinity_t target)
 {
 	ASSERT(fd >= 0);
