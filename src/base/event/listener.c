@@ -262,7 +262,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 }
 
 void NONNULL(1)
-mm_event_listener_cleanup(struct mm_event_listener *listener)
+mm_event_listener_cleanup(struct mm_event_listener *listener UNUSED)
 {
 	ENTER();
 

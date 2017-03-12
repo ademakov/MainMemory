@@ -21,9 +21,6 @@
 
 #if HAVE_SYS_EPOLL_H
 
-#include "base/report.h"
-#include "base/stdcall.h"
-#include "base/event/batch.h"
 #include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
@@ -49,43 +46,6 @@ mm_event_epoll_notify_handler(mm_event_t event UNUSED, void *data)
 
 	LEAVE();
 }
-
-#endif
-
-#if ENABLE_INLINE_SYSCALLS
-
-static inline int
-mm_epoll_create(int n)
-{
-	return mm_syscall_1(SYS_epoll_create, n);
-}
-
-static inline int
-mm_epoll_ctl(int ep, int op, int fd, struct epoll_event *event)
-{
-	return mm_syscall_4(SYS_epoll_ctl, ep, op, fd, (uintptr_t) event);
-}
-
-static inline int
-mm_epoll_wait(int ep, struct epoll_event *events, int nevents, int timeout)
-{
-	return mm_syscall_4(SYS_epoll_wait, ep,
-			    (uintptr_t) events, nevents,
-			    timeout);
-}
-
-static inline int
-mm_eventfd(unsigned int value, int flags)
-{
-	return mm_syscall_2(SYS_eventfd, value, flags);
-}
-
-#else
-
-# define mm_epoll_create	epoll_create
-# define mm_epoll_ctl		epoll_ctl
-# define mm_epoll_wait		epoll_wait
-# define mm_eventfd		eventfd
 
 #endif
 
@@ -123,80 +83,6 @@ mm_event_epoll_del_out(struct mm_event_epoll *backend, struct mm_event_fd *sink)
 
 	if (unlikely(rc < 0))
 		mm_error(errno, "epoll_ctl");
-}
-
-static void
-mm_event_epoll_add_change(struct mm_event_epoll *backend, struct mm_event_change *change,
-			  struct mm_event_listener *listener)
-{
-	struct mm_event_fd *sink = change->sink;
-
-	int rc;
-	struct epoll_event ee;
-	ee.data.ptr = sink;
-
-	switch (change->kind) {
-	case MM_EVENT_REGISTER:
-		ee.events = EPOLLET;
-		if (sink->regular_input || sink->oneshot_input)
-			ee.events |= EPOLLIN | EPOLLRDHUP;
-		if (sink->regular_output || sink->oneshot_output)
-			ee.events |= EPOLLOUT;
-
-		if (sink->oneshot_input)
-			sink->oneshot_input_trigger = true;
-		if (sink->oneshot_output)
-			sink->oneshot_output_trigger = true;
-
-		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
-		if (unlikely(rc < 0))
-			mm_error(errno, "epoll_ctl");
-		break;
-
-	case MM_EVENT_UNREGISTER:
-		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
-		if (unlikely(rc < 0))
-			mm_error(errno, "epoll_ctl");
-		mm_event_listener_unregister(listener, sink);
-		break;
-
-	case MM_EVENT_TRIGGER_INPUT:
-		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
-			sink->oneshot_input_trigger = true;
-
-			ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-			if (sink->regular_output || sink->oneshot_output_trigger)
-				ee.events |= EPOLLOUT;
-
-			if (sink->regular_output || sink->oneshot_output)
-				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
-			else
-				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
-			if (unlikely(rc < 0))
-				mm_error(errno, "epoll_ctl");
-		}
-		break;
-
-	case MM_EVENT_TRIGGER_OUTPUT:
-		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
-			sink->oneshot_output_trigger = true;
-
-			ee.events = EPOLLET | EPOLLOUT;
-			if (sink->regular_input || sink->oneshot_input_trigger)
-				ee.events |= EPOLLIN | EPOLLRDHUP;
-
-			if (sink->regular_input || sink->oneshot_input)
-				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
-			else
-				rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
-			if (unlikely(rc < 0))
-				mm_error(errno, "epoll_ctl");
-		}
-		break;
-
-	default:
-		ABORT();
-	}
 }
 
 static void
@@ -336,20 +222,17 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage UNUSED)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Event polling and wakeup.
+ **********************************************************************/
+
 void NONNULL(1, 2)
-mm_event_epoll_listen(struct mm_event_epoll *backend,
-		      struct mm_event_listener *listener,
+mm_event_epoll_listen(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
 		      mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_batch *changes = &listener->changes;
-	struct mm_event_epoll_storage *storage = &listener->storage.storage;
 
-	// Make event changes.
-	for (unsigned int i = 0; i < changes->nchanges; i++) {
-		struct mm_event_change *change = &changes->changes[i];
-		mm_event_epoll_add_change(backend, change, listener);
-	}
+	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
 
 	// Announce that the thread is about to sleep.
 	if (timeout) {
@@ -370,15 +253,91 @@ mm_event_epoll_listen(struct mm_event_epoll *backend,
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_change(struct mm_event_epoll *backend, struct mm_event_change *change)
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool NONNULL(1)
+mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
+{
+	ENTER();
+	bool rc = true;
+
+	// Create a file descriptor for notifications.
+	int fd = mm_eventfd(0, 0);
+	if (fd < 0) {
+		mm_warning(errno, "eventfd");
+		rc = false;
+		goto leave;
+	}
+
+	// Set it up for non-blocking I/O.
+	mm_set_nonblocking(fd);
+
+	// Initialize the corresponding event sink.
+	mm_event_prepare_fd(&backend->notify_fd, fd, mm_event_epoll_notify_handler,
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_LOOSE);
+
+	// Register the event sink.
+	struct epoll_event ee;
+	ee.events = EPOLLIN | EPOLLET;
+	ee.data.ptr = &backend->notify_fd;
+	int er = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, backend->notify_fd.fd, &ee);
+	if (unlikely(er < 0))
+		mm_fatal(errno, "epoll_ctl");
+
+leave:
+	LEAVE();
+	return rc;
+}
+
+void NONNULL(1)
+mm_event_epoll_notify(struct mm_event_epoll *backend)
 {
 	ENTER();
 
-	mm_event_epoll_add_change(backend, change, NULL);
+	uint64_t value = 1;
+	int n = mm_write(backend->notify_fd.fd, &value, sizeof value);
+	if (unlikely(n != sizeof value))
+		mm_fatal(errno, "eventfd write");
 
 	LEAVE();
 }
+
+#endif /* MM_EVENT_NATIVE_NOTIFY */
+
+/**********************************************************************
+ * I/O event control.
+ **********************************************************************/
+
+void NONNULL(1, 2, 3)
+mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
+			     struct mm_event_fd *sink)
+{
+	ENTER();
+
+	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
+
+	// Start a reclamation epoch.
+	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
+
+	// Delete the file descriptor from epoll.
+	struct epoll_event ee;
+	int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
+	if (unlikely(rc < 0))
+		mm_error(errno, "epoll_ctl");
+
+	// Finish unregister call sequence.
+	mm_event_listener_unregister(listener, sink);
+
+	// Attempt to advance the reclamation epoch and possibly finish it.
+	mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * I/O event processing.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_event_epoll_reset_input_low(struct mm_event_fd *sink)
@@ -443,56 +402,5 @@ mm_event_epoll_reset_poller_output_low(struct mm_event_fd *sink, struct mm_event
 
 	LEAVE();
 }
-
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
-mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
-{
-	ENTER();
-	bool rc = true;
-
-	// Create a file descriptor for notifications.
-	int fd = mm_eventfd(0, 0);
-	if (fd < 0) {
-		mm_warning(errno, "eventfd");
-		rc = false;
-		goto leave;
-	}
-
-	// Set it up for non-blocking I/O.
-	mm_set_nonblocking(fd);
-
-	// Initialize the corresponding event sink.
-	mm_event_prepare_fd(&backend->notify_fd, fd, mm_event_epoll_notify_handler,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_LOOSE);
-
-	// Register the event sink.
-	struct epoll_event ee;
-	ee.events = EPOLLIN | EPOLLET;
-	ee.data.ptr = &backend->notify_fd;
-	int er = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, backend->notify_fd.fd, &ee);
-	if (unlikely(er < 0))
-		mm_fatal(errno, "epoll_ctl");
-
-leave:
-	LEAVE();
-	return rc;
-}
-
-void NONNULL(1)
-mm_event_epoll_notify(struct mm_event_epoll *backend)
-{
-	ENTER();
-
-	uint64_t value = 1;
-	int n = mm_write(backend->notify_fd.fd, &value, sizeof value);
-	if (unlikely(n != sizeof value))
-		mm_fatal(errno, "eventfd write");
-
-	LEAVE();
-}
-
-#endif /* MM_EVENT_NATIVE_NOTIFY */
 
 #endif /* HAVE_SYS_EPOLL_H */

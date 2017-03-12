@@ -137,10 +137,11 @@ mm_event_backend_has_urgent_changes(struct mm_event_backend_storage *storage UNU
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_register_fd(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
+mm_event_backend_register_fd(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
 			     struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_register_fd(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_register_fd(&backend->backend, storage, sink);
 #endif
@@ -151,26 +152,29 @@ mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event
 			       struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_unregister_fd(&backend->backend, &storage->storage, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_unregister_fd(&backend->backend, storage, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
+mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
 			       struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_trigger_input(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_input(&backend->backend, storage, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
+mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
 			       struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
+	mm_event_epoll_trigger_output(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_output(&backend->backend, storage, sink);
 #endif
