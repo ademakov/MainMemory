@@ -79,19 +79,23 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 		struct kevent *event = &listener->storage.events[i];
 
 		if (event->filter == EVFILT_READ) {
-			DEBUG("read event");
+			DEBUG("read event: fd %d", (int) event->ident);
 
 			struct mm_event_fd *sink = event->udata;
-			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
+			if (unlikely((event->flags & EV_ERROR) != 0))
+				mm_warning(event->data, "kevent change failed");
+			else if ((event->flags & EV_EOF) != 0)
 				mm_event_listener_input_error(listener, sink);
 			else
 				mm_event_listener_input(listener, sink);
 
 		} else if (event->filter == EVFILT_WRITE) {
-			DEBUG("write event");
+			DEBUG("write event: fd %d", (int) event->ident);
 
 			struct mm_event_fd *sink = event->udata;
-			if ((event->flags & (EV_ERROR | EV_EOF)) != 0)
+			if (unlikely((event->flags & EV_ERROR) != 0))
+				mm_warning(event->data, "kevent change failed");
+			else if ((event->flags & EV_EOF) != 0)
 				mm_event_listener_output_error(listener, sink);
 			else
 				mm_event_listener_output(listener, sink);
