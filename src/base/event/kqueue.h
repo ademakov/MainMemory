@@ -36,11 +36,6 @@
 #define MM_EVENT_KQUEUE_NEVENTS		(64)
 #define MM_EVENT_KQUEUE_NCHANGES	(32)
 
-/* Forward declarations. */
-struct mm_event_batch;
-struct mm_event_change;
-struct mm_event_listener;
-
 /* Common data for kqueue support. */
 struct mm_event_kqueue
 {
