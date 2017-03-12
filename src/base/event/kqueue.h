@@ -34,6 +34,7 @@
 #endif
 
 #define MM_EVENT_KQUEUE_NEVENTS		(64)
+#define MM_EVENT_KQUEUE_NCHANGES	(32)
 
 /* Forward declarations. */
 struct mm_event_batch;
@@ -57,12 +58,15 @@ struct mm_event_kqueue_storage
 	/* The unregister list size. */
 	uint32_t nunregister;
 
-	/* The kevent list. */
-	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
+	/* The kevent change list. */
+	struct kevent events[MM_EVENT_KQUEUE_NCHANGES];
+	/* The kevent return list. */
+	struct kevent revents[MM_EVENT_KQUEUE_NEVENTS];
+
 	/* The changes list. */
-	struct mm_event_fd *changes[MM_EVENT_KQUEUE_NEVENTS];
+	struct mm_event_fd *changes[MM_EVENT_KQUEUE_NCHANGES];
 	/* The unregister list. */
-	struct mm_event_fd *unregister[MM_EVENT_KQUEUE_NEVENTS];
+	struct mm_event_fd *unregister[MM_EVENT_KQUEUE_NCHANGES];
 
 #if ENABLE_EVENT_STATS
 	/* Statistics. */
@@ -94,7 +98,7 @@ mm_event_kqueue_register_fd(struct mm_event_kqueue *backend, struct mm_event_kqu
 	bool output = sink->regular_output || sink->oneshot_output;
 	uint32_t n = (input != false) + (output != false);
 	if (likely(n)) {
-		if (unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NEVENTS))
+		if (unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
 			mm_event_kqueue_flush(backend, storage);
 
 		if (input) {
@@ -119,7 +123,7 @@ mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_k
 	uint32_t n = (input != false) + (output != false);
 	if (likely(n)) {
 		if (unlikely(sink->status == MM_EVENT_CHANGED)
-		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NEVENTS))
+		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
 			mm_event_kqueue_flush(backend, storage);
 
 		storage->unregister[storage->nunregister++] = sink;
@@ -139,7 +143,7 @@ mm_event_kqueue_trigger_input(struct mm_event_kqueue *backend, struct mm_event_k
 			      struct mm_event_fd *sink)
 {
 	if (unlikely(sink->status == MM_EVENT_CHANGED)
-	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NEVENTS))
+	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
 		mm_event_kqueue_flush(backend, storage);
 
 	sink->status = MM_EVENT_CHANGED;
@@ -153,7 +157,7 @@ mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_
 			       struct mm_event_fd *sink)
 {
 	if (unlikely(sink->status == MM_EVENT_CHANGED)
-	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NEVENTS))
+	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
 		mm_event_kqueue_flush(backend, storage);
 
 	sink->status = MM_EVENT_CHANGED;

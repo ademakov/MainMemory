@@ -61,7 +61,7 @@ mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.events[i];
+		struct kevent *event = &listener->storage.revents[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
 			struct mm_event_fd *sink = event->udata;
 			if (!mm_event_listener_adjust(listener, sink))
@@ -76,7 +76,7 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.events[i];
+		struct kevent *event = &listener->storage.revents[i];
 
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event: fd %d", (int) event->ident);
@@ -123,7 +123,7 @@ mm_event_kqueue_process_events(struct mm_event_listener *listener, int nevents)
 }
 
 static void
-mm_event_kqueue_postprocess_changes(struct mm_event_listener *listener)
+mm_event_kqueue_finish_changes(struct mm_event_listener *listener)
 {
 	listener->storage.nevents = 0;
 
@@ -214,7 +214,7 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_s
 
 	// Poll the system for events.
 	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
-			  storage->events, MM_EVENT_KQUEUE_NEVENTS, &ts);
+			  storage->revents, MM_EVENT_KQUEUE_NEVENTS, &ts);
 	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
@@ -227,11 +227,11 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_s
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
 
+	// Finish pending changes to let event handlers make new changes
+	// without problems.
+	mm_event_kqueue_finish_changes(listener);
 	// Handle incoming events.
 	mm_event_kqueue_process_events(listener, n);
-
-	// Post-process the changes.
-	mm_event_kqueue_postprocess_changes(listener);
 
 #if ENABLE_EVENT_STATS
 	storage->nevents_stats[n]++;
@@ -261,8 +261,8 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 	if (unlikely(n < 0))
 		mm_error(errno, "kevent");
 
-	// Post-process the changes.
-	mm_event_kqueue_postprocess_changes(listener);
+	// Finish pending changes.
+	mm_event_kqueue_finish_changes(listener);
 
 	// If a reclamation epoch is active then attempt to advance it and possibly finish.
 	if (mm_event_epoch_active(&listener->epoch))
