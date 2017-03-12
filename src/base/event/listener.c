@@ -198,7 +198,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 	// Queue it for reclamation.
 	mm_event_epoch_retire(&listener->epoch, sink);
 	// Let close the file descriptor.
-	mm_event_handle_basic(sink, MM_EVENT_DISABLE);
+	mm_event_handle_basic(sink, MM_EVENT_RETIRE);
 
 	LEAVE();
 }

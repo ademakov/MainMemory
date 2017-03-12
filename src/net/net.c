@@ -637,7 +637,7 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		mm_net_set_write_ready(sock, MM_NET_WRITE_ERROR);
 		break;
 
-	case MM_EVENT_DISABLE:
+	case MM_EVENT_RETIRE:
 		// Close the socket.
 		ASSERT(sock->event.fd >= 0);
 		mm_close(sock->event.fd);

@@ -69,7 +69,7 @@ mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
 	/* Perform backend-specific I/O state reset. */
 	if (event < MM_EVENT_OUTPUT)
 		mm_event_backend_reset_input(sink);
-	else if (event < MM_EVENT_DISABLE)
+	else if (event < MM_EVENT_RETIRE)
 		mm_event_backend_reset_output(sink);
 }
 
