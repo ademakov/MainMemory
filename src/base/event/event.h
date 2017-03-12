@@ -142,7 +142,7 @@ mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
  * I/O events control.
  **********************************************************************/
 
-bool NONNULL(1, 3)
+void NONNULL(1, 3)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
 		    mm_event_sequence_t input, mm_event_sequence_t output,
 		    mm_event_affinity_t target);

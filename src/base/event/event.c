@@ -30,11 +30,14 @@
  * I/O events control.
  **********************************************************************/
 
-bool NONNULL(1)
+void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
 		    mm_event_sequence_t input, mm_event_sequence_t output,
 		    mm_event_affinity_t target)
 {
+	ENTER();
+	DEBUG("fd %d", fd);
+
 	ASSERT(fd >= 0);
 	// It is forbidden to have both input and output ignored.
 	VERIFY(input != MM_EVENT_IGNORED || output != MM_EVENT_IGNORED);
@@ -85,12 +88,15 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->oneshot_output = false;
 	}
 
-	return true;
+	LEAVE();
 }
 
 void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink)
 {
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->status);
+
 	if (likely(sink->status == MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_ENABLED;
 
@@ -103,11 +109,16 @@ mm_event_register_fd(struct mm_event_fd *sink)
 		}
 		mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
+
+	LEAVE();
 }
 
 void NONNULL(1)
 mm_event_unregister_fd(struct mm_event_fd *sink)
 {
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->status);
+
 	if (likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_DROPPED;
 
@@ -115,11 +126,16 @@ mm_event_unregister_fd(struct mm_event_fd *sink)
 		struct mm_event_listener *listener = mm_thread_getlistener(thread);
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
+
+	LEAVE();
 }
 
 void NONNULL(1)
 mm_event_unregister_faulty_fd(struct mm_event_fd *sink)
 {
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->status);
+
 	if (likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_INVALID;
 
@@ -128,11 +144,16 @@ mm_event_unregister_faulty_fd(struct mm_event_fd *sink)
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 		mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
 	}
+
+	LEAVE();
 }
 
 void NONNULL(1)
 mm_event_trigger_input(struct mm_event_fd *sink)
 {
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->status);
+
 	if (likely(sink->status > MM_EVENT_INITIAL) && sink->oneshot_input
 	    && !sink->oneshot_input_trigger) {
 		sink->oneshot_input_trigger = true;
@@ -141,11 +162,16 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 		struct mm_event_listener *listener = mm_thread_getlistener(thread);
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
 	}
+
+	LEAVE();
 }
 
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink)
 {
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->status);
+
 	if (likely(likely(sink->status > MM_EVENT_INITIAL)) && sink->oneshot_output
 	    && !sink->oneshot_output_trigger) {
 		sink->oneshot_output_trigger = true;
@@ -154,6 +180,8 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 		struct mm_event_listener *listener = mm_thread_getlistener(thread);
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}
+
+	LEAVE();
 }
 
 /**********************************************************************
@@ -234,7 +262,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
 		timeout = 0;
-	} else if (mm_event_backend_has_urgent_changes(&listener->storage)) {
+	} else if (mm_event_backend_has_changes(&listener->storage)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
 	}

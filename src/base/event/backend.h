@@ -117,6 +117,16 @@ mm_event_backend_flush(struct mm_event_backend *backend UNUSED, struct mm_event_
 }
 
 static inline bool NONNULL(1)
+mm_event_backend_has_changes(struct mm_event_backend_storage *storage UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	return false;
+#elif HAVE_SYS_EVENT_H
+	return storage->nevents != 0;
+#endif
+}
+
+static inline bool NONNULL(1)
 mm_event_backend_has_urgent_changes(struct mm_event_backend_storage *storage UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
