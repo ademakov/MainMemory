@@ -20,10 +20,9 @@
 #include "base/event/backend.h"
 
 #include "base/report.h"
-#include "base/event/batch.h"
 
-void NONNULL(1)
-mm_event_backend_prepare(struct mm_event_backend *backend)
+void NONNULL(1, 2)
+mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_storage *some_storage)
 {
 	ENTER();
 
@@ -41,22 +40,19 @@ mm_event_backend_prepare(struct mm_event_backend *backend)
 # elif HAVE_SYS_EVENT_H
 	backend->native_notify = mm_event_kqueue_enable_notify(&backend->backend);
 # endif
-	if (backend->native_notify)
-		goto leave;
+	bool native_notify = backend->native_notify;
+#else
+	bool native_notify = false;
 #endif
 
-	// Open the event self-pipe.
-	mm_selfpipe_prepare(&backend->selfpipe);
+	if (!native_notify) {
+		// Open the event self-pipe.
+		mm_selfpipe_prepare(&backend->selfpipe);
+		// Register the self-pipe.
+		mm_event_backend_register_fd(backend, some_storage, &backend->selfpipe.event_fd);
+		mm_event_backend_flush(backend, some_storage);
+	}
 
-	// Register the self-pipe.
-	struct mm_event_change change;
-	change.kind = MM_EVENT_REGISTER,
-	change.sink = &backend->selfpipe.event_fd;
-	mm_event_backend_change(backend, &change);
-
-#if MM_EVENT_NATIVE_NOTIFY
-leave:
-#endif
 	LEAVE();
 }
 
@@ -91,7 +87,7 @@ mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage)
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_storage_prepare(&storage->storage);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_storage_prepare(&storage->storage);
+	mm_event_kqueue_storage_prepare(storage);
 #endif
 
 	LEAVE();

@@ -24,6 +24,8 @@
 
 #if HAVE_SYS_EVENT_H
 
+#include "base/event/event.h"
+
 #include <sys/types.h>
 #include <sys/event.h>
 
@@ -49,9 +51,18 @@ struct mm_event_kqueue
 struct mm_event_kqueue_storage
 {
 	/* The kevent list size. */
-	int nevents;
+	uint32_t nevents;
+	/* The change list size. */
+	uint32_t nchanges;
+	/* The unregister list size. */
+	uint32_t nunregister;
+
 	/* The kevent list. */
 	struct kevent events[MM_EVENT_KQUEUE_NEVENTS];
+	/* The changes list. */
+	struct mm_event_fd *changes[MM_EVENT_KQUEUE_NEVENTS];
+	/* The unregister list. */
+	struct mm_event_fd *unregister[MM_EVENT_KQUEUE_NEVENTS];
 
 #if ENABLE_EVENT_STATS
 	/* Statistics. */
@@ -69,12 +80,87 @@ void NONNULL(1)
 mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
 
 void NONNULL(1, 2)
-mm_event_kqueue_listen(struct mm_event_kqueue *backend,
-		       struct mm_event_listener *listener,
+mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 		       mm_timeout_t timeout);
 
 void NONNULL(1, 2)
-mm_event_kqueue_change(struct mm_event_kqueue *backend, struct mm_event_change *change);
+mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage);
+
+static inline void NONNULL(1, 2, 3)
+mm_event_kqueue_register_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
+			    struct mm_event_fd *sink)
+{
+	bool input = sink->regular_input || sink->oneshot_input;
+	bool output = sink->regular_output || sink->oneshot_output;
+	uint32_t n = (input != false) + (output != false);
+	if (likely(n)) {
+		if (unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NEVENTS))
+			mm_event_kqueue_flush(backend, storage);
+
+		if (input) {
+			int flags = sink->oneshot_input ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
+			struct kevent *kp = &storage->events[storage->nevents++];
+			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
+		}
+		if (output) {
+			int flags = sink->oneshot_output ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
+			struct kevent *kp = &storage->events[storage->nevents++];
+			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
+		}
+	}
+}
+
+static inline void NONNULL(1, 2, 3)
+mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
+			      struct mm_event_fd *sink)
+{
+	bool input = sink->regular_input || sink->oneshot_input;
+	bool output = sink->regular_output || sink->oneshot_output;
+	uint32_t n = (input != false) + (output != false);
+	if (likely(n)) {
+		if (unlikely(sink->status == MM_EVENT_CHANGED)
+		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NEVENTS))
+			mm_event_kqueue_flush(backend, storage);
+
+		storage->unregister[storage->nunregister++] = sink;
+		if (input) {
+			struct kevent *kp = &storage->events[storage->nevents++];
+			EV_SET(kp, sink->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
+		}
+		if (output) {
+			struct kevent *kp = &storage->events[storage->nevents++];
+			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
+		}
+	}
+}
+
+static inline void NONNULL(1, 2, 3)
+mm_event_kqueue_trigger_input(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
+			      struct mm_event_fd *sink)
+{
+	if (unlikely(sink->status == MM_EVENT_CHANGED)
+	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NEVENTS))
+		mm_event_kqueue_flush(backend, storage);
+
+	sink->status = MM_EVENT_CHANGED;
+	storage->changes[storage->nchanges++] = sink;
+	struct kevent *kp = &storage->events[storage->nevents++];
+	EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
+}
+
+static inline void NONNULL(1, 2, 3)
+mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
+			       struct mm_event_fd *sink)
+{
+	if (unlikely(sink->status == MM_EVENT_CHANGED)
+	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NEVENTS))
+		mm_event_kqueue_flush(backend, storage);
+
+	sink->status = MM_EVENT_CHANGED;
+	storage->changes[storage->nchanges++] = sink;
+	struct kevent *kp = &storage->events[storage->nevents++];
+	EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
+}
 
 #if MM_EVENT_NATIVE_NOTIFY
 

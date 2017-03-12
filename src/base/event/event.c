@@ -32,16 +32,17 @@
 
 bool NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
-		    mm_event_sequence_t input_mode, mm_event_sequence_t output_mode,
+		    mm_event_sequence_t input, mm_event_sequence_t output,
 		    mm_event_affinity_t target)
 {
 	ASSERT(fd >= 0);
 	// It is forbidden to have both input and output ignored.
-	VERIFY(input_mode != MM_EVENT_IGNORED || output_mode != MM_EVENT_IGNORED);
+	VERIFY(input != MM_EVENT_IGNORED || output != MM_EVENT_IGNORED);
 
 	sink->fd = fd;
-	sink->target = MM_THREAD_NONE;
 	sink->handler = handler;
+	sink->status = MM_EVENT_INITIAL;
+	sink->target = MM_THREAD_NONE;
 
 #if ENABLE_SMP
 	sink->receive_stamp = 0;
@@ -50,34 +51,35 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 #endif
 	sink->queued_events = 0;
 
+	sink->oneshot_input_trigger = false;
+	sink->oneshot_output_trigger = false;
+
 	sink->loose_target = (target == MM_EVENT_LOOSE);
 	sink->bound_target = (target == MM_EVENT_BOUND);
 
-	sink->oneshot_input_trigger = false;
-	sink->oneshot_output_trigger = false;
-	sink->changed = false;
-
-	if (input_mode == MM_EVENT_IGNORED) {
+	if (input == MM_EVENT_IGNORED) {
 		sink->regular_input = false;
 		sink->oneshot_input = false;
-	} else if (input_mode == MM_EVENT_ONESHOT) {
+	} else if (input == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for loose sinks.
 		ASSERT(!sink->loose_target);
 		sink->regular_input = false;
 		sink->oneshot_input = true;
+		sink->oneshot_input_trigger = true;
 	} else {
 		sink->regular_input = true;
 		sink->oneshot_input = false;
 	}
 
-	if (output_mode == MM_EVENT_IGNORED) {
+	if (output == MM_EVENT_IGNORED) {
 		sink->regular_output = false;
 		sink->oneshot_output = false;
-	} else if (output_mode == MM_EVENT_ONESHOT) {
+	} else if (output == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for loose sinks.
 		ASSERT(!sink->loose_target);
 		sink->regular_output = false;
 		sink->oneshot_output = true;
+		sink->oneshot_output_trigger = true;
 	} else {
 		sink->regular_output = true;
 		sink->oneshot_output = false;
@@ -89,51 +91,69 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink)
 {
-	struct mm_thread *thread = mm_thread_selfptr();
-	struct mm_event_listener *listener = mm_thread_getlistener(thread);
-	mm_thread_t target = mm_event_target(sink);
-	if (target == MM_THREAD_NONE) {
-		sink->target = listener->target;
-	} else {
-		VERIFY(target == listener->target);
+	if (likely(sink->status == MM_EVENT_INITIAL)) {
+		sink->status = MM_EVENT_ENABLED;
+
+		struct mm_thread *thread = mm_thread_selfptr();
+		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		if (sink->target == MM_THREAD_NONE) {
+			sink->target = listener->target;
+		} else {
+			VERIFY(sink->target == listener->target);
+		}
+		mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
-	mm_event_listener_add(listener, sink, MM_EVENT_REGISTER);
 }
 
 void NONNULL(1)
 mm_event_unregister_fd(struct mm_event_fd *sink)
 {
-	struct mm_thread *thread = mm_thread_selfptr();
-	struct mm_event_listener *listener = mm_thread_getlistener(thread);
-	VERIFY(mm_event_target(sink) == listener->target);
-	mm_event_listener_add(listener, sink, MM_EVENT_UNREGISTER);
+	if (likely(sink->status > MM_EVENT_INITIAL)) {
+		sink->status = MM_EVENT_DROPPED;
+
+		struct mm_thread *thread = mm_thread_selfptr();
+		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
+	}
 }
 
 void NONNULL(1)
 mm_event_unregister_faulty_fd(struct mm_event_fd *sink)
 {
-	struct mm_event_change change = { .kind = MM_EVENT_UNREGISTER, .sink = sink };
-	struct mm_domain *domain = mm_domain_selfptr();
-	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
-	mm_event_backend_change(&dispatch->backend, &change);
+	if (likely(sink->status > MM_EVENT_INITIAL)) {
+		sink->status = MM_EVENT_INVALID;
+
+		struct mm_thread *thread = mm_thread_selfptr();
+		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
+		mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
+	}
 }
 
 void NONNULL(1)
 mm_event_trigger_input(struct mm_event_fd *sink)
 {
-	struct mm_thread *thread = mm_thread_selfptr();
-	struct mm_event_listener *listener = mm_thread_getlistener(thread);
-	VERIFY(mm_event_target(sink) == listener->target);
-	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_INPUT);
+	if (likely(sink->status > MM_EVENT_INITIAL) && sink->oneshot_input
+	    && !sink->oneshot_input_trigger) {
+		sink->oneshot_input_trigger = true;
+
+		struct mm_thread *thread = mm_thread_selfptr();
+		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
+	}
 }
 
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink)
 {
-	struct mm_thread *thread = mm_thread_selfptr();
-	struct mm_event_listener *listener = mm_thread_getlistener(thread);
-	VERIFY(mm_event_target(sink) == listener->target);
-	mm_event_listener_add(listener, sink, MM_EVENT_TRIGGER_OUTPUT);
+	if (likely(likely(sink->status > MM_EVENT_INITIAL)) && sink->oneshot_output
+	    && !sink->oneshot_output_trigger) {
+		sink->oneshot_output_trigger = true;
+
+		struct mm_thread *thread = mm_thread_selfptr();
+		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
+	}
 }
 
 /**********************************************************************
@@ -189,13 +209,10 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&dispatch->backend, listener, timeout);
+	mm_event_backend_listen(&dispatch->backend, &listener->storage, timeout);
 
 	// End a reclamation critical section.
 	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
-
-	// Forget just handled change events.
-	mm_event_listener_clear_changes(listener);
 
 	LEAVE();
 }
@@ -217,7 +234,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		// This check does not have to be precise so there is no need to
 		// use event_sink_lock here.
 		timeout = 0;
-	} else if (mm_event_listener_has_changes(listener)) {
+	} else if (mm_event_backend_has_urgent_changes(&listener->storage)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
 	}

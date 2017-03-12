@@ -51,6 +51,15 @@ typedef enum {
 	MM_EVENT_AGILE,
 } mm_event_affinity_t;
 
+/* Event sink status. */
+typedef enum {
+	MM_EVENT_INVALID = -2,
+	MM_EVENT_DROPPED = -1,
+	MM_EVENT_INITIAL = 0,
+	MM_EVENT_ENABLED = 1,
+	MM_EVENT_CHANGED = 2,
+} mm_event_status_t;
+
 /* Event handler routine. */
 typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
 
@@ -66,8 +75,11 @@ struct mm_event_fd
 	/* Event handler routine. */
 	mm_event_handler_t handler;
 
-	/* The file descriptor to watch. */
+	/* File descriptor to watch. */
 	int fd;
+
+	/* Current event sink status. */
+	mm_event_status_t status;
 
 	/* The thread the owns the sink. */
 	mm_thread_t target;
@@ -87,13 +99,9 @@ struct mm_event_fd
 	mm_event_stamp_t complete_stamp;
 #endif
 
-	/* Pending events for sinks in the dispatch queue. */
-	uint8_t queued_events;
-
 	/* Flags used by poller threads. */
 	bool oneshot_input_trigger;
 	bool oneshot_output_trigger;
-	bool changed;
 
 	/* Immutable flags. */
 	unsigned loose_target : 1;
@@ -102,6 +110,9 @@ struct mm_event_fd
 	unsigned oneshot_input : 1;
 	unsigned regular_output : 1;
 	unsigned oneshot_output : 1;
+
+	/* Pending events for sinks in the dispatch queue. */
+	uint8_t queued_events;
 
 	/* Reclaim queue link. */
 	union {

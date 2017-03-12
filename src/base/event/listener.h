@@ -21,7 +21,6 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
-#include "base/event/batch.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
@@ -117,9 +116,6 @@ struct mm_event_listener
 
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;
-
-	/* Listener's private change events store. */
-	struct mm_event_batch changes;
 
 	/* Listener's helper to forward events. */
 	struct mm_event_forward_cache forward;
@@ -234,28 +230,6 @@ mm_event_listener_timedwait(struct mm_event_listener *listener, mm_timeout_t tim
 leave:
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
-}
-
-/**********************************************************************
- * I/O events support.
- **********************************************************************/
-
-static inline void NONNULL(1, 2)
-mm_event_listener_add(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_change_t event)
-{
-	mm_event_batch_add(&listener->changes, event, sink);
-}
-
-static inline bool NONNULL(1)
-mm_event_listener_has_changes(struct mm_event_listener *listener)
-{
-	return !mm_event_batch_empty(&listener->changes);
-}
-
-static inline void NONNULL(1)
-mm_event_listener_clear_changes(struct mm_event_listener *listener)
-{
-	mm_event_batch_clear(&listener->changes);
 }
 
 /**********************************************************************

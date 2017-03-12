@@ -195,10 +195,15 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 
 	// Count the received event.
 	mm_event_update(sink);
-	// Queue it for reclamation.
-	mm_event_epoch_retire(&listener->epoch, sink);
-	// Let close the file descriptor.
-	mm_event_handle_basic(sink, MM_EVENT_RETIRE);
+
+	// Initiate event sink reclamation unless the client code asked
+	// otherwise.
+	if (sink->status != MM_EVENT_INVALID) {
+		// Queue it for reclamation.
+		mm_event_epoch_retire(&listener->epoch, sink);
+		// Let close the file descriptor.
+		mm_event_handle_basic(sink, MM_EVENT_RETIRE);
+	}
 
 	LEAVE();
 }
@@ -235,9 +240,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	// Initialize event forwarding data.
 	mm_event_forward_prepare(&listener->forward, dispatch->nlisteners);
 
-	// Initialize change event storage.
-	mm_event_batch_prepare(&listener->changes, 256);
-
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare_local(&listener->epoch);
 
@@ -271,8 +273,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 #else
 	mm_thread_monitor_cleanup(&listener->monitor);
 #endif
-
-	mm_event_batch_cleanup(&listener->changes);
 
 	LEAVE();
 }

@@ -50,7 +50,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	}
 
 	// Initialize system-specific resources.
-	mm_event_backend_prepare(&dispatch->backend);
+	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);
 
 	// Initialize poller thread data.
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;

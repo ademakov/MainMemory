@@ -23,7 +23,6 @@
 
 #include "base/report.h"
 #include "base/stdcall.h"
-#include "base/event/batch.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 
@@ -55,109 +54,6 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
 
 #endif
 
-static bool
-mm_event_kqueue_add_change(struct kevent *events, int *pnevents, struct mm_event_change *change)
-{
-	int nevents = *pnevents;
-	struct mm_event_fd *sink = change->sink;
-
-	switch (change->kind) {
-	case MM_EVENT_REGISTER:
-		if (sink->regular_input || sink->oneshot_input) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-
-			int flags;
-			if (sink->oneshot_input) {
-				flags = EV_ADD | EV_ONESHOT;
-				sink->oneshot_input_trigger = true;
-			} else {
-				flags = EV_ADD | EV_CLEAR;
-			}
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
-		}
-		if (sink->regular_output || sink->oneshot_output) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-
-			int flags;
-			if (sink->oneshot_output) {
-				flags = EV_ADD | EV_ONESHOT;
-				sink->oneshot_output_trigger = true;
-			} else {
-				flags = EV_ADD | EV_CLEAR;
-			}
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
-		}
-		break;
-
-	case MM_EVENT_UNREGISTER:
-		if (sink->regular_input || sink->oneshot_input_trigger) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
-		}
-		if (sink->regular_output || sink->oneshot_output_trigger) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
-		}
-		break;
-
-	case MM_EVENT_TRIGGER_INPUT:
-		if (sink->oneshot_input && !sink->oneshot_input_trigger) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-			sink->oneshot_input_trigger = true;
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
-		}
-		break;
-
-	case MM_EVENT_TRIGGER_OUTPUT:
-		if (sink->oneshot_output && !sink->oneshot_output_trigger) {
-			if (unlikely(nevents == MM_EVENT_KQUEUE_NEVENTS))
-				return false;
-			if (unlikely(sink->changed))
-				return false;
-			sink->oneshot_output_trigger = true;
-
-			struct kevent *kp = &events[nevents++];
-			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
-		}
-		break;
-
-	default:
-		ABORT();
-	}
-
-	if (*pnevents != nevents) {
-		*pnevents = nevents;
-		sink->changed = true;
-	}
-
-	return true;
-}
-
 static void
 mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 {
@@ -165,7 +61,7 @@ mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.storage.events[i];
+		struct kevent *event = &listener->storage.events[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
 			struct mm_event_fd *sink = event->udata;
 			if (!mm_event_listener_adjust(listener, sink))
@@ -180,7 +76,7 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.storage.events[i];
+		struct kevent *event = &listener->storage.events[i];
 
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event");
@@ -223,69 +119,27 @@ mm_event_kqueue_process_events(struct mm_event_listener *listener, int nevents)
 }
 
 static void
-mm_event_kqueue_postprocess_changes(struct mm_event_batch *changes,
-				    struct mm_event_listener *listener,
-				    unsigned int first, unsigned int last)
+mm_event_kqueue_postprocess_changes(struct mm_event_listener *listener)
 {
-	for (unsigned int i = first; i < last; i++) {
-		struct mm_event_change *change = &changes->changes[i];
-		struct mm_event_fd *sink = change->sink;
+	listener->storage.nevents = 0;
 
-		// Reset the change flag.
-		sink->changed = false;
-
-		// Store the pertinent event.
-		if (change->kind == MM_EVENT_UNREGISTER)
-			mm_event_listener_unregister(listener, sink);
-	}
-}
-
-static void
-mm_event_kqueue_commit_changes(struct mm_event_kqueue *backend,
-			       struct mm_event_kqueue_storage *storage)
-{
-	// Submit change events.
-	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
-			  NULL, 0, NULL);
-	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
-	if (unlikely(n < 0))
-		mm_error(errno, "kevent");
-	storage->nevents = 0;
-}
-
-static int
-mm_event_kqueue_poll(struct mm_event_kqueue *backend,
-		     struct mm_event_kqueue_storage *storage,
-		     mm_timeout_t timeout)
-{
-	// Calculate the event wait timeout.
-	struct timespec ts;
-	if (timeout) {
-		ts.tv_sec = timeout / 1000000;
-		ts.tv_nsec = (timeout % 1000000) * 1000;
-	} else {
-		ts.tv_sec = 0;
-		ts.tv_nsec = 0;
+	// Reset change flags.
+	const uint32_t nchanges = listener->storage.nchanges;
+	if (nchanges) {
+		listener->storage.nchanges = 0;
+		for (uint32_t i = 0; i < nchanges; i++) {
+			listener->storage.changes[i]->status = MM_EVENT_ENABLED;
+		}
 	}
 
-	// Poll the system for events.
-	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
-			  storage->events, MM_EVENT_KQUEUE_NEVENTS, &ts);
-	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
-	if (unlikely(n < 0)) {
-		if (errno == EINTR)
-			mm_warning(errno, "kevent");
-		else
-			mm_error(errno, "kevent");
-		n = 0;
+	// Handle unregistered sinks.
+	const uint32_t nunregister = listener->storage.nunregister;
+	if (nunregister) {
+		listener->storage.nunregister = 0;
+		for (uint32_t i = 0; i < nunregister; i++) {
+			mm_event_listener_unregister(listener, listener->storage.unregister[i]);
+		}
 	}
-	storage->nevents = 0;
-
-#if ENABLE_EVENT_STATS
-	storage->nevents_stats[n]++;
-#endif
-
-	return n;
 }
 
 void NONNULL(1)
@@ -318,6 +172,8 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 	ENTER();
 
 	storage->nevents = 0;
+	storage->nchanges = 0;
+	storage->nunregister = 0;
 
 #if ENABLE_EVENT_STATS
 	for (size_t i = 0; i <= MM_EVENT_KQUEUE_NEVENTS; i++)
@@ -328,33 +184,12 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 }
 
 void NONNULL(1, 2)
-mm_event_kqueue_listen(struct mm_event_kqueue *backend,
-		       struct mm_event_listener *listener,
+mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 		       mm_timeout_t timeout)
 {
 	ENTER();
-	struct mm_event_batch *changes = &listener->changes;
-	struct mm_event_kqueue_storage *storage = &listener->storage.storage;
 
-	// Make event changes.
-	unsigned int first = 0, next = 0;
-	while (next < changes->nchanges) {
-		struct mm_event_change *change = &changes->changes[next];
-		if (likely(mm_event_kqueue_add_change(storage->events, &storage->nevents, change))) {
-			// Proceed with more change events if any.
-			next++;
-		} else {
-			// Flush event changes.
-			mm_event_kqueue_commit_changes(backend, storage);
-
-			// Store unregister events.
-			mm_event_kqueue_postprocess_changes(changes, listener, first, next);
-
-			// Proceed with more change events if any.
-			first = next;
-			continue;
-		}
-	}
+	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
 
 	// Announce that the thread is about to sleep.
 	if (timeout) {
@@ -363,8 +198,27 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 			timeout = 0;
 	}
 
-	// Poll for incoming events.
-	int n = mm_event_kqueue_poll(backend, storage, timeout);
+	// Calculate the event wait timeout.
+	struct timespec ts;
+	if (timeout) {
+		ts.tv_sec = timeout / 1000000;
+		ts.tv_nsec = (timeout % 1000000) * 1000;
+	} else {
+		ts.tv_sec = 0;
+		ts.tv_nsec = 0;
+	}
+
+	// Poll the system for events.
+	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
+			  storage->events, MM_EVENT_KQUEUE_NEVENTS, &ts);
+	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
+	if (unlikely(n < 0)) {
+		if (errno == EINTR)
+			mm_warning(errno, "kevent");
+		else
+			mm_error(errno, "kevent");
+		n = 0;
+	}
 
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
@@ -372,25 +226,43 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend,
 	// Handle incoming events.
 	mm_event_kqueue_process_events(listener, n);
 
-	// Store unregister events.
-	mm_event_kqueue_postprocess_changes(changes, listener, first, changes->nchanges);
+	// Post-process the changes.
+	mm_event_kqueue_postprocess_changes(listener);
+
+#if ENABLE_EVENT_STATS
+	storage->nevents_stats[n]++;
+#endif
 
 	LEAVE();
 }
 
 void NONNULL(1, 2)
-mm_event_kqueue_change(struct mm_event_kqueue *backend, struct mm_event_change *change)
+mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage)
 {
 	ENTER();
 
-	int nevents = 0;
-	struct kevent events[2];
-	mm_event_kqueue_add_change(events, &nevents, change);
+	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
 
-	int n = mm_kevent(backend->event_fd, events, nevents, NULL, 0, NULL);
-	DEBUG("kevent changed: %d, received: %d", nevents, n);
+	// TODO: Protect against fiber yield with following re-enter.
+
+	// If any event sinks are to be unregistered then start a reclamation epoch.
+	if (storage->nunregister != 0)
+		mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
+
+	// Submit change events.
+	static struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
+	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents, NULL, 0, &ts);
+	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
 	if (unlikely(n < 0))
 		mm_error(errno, "kevent");
+
+	// Post-process the changes.
+	mm_event_kqueue_postprocess_changes(listener);
+
+	// If a reclamation epoch is active then attempt to advance it and possibly finish.
+	if (mm_event_epoch_active(&listener->epoch))
+		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
 
 	LEAVE();
 }
