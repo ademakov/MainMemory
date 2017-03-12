@@ -680,8 +680,9 @@ mm_core_boot_init(struct mm_core *core)
 	if (MM_CORE_IS_PRIMARY(core)) {
 		struct mm_domain *domain = mm_domain_selfptr();
 
-		// Call the start hooks on the primary core.
 		mm_timer_prepare(&core->time_manager, &space->xarena);
+
+		// Call the start hooks on the primary core.
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_thread_local_summary(domain);
 
