@@ -199,41 +199,16 @@ mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_epoll_reset_input_low(struct mm_event_fd *sink);
+mm_event_epoll_reset_input(struct mm_event_fd *sink);
+
 void NONNULL(1)
-mm_event_epoll_reset_output_low(struct mm_event_fd *sink);
+mm_event_epoll_reset_output(struct mm_event_fd *sink);
+
 void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input_low(struct mm_event_fd *sink, struct mm_event_listener *listener);
+mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener);
+
 void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output_low(struct mm_event_fd *sink, struct mm_event_listener *listener);
-
-static inline void NONNULL(1)
-mm_event_epoll_reset_input(struct mm_event_fd *sink)
-{
-	if (sink->oneshot_input_trigger)
-		mm_event_epoll_reset_input_low(sink);
-}
-
-static inline void NONNULL(1)
-mm_event_epoll_reset_output(struct mm_event_fd *sink)
-{
-	if (sink->oneshot_output_trigger)
-		mm_event_epoll_reset_output_low(sink);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener)
-{
-	if (sink->oneshot_input_trigger)
-		mm_event_epoll_reset_poller_input_low(sink, listener);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener)
-{
-	if (sink->oneshot_output_trigger)
-		mm_event_epoll_reset_poller_output_low(sink, listener);
-}
+mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener);
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */

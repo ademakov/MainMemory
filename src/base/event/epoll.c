@@ -340,12 +340,9 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epo
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_epoll_reset_input_low(struct mm_event_fd *sink)
+mm_event_epoll_reset_input(struct mm_event_fd *sink)
 {
 	ENTER();
-
-	ASSERT(sink->oneshot_input_trigger);
-	sink->oneshot_input_trigger = false;
 
 	struct mm_domain *domain = mm_domain_selfptr();
 	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
@@ -357,12 +354,9 @@ mm_event_epoll_reset_input_low(struct mm_event_fd *sink)
 }
 
 void NONNULL(1)
-mm_event_epoll_reset_output_low(struct mm_event_fd *sink)
+mm_event_epoll_reset_output(struct mm_event_fd *sink)
 {
 	ENTER();
-
-	ASSERT(sink->oneshot_output_trigger);
-	sink->oneshot_output_trigger = false;
 
 	struct mm_domain *domain = mm_domain_selfptr();
 	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
@@ -374,12 +368,9 @@ mm_event_epoll_reset_output_low(struct mm_event_fd *sink)
 }
 
 void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input_low(struct mm_event_fd *sink, struct mm_event_listener *listener)
+mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener)
 {
 	ENTER();
-
-	ASSERT(sink->oneshot_input_trigger);
-	sink->oneshot_input_trigger = false;
 
 	struct mm_event_epoll_storage *storage = &listener->storage.storage;
 	ASSERT(storage->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
@@ -389,12 +380,9 @@ mm_event_epoll_reset_poller_input_low(struct mm_event_fd *sink, struct mm_event_
 }
 
 void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output_low(struct mm_event_fd *sink, struct mm_event_listener *listener)
+mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener)
 {
 	ENTER();
-
-	ASSERT(sink->oneshot_output_trigger);
-	sink->oneshot_output_trigger = false;
 
 	struct mm_event_epoll_storage *storage = &listener->storage.storage;
 	ASSERT(storage->output_reset_num < MM_EVENT_EPOLL_NEVENTS);

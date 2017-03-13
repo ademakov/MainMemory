@@ -185,74 +185,55 @@ mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_even
  * Interface for handling events delivered to the target thread.
  **********************************************************************/
 
-static inline void NONNULL(1)
-mm_event_backend_reset_input(struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_reset_input(sink);
-#elif HAVE_SYS_EVENT_H
-	sink->oneshot_input_trigger = false;
-#endif
-}
-
-static inline void NONNULL(1)
-mm_event_backend_reset_output(struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_reset_output(sink);
-#elif HAVE_SYS_EVENT_H
-	sink->oneshot_output_trigger = false;
-#endif
-}
-
-static inline void NONNULL(1)
-mm_event_backend_reset_poller_input(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_reset_poller_input(sink, listener);
-#elif HAVE_SYS_EVENT_H
-	sink->oneshot_input_trigger = false;
-#endif
-}
-
-static inline void NONNULL(1)
-mm_event_backend_reset_poller_output(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_reset_poller_output(sink, listener);
-#elif HAVE_SYS_EVENT_H
-	sink->oneshot_output_trigger = false;
-#endif
-}
-
 /* Start processing of an event after it is delivered to the target
    thread. Also reset oneshot I/O state if needed. */
 static inline void NONNULL(1)
 mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 {
-	/* Start processing the event. */
-	mm_event_handle(sink, event);
-	/* Perform backend-specific I/O state reset. */
-	if (event < MM_EVENT_OUTPUT)
-		mm_event_backend_reset_input(sink);
-	else if (event < MM_EVENT_RETIRE)
-		mm_event_backend_reset_output(sink);
+	VERIFY(event < MM_EVENT_RETIRE);
+	if (event < MM_EVENT_OUTPUT) {
+		sink->oneshot_input_trigger = false;
+		/* Start processing the event. */
+		mm_event_handle(sink, event);
+		/* Perform backend-specific I/O state reset. */
+#if HAVE_SYS_EPOLL_H
+		mm_event_epoll_reset_input(sink);
+#endif
+	} else if (event < MM_EVENT_RETIRE) {
+		sink->oneshot_output_trigger = false;
+		/* Start processing the event. */
+		mm_event_handle(sink, event);
+		/* Perform backend-specific I/O state reset. */
+#if HAVE_SYS_EPOLL_H
+		mm_event_epoll_reset_output(sink);
+#endif
+	}
 }
 
 /* Start processing of an event after it is delivered to the target
    thread. The event must be an I/O event and the call must be made
    by a poller thread. */
 static inline void NONNULL(1, 2)
-mm_backend_poller_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
+mm_backend_poller_handle(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink, mm_event_t event)
 {
-	ASSERT(event < MM_EVENT_RETIRE);
-	/* Start processing the event. */
-	mm_event_handle(sink, event);
-	/* Perform backend-specific I/O state reset. */
-	if (event < MM_EVENT_OUTPUT)
-		mm_event_backend_reset_poller_input(listener, sink);
-	else
-		mm_event_backend_reset_poller_output(listener, sink);
+	VERIFY(event < MM_EVENT_RETIRE);
+	if (event < MM_EVENT_OUTPUT) {
+		sink->oneshot_input_trigger = false;
+		/* Start processing the event. */
+		mm_event_handle(sink, event);
+		/* Perform backend-specific I/O state reset. */
+#if HAVE_SYS_EPOLL_H
+		mm_event_epoll_reset_poller_input(sink, listener);
+#endif
+	} else {
+		sink->oneshot_output_trigger = false;
+		/* Start processing the event. */
+		mm_event_handle(sink, event);
+		/* Perform backend-specific I/O state reset. */
+#if HAVE_SYS_EPOLL_H
+		mm_event_epoll_reset_poller_output(sink, listener);
+#endif
+	}
 }
 
 #endif /* BASE_EVENT_BACKEND_H */
