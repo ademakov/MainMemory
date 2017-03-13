@@ -57,15 +57,15 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	sink->oneshot_input_trigger = false;
 	sink->oneshot_output_trigger = false;
 
-	sink->loose_target = (target == MM_EVENT_LOOSE);
+	sink->stray_target = (target == MM_EVENT_STRAY);
 	sink->bound_target = (target == MM_EVENT_BOUND);
 
 	if (input == MM_EVENT_IGNORED) {
 		sink->regular_input = false;
 		sink->oneshot_input = false;
 	} else if (input == MM_EVENT_ONESHOT) {
-		// Oneshot state cannot be properly managed for loose sinks.
-		ASSERT(!sink->loose_target);
+		// Oneshot state cannot be properly managed for stray sinks.
+		ASSERT(!sink->stray_target);
 		sink->regular_input = false;
 		sink->oneshot_input = true;
 		sink->oneshot_input_trigger = true;
@@ -78,8 +78,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->regular_output = false;
 		sink->oneshot_output = false;
 	} else if (output == MM_EVENT_ONESHOT) {
-		// Oneshot state cannot be properly managed for loose sinks.
-		ASSERT(!sink->loose_target);
+		// Oneshot state cannot be properly managed for stray sinks.
+		ASSERT(!sink->stray_target);
 		sink->regular_output = false;
 		sink->oneshot_output = true;
 		sink->oneshot_output_trigger = true;

@@ -68,7 +68,7 @@ struct mm_event_listener_stats
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
 
-	uint64_t loose_events;
+	uint64_t stray_events;
 	uint64_t direct_events;
 	uint64_t enqueued_events;
 	uint64_t dequeued_events;
@@ -266,7 +266,7 @@ mm_event_listener_adjust_start(struct mm_event_listener *listener, uint32_t neve
 static inline bool NONNULL(1, 2)
 mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	if (mm_event_target(sink) == listener->target && !sink->loose_target)
+	if (mm_event_target(sink) == listener->target && !sink->stray_target)
 		listener->direct_events_estimate++;
 	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
 }

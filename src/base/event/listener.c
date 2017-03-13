@@ -138,12 +138,12 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 {
 	ENTER();
 
-	if (unlikely(sink->loose_target)) {
+	if (unlikely(sink->stray_target)) {
 		// Handle the event immediately.
 		mm_event_handle_basic(sink, event);
 
 #if ENABLE_EVENT_STATS
-		listener->stats.loose_events++;
+		listener->stats.stray_events++;
 #endif
 
 	} else {
@@ -248,7 +248,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
 	listener->stats.wait_calls = 0;
-	listener->stats.loose_events = 0;
+	listener->stats.stray_events = 0;
 	listener->stats.direct_events = 0;
 	listener->stats.enqueued_events = 0;
 	listener->stats.dequeued_events = 0;

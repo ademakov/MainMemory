@@ -46,9 +46,12 @@ typedef enum {
 
 /* Event sink thread affinity. */
 typedef enum {
-	MM_EVENT_LOOSE,
+	/* Bound to a single thread forever. */
 	MM_EVENT_BOUND,
-	MM_EVENT_AGILE,
+	/* Bound to a single thread while handling an event. */
+	MM_EVENT_LOOSE,
+	/* Might handle events concurrently on random threads. */
+	MM_EVENT_STRAY,
 } mm_event_affinity_t;
 
 /* Event sink status. */
@@ -104,7 +107,7 @@ struct mm_event_fd
 	bool oneshot_output_trigger;
 
 	/* Immutable flags. */
-	unsigned loose_target : 1;
+	unsigned stray_target : 1;
 	unsigned bound_target : 1;
 	unsigned regular_input : 1;
 	unsigned oneshot_input : 1;

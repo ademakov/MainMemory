@@ -104,11 +104,11 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 
 		mm_log_fmt("listener %d: "
 			   "wait=%llu poll=%llu/%llu "
-			   "loose=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n", i,
+			   "stray=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n", i,
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
 			   (unsigned long long) stats->zero_poll_calls,
-			   (unsigned long long) stats->loose_events,
+			   (unsigned long long) stats->stray_events,
 			   (unsigned long long) stats->direct_events,
 			   (unsigned long long) stats->enqueued_events,
 			   (unsigned long long) stats->dequeued_events,
