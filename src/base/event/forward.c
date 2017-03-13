@@ -234,7 +234,7 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 {
 	ENTER();
 
-	mm_thread_t target = mm_event_target(sink);
+	mm_thread_t target = sink->listener->target;
 	struct mm_event_forward_buffer *buffer = &cache->buffers[target];
 
 	// Flush the buffer if it is full.
