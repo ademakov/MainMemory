@@ -214,7 +214,7 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
    thread. The event must be an I/O event and the call must be made
    by a poller thread. */
 static inline void NONNULL(1, 2)
-mm_backend_poller_handle(struct mm_event_listener *listener UNUSED, struct mm_event_fd *sink, mm_event_t event)
+mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
 {
 	VERIFY(event < MM_EVENT_RETIRE);
 	if (event < MM_EVENT_OUTPUT) {
@@ -223,7 +223,7 @@ mm_backend_poller_handle(struct mm_event_listener *listener UNUSED, struct mm_ev
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_input(sink, listener);
+		mm_event_epoll_reset_poller_input(&storage->storage, sink);
 #endif
 	} else {
 		sink->oneshot_output_trigger = false;
@@ -231,7 +231,7 @@ mm_backend_poller_handle(struct mm_event_listener *listener UNUSED, struct mm_ev
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_output(sink, listener);
+		mm_event_epoll_reset_poller_output(&storage->storage, sink);
 #endif
 	}
 }

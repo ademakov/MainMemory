@@ -204,11 +204,19 @@ mm_event_epoll_reset_input(struct mm_event_fd *sink);
 void NONNULL(1)
 mm_event_epoll_reset_output(struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener);
+static inline void NONNULL(1, 2)
+mm_event_epoll_reset_poller_input(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+{
+	ASSERT(storage->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
+	storage->input_reset[storage->input_reset_num++] = sink;
+}
 
-void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener);
+static inline void NONNULL(1, 2)
+mm_event_epoll_reset_poller_output(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+{
+	ASSERT(storage->output_reset_num < MM_EVENT_EPOLL_NEVENTS);
+	storage->output_reset[storage->output_reset_num++] = sink;
+}
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */

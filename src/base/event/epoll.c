@@ -367,28 +367,4 @@ mm_event_epoll_reset_output(struct mm_event_fd *sink)
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input(struct mm_event_fd *sink, struct mm_event_listener *listener)
-{
-	ENTER();
-
-	struct mm_event_epoll_storage *storage = &listener->storage.storage;
-	ASSERT(storage->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
-	storage->input_reset[storage->input_reset_num++] = sink;
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output(struct mm_event_fd *sink, struct mm_event_listener *listener)
-{
-	ENTER();
-
-	struct mm_event_epoll_storage *storage = &listener->storage.storage;
-	ASSERT(storage->output_reset_num < MM_EVENT_EPOLL_NEVENTS);
-	storage->output_reset[storage->output_reset_num++] = sink;
-
-	LEAVE();
-}
-
 #endif /* HAVE_SYS_EPOLL_H */
