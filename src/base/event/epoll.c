@@ -137,33 +137,6 @@ mm_event_epoll_process_events(struct mm_event_epoll *backend,
 	}
 }
 
-static int
-mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-		    mm_timeout_t timeout)
-{
-	if (timeout) {
-		// Calculate the event wait timeout.
-		timeout /= 1000;
-	}
-
-	// Poll the system for events.
-	int n = mm_epoll_wait(backend->event_fd, storage->events, MM_EVENT_EPOLL_NEVENTS,
-			      timeout);
-	if (unlikely(n < 0)) {
-		if (errno == EINTR)
-			mm_warning(errno, "epoll_wait");
-		else
-			mm_error(errno, "epoll_wait");
-		n = 0;
-	}
-
-#if ENABLE_EVENT_STATS
-	storage->nevents_stats[n]++;
-#endif
-
-	return n;
-}
-
 /**********************************************************************
  * Event backend initialization and cleanup.
  **********************************************************************/
@@ -212,32 +185,47 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage UNUSED)
 }
 
 /**********************************************************************
- * Event backend poll and signal routines.
+ * Event backend poll and notify routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_listen(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-		      mm_timeout_t timeout)
+mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
+		    mm_timeout_t timeout)
 {
 	ENTER();
 
 	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
 
-	// Announce that the thread is about to sleep.
 	if (timeout) {
+		// Announce that the thread is about to sleep.
 		mm_stamp_t stamp = mm_event_listener_polling(listener);
-		if (!mm_event_listener_restful(listener, stamp))
+		if (!mm_event_listener_restful(listener, stamp)) {
 			timeout = 0;
+		} else {
+			// Calculate the event wait timeout.
+			timeout /= 1000;
+		}
 	}
 
-	// Poll for incoming events.
-	int n = mm_event_epoll_poll(backend, storage, timeout);
+	// Poll the system for events.
+	int n = mm_epoll_wait(backend->event_fd, storage->events, MM_EVENT_EPOLL_NEVENTS, timeout);
+	if (unlikely(n < 0)) {
+		if (errno == EINTR)
+			mm_warning(errno, "epoll_wait");
+		else
+			mm_error(errno, "epoll_wait");
+		n = 0;
+	}
 
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
 
 	// Handle incoming events.
 	mm_event_epoll_process_events(backend, listener, n);
+
+#if ENABLE_EVENT_STATS
+	storage->nevents_stats[n]++;
+#endif
 
 	LEAVE();
 }

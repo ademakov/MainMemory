@@ -121,12 +121,12 @@ mm_eventfd(unsigned int value, int flags)
 #endif
 
 /**********************************************************************
- * Event backend poll and signal routines.
+ * Event backend poll and notify routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_listen(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-		      mm_timeout_t timeout);
+mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
+		    mm_timeout_t timeout);
 
 #if MM_EVENT_NATIVE_NOTIFY
 

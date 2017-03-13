@@ -200,7 +200,7 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 }
 
 /**********************************************************************
- * Event backend poll and signal routines.
+ * Event backend poll and notify routines.
  **********************************************************************/
 
 void NONNULL(1, 2)

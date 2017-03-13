@@ -74,7 +74,7 @@ void NONNULL(1)
 mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
 
 /**********************************************************************
- * Event backend poll and signal routines.
+ * Event backend poll and notify routines.
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
@@ -82,7 +82,7 @@ mm_event_backend_poll(struct mm_event_backend *backend, struct mm_event_backend_
 		      mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&backend->backend, storage, timeout);
+	mm_event_epoll_poll(&backend->backend, storage, timeout);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_poll(&backend->backend, storage, timeout);
 #endif
