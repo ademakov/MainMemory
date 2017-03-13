@@ -20,7 +20,6 @@
 #include "base/event/epoch.h"
 
 #include "base/event/dispatch.h"
-#include "base/event/handle.h"
 #include "base/event/listener.h"
 #include "base/thread/thread.h"
 
@@ -71,7 +70,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		while (!mm_stack_empty(limbo)) {
 			struct mm_slink *link = mm_stack_remove(limbo);
 			struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-			mm_event_handle_basic(sink, MM_EVENT_RECLAIM);
+			mm_event_handle(sink, MM_EVENT_RECLAIM);
 			local->count--;
 		}
 

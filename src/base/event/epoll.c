@@ -336,7 +336,7 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epo
 }
 
 /**********************************************************************
- * I/O event processing.
+ * Interface for handling events delivered to the target thread.
  **********************************************************************/
 
 void NONNULL(1)

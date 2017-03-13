@@ -195,7 +195,7 @@ mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd
 }
 
 /**********************************************************************
- * I/O event processing.
+ * Interface for handling events delivered to the target thread.
  **********************************************************************/
 
 void NONNULL(1)

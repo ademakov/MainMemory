@@ -22,7 +22,6 @@
 #include "base/bitops.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
-#include "base/event/handle.h"
 #include "base/memory/memory.h"
 
 #if ENABLE_MACH_SEMAPHORE
@@ -65,7 +64,7 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
-		mm_event_handle_poller_io(listener, sink, event);
+		mm_backend_poller_handle(listener, sink, event);
 		listener->dequeued_events++;
 	}
 }
@@ -140,7 +139,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 
 	if (unlikely(sink->stray_target)) {
 		// Handle the event immediately.
-		mm_event_handle_basic(sink, event);
+		mm_event_handle(sink, event);
 
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
@@ -175,7 +174,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (target == listener->target) {
-			mm_event_handle_poller_io(listener, sink, event);
+			mm_backend_poller_handle(listener, sink, event);
 			listener->direct_events++;
 		} else if (target != MM_THREAD_NONE) {
 			mm_event_forward(&listener->forward, sink, event);
@@ -202,7 +201,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 		// Queue it for reclamation.
 		mm_event_epoch_retire(&listener->epoch, sink);
 		// Let close the file descriptor.
-		mm_event_handle_basic(sink, MM_EVENT_RETIRE);
+		mm_event_handle(sink, MM_EVENT_RETIRE);
 	}
 
 	LEAVE();

@@ -21,6 +21,7 @@
 #define BASE_EVENT_BACKEND_H
 
 #include "common.h"
+#include "base/report.h"
 #include "base/event/epoll.h"
 #include "base/event/kqueue.h"
 #include "base/event/selfpipe.h"
@@ -180,6 +181,10 @@ mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_even
 #endif
 }
 
+/**********************************************************************
+ * Interface for handling events delivered to the target thread.
+ **********************************************************************/
+
 static inline void NONNULL(1)
 mm_event_backend_reset_input(struct mm_event_fd *sink)
 {
@@ -218,6 +223,36 @@ mm_event_backend_reset_poller_output(struct mm_event_listener *listener UNUSED, 
 #elif HAVE_SYS_EVENT_H
 	sink->oneshot_output_trigger = false;
 #endif
+}
+
+/* Start processing of an event after it is delivered to the target
+   thread. Also reset oneshot I/O state if needed. */
+static inline void NONNULL(1)
+mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+	/* Start processing the event. */
+	mm_event_handle(sink, event);
+	/* Perform backend-specific I/O state reset. */
+	if (event < MM_EVENT_OUTPUT)
+		mm_event_backend_reset_input(sink);
+	else if (event < MM_EVENT_RETIRE)
+		mm_event_backend_reset_output(sink);
+}
+
+/* Start processing of an event after it is delivered to the target
+   thread. The event must be an I/O event and the call must be made
+   by a poller thread. */
+static inline void NONNULL(1, 2)
+mm_backend_poller_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
+{
+	ASSERT(event < MM_EVENT_RETIRE);
+	/* Start processing the event. */
+	mm_event_handle(sink, event);
+	/* Perform backend-specific I/O state reset. */
+	if (event < MM_EVENT_OUTPUT)
+		mm_event_backend_reset_poller_input(listener, sink);
+	else
+		mm_event_backend_reset_poller_output(listener, sink);
 }
 
 #endif /* BASE_EVENT_BACKEND_H */

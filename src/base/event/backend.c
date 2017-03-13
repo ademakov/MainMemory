@@ -19,8 +19,6 @@
 
 #include "base/event/backend.h"
 
-#include "base/report.h"
-
 void NONNULL(1, 2)
 mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_storage *some_storage)
 {

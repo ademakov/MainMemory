@@ -130,14 +130,53 @@ mm_event_target(const struct mm_event_fd *sink)
 	return sink->target;
 }
 
+/**********************************************************************
+ * Event sink activity.
+ **********************************************************************/
+
+/* Mark a sink as having an incoming event received from the system. */
+static inline void
+mm_event_update(struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	sink->receive_stamp++;
+#endif
+}
+
 /* Mark a sink as having completed the processing of all the events
-   delivered so far. */
+   delivered to the target thread so far. */
 static inline void NONNULL(1)
 mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 {
 #if ENABLE_SMP
 	/* TODO: release memory fence */
 	mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
+#endif
+}
+
+/* Start asynchronous processing of an event as it is delivered to
+   the target thread. */
+static inline void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+#if ENABLE_SMP
+	/* Count the delivered event. */
+	sink->dispatch_stamp++;
+#endif
+	/* Initiate its processing. */
+	(sink->handler)(event, sink);
+}
+
+/* Check if a sink has some not yet fully processed events. */
+static inline bool NONNULL(1)
+mm_event_active(const struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	// TODO: acquire memory fence
+	mm_event_stamp_t stamp = mm_memory_load(sink->complete_stamp);
+	return sink->receive_stamp != stamp;
+#else
+	return true;
 #endif
 }
 
