@@ -27,6 +27,8 @@
 #include "base/memory/arena.h"
 #include "base/memory/pool.h"
 
+#define ENABLE_TIMER_LOCATION	0
+
 #define MM_TIMER_ERROR	((mm_timer_t) -1)
 #define MM_TIMER_BLOCK	((mm_timer_t) -2)
 
@@ -72,8 +74,19 @@ mm_timer_destroy(mm_timer_t timer_id);
 void
 mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timeval_t interval);
 
+#if ENABLE_TIMER_LOCATION
+
+# define mm_timer_block(t) mm_timer_block_at(t, __LOCATION__, __FUNCTION__)
+
+void NONNULL(2, 3)
+mm_timer_block_at(mm_timeout_t timeout, const char *location, const char *function);
+
+#else
+
 void
 mm_timer_block(mm_timeout_t timeout);
+
+#endif
 
 static inline void
 mm_timer_resetclocks(struct mm_time_manager *manager)

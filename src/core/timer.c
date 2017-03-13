@@ -250,8 +250,13 @@ mm_timer_block_cleanup(struct mm_timer_resume *timer)
 	mm_timeq_delete(timer->manager->time_queue, &timer->entry);
 }
 
+#if ENABLE_TIMER_LOCATION
+void NONNULL(2, 3)
+mm_timer_block_at(mm_timeout_t timeout, const char *location, const char *function)
+#else
 void
 mm_timer_block(mm_timeout_t timeout)
+#endif
 {
 	ENTER();
 
@@ -267,7 +272,11 @@ mm_timer_block(mm_timeout_t timeout)
 	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);
 
 	mm_timeq_insert(manager->time_queue, &timer.entry);
+#if ENABLE_TIMER_LOCATION && ENABLE_TASK_LOCATION
+	mm_task_block_at(location, function);
+#else
 	mm_task_block();
+#endif
 
 	mm_task_cleanup_pop(mm_timer_is_armed(&timer.entry));
 
