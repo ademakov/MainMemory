@@ -1164,7 +1164,7 @@ retry:
 		if (conn_errno == 0) {
 			rc = 0;
 		} else {
-			mm_event_unregister_faulty_fd(&sock->event);
+			mm_event_unregister_invalid_fd(&sock->event);
 			sock->event.fd = -1;
 			mm_close(fd);
 			errno = conn_errno;

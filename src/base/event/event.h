@@ -154,7 +154,7 @@ void NONNULL(1)
 mm_event_unregister_fd(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_unregister_faulty_fd(struct mm_event_fd *sink);
+mm_event_unregister_invalid_fd(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_trigger_input(struct mm_event_fd *sink);
