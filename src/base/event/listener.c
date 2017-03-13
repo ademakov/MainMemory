@@ -58,9 +58,10 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 	uint16_t mask = dispatch->sink_queue_size - 1;
 	uint16_t index = dispatch->sink_queue_head++ & mask;
-	struct mm_event_fd *sink = dispatch->sink_queue[index];
 
-	sink->target = listener->target;
+	struct mm_event_fd *sink = dispatch->sink_queue[index];
+	sink->listener = listener;
+
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events ^= 1 << event;
@@ -146,24 +147,26 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 #endif
 
 	} else {
-		mm_thread_t target = mm_event_target(sink);
-
 		// If the event sink can be detached from its target thread
 		// then do it now. But make sure the target thread has some
 		// minimal amount if work.
 		if (!sink->bound_target && !mm_event_active(sink)) {
-			ASSERT(target != MM_THREAD_NONE);
+			ASSERT(sink->listener != NULL);
 			uint16_t nr = listener->dequeued_events;
-			if (target == listener->target) {
+			if (sink->listener == listener) {
 				nr += listener->direct_events;
 				if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
-					sink->target = target = MM_THREAD_NONE;
+					sink->listener = NULL;
 			} else {
 				nr += max(listener->direct_events, listener->direct_events_estimate);
-				if (nr < MM_EVENT_LISTENER_RETAIN_MIN)
-					sink->target = target = listener->target;
-				else if (listener->forward.buffers[target].ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
-					sink->target = target = MM_THREAD_NONE;
+				if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
+					sink->listener = listener;
+				} else {
+					mm_thread_t target = sink->listener->target;
+					uint32_t ntotal = listener->forward.buffers[target].ntotal;
+					if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
+						sink->listener = NULL;
+				}
 			}
 		}
 
@@ -173,10 +176,10 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
-		if (target == listener->target) {
+		if (sink->listener == listener) {
 			mm_backend_poller_handle(&listener->storage, sink, event);
 			listener->direct_events++;
-		} else if (target != MM_THREAD_NONE) {
+		} else if (sink->listener != NULL) {
 			mm_event_forward(&listener->forward, sink, event);
 			listener->forwarded_events++;
 		} else {

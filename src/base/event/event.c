@@ -26,6 +26,13 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
+mm_thread_t NONNULL(1)
+mm_event_target(const struct mm_event_fd *sink)
+{
+	struct mm_event_listener *listener = sink->listener;
+	return listener != NULL ? listener->target : MM_THREAD_NONE;
+}
+
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
@@ -43,9 +50,9 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	VERIFY(input != MM_EVENT_IGNORED || output != MM_EVENT_IGNORED);
 
 	sink->fd = fd;
-	sink->handler = handler;
 	sink->status = MM_EVENT_INITIAL;
-	sink->target = MM_THREAD_NONE;
+	sink->handler = handler;
+	sink->listener = NULL;
 
 #if ENABLE_SMP
 	sink->receive_stamp = 0;
@@ -100,13 +107,16 @@ mm_event_register_fd(struct mm_event_fd *sink)
 	if (likely(sink->status == MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_ENABLED;
 
+		// Bind the sink to this thread's event listener.
 		struct mm_thread *thread = mm_thread_selfptr();
 		struct mm_event_listener *listener = mm_thread_getlistener(thread);
-		if (sink->target == MM_THREAD_NONE) {
-			sink->target = listener->target;
+		if (sink->listener == NULL) {
+			sink->listener = listener;
 		} else {
-			VERIFY(sink->target == listener->target);
+			VERIFY(sink->listener == listener);
 		}
+
+		// Register with the event backend.
 		mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
 
@@ -122,8 +132,9 @@ mm_event_unregister_fd(struct mm_event_fd *sink)
 	if (likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_DROPPED;
 
-		struct mm_thread *thread = mm_thread_selfptr();
-		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		struct mm_event_listener *listener = sink->listener;
+		ASSERT(listener->thread == mm_thread_selfptr());
+
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
 
@@ -139,8 +150,9 @@ mm_event_unregister_invalid_fd(struct mm_event_fd *sink)
 	if (likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->status = MM_EVENT_INVALID;
 
-		struct mm_thread *thread = mm_thread_selfptr();
-		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		struct mm_event_listener *listener = sink->listener;
+		ASSERT(listener->thread == mm_thread_selfptr());
+
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 		mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
 	}
@@ -158,8 +170,9 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	    && !sink->oneshot_input_trigger) {
 		sink->oneshot_input_trigger = true;
 
-		struct mm_thread *thread = mm_thread_selfptr();
-		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		struct mm_event_listener *listener = sink->listener;
+		ASSERT(listener->thread == mm_thread_selfptr());
+
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
 	}
 
@@ -176,8 +189,9 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	    && !sink->oneshot_output_trigger) {
 		sink->oneshot_output_trigger = true;
 
-		struct mm_thread *thread = mm_thread_selfptr();
-		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		struct mm_event_listener *listener = sink->listener;
+		ASSERT(listener->thread == mm_thread_selfptr());
+
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}
 

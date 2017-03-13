@@ -100,17 +100,17 @@ typedef uint16_t mm_event_stamp_t;
 
 struct mm_event_fd
 {
-	/* Event handler routine. */
-	mm_event_handler_t handler;
-
 	/* File descriptor to watch. */
 	int fd;
 
 	/* Current event sink status. */
 	mm_event_status_t status;
 
-	/* The thread the owns the sink. */
-	mm_thread_t target;
+	/* Event handler routine. */
+	mm_event_handler_t handler;
+
+	/* Listener (along with associated thread) that owns the sink. */
+	struct mm_event_listener *listener;
 
 #if ENABLE_SMP
 	/* The stamp updated by poller threads on every next event received
@@ -149,11 +149,8 @@ struct mm_event_fd
 	};
 };
 
-static inline mm_thread_t NONNULL(1)
-mm_event_target(const struct mm_event_fd *sink)
-{
-	return sink->target;
-}
+mm_thread_t NONNULL(1)
+mm_event_target(const struct mm_event_fd *sink);
 
 /**********************************************************************
  * Event sink activity.
