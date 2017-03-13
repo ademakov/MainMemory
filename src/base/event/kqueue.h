@@ -87,8 +87,8 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-		       mm_timeout_t timeout);
+mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
+		     mm_timeout_t timeout);
 
 #if MM_EVENT_NATIVE_NOTIFY
 

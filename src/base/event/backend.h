@@ -78,13 +78,13 @@ mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
-mm_event_backend_listen(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
-			mm_timeout_t timeout)
+mm_event_backend_poll(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
+		      mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_listen(&backend->backend, storage, timeout);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_listen(&backend->backend, storage, timeout);
+	mm_event_kqueue_poll(&backend->backend, storage, timeout);
 #endif
 }
 

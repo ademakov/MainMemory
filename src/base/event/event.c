@@ -237,7 +237,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_listen(&dispatch->backend, &listener->storage, timeout);
+	mm_event_backend_poll(&dispatch->backend, &listener->storage, timeout);
 
 	// End a reclamation critical section.
 	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
