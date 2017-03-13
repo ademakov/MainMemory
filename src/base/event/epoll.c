@@ -24,7 +24,6 @@
 #include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
-#include "base/thread/domain.h"
 
 #if HAVE_SYS_EVENTFD_H
 # include <sys/eventfd.h>
@@ -336,8 +335,8 @@ mm_event_epoll_reset_input(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_domain *domain = mm_domain_selfptr();
-	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
+	struct mm_event_listener *listener = sink->listener;
+	struct mm_event_dispatch *dispatch = listener->dispatch;
 	struct mm_event_epoll *backend = &dispatch->backend.backend;
 
 	mm_event_epoll_del_in(backend, sink);
@@ -350,8 +349,8 @@ mm_event_epoll_reset_output(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_domain *domain = mm_domain_selfptr();
-	struct mm_event_dispatch *dispatch = mm_domain_getdispatch(domain);
+	struct mm_event_listener *listener = sink->listener;
+	struct mm_event_dispatch *dispatch = listener->dispatch;
 	struct mm_event_epoll *backend = &dispatch->backend.backend;
 
 	mm_event_epoll_del_out(backend, sink);
