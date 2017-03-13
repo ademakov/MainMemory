@@ -53,12 +53,11 @@ struct mm_event_backend
 
 /* System-specific events storage. */
 #if HAVE_SYS_EPOLL_H
-struct mm_event_backend_storage
-{
-	struct mm_event_epoll_storage storage;
-};
+# define mm_event_backend_storage mm_event_epoll_storage
 #elif HAVE_SYS_EVENT_H
 # define mm_event_backend_storage mm_event_kqueue_storage
+#else
+struct mm_event_backend_storage;
 #endif
 
 void NONNULL(1, 2)
@@ -75,7 +74,7 @@ mm_event_backend_listen(struct mm_event_backend *backend, struct mm_event_backen
 			mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_listen(&backend->backend, &storage->storage, timeout);
+	mm_event_epoll_listen(&backend->backend, storage, timeout);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_listen(&backend->backend, storage, timeout);
 #endif
@@ -153,7 +152,7 @@ mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event
 			       struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_unregister_fd(&backend->backend, &storage->storage, sink);
+	mm_event_epoll_unregister_fd(&backend->backend, storage, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_unregister_fd(&backend->backend, storage, sink);
 #endif
@@ -223,7 +222,7 @@ mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_input(&storage->storage, sink);
+		mm_event_epoll_reset_poller_input(storage, sink);
 #endif
 	} else {
 		sink->oneshot_output_trigger = false;
@@ -231,7 +230,7 @@ mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_output(&storage->storage, sink);
+		mm_event_epoll_reset_poller_output(storage, sink);
 #endif
 	}
 }

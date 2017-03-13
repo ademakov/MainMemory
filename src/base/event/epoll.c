@@ -92,7 +92,7 @@ mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 		return;
 
 	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &listener->storage.storage.events[i];
+		struct epoll_event *event = &listener->storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 		if ((event->events & EPOLLIN) != 0 && !mm_event_listener_adjust(listener, sink))
 			return;
@@ -104,13 +104,13 @@ mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *listener, int nevents)
 {
-	listener->storage.storage.input_reset_num = 0;
-	listener->storage.storage.output_reset_num = 0;
+	listener->storage.input_reset_num = 0;
+	listener->storage.output_reset_num = 0;
 
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &listener->storage.storage.events[i];
+		struct epoll_event *event = &listener->storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
 		if ((event->events & EPOLLIN) != 0)
@@ -131,10 +131,10 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
 
 	mm_event_listener_handle_finish(listener);
 
-	for (int i = 0; i < listener->storage.storage.input_reset_num; i++)
-		mm_event_epoll_del_in(backend, listener->storage.storage.input_reset[i]);
-	for (int i = 0; i < listener->storage.storage.output_reset_num; i++)
-		mm_event_epoll_del_out(backend, listener->storage.storage.output_reset[i]);
+	for (int i = 0; i < listener->storage.input_reset_num; i++)
+		mm_event_epoll_del_in(backend, listener->storage.input_reset[i]);
+	for (int i = 0; i < listener->storage.output_reset_num; i++)
+		mm_event_epoll_del_out(backend, listener->storage.output_reset[i]);
 }
 
 static void
