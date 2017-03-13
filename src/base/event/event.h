@@ -39,8 +39,12 @@ typedef enum {
 
 /* I/O event repeat modes. */
 typedef enum {
+	/* No event are expected. */
 	MM_EVENT_IGNORED,
+	/* Repeated events are expected. */
 	MM_EVENT_REGULAR,
+	/* Single event is expected. To get another one it required
+	   to call a corresponding trigger function. */
 	MM_EVENT_ONESHOT,
 } mm_event_sequence_t;
 
@@ -48,7 +52,7 @@ typedef enum {
 typedef enum {
 	/* Bound to a single thread forever. */
 	MM_EVENT_BOUND,
-	/* Bound to a single thread while handling an event. */
+	/* Bound to a single thread while active. */
 	MM_EVENT_LOOSE,
 	/* Might handle events concurrently on random threads. */
 	MM_EVENT_STRAY,
@@ -67,12 +71,11 @@ typedef enum {
 typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
 
 /**********************************************************************
- * I/O events support.
+ * I/O event sink.
  **********************************************************************/
 
 typedef uint16_t mm_event_stamp_t;
 
-/* Event sink. */
 struct mm_event_fd
 {
 	/* Event handler routine. */
@@ -181,7 +184,7 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 }
 
 /**********************************************************************
- * I/O events control.
+ * I/O event sink control.
  **********************************************************************/
 
 void NONNULL(1, 3)
