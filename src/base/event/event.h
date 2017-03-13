@@ -58,6 +58,28 @@ typedef enum {
 	MM_EVENT_STRAY,
 } mm_event_affinity_t;
 
+/*
+ * NB: Oneshot event sinks have some restrictions.
+ *
+ * Every oneshot sink maintains a bit of internal state that tells if the
+ * relevant event is expected. This bit is modified without acquiring any
+ * locks by the thread the sink is bound to.
+ *
+ * Therefore it is forbidden to create oneshot sinks with stray affinity.
+ * If it were allowed there would be race conditions modifying the oneshot
+ * state.
+ *
+ * Additionally for oneshot sinks the epoll backend needs to modify (with
+ * epoll_ctl) the corresponding file descriptor after each I/O event. So
+ * if the event handler does the same thing directly then the backend can
+ * get confused (because of certain implementation issues).
+ *
+ * Therefore event handler routines for oneshot sinks may process events
+ * only asynchronously rather than directly. That is the event handler may
+ * only remember which sinks and events need to be processed. The actual
+ * processing takes place after return from the listen routine.
+ */
+
 /* Event sink status. */
 typedef enum {
 	MM_EVENT_INVALID = -2,
