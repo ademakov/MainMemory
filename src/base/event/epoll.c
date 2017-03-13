@@ -30,24 +30,9 @@
 # include <sys/eventfd.h>
 #endif
 
-#if MM_EVENT_NATIVE_NOTIFY
-
-static void
-mm_event_epoll_notify_handler(mm_event_t event UNUSED, void *data)
-{
-	ENTER();
-
-	struct mm_event_epoll *backend = containerof(data, struct mm_event_epoll, notify_fd);
-
-	uint64_t value;
-	int n = mm_read(backend->notify_fd.fd, &value, sizeof value);
-	if (n != sizeof value)
-		mm_warning(errno, "eventfd read");
-
-	LEAVE();
-}
-
-#endif
+/**********************************************************************
+ * Helper routines for handling incoming events.
+ **********************************************************************/
 
 static void
 mm_event_epoll_del_in(struct mm_event_epoll *backend, struct mm_event_fd *sink)
@@ -179,6 +164,10 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	return n;
 }
 
+/**********************************************************************
+ * Event backend initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1)
 mm_event_epoll_prepare(struct mm_event_epoll *backend)
 {
@@ -223,7 +212,7 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage UNUSED)
 }
 
 /**********************************************************************
- * Event polling and wakeup.
+ * Event backend poll and signal routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
@@ -254,6 +243,21 @@ mm_event_epoll_listen(struct mm_event_epoll *backend, struct mm_event_epoll_stor
 }
 
 #if MM_EVENT_NATIVE_NOTIFY
+
+static void
+mm_event_epoll_notify_handler(mm_event_t event UNUSED, void *data)
+{
+	ENTER();
+
+	struct mm_event_epoll *backend = containerof(data, struct mm_event_epoll, notify_fd);
+
+	uint64_t value;
+	int n = mm_read(backend->notify_fd.fd, &value, sizeof value);
+	if (n != sizeof value)
+		mm_warning(errno, "eventfd read");
+
+	LEAVE();
+}
 
 bool NONNULL(1)
 mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
@@ -305,7 +309,7 @@ mm_event_epoll_notify(struct mm_event_epoll *backend)
 #endif /* MM_EVENT_NATIVE_NOTIFY */
 
 /**********************************************************************
- * I/O event control.
+ * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1, 2, 3)

@@ -206,7 +206,7 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 }
 
 /**********************************************************************
- * I/O event sink control.
+ * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1, 3)

@@ -69,6 +69,10 @@ struct mm_event_kqueue_storage
 #endif
 };
 
+/**********************************************************************
+ * Event backend initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1)
 mm_event_kqueue_prepare(struct mm_event_kqueue *backend);
 
@@ -78,9 +82,27 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *backend);
 void NONNULL(1)
 mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
 
+/**********************************************************************
+ * Event backend poll and signal routines.
+ **********************************************************************/
+
 void NONNULL(1, 2)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 		       mm_timeout_t timeout);
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+bool NONNULL(1)
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend);
+
+void NONNULL(1)
+mm_event_kqueue_notify(struct mm_event_kqueue *backend);
+
+#endif
+
+/**********************************************************************
+ * Event sink I/O control.
+ **********************************************************************/
 
 void NONNULL(1, 2)
 mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage);
@@ -160,16 +182,6 @@ mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_
 	struct kevent *kp = &storage->events[storage->nevents++];
 	EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
 }
-
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend);
-
-void NONNULL(1)
-mm_event_kqueue_notify(struct mm_event_kqueue *backend);
-
-#endif
 
 #endif /* HAVE_SYS_EVENT_H */
 #endif /* BASE_EVENT_KQUEUE_H */

@@ -27,7 +27,7 @@
 #include "base/thread/thread.h"
 
 /**********************************************************************
- * I/O events control.
+ * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1)
@@ -65,7 +65,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->oneshot_input = false;
 	} else if (input == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for stray sinks.
-		ASSERT(!sink->stray_target);
+		VERIFY(!sink->stray_target);
 		sink->regular_input = false;
 		sink->oneshot_input = true;
 		sink->oneshot_input_trigger = true;
@@ -79,7 +79,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 		sink->oneshot_output = false;
 	} else if (output == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for stray sinks.
-		ASSERT(!sink->stray_target);
+		VERIFY(!sink->stray_target);
 		sink->regular_output = false;
 		sink->oneshot_output = true;
 		sink->oneshot_output_trigger = true;

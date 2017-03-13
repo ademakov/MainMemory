@@ -60,6 +60,10 @@ struct mm_event_backend
 struct mm_event_backend_storage;
 #endif
 
+/**********************************************************************
+ * Event backend initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1, 2)
 mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_storage *some_storage);
 
@@ -68,6 +72,10 @@ mm_event_backend_cleanup(struct mm_event_backend *backend);
 
 void NONNULL(1)
 mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
+
+/**********************************************************************
+ * Event backend poll and signal routines.
+ **********************************************************************/
 
 static inline void NONNULL(1, 2)
 mm_event_backend_listen(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
@@ -106,15 +114,9 @@ mm_event_backend_dampen(struct mm_event_backend *backend)
 	mm_selfpipe_drain(&backend->selfpipe);
 }
 
-static inline void NONNULL(1, 2)
-mm_event_backend_flush(struct mm_event_backend *backend UNUSED, struct mm_event_backend_storage *storage UNUSED)
-{
-#if HAVE_SYS_EPOLL_H
-	// Nothing to do.
-#elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_flush(&backend->backend, storage);
-#endif
-}
+/**********************************************************************
+ * Event sink I/O control.
+ **********************************************************************/
 
 static inline bool NONNULL(1)
 mm_event_backend_has_changes(struct mm_event_backend_storage *storage UNUSED)
@@ -133,6 +135,16 @@ mm_event_backend_has_urgent_changes(struct mm_event_backend_storage *storage UNU
 	return false;
 #elif HAVE_SYS_EVENT_H
 	return storage->nunregister != 0;
+#endif
+}
+
+static inline void NONNULL(1, 2)
+mm_event_backend_flush(struct mm_event_backend *backend UNUSED, struct mm_event_backend_storage *storage UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	// Nothing to do.
+#elif HAVE_SYS_EVENT_H
+	mm_event_kqueue_flush(&backend->backend, storage);
 #endif
 }
 
@@ -189,7 +201,7 @@ mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_even
 static inline void NONNULL(1)
 mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 {
-	VERIFY(event < MM_EVENT_RETIRE);
+	ASSERT(event < MM_EVENT_RETIRE);
 	if (event < MM_EVENT_OUTPUT) {
 		sink->oneshot_input_trigger = false;
 		/* Start processing the event. */
@@ -217,7 +229,7 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 static inline void NONNULL(1, 2)
 mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
 {
-	VERIFY(event < MM_EVENT_RETIRE);
+	ASSERT(event < MM_EVENT_RETIRE);
 	if (event < MM_EVENT_OUTPUT) {
 		sink->oneshot_input_trigger = false;
 		/* Start processing the event. */

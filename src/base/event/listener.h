@@ -130,6 +130,10 @@ struct mm_event_listener
 
 } CACHE_ALIGN;
 
+/**********************************************************************
+ * Event listener initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1, 2, 3)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
 			  struct mm_thread *thread);

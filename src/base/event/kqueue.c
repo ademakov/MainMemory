@@ -30,6 +30,10 @@
 
 #define MM_EVENT_KQUEUE_NOTIFY_ID	123
 
+/**********************************************************************
+ * Wrappers for kqueue system calls.
+ **********************************************************************/
+
 #if ENABLE_INLINE_SYSCALLS
 
 static inline int
@@ -53,6 +57,10 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
 # define mm_kevent	kevent
 
 #endif
+
+/**********************************************************************
+ * Helper routines for handling incoming events.
+ **********************************************************************/
 
 static void
 mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
@@ -146,6 +154,10 @@ mm_event_kqueue_finish_changes(struct mm_event_listener *listener)
 	}
 }
 
+/**********************************************************************
+ * Event backend initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1)
 mm_event_kqueue_prepare(struct mm_event_kqueue *backend)
 {
@@ -186,6 +198,10 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Event backend poll and signal routines.
+ **********************************************************************/
 
 void NONNULL(1, 2)
 mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
@@ -240,37 +256,6 @@ mm_event_kqueue_listen(struct mm_event_kqueue *backend, struct mm_event_kqueue_s
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage)
-{
-	ENTER();
-
-	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
-	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
-
-	// TODO: Protect against fiber yield with following re-enter.
-
-	// If any event sinks are to be unregistered then start a reclamation epoch.
-	if (storage->nunregister != 0)
-		mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
-
-	// Submit change events.
-	static struct timespec ts = { .tv_sec = 0, .tv_nsec = 0 };
-	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents, NULL, 0, &ts);
-	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
-	if (unlikely(n < 0))
-		mm_error(errno, "kevent");
-
-	// Finish pending changes.
-	mm_event_kqueue_finish_changes(listener);
-
-	// If a reclamation epoch is active then attempt to advance it and possibly finish.
-	if (mm_event_epoch_active(&listener->epoch))
-		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
-
-	LEAVE();
-}
-
 #if MM_EVENT_NATIVE_NOTIFY
 
 bool NONNULL(1)
@@ -316,5 +301,39 @@ mm_event_kqueue_notify(struct mm_event_kqueue *backend)
 }
 
 #endif /* MM_EVENT_NATIVE_NOTIFY */
+
+/**********************************************************************
+ * Event sink I/O control.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage)
+{
+	ENTER();
+
+	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
+
+	// TODO: Protect against fiber yield with following re-enter.
+
+	// If any event sinks are to be unregistered then start a reclamation epoch.
+	if (storage->nunregister != 0)
+		mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
+
+	// Submit change events.
+	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents, NULL, 0, NULL);
+	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
+	if (unlikely(n < 0))
+		mm_error(errno, "kevent");
+
+	// Finish pending changes.
+	mm_event_kqueue_finish_changes(listener);
+
+	// If a reclamation epoch is active then attempt to advance it and possibly finish.
+	if (mm_event_epoch_active(&listener->epoch))
+		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
+
+	LEAVE();
+}
 
 #endif /* HAVE_SYS_EVENT_H */

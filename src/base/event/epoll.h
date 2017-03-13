@@ -66,6 +66,10 @@ struct mm_event_epoll_storage
 #endif
 };
 
+/**********************************************************************
+ * Event backend initialization and cleanup.
+ **********************************************************************/
+
 void NONNULL(1)
 mm_event_epoll_prepare(struct mm_event_epoll *backend);
 
@@ -117,7 +121,7 @@ mm_eventfd(unsigned int value, int flags)
 #endif
 
 /**********************************************************************
- * Event polling and wakeup.
+ * Event backend poll and signal routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
@@ -135,7 +139,7 @@ mm_event_epoll_notify(struct mm_event_epoll *backend);
 #endif
 
 /**********************************************************************
- * I/O event control.
+ * Event sink I/O control.
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
