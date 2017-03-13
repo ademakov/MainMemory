@@ -427,11 +427,17 @@ mm_core_master(mm_value_t arg)
 			// Take the first available work item.
 			struct mm_work *work = mm_core_get_work(core);
 
+			// Make a unique worker name.
+			char worker_name[32];
+			static mm_atomic_uint32_t nworkers;
+			uint32_t id = mm_atomic_uint32_fetch_and_add(&nworkers, 1);
+			sprintf(worker_name, "worker %u", (uint32_t) id);
+
 			// Make a new worker task to handle it.
 			struct mm_task_attr attr;
 			mm_task_attr_init(&attr);
 			mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
-			mm_task_attr_setname(&attr, "worker");
+			mm_task_attr_setname(&attr, worker_name);
 			mm_task_create(&attr, mm_core_worker, (mm_value_t) work);
 			core->nworkers++;
 		} else {
