@@ -32,7 +32,6 @@ libmmbase_la_SOURCES = \
 	timeq.c timeq.h \
 	topology.c topology.h \
 	event/backend.c event/backend.h \
-	event/batch.c event/batch.h \
 	event/dispatch.c event/dispatch.h \
 	event/epoch.c event/epoch.h \
 	event/epoll.c event/epoll.h \
