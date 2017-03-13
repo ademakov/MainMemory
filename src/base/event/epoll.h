@@ -184,13 +184,13 @@ static inline void NONNULL(1, 2)
 mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd *sink)
 {
 	struct epoll_event ee;
-	ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-	if (sink->regular_output || sink->oneshot_output_trigger)
-		ee.events |= EPOLLOUT;
+	ee.events = EPOLLET | EPOLLOUT;
+	if (sink->regular_input || sink->oneshot_input_trigger)
+		ee.events |= EPOLLIN | EPOLLRDHUP;
 	ee.data.ptr = sink;
 
 	int rc;
-	if (sink->regular_output || sink->oneshot_output)
+	if (sink->regular_input || sink->oneshot_input)
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
 	else
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
