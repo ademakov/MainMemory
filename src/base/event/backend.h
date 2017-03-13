@@ -196,7 +196,8 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_input(sink);
+		if (sink->oneshot_input)
+			mm_event_epoll_reset_input(sink);
 #endif
 	} else {
 		sink->oneshot_output_trigger = false;
@@ -204,7 +205,8 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_output(sink);
+		if (sink->oneshot_output)
+			mm_event_epoll_reset_output(sink);
 #endif
 	}
 }
@@ -222,7 +224,8 @@ mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_input(storage, sink);
+		if (sink->oneshot_input)
+			mm_event_epoll_reset_poller_input(storage, sink);
 #endif
 	} else {
 		sink->oneshot_output_trigger = false;
@@ -230,7 +233,8 @@ mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct
 		mm_event_handle(sink, event);
 		/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-		mm_event_epoll_reset_poller_output(storage, sink);
+		if (sink->oneshot_output)
+			mm_event_epoll_reset_poller_output(storage, sink);
 #endif
 	}
 }
