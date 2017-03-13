@@ -199,7 +199,7 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 #if HAVE_SYS_EPOLL_H
 		mm_event_epoll_reset_input(sink);
 #endif
-	} else if (event < MM_EVENT_RETIRE) {
+	} else {
 		sink->oneshot_output_trigger = false;
 		/* Start processing the event. */
 		mm_event_handle(sink, event);
