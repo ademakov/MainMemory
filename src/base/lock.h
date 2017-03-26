@@ -25,26 +25,6 @@
 #include "base/thread/backoff.h"
 
 /**********************************************************************
- * Architecture-specific Test-And-Set(TAS) primitives.
- **********************************************************************/
-
-/*
- * mm_lock_acquire() is a test-and-set atomic operation along with
- * acquire fence.
- *
- * mm_lock_release() is a simple clear operation along with release
- * fence.
- */
-
-#if ARCH_X86
-# include "arch/x86/lock.h"
-#elif ARCH_X86_64
-# include "arch/x86-64/lock.h"
-#else
-# include "arch/generic/lock.h"
-#endif
-
-/**********************************************************************
  * Basic TAS(TATAS) Spin Locks.
  **********************************************************************/
 
@@ -53,21 +33,28 @@
  * few key global data structures.
  */
 
+#define MM_LOCK_INIT	{0}
+
+typedef struct { mm_atomic_uint8_t value; } mm_lock_t;
+
 static inline void
 mm_global_lock(mm_lock_t *lock)
 {
 	uint32_t backoff = 0;
-	while (mm_lock_acquire(lock)) {
+	// TODO: FAS with acquire semantics.
+	while (mm_atomic_uint8_fetch_and_set(&lock->value, 1)) {
 		do
 			backoff = mm_thread_backoff(backoff);
-		while (mm_memory_load(lock->locked));
+		while (mm_memory_load(lock->value));
 	}
 }
 
 static inline void
 mm_global_unlock(mm_lock_t *lock)
 {
-	mm_lock_release(lock);
+	// TODO: store with release semantics
+	mm_memory_store_fence();
+	mm_memory_store(lock->value, 0);
 }
 
 /**********************************************************************
@@ -130,7 +117,8 @@ typedef struct
 static inline bool
 mm_common_trylock(mm_common_lock_t *lock)
 {
-	bool fail = mm_lock_acquire(&lock->lock);
+	// TODO: FAS with acquire semantics.
+	bool fail = mm_atomic_uint8_fetch_and_set(&lock->lock.value, 1);
 
 #if ENABLE_LOCK_STATS
 	struct mm_lock_stat *stat = mm_lock_getstat(&lock->stat);
@@ -151,13 +139,14 @@ mm_common_lock(mm_common_lock_t *lock)
 #endif
 	uint32_t backoff = 0;
 
-	while (mm_lock_acquire(&lock->lock)) {
+	// TODO: FAS with acquire semantics.
+	while (mm_atomic_uint8_fetch_and_set(&lock->lock.value, 1)) {
 		do {
 #if ENABLE_LOCK_STATS
 			++fail;
 #endif
 			backoff = mm_thread_backoff(backoff);
-		} while (mm_memory_load(lock->lock.locked));
+		} while (mm_memory_load(lock->lock.value));
 	}
 
 #if ENABLE_LOCK_STATS
@@ -170,7 +159,9 @@ mm_common_lock(mm_common_lock_t *lock)
 static inline void
 mm_common_unlock(mm_common_lock_t *lock)
 {
-	mm_lock_release(&lock->lock);
+	// TODO: store with release semantics
+	mm_memory_store_fence();
+	mm_memory_store(lock->lock.value, 0);
 }
 
 /**********************************************************************

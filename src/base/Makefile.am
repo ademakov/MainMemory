@@ -71,7 +71,6 @@ libmmbase_la_SOURCES += \
 	arch/x86/basic.h \
 	arch/x86/cstack.c arch/x86/cstack-switch.S \
 	arch/x86/fence.h \
-	arch/x86/lock.h \
 	arch/x86/spin.h \
 	arch/x86/syscall.h arch/x86/syscall.c
 endif
@@ -83,7 +82,6 @@ libmmbase_la_SOURCES += \
 	arch/x86-64/basic.h \
 	arch/x86-64/cstack.c arch/x86-64/cstack-switch.S \
 	arch/x86-64/fence.h \
-	arch/x86-64/lock.h \
 	arch/x86-64/spin.h \
 	arch/x86-64/syscall.h arch/x86-64/syscall.c
 endif
@@ -93,7 +91,6 @@ libmmbase_la_SOURCES += \
 	arch/generic/atomic.h \
 	arch/generic/basic.h \
 	arch/generic/cstack.c \
-	arch/generic/lock.h \
 	arch/generic/spin.h \
 	arch/generic/syscall.h
 endif
