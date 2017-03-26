@@ -33,7 +33,7 @@
 #endif
 
 #if ENABLE_LINUX_FUTEX
-# include "arch/syscall.h"
+# include "base/syscall.h"
 # include <linux/futex.h>
 # include <sys/syscall.h>
 #elif ENABLE_MACH_SEMAPHORE
