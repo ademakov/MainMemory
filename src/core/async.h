@@ -21,7 +21,7 @@
 #define CORE_ASYNC_H
 
 #include "common.h"
-#include "arch/syscall.h"
+#include "base/syscall.h"
 #include "base/thread/domain.h"
 
 #include <sys/syscall.h>

@@ -19,8 +19,8 @@
 
 #include "base/thread/barrier.h"
 
-#include "arch/memory.h"
-#include "arch/spin.h"
+#include "base/atomic.h"
+#include "base/thread/backoff.h"
 
 void NONNULL(1)
 mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count)

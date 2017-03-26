@@ -1,7 +1,7 @@
 /*
- * base/thread/barrier.h - MainMemory barriers.
+ * base/cstack.h - MainMemory arch-specific call stack support.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2012-2014  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,33 +17,37 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THREAD_BARRIER_H
-#define BASE_THREAD_BARRIER_H
+#ifndef BASE_CSTACK_H
+#define BASE_CSTACK_H
 
 #include "common.h"
-#include "base/atomic.h"
 
-struct mm_thread_barrier
-{
-	uint32_t count CACHE_ALIGN;
+#include <stddef.h>
 
-	mm_atomic_uint32_t value;
+#if ARCH_GENERIC
+# if HAVE_UCONTEXT_H
+#  include <ucontext.h>
+# else
+#  error "Unsupported architecture."
+# endif
+#endif
 
-	uint32_t sense CACHE_ALIGN;
-};
+#if ARCH_GENERIC
+typedef ucontext_t mm_cstack_t;
+#else
+typedef void * mm_cstack_t;
+#endif
 
-struct mm_thread_barrier_local
-{
-	uint32_t sense;
-};
+void *
+mm_cstack_create(uint32_t stack_size, uint32_t guard_size);
 
 void NONNULL(1)
-mm_thread_barrier_prepare(struct mm_thread_barrier *barrier, uint32_t count);
-
-void NONNULL(1)
-mm_thread_barrier_local_prepare(struct mm_thread_barrier_local *local);
+mm_cstack_destroy(void *stack, uint32_t stack_size);
 
 void NONNULL(1, 2)
-mm_thread_barrier_wait(struct mm_thread_barrier *barrier, struct mm_thread_barrier_local *local);
+mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size);
 
-#endif /* BASE_THREAD_BARRIER_H */
+void NONNULL(1, 2)
+mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx);
+
+#endif /* BASE_CSTACK_H */

@@ -25,7 +25,6 @@
 #endif
 
 #include "config.h"
-#include "arch/basic.h"
 
 /**********************************************************************
  * Common Standard Headers.
@@ -37,6 +36,18 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+
+/**********************************************************************
+ * Basic architecture properties.
+ **********************************************************************/
+
+#if ARCH_X86
+# include "base/arch/x86/basic.h"
+#elif ARCH_X86_64
+# include "base/arch/x86-64/basic.h"
+#else
+# include "base/arch/generic/basic.h"
+#endif
 
 /**********************************************************************
  * Common Macros.

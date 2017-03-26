@@ -21,7 +21,6 @@
 #define CORE_WORK_H
 
 #include "common.h"
-#include "arch/atomic.h"
 #include "base/list.h"
 #include "core/core.h"
 

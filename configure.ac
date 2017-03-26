@@ -128,7 +128,6 @@ fi
 AC_CONFIG_FILES([
 	Makefile
 	src/Makefile
-	src/arch/Makefile
 	src/base/Makefile
 	src/memcache/Makefile
 	tests/Makefile

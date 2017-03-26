@@ -21,7 +21,7 @@
 #define BASE_EXIT_H
 
 #include "common.h"
-#include "arch/memory.h"
+#include "base/atomic.h"
 
 #include <stdlib.h>
 #if HAVE_SYSEXITS_H

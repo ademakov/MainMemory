@@ -2,9 +2,7 @@
 #include "runner.h"
 
 #include "common.h"
-#include "arch/atomic.h"
-#include "arch/memory.h"
-#include "arch/spin.h"
+#include "base/atomic.h"
 #include "base/lock.h"
 #include "base/thread/barrier.h"
 

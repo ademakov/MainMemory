@@ -21,7 +21,27 @@
 #define BASE_THREAD_BACKOFF_H
 
 #include "common.h"
-#include "arch/spin.h"
+
+/**********************************************************************
+ * Architecture-specific back off primitive.
+ **********************************************************************/
+
+/*
+ * mm_spin_pause() is a special instruction to be used in busy wait loops
+ * to make hyper-threading CPUs happy.
+ */
+
+#if ARCH_X86
+# include "base/arch/x86/spin.h"
+#elif ARCH_X86_64
+# include "base/arch/x86-64/spin.h"
+#else
+# include "base/arch/generic/spin.h"
+#endif
+
+/**********************************************************************
+ * Thread contention back off routines.
+ **********************************************************************/
 
 #define MM_BACKOFF_SMALL	(0xff)
 

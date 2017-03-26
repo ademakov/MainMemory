@@ -21,8 +21,28 @@
 #define BASE_LOCK_H
 
 #include "common.h"
-#include "arch/lock.h"
+#include "base/atomic.h"
 #include "base/thread/backoff.h"
+
+/**********************************************************************
+ * Architecture-specific Test-And-Set(TAS) primitives.
+ **********************************************************************/
+
+/*
+ * mm_lock_acquire() is a test-and-set atomic operation along with
+ * acquire fence.
+ *
+ * mm_lock_release() is a simple clear operation along with release
+ * fence.
+ */
+
+#if ARCH_X86
+# include "arch/x86/lock.h"
+#elif ARCH_X86_64
+# include "arch/x86-64/lock.h"
+#else
+# include "arch/generic/lock.h"
+#endif
 
 /**********************************************************************
  * Basic TAS(TATAS) Spin Locks.

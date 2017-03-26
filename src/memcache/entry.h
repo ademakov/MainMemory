@@ -27,7 +27,7 @@
 #include "core/core.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
-# include "arch/atomic.h"
+# include "base/atomic.h"
 #endif
 
 /* Forward declaration. */

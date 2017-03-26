@@ -1,5 +1,5 @@
 
-SUBDIRS = arch base memcache
+SUBDIRS = base memcache
 
 AM_CFLAGS = -Wall -Wextra
 
@@ -26,7 +26,7 @@ net_sources = \
 	net/netbuf.c net/netbuf.h
 
 libmm_la_SOURCES = $(core_sources) $(net_sources)
-libmm_la_LIBADD = base/libmmbase.la arch/libmmarch.la
+libmm_la_LIBADD = base/libmmbase.la
 
 mmd_SOURCES = main.c
 mmd_LDADD = memcache/libmemcache.a libmm.la

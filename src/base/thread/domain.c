@@ -20,8 +20,8 @@
 #include "base/thread/domain.h"
 
 #include "base/bitops.h"
+#include "base/cstack.h"
 #include "base/ring.h"
-#include "base/memory/cstack.h"
 #include "base/memory/global.h"
 #include "base/thread/local.h"
 

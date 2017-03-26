@@ -21,7 +21,7 @@
 #define CORE_TASK_H
 
 #include "common.h"
-#include "arch/cstack.h"
+#include "base/cstack.h"
 #include "base/list.h"
 #include "core/core.h"
 #include "core/value.h"

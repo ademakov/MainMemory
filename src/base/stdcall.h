@@ -35,7 +35,7 @@
 
 #if ENABLE_INLINE_SYSCALLS
 
-#include "arch/syscall.h"
+#include "base/syscall.h"
 #include <sys/syscall.h>
 
 #if defined(SYS_socketcall) && !defined(SYS_accept)

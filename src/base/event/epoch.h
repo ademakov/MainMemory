@@ -21,7 +21,7 @@
 #define BASE_EVENT_EPOCH_H
 
 #include "common.h"
-#include "arch/atomic.h"
+#include "base/atomic.h"
 #include "base/report.h"
 #include "base/event/event.h"
 

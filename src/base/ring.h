@@ -21,7 +21,7 @@
 #define BASE_RING_H
 
 #include "common.h"
-#include "arch/atomic.h"
+#include "base/atomic.h"
 #include "base/lock.h"
 
 /**********************************************************************
