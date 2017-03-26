@@ -48,7 +48,7 @@ mm_thread_barrier_wait(struct mm_thread_barrier *const barrier, struct mm_thread
 	} else {
 		mm_memory_fence(); // TODO: atomic_load fence
 		while (mm_memory_load(barrier->sense) != sense)
-			mm_spin_pause();
+			mm_cpu_backoff();
 	}
 
 	local->sense = sense;

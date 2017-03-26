@@ -21,30 +21,25 @@
 #define BASE_ATOMIC_H
 
 #include "common.h"
+#include "base/arch/intrinsic.h"
 
 /**********************************************************************
  * Architecture-specific atomic routines.
  **********************************************************************/
 
 #if ARCH_X86
-# include "arch/x86/atomic.h"
-# include "arch/generic/atomic64.h"
+# include "base/arch/x86/atomic.h"
+# include "base/arch/generic/atomic64.h"
 #elif ARCH_X86_64
-# include "arch/x86-64/atomic.h"
+# include "base/arch/x86-64/atomic.h"
 #else
-# include "arch/generic/atomic.h"
-# include "arch/generic/atomic64.h"
+# include "base/arch/generic/atomic.h"
+# include "base/arch/generic/atomic64.h"
 #endif
 
 /**********************************************************************
  * Architecture-specific memory ordering.
  **********************************************************************/
-
-#if ARCH_X86
-# include "arch/x86/fence.h"
-#elif ARCH_X86_64
-# include "arch/x86-64/fence.h"
-#endif
 
 #ifndef mm_memory_strict_fence
 #define mm_memory_strict_fence()	__sync_synchronize()

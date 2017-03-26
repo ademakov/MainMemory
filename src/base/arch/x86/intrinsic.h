@@ -1,7 +1,7 @@
 /*
- * base/arch/x86/fence.h - MainMemory arch-specific memory fences.
+ * base/arch/x86/intrinsic.h - Architecture-specific intrinsics.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,9 +17,23 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_ARCH_X86_FENCE_H
-#define BASE_ARCH_X86_FENCE_H
+#ifndef BASE_ARCH_X86_INTRINSIC_H
+#define BASE_ARCH_X86_INTRINSIC_H
+
+/**********************************************************************
+ * Architecture-specific back off primitive.
+ **********************************************************************/
+
+static inline void
+mm_cpu_backoff(void)
+{
+	asm volatile("rep; nop" ::: "memory");
+}
+
+/**********************************************************************
+ * Architecture-specific memory ordering.
+ **********************************************************************/
 
 #define mm_memory_strict_fence()	asm volatile("lock; addl $0,0(%%esp)" ::: "memory")
 
-#endif /* BASE_ARCH_X86_FENCE_H */
+#endif /* BASE_ARCH_X86_INTRINSIC_H */

@@ -1,7 +1,7 @@
 /*
- * base/thread/backoff.h - MainMemory contention back off.
+ * base/arch/intrinsic.h - Architecture-specific intrinsics.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,36 +17,24 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THREAD_BACKOFF_H
-#define BASE_THREAD_BACKOFF_H
+#ifndef BASE_ARCH_INTRINSIC_H
+#define BASE_ARCH_INTRINSIC_H
 
-#include "common.h"
-#include "base/arch/intrinsic.h"
+#if ARCH_X86
+# include "base/arch/x86/intrinsic.h"
+#elif ARCH_X86_64
+# include "base/arch/x86-64/intrinsic.h"
+#else
+# include "base/arch/generic/intrinsic.h"
+#endif
 
 /**********************************************************************
- * Thread contention back off routines.
+ * Architecture-specific back off primitive.
  **********************************************************************/
 
-#define MM_BACKOFF_SMALL	(0xff)
+/*
+ * mm_cpu_backoff() is to be used in busy wait loops to reduce contention
+ * and make hyper-threading CPUs happy.
+ */
 
-uint32_t mm_thread_backoff_slow(uint32_t count);
-
-static inline void
-mm_thread_backoff_fixed(uint32_t count)
-{
-	while (count--)
-		mm_cpu_backoff();
-}
-
-static inline uint32_t
-mm_thread_backoff(uint32_t count)
-{
-	if (count < MM_BACKOFF_SMALL) {
-		mm_thread_backoff_fixed(count);
-		return count + count + 1;
-	} else {
-		return mm_thread_backoff_slow(count);
-	}
-}
-
-#endif /* BASE_THREAD_BACKOFF_H */
+#endif /* BASE_ARCH_INTRINSIC_H */
