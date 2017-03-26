@@ -173,12 +173,6 @@ mm_common_unlock(mm_common_lock_t *lock)
 	mm_lock_release(&lock->lock);
 }
 
-static inline bool
-mm_common_is_locked(mm_common_lock_t *lock)
-{
-	return mm_lock_is_acquired(&lock->lock);
-}
-
 /**********************************************************************
  * Spin Locks for Regular Threads.
  **********************************************************************/
@@ -231,17 +225,6 @@ mm_regular_unlock(mm_regular_lock_t *lock)
 	mm_common_unlock(&lock->lock);
 #else
 	(void) lock;
-#endif
-}
-
-static inline bool
-mm_regular_is_locked(mm_regular_lock_t *lock)
-{
-#if ENABLE_SMP
-	return mm_common_is_locked(&lock->lock);
-#else
-	(void) lock;
-	return false;
 #endif
 }
 

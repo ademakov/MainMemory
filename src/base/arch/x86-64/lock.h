@@ -42,10 +42,4 @@ mm_lock_release(mm_lock_t *lock)
 	mm_memory_store(lock->locked, 0);
 }
 
-static inline bool
-mm_lock_is_acquired(mm_lock_t *lock)
-{
-	return mm_memory_load(lock->locked) != 0;
-}
-
 #endif /* BASE_ARCH_X86_64_LOCK_H */

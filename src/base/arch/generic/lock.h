@@ -36,10 +36,4 @@ mm_lock_release(mm_lock_t *lock)
 	__sync_lock_release(&lock->locked);
 }
 
-static inline bool
-mm_lock_is_acquired(mm_lock_t *lock)
-{
-	return mm_memory_load(lock->locked) != 0;
-}
-
 #endif /* BASE_ARCH_GENERIC_LOCK_H */
