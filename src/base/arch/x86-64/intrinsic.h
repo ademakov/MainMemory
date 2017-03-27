@@ -54,4 +54,16 @@ mm_cpu_backoff(void)
 
 #define mm_memory_fence()		mm_compiler_barrier()
 
+/**********************************************************************
+ * Architecture-specific CPU time stamp counter.
+ **********************************************************************/
+
+static inline uint64_t
+mm_cpu_timestamp(void)
+{
+	uint64_t rax, rdx;
+	asm volatile("rdtsc" : "=a"(rax), "=d"(rdx));
+	return (rdx << 32) | rax;
+}
+
 #endif /* BASE_ARCH_X86_64_INTRINSIC_H */

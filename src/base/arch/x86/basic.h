@@ -32,4 +32,7 @@
 /* Virtual address width. */
 #define MM_ADDRESS_BITS		(32)
 
+/* CPU provides a time stamp counter. */
+#define MM_CPU_TIMESTAMP	(1)
+
 #endif /* BASE_ARCH_X86_BASIC_H */

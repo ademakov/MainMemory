@@ -36,4 +36,16 @@ mm_cpu_backoff(void)
 
 #define mm_memory_strict_fence()	asm volatile("lock; addl $0,0(%%esp)" ::: "memory")
 
+/**********************************************************************
+ * Architecture-specific CPU time stamp counter.
+ **********************************************************************/
+
+static inline uint64_t
+mm_cpu_timestamp(void)
+{
+	uint64_t tsc;
+	asm volatile("rdtsc" : "=A"(tsc));
+	return tsc;
+}
+
 #endif /* BASE_ARCH_X86_INTRINSIC_H */
