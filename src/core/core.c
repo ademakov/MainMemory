@@ -1,7 +1,7 @@
 /*
  * core/core.c - MainMemory core.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 #include "core/core.h"
 #include "core/future.h"
-#include "core/port.h"
 #include "core/task.h"
 #include "core/work.h"
 
@@ -904,7 +903,6 @@ mm_core_init(void)
 	mm_net_init();
 
 	mm_task_init();
-	mm_port_init();
 	mm_wait_init();
 	mm_future_init();
 	mm_work_init();
@@ -937,7 +935,6 @@ mm_core_term(void)
 	mm_core_free_hooks();
 
 	mm_task_term();
-	mm_port_term();
 	mm_wait_term();
 
 	mm_net_term();

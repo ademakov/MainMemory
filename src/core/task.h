@@ -1,7 +1,7 @@
 /*
  * core/task.h - MainMemory tasks.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -69,9 +69,8 @@ typedef enum {
 #define MM_TASK_CANCEL_ENABLE		0x0000
 #define MM_TASK_CANCEL_DISABLE		0x0001
 #define MM_TASK_CANCEL_DEFERRED		0x0000
-#define MM_TASK_CANCEL_ASYNCHRONOUS	0x0002
-#define MM_TASK_CANCEL_REQUIRED		0x0004
-#define MM_TASK_CANCEL_OCCURRED		0x0008
+#define MM_TASK_CANCEL_REQUIRED		0x0002
+#define MM_TASK_CANCEL_OCCURRED		0x0004
 /* Flags for tasks blocked for various reasons. */
 #if ENABLE_TASK_IO_FLAGS
 #define MM_TASK_READING			0x0010
@@ -138,6 +137,9 @@ struct mm_task
 	struct mm_link queue;
 	struct mm_link wait_queue;
 
+	/* Blocked or pending task stack context. */
+	mm_cstack_t stack_ctx;
+
 	/* The task status. */
 	mm_task_state_t state;
 	mm_task_flags_t flags;
@@ -146,11 +148,8 @@ struct mm_task
 	mm_priority_t priority;
 	mm_priority_t original_priority;
 
-	/* The list of task-local dynamically-allocated memory. */
-	struct mm_list chunks;
-
-	/* The list of task's ports. */
-	struct mm_list ports;
+	/* The task core. */
+	struct mm_core *core;
 
 	/* The list of task cleanup records. */
 	struct mm_task_cleanup_rec *cleanup;
@@ -165,10 +164,6 @@ struct mm_task
 	/* The task stack. */
 	uint32_t stack_size;
 	void *stack_base;
-	mm_cstack_t stack_ctx;
-
-	/* The task core. */
-	struct mm_core *core;
 
 	/* The task name. */
 	char name[MM_TASK_NAME_SIZE];
@@ -293,13 +288,6 @@ mm_task_exit(mm_value_t result);
 			| MM_TASK_CANCEL_OCCURRED))	\
 	 == MM_TASK_CANCEL_REQUIRED)
 
-#define MM_TASK_CANCEL_TEST_ASYNC(task_flags)		\
-	((task_flags & (MM_TASK_CANCEL_DISABLE		\
-			| MM_TASK_CANCEL_REQUIRED	\
-			| MM_TASK_CANCEL_OCCURRED	\
-			| MM_TASK_CANCEL_ASYNCHRONOUS)) \
-	 == (MM_TASK_CANCEL_REQUIRED | MM_TASK_CANCEL_ASYNCHRONOUS))
-
 static inline void
 mm_task_testcancel(void)
 {
@@ -310,33 +298,10 @@ mm_task_testcancel(void)
 	}
 }
 
-static inline void
-mm_task_testcancel_asynchronous(void)
-{
-	struct mm_task *task = mm_task_selfptr();
-	if (unlikely(MM_TASK_CANCEL_TEST_ASYNC(task->flags))) {
-		task->flags |= MM_TASK_CANCEL_OCCURRED;
-		mm_task_exit(MM_RESULT_CANCELED);
-	}
-}
-
-void mm_task_setcancelstate(int new_value, int *old_value_ptr);
-void mm_task_setcanceltype(int new_value, int *old_value_ptr);
-
-int mm_task_enter_cancel_point(void);
-void mm_task_leave_cancel_point(int);
+void
+mm_task_setcancelstate(int new_value, int *old_value_ptr);
 
 void NONNULL(1)
 mm_task_cancel(struct mm_task *task);
-
-/**********************************************************************
- * Task-local dynamic memory.
- **********************************************************************/
-
-void * MALLOC
-mm_task_alloc(size_t size);
-
-void
-mm_task_free(void *ptr);
 
 #endif /* CORE_TASK_H */

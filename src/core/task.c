@@ -1,7 +1,7 @@
 /*
  * core/task.c - MainMemory tasks.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,6 @@
 
 #include "core/task.h"
 #include "core/core.h"
-#include "core/port.h"
 #include "core/timer.h"
 
 #include "base/bitops.h"
@@ -155,20 +154,6 @@ mm_task_cleanup(struct mm_task *task)
 	LEAVE();
 }
 
-/* Free task-local dynamic memory. */
-static void
-mm_task_free_chunks(struct mm_task *task)
-{
-	ENTER();
-
-	while (!mm_list_empty(&task->chunks)) {
-		struct mm_link *link = mm_list_remove_head(&task->chunks);
-		mm_private_free(link);
-	}
-
-	LEAVE();
-}
-
 /* Create a new task. */
 static struct mm_task *
 mm_task_new(void)
@@ -183,14 +168,8 @@ mm_task_new(void)
 	task->stack_size = 0;
 	task->stack_base = NULL;
 
-	// Initialize the task ports list.
-	mm_list_prepare(&task->ports);
-
 	// Initialize the cleanup handler list.
 	task->cleanup = NULL;
-
-	// Initialize the dynamic memory list.
-	mm_list_prepare(&task->chunks);
 
 	return task;
 }
@@ -328,17 +307,6 @@ mm_task_destroy(struct mm_task *task)
 	ASSERT((task->flags & MM_TASK_WAITING) == 0);
 #endif
 
-	// Destroy the ports.
-	while (!mm_list_empty(&task->ports)) {
-		// TODO: ensure that ports are not referenced from elsewhere.
-		struct mm_link *link = mm_list_head(&task->ports);
-		struct mm_port *port = containerof(link, struct mm_port, ports);
-		mm_port_destroy(port);
-	}
-
-	// Free the dynamic memory.
-	mm_task_free_chunks(task);
-
 	// Free the stack.
 	if (task->stack_base != NULL)
 		mm_cstack_destroy(task->stack_base, task->stack_size);
@@ -450,10 +418,6 @@ mm_task_switch(mm_task_state_t state)
 
 	// Switch to the new task relinquishing CPU control for a while.
 	mm_cstack_switch(&old_task->stack_ctx, &new_task->stack_ctx);
-
-	// Resume the task unless it has been canceled and it agrees to be
-	// canceled asynchronously. In that case it quits here.
-	mm_task_testcancel_asynchronous();
 }
 
 /* Queue a task for execution. */
@@ -575,8 +539,6 @@ mm_task_exit(mm_value_t result)
 	// Set the task result.
 	task->result = result;
 
-	// TODO: invalidate ports ?
-
 	// Call the cleanup handlers.
 	mm_task_cleanup(task);
 
@@ -586,9 +548,6 @@ mm_task_exit(mm_value_t result)
 #else
 	ASSERT((task->flags & MM_TASK_WAITING) == 0);
 #endif
-
-	// Free the dynamic memory.
-	mm_task_free_chunks(task);
 
 	// Reset the task name.
 	mm_task_setname(task, "dead");
@@ -618,67 +577,11 @@ mm_task_setcancelstate(int new_value, int *old_value_ptr)
 			task->flags |= MM_TASK_CANCEL_DISABLE;
 		} else {
 			task->flags &= ~MM_TASK_CANCEL_DISABLE;
-			mm_task_testcancel_asynchronous();
 		}
 	}
 
-	if (old_value_ptr != NULL) {
+	if (old_value_ptr != NULL)
 		*old_value_ptr = old_value;
-	}
-
-	LEAVE();
-}
-
-void
-mm_task_setcanceltype(int new_value, int *old_value_ptr)
-{
-	ENTER();
-	ASSERT(new_value == MM_TASK_CANCEL_DEFERRED
-	       || new_value == MM_TASK_CANCEL_ASYNCHRONOUS);
-
-	struct mm_task *task = mm_task_selfptr();
-	int old_value = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
-	if (likely(old_value != new_value)) {
-		if (new_value) {
-			task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
-			mm_task_testcancel_asynchronous();
-		} else {
-			task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
-		}
-	}
-
-	if (old_value_ptr != NULL) {
-		*old_value_ptr = old_value;
-	}
-
-	LEAVE();
-}
-
-int
-mm_task_enter_cancel_point(void)
-{
-	ENTER();
-
-	struct mm_task *task = mm_task_selfptr();
-	int cp = (task->flags & MM_TASK_CANCEL_ASYNCHRONOUS);
-	if (likely(cp == 0)) {
-		task->flags |= MM_TASK_CANCEL_ASYNCHRONOUS;
-		mm_task_testcancel_asynchronous();
-	}
-
-	LEAVE();
-	return cp;
-}
-
-void
-mm_task_leave_cancel_point(int cp)
-{
-	ENTER();
-
-	if (likely(cp == 0)) {
-		struct mm_task *task = mm_task_selfptr();
-		task->flags &= ~MM_TASK_CANCEL_ASYNCHRONOUS;
-	}
 
 	LEAVE();
 }
@@ -691,52 +594,8 @@ mm_task_cancel(struct mm_task *task)
 	task->flags |= MM_TASK_CANCEL_REQUIRED;
 	if (unlikely(task->state == MM_TASK_RUNNING)) {
 		ASSERT(task == mm_task_selfptr());
-		mm_task_testcancel_asynchronous();
 	} else {
 		mm_task_run(task);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
- * Task-local dynamic memory.
- **********************************************************************/
-
-void *
-mm_task_alloc(size_t size)
-{
-	ENTER();
-	ASSERT(size > 0);
-
-	/* Allocate the requested memory plus some extra for the list link. */
-	void *ptr = mm_private_alloc(size + sizeof(struct mm_list));
-
-	/* Keep the allocated memory in the task's chunk list. */
-	struct mm_task *task = mm_task_selfptr();
-	mm_list_append(&task->chunks, (struct mm_link *) ptr);
-
-	/* Get the address past the list link. */
-	ptr = (void *) (((char *) ptr) + sizeof(struct mm_list));
-
-	LEAVE();
-	return ptr;
-}
-
-void
-mm_task_free(void *ptr)
-{
-	ENTER();
-
-	if (likely(ptr != NULL)) {
-		/* Get the real start address of the chunk. */
-		struct mm_link *link = (struct mm_link *) (((char *) ptr) - sizeof(struct mm_list));
-
-		/* Remove it from the task's chunk list. */
-		mm_list_delete(link);
-
-		/* Free the memory. */
-		mm_private_free(link);
 	}
 
 	LEAVE();

@@ -13,7 +13,6 @@ core_sources = \
 	core/combiner.c core/combiner.h \
 	core/core.c core/core.h \
 	core/future.c core/future.h \
-	core/port.c core/port.h \
 	core/runq.c core/runq.h \
 	core/task.c core/task.h \
 	core/timer.c core/timer.h \
