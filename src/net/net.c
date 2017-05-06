@@ -296,11 +296,11 @@ mm_net_socket_destroy(struct mm_net_socket *sock)
 }
 
 static mm_value_t
-mm_net_reclaim_routine(mm_value_t arg)
+mm_net_reclaim_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, reclaim_work);
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
 	// Notify a reader/writer about closing.
@@ -332,8 +332,8 @@ mm_net_reclaim_routine(mm_value_t arg)
  **********************************************************************/
 
 static void mm_net_socket_handler(mm_event_t event, void *data);
-static mm_value_t mm_net_reader_routine(mm_value_t arg);
-static mm_value_t mm_net_writer_routine(mm_value_t arg);
+static mm_value_t mm_net_reader_routine(struct mm_work *work);
+static mm_value_t mm_net_writer_routine(struct mm_work *work);
 
 static void
 mm_net_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
@@ -398,9 +398,9 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_net_socket_prepare_event(sock, fd);
 
 	// Initialize the required work items.
-	mm_work_prepare(&sock->read_work, mm_net_reader_routine, (mm_value_t) sock, mm_net_reader_complete);
-	mm_work_prepare(&sock->write_work, mm_net_writer_routine, (mm_value_t) sock, mm_net_writer_complete);
-	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, (mm_value_t) sock, mm_work_complete_noop);
+	mm_work_prepare(&sock->read_work, mm_net_reader_routine, mm_net_reader_complete);
+	mm_work_prepare(&sock->write_work, mm_net_writer_routine, mm_net_writer_complete);
+	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, NULL);
 }
 
 /**********************************************************************
@@ -461,22 +461,29 @@ leave:
 }
 
 static mm_value_t
-mm_net_acceptor(mm_value_t arg)
+mm_net_acceptor(struct mm_work *work)
 {
 	ENTER();
 
 	// Find the pertinent server.
-	struct mm_net_server *srv = (struct mm_net_server *) arg;
+	struct mm_net_server *srv = containerof(work, struct mm_net_server, acceptor_work);
 
 	// Accept incoming connections.
 	while (mm_net_accept(srv))
 		mm_task_yield();
 
-	// Indicate that the acceptor task is deactivated.
-	srv->acceptor_active = false;
-
 	LEAVE();
 	return 0;
+}
+
+static void
+mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
+{
+	// Find the pertinent server.
+	struct mm_net_server *srv = containerof(work, struct mm_net_server, acceptor_work);
+
+	// Indicate that the acceptor task is deactivated.
+	srv->acceptor_active = false;
 }
 
 static void
@@ -808,11 +815,11 @@ leave:
 }
 
 static mm_value_t
-mm_net_reader_routine(mm_value_t arg)
+mm_net_reader_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, read_work);
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
@@ -832,11 +839,11 @@ leave:
 }
 
 static mm_value_t
-mm_net_writer_routine(mm_value_t arg)
+mm_net_writer_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, write_work);
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
@@ -917,11 +924,11 @@ mm_net_term(void)
  **********************************************************************/
 
 static mm_value_t
-mm_net_register_server(mm_value_t arg)
+mm_net_register_server(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_server *srv = (struct mm_net_server *) arg;
+	struct mm_net_server *srv = containerof(work, struct mm_net_server, register_work);
 	ASSERT(srv->event.fd >= 0);
 
 	mm_event_register_fd(&srv->event);
@@ -935,8 +942,8 @@ mm_net_prepare_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 {
 	srv->proto = proto;
 	srv->acceptor_active = false;
-	mm_work_prepare(&srv->acceptor_work, mm_net_acceptor, (mm_value_t) srv, mm_work_complete_noop);
-	mm_work_prepare(&srv->register_work, mm_net_register_server, (mm_value_t) srv, mm_work_complete_noop);
+	mm_work_prepare(&srv->acceptor_work, mm_net_acceptor, mm_net_acceptor_complete);
+	mm_work_prepare(&srv->register_work, mm_net_register_server, NULL);
 }
 
 struct mm_net_server * NONNULL(1, 2, 3)
@@ -1067,7 +1074,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket 
 	// Initialize the destruction routine.
 	sock->destroy = destroy;
 	// Initialize the required work items.
-	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, (mm_value_t) sock, mm_work_complete_noop);
+	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, NULL);
 
 	LEAVE();
 }

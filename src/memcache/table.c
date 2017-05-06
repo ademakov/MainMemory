@@ -168,17 +168,28 @@ mc_table_expand(struct mc_tpart *part, uint32_t n)
 }
 
 static mm_value_t
-mc_table_stride_routine(mm_value_t arg)
+mc_table_stride_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mc_tpart *part = (struct mc_tpart *) arg;
+	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
 	ASSERT(part->striding);
 
 	struct mc_action action;
 	action.part = part;
-
 	mc_action_stride(&action);
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mc_table_stride_complete(struct mm_work *work, mm_value_t result UNUSED)
+{
+	ENTER();
+
+	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
+	ASSERT(part->striding);
 
 #if ENABLE_SMP
 	mm_regular_unlock(&part->striding);
@@ -187,7 +198,6 @@ mc_table_stride_routine(mm_value_t arg)
 #endif
 
 	LEAVE();
-	return 0;
 }
 
 static void
@@ -209,11 +219,11 @@ mc_table_start_striding(struct mc_tpart *part)
  **********************************************************************/
 
 static mm_value_t
-mc_table_evict_routine(mm_value_t arg)
+mc_table_evict_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mc_tpart *part = (struct mc_tpart *) arg;
+	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
 	ASSERT(part->evicting);
 
 	struct mc_action action;
@@ -225,6 +235,18 @@ mc_table_evict_routine(mm_value_t arg)
 		mm_task_yield();
 	}
 
+	LEAVE();
+	return 0;
+}
+
+static void
+mm_table_evict_complete(struct mm_work *work, mm_value_t result UNUSED)
+{
+	ENTER();
+
+	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
+	ASSERT(part->evicting);
+
 #if ENABLE_SMP
 	mm_regular_unlock(&part->evicting);
 #else
@@ -232,7 +254,6 @@ mc_table_evict_routine(mm_value_t arg)
 #endif
 
 	LEAVE();
-	return 0;
 }
 
 static void
@@ -330,10 +351,8 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 	part->evicting = false;
 	part->striding = false;
 #endif
-	mm_work_prepare(&part->evict_work, mc_table_evict_routine, (mm_value_t) part,
-			mm_work_complete_noop);
-	mm_work_prepare(&part->stride_work, mc_table_stride_routine, (mm_value_t) part,
-			mm_work_complete_noop);
+	mm_work_prepare(&part->evict_work, mc_table_evict_routine, mm_table_evict_complete);
+	mm_work_prepare(&part->stride_work, mc_table_stride_routine, mc_table_stride_complete);
 
 	part->stamp = index + 1;
 

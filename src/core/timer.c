@@ -174,12 +174,17 @@ mm_timer_next(struct mm_time_manager *manager)
  **********************************************************************/
 
 static mm_value_t
-mm_timer_routine(mm_value_t arg)
+mm_timer_routine(struct mm_work *work)
 {
-	struct mm_timer *timer = (struct mm_timer *) arg;
-	mm_value_t result = (timer->start)(timer->start_arg);
+	struct mm_timer *timer = containerof(work, struct mm_timer, work);
+	return (timer->start)(timer->start_arg);
+}
+
+static void
+mm_timer_complete(struct mm_work *work, mm_value_t value UNUSED)
+{
+	struct mm_timer *timer = containerof(work, struct mm_timer, work);
 	timer->active = false;
-	return result;
 }
 
 mm_timer_t NONNULL(2)
@@ -202,7 +207,7 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 	}
 
 	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
-	mm_work_prepare(&timer->work, mm_timer_routine, (mm_value_t) timer, mm_work_complete_noop);
+	mm_work_prepare(&timer->work, mm_timer_routine, mm_timer_complete);
 	timer->clock = clock;
 	timer->active = false;
 	timer->start = start;

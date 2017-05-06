@@ -155,4 +155,20 @@ typedef uintptr_t		mm_value_t;
 /* Task execution routine. */
 typedef mm_value_t (*mm_routine_t)(mm_value_t arg);
 
+/*
+ * Task and future special result codes.
+ */
+
+/* The result is unavailable as the task/future has been canceled. */
+#define MM_RESULT_CANCELED	((mm_value_t) -1)
+
+/* The result is unavailable as the task/future is still running. */
+#define MM_RESULT_NOTREADY	((mm_value_t) -2)
+
+/* The result is unavailable as the future has not yet started. */
+#define MM_RESULT_DEFERRED	((mm_value_t) -3)
+
+/* The result is unavailable as not needed in the first place. */
+#define MM_RESULT_UNWANTED	((mm_value_t) -4)
+
 #endif /* COMMON_H */

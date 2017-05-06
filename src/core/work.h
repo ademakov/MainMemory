@@ -24,7 +24,10 @@
 #include "base/list.h"
 #include "core/core.h"
 
-/* Completion notification routine for work items.  */
+/* A work routine. */
+typedef mm_value_t (*mm_work_routine_t)(struct mm_work *work);
+
+/* A work completion notification routine. */
 typedef void (*mm_work_complete_t)(struct mm_work *work, mm_value_t result);
 
 /* A work item. */
@@ -32,12 +35,8 @@ struct mm_work
 {
 	/* A link in the work queue. */
 	struct mm_qlink link;
-
 	/* The work routine. */
-	mm_routine_t routine;
-	/* The work routine argument. */
-	mm_value_t argument;
-
+	mm_work_routine_t routine;
 	/* The work completion routine. */
 	mm_work_complete_t complete;
 };
@@ -49,14 +48,10 @@ struct mm_work
 void mm_work_complete_noop(struct mm_work *work, mm_value_t result);
 
 static inline void NONNULL(1, 2)
-mm_work_prepare(struct mm_work *work,
-		mm_routine_t routine,
-		mm_value_t argument,
-		mm_work_complete_t complete)
+mm_work_prepare(struct mm_work *work, mm_work_routine_t routine, mm_work_complete_t complete)
 {
 	work->routine = routine;
-	work->argument = argument;
-	work->complete = complete;
+	work->complete = complete != NULL ? complete : mm_work_complete_noop;
 }
 
 #endif /* CORE_WORK_H */

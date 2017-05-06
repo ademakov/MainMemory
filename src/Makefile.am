@@ -16,7 +16,6 @@ core_sources = \
 	core/runq.c core/runq.h \
 	core/task.c core/task.h \
 	core/timer.c core/timer.h \
-	core/value.h \
 	core/wait.c core/wait.h \
 	core/work.c core/work.h
 

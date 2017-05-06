@@ -24,7 +24,6 @@
 #include "base/cstack.h"
 #include "base/list.h"
 #include "core/core.h"
-#include "core/value.h"
 
 #define ENABLE_TASK_LOCATION	0
 #define ENABLE_TASK_IO_FLAGS	0

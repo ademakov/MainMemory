@@ -291,21 +291,22 @@ mm_core_worker_execute(struct mm_work *work)
 	ENTER();
 
 	// Save the work data before it might be destroyed.
-	mm_routine_t routine = work->routine;
-	mm_value_t value = work->argument;
-	mm_work_complete_t complete = work->complete;
+	const mm_work_routine_t routine = work->routine;
+	const mm_work_complete_t complete = work->complete;
+
+	mm_value_t result;
 
 	// Ensure completion notification on task cancellation.
 	mm_task_cleanup_push(mm_core_worker_cancel, work);
 
 	// Execute the work routine.
-	value = routine(value);
+	result = routine(work);
 
 	// Task completed, no cleanup is required.
 	mm_task_cleanup_pop(false);
 
 	// Perform completion notification on return.
-	complete(work, value);
+	complete(work, result);
 
 	LEAVE();
 }
