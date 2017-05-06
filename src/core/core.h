@@ -152,9 +152,6 @@ void mm_core_stop(void);
  **********************************************************************/
 
 void NONNULL(2)
-mm_core_post(mm_core_t core, mm_routine_t routine, mm_value_t routine_arg);
-
-void NONNULL(2)
 mm_core_post_work(mm_core_t core_id, struct mm_work *work);
 
 void NONNULL(1)

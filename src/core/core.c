@@ -169,16 +169,12 @@ mm_core_get_work(struct mm_core *core)
 static void
 mm_core_add_work(struct mm_core *core, struct mm_work *work)
 {
-	ENTER();
-
 	// Enqueue the work item.
 	mm_queue_append(&core->workq, &work->link);
 	core->nwork++;
 
 	// If there is a task waiting for work then let it run now.
 	mm_core_poke(core);
-
-	LEAVE();
 }
 
 #if ENABLE_SMP
@@ -234,21 +230,6 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 }
 
 #endif
-
-void NONNULL(2)
-mm_core_post(mm_core_t core_id, mm_routine_t routine, mm_value_t routine_arg)
-{
-	ENTER();
-
-	// Create a work item.
-	struct mm_work *work = mm_work_create();
-	mm_work_prepare(work, routine, routine_arg, NULL);
-
-	// Post it to specified core.
-	mm_core_post_work(core_id, work);
-
-	LEAVE();
-}
 
 /**********************************************************************
  * Task queue.
@@ -314,24 +295,17 @@ mm_core_worker_execute(struct mm_work *work)
 	mm_value_t value = work->argument;
 	mm_work_complete_t complete = work->complete;
 
-	if (complete == NULL) {
-		// Destroy unneeded work data.
-		mm_work_destroy(work);
-		// Execute the work routine.
-		routine(value);
-	} else {
-		// Ensure completion notification on task cancellation.
-		mm_task_cleanup_push(mm_core_worker_cancel, work);
+	// Ensure completion notification on task cancellation.
+	mm_task_cleanup_push(mm_core_worker_cancel, work);
 
-		// Execute the work routine.
-		value = routine(value);
+	// Execute the work routine.
+	value = routine(value);
 
-		// Task completed, no cleanup is required.
-		mm_task_cleanup_pop(false);
+	// Task completed, no cleanup is required.
+	mm_task_cleanup_pop(false);
 
-		// Perform completion notification on return.
-		complete(work, value);
-	}
+	// Perform completion notification on return.
+	complete(work, value);
 
 	LEAVE();
 }
@@ -837,21 +811,10 @@ mm_core_init_single(struct mm_core *core)
 }
 
 static void
-mm_core_term_work(struct mm_core *core)
-{
-	mm_core_t core_id = mm_core_getid(core);
-	while (mm_core_has_work(core)) {
-		struct mm_work *work = mm_core_get_work(core);
-		mm_work_destroy_low(core_id, work);
-	}
-}
-
-static void
 mm_core_term_single(struct mm_core *core)
 {
 	ENTER();
 
-	mm_core_term_work(core);
 	mm_wait_cache_cleanup(&core->wait_cache);
 
 	mm_task_destroy(core->boot);
@@ -899,7 +862,6 @@ mm_core_init(void)
 	mm_task_init();
 	mm_wait_init();
 	mm_future_init();
-	mm_work_init();
 
 #if ENABLE_TRACE
 	mm_trace_set_getcontext(mm_core_gettracecontext);

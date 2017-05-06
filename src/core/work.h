@@ -43,33 +43,6 @@ struct mm_work
 };
 
 /**********************************************************************
- * Work item module initialization.
- **********************************************************************/
-
-void mm_work_init(void);
-
-/**********************************************************************
- * Work item creation and destruction.
- **********************************************************************/
-
-struct mm_work *mm_work_create_low(mm_core_t core);
-
-void NONNULL(2)
-mm_work_destroy_low(mm_core_t, struct mm_work *work);
-
-static inline struct mm_work *
-mm_work_create(void)
-{
-	return mm_work_create_low(mm_core_self());
-}
-
-static inline void
-mm_work_destroy(struct mm_work *work)
-{
-	mm_work_destroy_low(mm_core_self(), work);
-}
-
-/**********************************************************************
  * Work item initialization.
  **********************************************************************/
 
