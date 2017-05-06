@@ -332,7 +332,6 @@ mm_net_reclaim_routine(mm_value_t arg)
  **********************************************************************/
 
 static void mm_net_socket_handler(mm_event_t event, void *data);
-static mm_value_t mm_net_register_routine(mm_value_t arg);
 static mm_value_t mm_net_reader_routine(mm_value_t arg);
 static mm_value_t mm_net_writer_routine(mm_value_t arg);
 
@@ -454,11 +453,7 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Register the socket for event dispatch.
-	mm_thread_t target = mm_event_target(&sock->event);
-	if (target == MM_THREAD_NONE || target == mm_event_target(&srv->event))
-		mm_event_register_fd(&sock->event);
-	else
-		mm_core_post(target, mm_net_register_routine, (mm_value_t) sock);
+	mm_event_register_fd(&sock->event);
 
 leave:
 	LEAVE();
@@ -849,21 +844,6 @@ mm_net_writer_routine(mm_value_t arg)
 	(sock->proto->writer)(sock);
 
 leave:
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_register_routine(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = (struct mm_net_socket *) arg;
-	ASSERT(!mm_net_is_closed(sock));
-
-	// Register the socket with the event loop.
-	mm_event_register_fd(&sock->event);
-
 	LEAVE();
 	return 0;
 }
