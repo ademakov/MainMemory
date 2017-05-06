@@ -23,7 +23,7 @@
 #include "memcache/memcache.h"
 #include "memcache/entry.h"
 
-#include "core/wait.h"
+#include "core/work.h"
 
 #include "base/bitops.h"
 #include "base/list.h"
@@ -62,8 +62,6 @@ struct mc_tpart
 	/* The total data size of all entries. */
 	size_t volume;
 
-	struct mm_waitset waitset;
-
 #if ENABLE_MEMCACHE_COMBINER
 	struct mm_combiner *combiner;
 #elif ENABLE_MEMCACHE_DELEGATE
@@ -73,8 +71,15 @@ struct mc_tpart
 	mm_regular_lock_t freelist_lock;
 #endif
 
+#if ENABLE_SMP
+	mm_regular_lock_t evicting;
+	mm_regular_lock_t striding;
+#else
 	bool evicting;
 	bool striding;
+#endif
+	struct mm_work evict_work;
+	struct mm_work stride_work;
 
 	/* The last used value for CAS command. */
 	uint64_t stamp;
@@ -117,7 +122,8 @@ extern struct mc_table mc_table;
 void NONNULL(1)
 mc_table_init(const struct mm_memcache_config *config);
 
-void mc_table_term(void);
+void
+mc_table_term(void);
 
 /**********************************************************************
  * Memcache general table routines.

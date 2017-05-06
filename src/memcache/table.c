@@ -180,7 +180,11 @@ mc_table_stride_routine(mm_value_t arg)
 
 	mc_action_stride(&action);
 
+#if ENABLE_SMP
+	mm_regular_unlock(&part->striding);
+#else
 	part->striding = false;
+#endif
 
 	LEAVE();
 	return 0;
@@ -192,9 +196,9 @@ mc_table_start_striding(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post(MM_CORE_SELF, mc_table_stride_routine, (mm_value_t) part);
+	mm_core_post_work(MM_CORE_SELF, &part->stride_work);
 #else
-	mm_core_post(MM_CORE_NONE, mc_table_stride_routine, (mm_value_t) part);
+	mm_core_post_work(MM_CORE_NONE, &part->stride_work);
 #endif
 
 	LEAVE();
@@ -221,7 +225,11 @@ mc_table_evict_routine(mm_value_t arg)
 		mm_task_yield();
 	}
 
+#if ENABLE_SMP
+	mm_regular_unlock(&part->evicting);
+#else
 	part->evicting = false;
+#endif
 
 	LEAVE();
 	return 0;
@@ -233,9 +241,9 @@ mc_table_start_evicting(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post(MM_CORE_SELF, mc_table_evict_routine, (mm_value_t) part);
+	mm_core_post_work(MM_CORE_SELF, &part->evict_work);
 #else
-	mm_core_post(MM_CORE_NONE, mc_table_evict_routine, (mm_value_t) part);
+	mm_core_post_work(MM_CORE_NONE, &part->evict_work);
 #endif
 
 	LEAVE();
@@ -244,19 +252,33 @@ mc_table_start_evicting(struct mc_tpart *part)
 void NONNULL(1)
 mc_table_reserve_volume(struct mc_tpart *part)
 {
+#if ENABLE_SMP
+	if (!part->evicting.lock.lock.value && mc_table_check_volume(part, 0)) {
+		if (mm_regular_trylock(&part->evicting))
+			mc_table_start_evicting(part);
+	}
+#else
 	if (!part->evicting && mc_table_check_volume(part, 0)) {
 		part->evicting = true;
 		mc_table_start_evicting(part);
 	}
+#endif
 }
 
 void NONNULL(1)
 mc_table_reserve_entries(struct mc_tpart *part)
 {
+#if ENABLE_SMP
+	if (!part->striding.lock.lock.value && mc_table_check_size(part)) {
+		if (mm_regular_trylock(&part->striding))
+			mc_table_start_striding(part);
+	}
+#else
 	if (!part->striding && mc_table_check_size(part)) {
 		part->striding = true;
 		mc_table_start_striding(part);
 	}
+#endif
 }
 
 /**********************************************************************
@@ -290,8 +312,6 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 
 	part->volume = 0;
 
-	mm_waitset_prepare(&part->waitset);
-
 #if ENABLE_MEMCACHE_COMBINER
 	part->combiner = mm_combiner_create(MC_COMBINER_SIZE,
 					    MC_COMBINER_HANDOFF);
@@ -303,8 +323,17 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 	part->freelist_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 #endif
 
+#if ENABLE_SMP
+	part->evicting = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+	part->striding = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+#else
 	part->evicting = false;
 	part->striding = false;
+#endif
+	mm_work_prepare(&part->evict_work, mc_table_evict_routine, (mm_value_t) part,
+			mm_work_complete_noop);
+	mm_work_prepare(&part->stride_work, mc_table_stride_routine, (mm_value_t) part,
+			mm_work_complete_noop);
 
 	part->stamp = index + 1;
 
