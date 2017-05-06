@@ -1,7 +1,7 @@
 /*
  * core/timer.c - MainMemory timers.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 
 #include "core/core.h"
 #include "core/task.h"
+#include "core/work.h"
 
 #define MM_TIMER_QUEUE_MAX_WIDTH	500
 #define MM_TIMER_QUEUE_MAX_COUNT	2000
@@ -28,13 +29,19 @@
 /* Generic timer. */
 struct mm_timer
 {
+	/* A timer queue node. */
 	struct mm_timeq_entry entry;
+
+	/* Timer task work item. */
+	struct mm_work work;
 
 	/* Clock type. */
 	mm_clock_t clock;
 
 	/* Absolute time flag. */
 	bool abstime;
+	/* The timer task activity task. */
+	bool active;
 
 	/* Task parameters. */
 	mm_routine_t start;
@@ -72,26 +79,32 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 	ENTER();
 
 	if (entry->ident == MM_TIMER_BLOCK) {
-		struct mm_timer_resume *resume =
-			containerof(entry, struct mm_timer_resume, entry);
+		struct mm_timer_resume *resume = containerof(entry, struct mm_timer_resume, entry);
 		mm_task_run(resume->task);
 	} else {
-		struct mm_timer *timer =
-			containerof(entry, struct mm_timer, entry);
+		struct mm_timer *timer = containerof(entry, struct mm_timer, entry);
 
 		if (likely(timer->start)) {
-			mm_core_post(MM_CORE_SELF, timer->start, timer->start_arg);
+			if (timer->active) {
+				mm_warning(0, "timer is still active");
+			} else {
+				timer->active = true;
+				mm_core_post_work(MM_CORE_SELF, &timer->work);
+			}
 		}
 
 		if (timer->interval) {
-			entry->value
-				= mm_timer_getclocktime(manager) + timer->interval;
+			entry->value = mm_timer_getclocktime(manager) + timer->interval;
 			mm_timeq_insert(manager->time_queue, entry);
 		}
 	}
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Per-thread timer manager.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_timer_prepare(struct mm_time_manager *manager, mm_arena_t arena)
@@ -156,6 +169,19 @@ mm_timer_next(struct mm_time_manager *manager)
 	return value;
 }
 
+/**********************************************************************
+ * Timed task execution.
+ **********************************************************************/
+
+static mm_value_t
+mm_timer_routine(mm_value_t arg)
+{
+	struct mm_timer *timer = (struct mm_timer *) arg;
+	mm_value_t result = (timer->start)(timer->start_arg);
+	timer->active = false;
+	return result;
+}
+
 mm_timer_t NONNULL(2)
 mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
@@ -176,7 +202,9 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 	}
 
 	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
+	mm_work_prepare(&timer->work, mm_timer_routine, (mm_value_t) timer, mm_work_complete_noop);
 	timer->clock = clock;
+	timer->active = false;
 	timer->start = start;
 	timer->start_arg = start_arg;
 	timer->value = MM_TIMEVAL_MAX;
@@ -200,6 +228,8 @@ mm_timer_destroy(mm_timer_t timer_id)
 	if (mm_timer_is_armed(&timer->entry))
 		mm_timeq_delete(manager->time_queue, &timer->entry);
 
+	// TODO: Check if the timer is still active and delay its
+	// destruction in this case.
 	mm_pool_free(&manager->timer_pool, timer);
 
 	LEAVE();
@@ -215,8 +245,11 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timev
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
-	if (mm_timer_is_armed(&timer->entry))
+	if (mm_timer_is_armed(&timer->entry)) {
+		// TODO: Check if the timer is still active and delay its
+		// re-arming in this case.
 		mm_timeq_delete(manager->time_queue, &timer->entry);
+	}
 
 	timer->abstime = abstime;
 	timer->value = value;
@@ -227,10 +260,8 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timev
 			if (timer->clock == MM_CLOCK_MONOTONIC) {
 				timer->entry.value = value;
 			} else {
-				mm_timeval_t time
-					= mm_timer_getclocktime(manager);
-				mm_timeval_t real_time
-					= mm_timer_getrealclocktime(manager);
+				mm_timeval_t time = mm_timer_getclocktime(manager);
+				mm_timeval_t real_time = mm_timer_getrealclocktime(manager);
 				timer->entry.value = value - real_time + time;
 			}
 		} else {
@@ -243,6 +274,10 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timev
 
 	LEAVE();
 }
+
+/**********************************************************************
+ * Timed task pauses.
+ **********************************************************************/
 
 static void
 mm_timer_block_cleanup(struct mm_timer_resume *timer)

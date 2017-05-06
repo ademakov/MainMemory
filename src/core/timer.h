@@ -1,7 +1,7 @@
 /*
  * core/timer.h - MainMemory timers.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -65,29 +65,6 @@ mm_timer_tick(struct mm_time_manager *manager);
 mm_timeval_t NONNULL(1)
 mm_timer_next(struct mm_time_manager *manager);
 
-mm_timer_t NONNULL(2)
-mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg);
-
-void
-mm_timer_destroy(mm_timer_t timer_id);
-
-void
-mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timeval_t interval);
-
-#if ENABLE_TIMER_LOCATION
-
-# define mm_timer_block(t) mm_timer_block_at(t, __LOCATION__, __FUNCTION__)
-
-void NONNULL(2, 3)
-mm_timer_block_at(mm_timeout_t timeout, const char *location, const char *function);
-
-#else
-
-void
-mm_timer_block(mm_timeout_t timeout);
-
-#endif
-
 static inline void
 mm_timer_resetclocks(struct mm_time_manager *manager)
 {
@@ -126,5 +103,36 @@ mm_timer_getrealclocktime(struct mm_time_manager *manager)
 		mm_timer_updaterealclock(manager);
 	return manager->real_clock_value;
 }
+
+/**********************************************************************
+ * Timed task execution.
+ **********************************************************************/
+
+mm_timer_t NONNULL(2)
+mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg);
+
+void
+mm_timer_destroy(mm_timer_t timer_id);
+
+void
+mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timeval_t interval);
+
+/**********************************************************************
+ * Timed task pauses.
+ **********************************************************************/
+
+#if ENABLE_TIMER_LOCATION
+
+# define mm_timer_block(t) mm_timer_block_at(t, __LOCATION__, __FUNCTION__)
+
+void NONNULL(2, 3)
+mm_timer_block_at(mm_timeout_t timeout, const char *location, const char *function);
+
+#else
+
+void
+mm_timer_block(mm_timeout_t timeout);
+
+#endif
 
 #endif /* CORE_TIMER_H */
