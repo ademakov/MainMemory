@@ -97,6 +97,13 @@ struct mm_net_server
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
+	/* Acceptor task is active. */
+	bool acceptor_active;
+
+	/* Work items for server tasks. */
+	struct mm_work acceptor_work;
+	struct mm_work register_work;
+
 	/* Core affinity. */
 	struct mm_bitset affinity;
 

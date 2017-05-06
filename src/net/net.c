@@ -472,6 +472,9 @@ mm_net_acceptor(mm_value_t arg)
 	while (mm_net_accept(srv))
 		mm_task_yield();
 
+	// Indicate that the acceptor task is deactivated.
+	srv->acceptor_active = false;
+
 	LEAVE();
 	return 0;
 }
@@ -481,10 +484,14 @@ mm_net_accept_handler(mm_event_t event, void *data)
 {
 	ENTER();
 
-	if (event == MM_EVENT_INPUT) {
-		struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
+	struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
+
+	if (likely(event == MM_EVENT_INPUT) && !srv->acceptor_active) {
+		// Indicate that the acceptor task is activated.
+		srv->acceptor_active = true;
+		// Really queue the acceptor task for running.
 		mm_thread_t thread = mm_event_target(&srv->event);
-		mm_core_post(thread, mm_net_acceptor, (mm_value_t) srv);
+		mm_core_post_work(thread, &srv->acceptor_work);
 	}
 
 	LEAVE();
@@ -909,6 +916,29 @@ mm_net_term(void)
  * Network servers.
  **********************************************************************/
 
+static mm_value_t
+mm_net_register_server(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
+	ASSERT(srv->event.fd >= 0);
+
+	mm_event_register_fd(&srv->event);
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mm_net_prepare_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+{
+	srv->proto = proto;
+	srv->acceptor_active = false;
+	mm_work_prepare(&srv->acceptor_work, mm_net_acceptor, (mm_value_t) srv, mm_work_complete_noop);
+	mm_work_prepare(&srv->register_work, mm_net_register_server, (mm_value_t) srv, mm_work_complete_noop);
+}
+
 struct mm_net_server * NONNULL(1, 2, 3)
 mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
 			  const char *path)
@@ -917,7 +947,7 @@ mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	srv->name = mm_format(&mm_global_arena, "%s (%s)", name, path);
-	srv->proto = proto;
+	mm_net_prepare_server(srv, proto);
 
 	if (!mm_net_set_unix_addr(&srv->addr, path))
 		mm_fatal(0, "failed to create '%s' server with path '%s'", name, path);
@@ -934,7 +964,7 @@ mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
-	srv->proto = proto;
+	mm_net_prepare_server(srv, proto);
 
 	if (!mm_net_set_inet_addr(&srv->addr, addrstr, port))
 		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
@@ -951,7 +981,7 @@ mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
 
 	struct mm_net_server *srv = mm_net_alloc_server();
 	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
-	srv->proto = proto;
+	mm_net_prepare_server(srv, proto);
 
 	if (!mm_net_set_inet6_addr(&srv->addr, addrstr, port))
 		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
@@ -969,20 +999,6 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
 	mm_bitset_or(&srv->affinity, mask);
 
 	LEAVE();
-}
-
-static mm_value_t
-mm_net_register_server(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_net_server *srv = (struct mm_net_server *) arg;
-	ASSERT(srv->event.fd >= 0);
-
-	mm_event_register_fd(&srv->event);
-
-	LEAVE();
-	return 0;
 }
 
 void NONNULL(1)
@@ -1010,7 +1026,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
-	mm_core_post(srv_core, mm_net_register_server, (mm_value_t) srv);
+	mm_core_post_work(srv_core, &srv->register_work);
 
 	LEAVE();
 }
