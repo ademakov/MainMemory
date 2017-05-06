@@ -97,10 +97,8 @@ mm_core_idle(struct mm_core *core, bool tail)
 {
 	ENTER();
 
-	struct mm_task *task = core->task;
-	ASSERT((task->flags & MM_TASK_CANCEL_ASYNCHRONOUS) == 0);
-
 	// Put the task into the wait queue.
+	struct mm_task *task = core->task;
 	if (tail)
 		mm_list_append(&core->idle, &task->wait_queue);
 	else
@@ -359,25 +357,17 @@ mm_core_worker(mm_value_t arg)
 	// Ensure cleanup on exit.
 	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
 
-	// TODO: verify this again, perhaps it was a dumb compiler
-	// Cache thread-specific data. This gives a smallish speedup for
-	// the code emitted for the loop below on platforms with emulated
-	// thread specific data (that is on Darwin).
-	struct mm_core *core = mm_core_selfptr();
+	// Handle the work item supplied by the master.
+	if (arg)
+		mm_core_worker_execute((struct mm_work *) arg);
 
-	// Take the work item supplied by the master.
-	struct mm_work *work = (struct mm_work *) arg;
+	struct mm_core *const core = mm_core_selfptr();
 	for (;;) {
-		mm_core_worker_execute(work);
-
-		// Check to see if there is outstanding work.
-		while (!mm_core_has_work(core)) {
-			// Wait for work standing at the front of the idle queue.
+		// Wait for work standing at the front of the idle queue.
+		while (!mm_core_has_work(core))
 			mm_core_idle(core, false);
-		}
-
-		// Take the first available work item.
-		work = mm_core_get_work(core);
+		// Handle the first available work item.
+		mm_core_worker_execute(mm_core_get_work(core));
 	}
 
 	// Cleanup on return.
@@ -387,15 +377,31 @@ mm_core_worker(mm_value_t arg)
 	return 0;
 }
 
+static void
+mm_core_worker_create(struct mm_core *core, mm_value_t arg)
+{
+	ENTER();
+
+	// Make a unique worker name.
+	char name[MM_TASK_NAME_SIZE];
+	snprintf(name, MM_TASK_NAME_SIZE, "worker %u:%u", mm_core_getid(core), core->nworkers);
+
+	// Make a new worker task and start it.
+	struct mm_task_attr attr;
+	mm_task_attr_init(&attr);
+	mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
+	mm_task_attr_setname(&attr, name);
+	mm_task_create(&attr, mm_core_worker, arg);
+
+	// Account for the newcomer worker.
+	core->nworkers++;
+
+	LEAVE();
+}
+
 /**********************************************************************
  * Master task.
  **********************************************************************/
-
-static mm_value_t
-mm_core_nowork(mm_value_t arg)
-{
-	return arg;
-}
 
 static mm_value_t
 mm_core_master(mm_value_t arg)
@@ -406,43 +412,31 @@ mm_core_master(mm_value_t arg)
 	bool verbose = mm_get_verbose_enabled();
 
 	// Force creation of the minimal number of workers.
-	while (core->nwork < core->nworkers_min)
-		mm_core_post(mm_core_getid(core), mm_core_nowork, 0);
+	while (core->nworkers < core->nworkers_min)
+		mm_core_worker_create(core, 0);
 
 	while (!mm_memory_load(core->stop)) {
-
-		// Inform about the status of all tasks.
-		if (verbose && core->nworkers > core->nworkers_min && mm_core_has_work(core))
-			mm_core_print_tasks(core);
-
 		// Check to see if there are enough workers.
 		if (core->nworkers >= core->nworkers_max) {
 			mm_task_block();
 			continue;
 		}
 
+		// Wait for work at the back end of the idle queue.
+		// So any idle worker would take work before the master.
+		mm_core_idle(core, true);
+
 		// Check to see if there is outstanding work.
 		if (mm_core_has_work(core)) {
 			// Take the first available work item.
 			struct mm_work *work = mm_core_get_work(core);
 
-			// Make a unique worker name.
-			char worker_name[32];
-			static mm_atomic_uint32_t nworkers;
-			uint32_t id = mm_atomic_uint32_fetch_and_add(&nworkers, 1);
-			sprintf(worker_name, "worker %u", (uint32_t) id);
-
 			// Make a new worker task to handle it.
-			struct mm_task_attr attr;
-			mm_task_attr_init(&attr);
-			mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
-			mm_task_attr_setname(&attr, worker_name);
-			mm_task_create(&attr, mm_core_worker, (mm_value_t) work);
-			core->nworkers++;
-		} else {
-			// Wait for work at the back end of the idle queue.
-			// So any idle worker would take work before the master.
-			mm_core_idle(core, true);
+			mm_core_worker_create(core, (mm_value_t) work);
+
+			// Inform about the status of all tasks.
+			if (verbose)
+				mm_core_print_tasks(core);
 		}
 	}
 
