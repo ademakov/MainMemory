@@ -347,6 +347,10 @@ mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 	mm_net_yield_writer(containerof(work, struct mm_net_socket, write_work));
 }
 
+MM_WORK_VTABLE_2(mm_net_read_vtable, mm_net_reader_routine, mm_net_reader_complete);
+MM_WORK_VTABLE_2(mm_net_write_vtable, mm_net_writer_routine, mm_net_writer_complete);
+MM_WORK_VTABLE_1(mm_net_reclaim_vtable, mm_net_reclaim_routine);
+
 static void
 mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto, uint32_t flags)
 {
@@ -398,9 +402,9 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_net_socket_prepare_event(sock, fd);
 
 	// Initialize the required work items.
-	mm_work_prepare(&sock->read_work, mm_net_reader_routine, mm_net_reader_complete);
-	mm_work_prepare(&sock->write_work, mm_net_writer_routine, mm_net_writer_complete);
-	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, NULL);
+	mm_work_prepare(&sock->read_work, &mm_net_read_vtable);
+	mm_work_prepare(&sock->write_work, &mm_net_write_vtable);
+	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
 }
 
 /**********************************************************************
@@ -942,8 +946,12 @@ mm_net_prepare_server(struct mm_net_server *srv, struct mm_net_proto *proto)
 {
 	srv->proto = proto;
 	srv->acceptor_active = false;
-	mm_work_prepare(&srv->acceptor_work, mm_net_acceptor, mm_net_acceptor_complete);
-	mm_work_prepare(&srv->register_work, mm_net_register_server, NULL);
+
+	MM_WORK_VTABLE_2(acceptor_vtable, mm_net_acceptor, mm_net_acceptor_complete);
+	mm_work_prepare(&srv->acceptor_work, &acceptor_vtable);
+
+	MM_WORK_VTABLE_1(register_vtable, mm_net_register_server);
+	mm_work_prepare(&srv->register_work, &register_vtable);
 }
 
 struct mm_net_server * NONNULL(1, 2, 3)
@@ -1073,8 +1081,9 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket 
 	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto, MM_NET_CLIENT);
 	// Initialize the destruction routine.
 	sock->destroy = destroy;
+
 	// Initialize the required work items.
-	mm_work_prepare(&sock->reclaim_work, mm_net_reclaim_routine, NULL);
+	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
 
 	LEAVE();
 }

@@ -351,8 +351,12 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 	part->evicting = false;
 	part->striding = false;
 #endif
-	mm_work_prepare(&part->evict_work, mc_table_evict_routine, mm_table_evict_complete);
-	mm_work_prepare(&part->stride_work, mc_table_stride_routine, mc_table_stride_complete);
+
+	MM_WORK_VTABLE_2(evict_vtable, mc_table_evict_routine, mm_table_evict_complete);
+	mm_work_prepare(&part->evict_work, &evict_vtable);
+
+	MM_WORK_VTABLE_2(stride_vtable, mc_table_stride_routine, mc_table_stride_complete);
+	mm_work_prepare(&part->stride_work, &stride_vtable);
 
 	part->stamp = index + 1;
 

@@ -280,7 +280,7 @@ mm_core_worker_cancel(uintptr_t arg)
 
 	// Notify that the work has been canceled.
 	struct mm_work *work = (struct mm_work *) arg;
-	work->complete(work, MM_RESULT_CANCELED);
+	(work->vtable->complete)(work, MM_RESULT_CANCELED);
 
 	LEAVE();
 }
@@ -291,8 +291,7 @@ mm_core_worker_execute(struct mm_work *work)
 	ENTER();
 
 	// Save the work data before it might be destroyed.
-	const mm_work_routine_t routine = work->routine;
-	const mm_work_complete_t complete = work->complete;
+	const struct mm_work_vtable *vtable = work->vtable;
 
 	mm_value_t result;
 
@@ -300,13 +299,13 @@ mm_core_worker_execute(struct mm_work *work)
 	mm_task_cleanup_push(mm_core_worker_cancel, work);
 
 	// Execute the work routine.
-	result = routine(work);
+	result = (vtable->routine)(work);
 
 	// Task completed, no cleanup is required.
 	mm_task_cleanup_pop(false);
 
 	// Perform completion notification on return.
-	complete(work, result);
+	(vtable->complete)(work, result);
 
 	LEAVE();
 }
