@@ -274,46 +274,14 @@ mm_core_run_task(struct mm_task *task)
  **********************************************************************/
 
 static void
-mm_core_worker_cancel(uintptr_t arg)
-{
-	ENTER();
-
-	// Notify that the work has been canceled.
-	struct mm_work *work = (struct mm_work *) arg;
-	(work->vtable->complete)(work, MM_RESULT_CANCELED);
-
-	LEAVE();
-}
-
-static void
-mm_core_worker_execute(struct mm_work *work)
-{
-	ENTER();
-
-	// Save the work data before it might be destroyed.
-	const struct mm_work_vtable *vtable = work->vtable;
-
-	mm_value_t result;
-
-	// Ensure completion notification on task cancellation.
-	mm_task_cleanup_push(mm_core_worker_cancel, work);
-
-	// Execute the work routine.
-	result = (vtable->routine)(work);
-
-	// Task completed, no cleanup is required.
-	mm_task_cleanup_pop(false);
-
-	// Perform completion notification on return.
-	(vtable->complete)(work, result);
-
-	LEAVE();
-}
-
-static void
-mm_core_worker_cleanup(uintptr_t arg UNUSED)
+mm_core_worker_cleanup(uintptr_t arg)
 {
 	struct mm_core *core = mm_core_selfptr();
+	struct mm_work *work = *((struct mm_work **) arg);
+
+	// Notify that the current work has been canceled.
+	if (work != NULL)
+		(work->vtable->complete)(work, MM_RESULT_CANCELED);
 
 	// Wake up the master possibly waiting for worker availability.
 	if (core->nworkers == core->nworkers_max)
@@ -328,20 +296,39 @@ mm_core_worker(mm_value_t arg)
 {
 	ENTER();
 
+	// The work item to cancel.
+	struct mm_work *cancel = NULL;
+
 	// Ensure cleanup on exit.
-	mm_task_cleanup_push(mm_core_worker_cleanup, 0);
+	mm_task_cleanup_push(mm_core_worker_cleanup, &cancel);
 
 	// Handle the work item supplied by the master.
-	if (arg)
-		mm_core_worker_execute((struct mm_work *) arg);
+	if (arg) {
+		struct mm_work *work = (struct mm_work *) arg;
+		const struct mm_work_vtable *vtable = work->vtable;
+		// Execute the work routine.
+		mm_memory_store(cancel, work);
+		mm_value_t result = (vtable->routine)(work);
+		mm_memory_store(cancel, NULL);
+		// Perform completion notification on return.
+		(vtable->complete)(work, result);
+	}
 
 	struct mm_core *const core = mm_core_selfptr();
 	for (;;) {
 		// Wait for work standing at the front of the idle queue.
 		while (!mm_core_has_work(core))
 			mm_core_idle(core, false);
+
 		// Handle the first available work item.
-		mm_core_worker_execute(mm_core_get_work(core));
+		struct mm_work *work = mm_core_get_work(core);
+		const struct mm_work_vtable *vtable = work->vtable;
+		// Execute the work routine.
+		mm_memory_store(cancel, work);
+		mm_value_t result = (vtable->routine)(work);
+		mm_memory_store(cancel, NULL);
+		// Perform completion notification on return.
+		(vtable->complete)(work, result);
 	}
 
 	// Cleanup on return.
