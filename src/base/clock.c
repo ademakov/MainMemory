@@ -30,35 +30,7 @@
 # include <time.h>
 #endif
 
-#if defined(CLOCK_REALTIME) && defined(CLOCK_MONOTONIC)
-
-void
-mm_clock_init(void)
-{
-	struct timespec ts;
-	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
-		mm_fatal(0, "clock_gettime(CLOCK_REALTIME, ...) does not seem to work");
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
-		mm_fatal(0, "clock_gettime(CLOCK_MONOTONIC, ...) does not seem to work");
-}
-
-mm_timeval_t
-mm_clock_gettime_realtime(void)
-{
-	struct timespec ts;
-	(void) clock_gettime(CLOCK_REALTIME, &ts);
-	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-}
-
-mm_timeval_t
-mm_clock_gettime_monotonic(void)
-{
-	struct timespec ts;
-	(void) clock_gettime(CLOCK_MONOTONIC, &ts);
-	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
-}
-
-#elif defined(HAVE_MACH_MACH_TIME_H)
+#if defined(HAVE_MACH_MACH_TIME_H)
 
 static mm_timeval_t mm_abstime_numer;
 static mm_timeval_t mm_abstime_denom;
@@ -87,6 +59,34 @@ mm_clock_gettime_monotonic(void)
 {
 	uint64_t at = mach_absolute_time();
 	return at * mm_abstime_numer / mm_abstime_denom;
+}
+
+#elif defined(CLOCK_REALTIME) && defined(CLOCK_MONOTONIC)
+
+void
+mm_clock_init(void)
+{
+	struct timespec ts;
+	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
+		mm_fatal(0, "clock_gettime(CLOCK_REALTIME, ...) does not seem to work");
+	if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
+		mm_fatal(0, "clock_gettime(CLOCK_MONOTONIC, ...) does not seem to work");
+}
+
+mm_timeval_t
+mm_clock_gettime_realtime(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_REALTIME, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+
+mm_timeval_t
+mm_clock_gettime_monotonic(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_MONOTONIC, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
 #else
