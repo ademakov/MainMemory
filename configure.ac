@@ -133,7 +133,7 @@ AC_CONFIG_FILES([
 	tests/Makefile
 	tests/base/Makefile
 	tests/unit/Makefile
-	samples/Makefile
-	samples/hello_server/Makefile
-	samples/proxy_server/Makefile])
+	examples/Makefile
+	examples/hello_server/Makefile
+	examples/proxy_server/Makefile])
 AC_OUTPUT
