@@ -368,7 +368,7 @@ mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
 }
 
 void
-mc_table_init(const struct mm_memcache_config *config)
+mc_table_start(const struct mm_memcache_config *config)
 {
 	ENTER();
 
@@ -462,7 +462,7 @@ mc_table_init(const struct mm_memcache_config *config)
 }
 
 void
-mc_table_term(void)
+mc_table_stop(void)
 {
 	ENTER();
 

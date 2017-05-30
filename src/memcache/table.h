@@ -120,10 +120,10 @@ extern struct mc_table mc_table;
  **********************************************************************/
 
 void NONNULL(1)
-mc_table_init(const struct mm_memcache_config *config);
+mc_table_start(const struct mm_memcache_config *config);
 
 void
-mc_table_term(void);
+mc_table_stop(void);
 
 /**********************************************************************
  * Memcache general table routines.

@@ -157,7 +157,7 @@ mc_memcache_start(void)
 {
 	ENTER();
 
-	mc_table_init(&mc_config);
+	mc_table_start(&mc_config);
 	mc_action_start();
 	mm_net_start_server(mc_tcp_server);
 
@@ -171,7 +171,7 @@ mc_memcache_stop(void)
 
 	mm_net_stop_server(mc_tcp_server);
 	mc_action_stop();
-	mc_table_term();
+	mc_table_stop();
 
 	LEAVE();
 }

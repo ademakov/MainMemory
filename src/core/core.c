@@ -878,7 +878,6 @@ mm_core_term(void)
 	mm_core_free_hooks();
 
 	mm_task_term();
-	mm_wait_term();
 
 	mm_net_term();
 

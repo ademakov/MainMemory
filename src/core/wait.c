@@ -88,14 +88,6 @@ mm_wait_init(void)
 	LEAVE();
 }
 
-void
-mm_wait_term(void)
-{
-	ENTER();
-
-	LEAVE();
-}
-
 /**********************************************************************
  * Per-core wait entry cache initialization and cleanup.
  **********************************************************************/

@@ -59,7 +59,6 @@ struct mm_waitset
  **********************************************************************/
 
 void mm_wait_init(void);
-void mm_wait_term(void);
 
 /**********************************************************************
  * Per-core wait entry cache initialization and cleanup.

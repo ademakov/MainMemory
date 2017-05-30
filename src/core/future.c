@@ -85,7 +85,7 @@ mm_future_routine(struct mm_work *work)
  **********************************************************************/
 
 static void
-mm_future_shared_init(void)
+mm_future_shared_start(void)
 {
 	ENTER();
 
@@ -95,7 +95,7 @@ mm_future_shared_init(void)
 }
 
 static void
-mm_future_shared_term(void)
+mm_future_shared_stop(void)
 {
 	ENTER();
 
@@ -109,8 +109,8 @@ mm_future_init(void)
 {
 	ENTER();
 
-	mm_core_hook_start(mm_future_shared_init);
-	mm_core_hook_stop(mm_future_shared_term);
+	mm_core_hook_start(mm_future_shared_start);
+	mm_core_hook_stop(mm_future_shared_stop);
 
 	LEAVE();
 }
