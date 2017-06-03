@@ -81,13 +81,16 @@ typedef enum {
  */
 
 /* Event sink status. */
-typedef enum {
+enum {
 	MM_EVENT_INVALID = -2,
 	MM_EVENT_DROPPED = -1,
 	MM_EVENT_INITIAL = 0,
 	MM_EVENT_ENABLED = 1,
 	MM_EVENT_CHANGED = 2,
-} mm_event_status_t;
+};
+
+/* Per-sink event counter. */
+typedef uint16_t mm_event_stamp_t;
 
 /* Event handler routine. */
 typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
@@ -96,21 +99,19 @@ typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
  * I/O event sink.
  **********************************************************************/
 
-typedef uint16_t mm_event_stamp_t;
-
 struct mm_event_fd
 {
-	/* File descriptor to watch. */
-	int fd;
-
-	/* Current event sink status. */
-	mm_event_status_t status;
-
 	/* Event handler routine. */
 	mm_event_handler_t handler;
 
 	/* Listener (along with associated thread) that owns the sink. */
 	struct mm_event_listener *listener;
+
+	/* File descriptor to watch. */
+	int fd;
+
+	/* Current event sink status. */
+	int16_t status;
 
 #if ENABLE_SMP
 	/* The stamp updated by poller threads on every next event received
