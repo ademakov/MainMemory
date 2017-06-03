@@ -666,6 +666,7 @@ mm_core_boot_term(struct mm_core *core)
 
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
+		mm_core_stats();
 		mm_hook_call(&mm_core_stop_hook, false);
 		mm_event_dispatch_cleanup(&mm_core_dispatch);
 	}
