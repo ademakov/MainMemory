@@ -198,7 +198,7 @@ mm_lock_find_domain_stat(struct mm_lock_stat_set *stat_set,
 			// If the entry is not yet ready then wait a bit until
 			// it becomes ready.  It shouldn't take long.  Really.
 			while (mm_memory_load(dom_stat->ready) == 0)
-				mm_spin_pause();
+				mm_cpu_backoff();
 			mm_memory_load_fence();
 			return dom_stat;
 		}
