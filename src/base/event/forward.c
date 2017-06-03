@@ -36,7 +36,7 @@ mm_event_forward_1(uintptr_t *arguments)
 
 	// Handle events.
 	uintptr_t events = arguments[1];
-	mm_backend_handle((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[0], events & 15);
 
 	LEAVE();
 }
@@ -48,8 +48,8 @@ mm_event_forward_2(uintptr_t *arguments)
 
 	// Handle events.
 	uintptr_t events = arguments[2];
-	mm_backend_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[1], events >> 4);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[1], events >> 4);
 
 	LEAVE();
 }
@@ -61,9 +61,9 @@ mm_event_forward_3(uintptr_t *arguments)
 
 	// Handle events.
 	uintptr_t events = arguments[3];
-	mm_backend_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[2], events >> 8);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[2], events >> 8);
 
 	LEAVE();
 }
@@ -75,10 +75,10 @@ mm_event_forward_4(uintptr_t *arguments)
 
 	// Handle events.
 	uintptr_t events = arguments[4];
-	mm_backend_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[3], events >> 12);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[3], events >> 12);
 
 	LEAVE();
 }
@@ -90,11 +90,11 @@ mm_event_forward_5(uintptr_t *arguments)
 
 	// Handle events.
 	uintptr_t events = arguments[5];
-	mm_backend_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[3], (events >> 12) & 15);
-	mm_backend_handle((struct mm_event_fd *) arguments[4], events >> 16);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[0], events & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[3], (events >> 12) & 15);
+	mm_event_backend_target_handle((struct mm_event_fd *) arguments[4], events >> 16);
 
 	LEAVE();
 }

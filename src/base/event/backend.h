@@ -183,7 +183,7 @@ mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event
 
 static inline void NONNULL(1, 2, 3)
 mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
-			       struct mm_event_fd *sink)
+			        struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_trigger_output(&backend->backend, sink);
@@ -199,7 +199,7 @@ mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_even
 /* Start processing of an event after it is delivered to the target
    thread. Also reset oneshot I/O state if needed. */
 static inline void NONNULL(1)
-mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_target_handle(struct mm_event_fd *sink, mm_event_t event)
 {
 	ASSERT(event < MM_EVENT_RETIRE);
 	if (event < MM_EVENT_OUTPUT) {
@@ -223,11 +223,29 @@ mm_backend_handle(struct mm_event_fd *sink, mm_event_t event)
 	}
 }
 
+/* Prepare a poller thread for handling received events. */
+static inline void NONNULL(1)
+mm_event_backend_poller_start(struct mm_event_backend_storage *storage UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_poller_start(storage);
+#endif
+}
+
+/* Make a poller thread done with received events. */
+static inline void NONNULL(1, 2)
+mm_event_backend_poller_finish(struct mm_event_backend *backend UNUSED, struct mm_event_backend_storage *storage UNUSED)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_poller_finish(&backend->backend, storage);
+#endif
+}
+
 /* Start processing of an event after it is delivered to the target
    thread. The event must be an I/O event and the call must be made
    by a poller thread. */
 static inline void NONNULL(1, 2)
-mm_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_poller_handle(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
 {
 	ASSERT(event < MM_EVENT_RETIRE);
 	if (event < MM_EVENT_OUTPUT) {

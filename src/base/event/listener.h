@@ -96,16 +96,24 @@ struct mm_event_listener
 	struct mm_thread_monitor monitor;
 #endif
 
+	union {
+		struct {
+			/* The number of directly handled events. */
+			uint16_t direct;
+			/* The number of events published in the sink queue. */
+			uint16_t enqueued;
+			uint16_t dequeued;
+			/* The number of events forwarded to other listeners. */
+			uint16_t forwarded;
+		} events;
+
+		/* Storage for event counters. */
+		uint64_t events_any;
+	};
+
 	/* The number of locally handled events found while adjusting
 	   the listener for appropriate event forwarding strategy. */
 	uint16_t direct_events_estimate;
-	/* The number of directly handled events. */
-	uint16_t direct_events;
-	/* The number of events published in the sink queue. */
-	uint16_t enqueued_events;
-	uint16_t dequeued_events;
-	/* The number of events forwarded to other listeners. */
-	uint16_t forwarded_events;
 
 	/* Associated thread. */
 	mm_thread_t target;
@@ -244,16 +252,13 @@ leave:
 static inline void NONNULL(1)
 mm_event_listener_clear_events(struct mm_event_listener *listener)
 {
-	listener->direct_events = 0;
-	listener->enqueued_events = 0;
-	listener->dequeued_events = 0;
-	listener->forwarded_events = 0;
+	listener->events_any = 0;
 }
 
 static inline bool NONNULL(1)
 mm_event_listener_got_events(struct mm_event_listener *listener)
 {
-	return listener->direct_events || listener->enqueued_events || listener->forwarded_events;
+	return listener->events_any != 0;
 }
 
 /**********************************************************************
@@ -278,6 +283,9 @@ mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd 
 /**********************************************************************
  * Interface for handling incoming events.
  **********************************************************************/
+
+bool NONNULL(1)
+mm_event_listener_handle_queued(struct mm_event_listener *listener);
 
 void NONNULL(1)
 mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents);

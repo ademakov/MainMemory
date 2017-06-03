@@ -135,8 +135,8 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			      struct mm_event_fd *sink)
 {
-	bool input = sink->regular_input || sink->oneshot_input;
-	bool output = sink->regular_output || sink->oneshot_output;
+	bool input = sink->regular_input || sink->oneshot_input_trigger;
+	bool output = sink->regular_output || sink->oneshot_output_trigger;
 	uint32_t n = (input != false) + (output != false);
 	if (likely(n)) {
 		if (unlikely(sink->status == MM_EVENT_CHANGED)

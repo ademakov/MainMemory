@@ -271,6 +271,8 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		// there is a chance to get some more immediately. Don't sleep
 		// to avoid a context switch.
 		timeout = 0;
+		// Reset event counters set at the previous cycle.
+		mm_event_listener_clear_events(listener);
 	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
 		// Check if there are immediately available events in the queue.
 		// This check does not have to be precise so there is no need to

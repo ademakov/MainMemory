@@ -81,8 +81,6 @@ mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 {
-	mm_event_listener_handle_start(listener, nevents);
-
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &listener->storage.revents[i];
 
@@ -111,22 +109,6 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 		} else if (event->filter == EVFILT_USER) {
 			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
 		}
-	}
-
-	mm_event_listener_handle_finish(listener);
-}
-
-static void
-mm_event_kqueue_process_events(struct mm_event_listener *listener, int nevents)
-{
-	mm_event_listener_clear_events(listener);
-	if (nevents != 0) {
-		mm_event_kqueue_adjust(listener, nevents);
-		mm_event_kqueue_handle(listener, nevents);
-	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
-		mm_event_listener_adjust_start(listener, 0);
-		mm_event_listener_handle_start(listener, 0);
-		mm_event_listener_handle_finish(listener);
 	}
 }
 
@@ -246,8 +228,16 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 	// Finish pending changes to let event handlers make new changes
 	// without problems.
 	mm_event_kqueue_finish_changes(listener);
+
 	// Handle incoming events.
-	mm_event_kqueue_process_events(listener, n);
+	if (n != 0) {
+		mm_event_kqueue_adjust(listener, n);
+		mm_event_listener_handle_start(listener, n);
+		mm_event_kqueue_handle(listener, n);
+		mm_event_listener_handle_finish(listener);
+	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
+		mm_event_listener_handle_queued(listener);
+	}
 
 #if ENABLE_EVENT_STATS
 	storage->nevents_stats[n]++;

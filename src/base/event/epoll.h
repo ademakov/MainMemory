@@ -198,6 +198,38 @@ mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd
 		mm_error(errno, "epoll_ctl");
 }
 
+static void NONNULL(1, 2)
+mm_event_epoll_disable_input(struct mm_event_epoll *backend, struct mm_event_fd *sink)
+{
+	struct epoll_event ev;
+	int rc;
+	if (sink->regular_output || sink->oneshot_output_trigger) {
+		ev.data.ptr = sink;
+		ev.events = EPOLLET | EPOLLOUT;
+		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ev);
+	} else {
+		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ev);
+	}
+	if (unlikely(rc < 0))
+		mm_error(errno, "epoll_ctl");
+}
+
+static void NONNULL(1, 2)
+mm_event_epoll_disable_output(struct mm_event_epoll *backend, struct mm_event_fd *sink)
+{
+	struct epoll_event ev;
+	int rc;
+	if (sink->regular_input || sink->oneshot_input_trigger) {
+		ev.data.ptr = sink;
+		ev.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
+		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ev);
+	} else {
+		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ev);
+	}
+	if (unlikely(rc < 0))
+		mm_error(errno, "epoll_ctl");
+}
+
 /**********************************************************************
  * Interface for handling events delivered to the target thread.
  **********************************************************************/
@@ -207,6 +239,22 @@ mm_event_epoll_reset_input(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_epoll_reset_output(struct mm_event_fd *sink);
+
+static inline void NONNULL(1)
+mm_event_epoll_poller_start(struct mm_event_epoll_storage *storage)
+{
+	storage->input_reset_num = 0;
+	storage->output_reset_num = 0;
+}
+
+static inline void NONNULL(1, 2)
+mm_event_epoll_poller_finish(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage)
+{
+	for (int i = 0; i < storage->input_reset_num; i++)
+		mm_event_epoll_disable_input(backend, storage->input_reset[i]);
+	for (int i = 0; i < storage->output_reset_num; i++)
+		mm_event_epoll_disable_output(backend, storage->output_reset[i]);
+}
 
 static inline void NONNULL(1, 2)
 mm_event_epoll_reset_poller_input(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
