@@ -74,11 +74,10 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
  * Interface for handling incoming events.
  **********************************************************************/
 
-bool NONNULL(1)
+void NONNULL(1)
 mm_event_listener_handle_queued(struct mm_event_listener *listener)
 {
 	ENTER();
-	bool rc = false;
 
 	// Prepare the backend for handling events.
 	mm_event_backend_poller_start(&listener->storage);
@@ -109,12 +108,8 @@ mm_event_listener_handle_queued(struct mm_event_listener *listener)
 	listener->stats.dequeued_events += listener->events.dequeued;
 #endif
 
-	// Check if got any events.
-	rc = (listener->events.dequeued != 0);
-
 leave:
 	LEAVE();
-	return rc;
 }
 
 void NONNULL(1)

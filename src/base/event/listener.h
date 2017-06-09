@@ -284,7 +284,7 @@ mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd 
  * Interface for handling incoming events.
  **********************************************************************/
 
-bool NONNULL(1)
+void NONNULL(1)
 mm_event_listener_handle_queued(struct mm_event_listener *listener);
 
 void NONNULL(1)
