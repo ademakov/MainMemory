@@ -273,14 +273,23 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		timeout = 0;
 		// Reset event counters set at the previous cycle.
 		mm_event_listener_clear_events(listener);
-	} else if (mm_memory_load(dispatch->sink_queue_num) != 0) {
-		// Check if there are immediately available events in the queue.
-		// This check does not have to be precise so there is no need to
-		// use event_sink_lock here.
-		timeout = 0;
-	} else if (mm_event_backend_has_changes(&listener->storage)) {
+	}
+
+	if (mm_event_backend_has_changes(&listener->storage)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
+	} else {
+		// Check to see if there are any queued events. If so then
+		// try to bypass the entire poll/wait machinery. The check
+		// does not have to be precise so there is no need to take
+		// the event_sink_lock lock.
+		if (mm_memory_load(dispatch->sink_queue_num) != 0) {
+			// Try to pull a few queued events. This may fail
+			// because of concurrent listeners doing the same.
+			mm_event_listener_handle_queued(listener);
+			if (listener->events.dequeued)
+				goto leave;
+		}
 	}
 
 	// The first arrived thread is elected to conduct the next event poll.
@@ -312,6 +321,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_wait(listener, dispatch, timeout);
 	}
 
+leave:
 	LEAVE();
 }
 
