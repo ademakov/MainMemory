@@ -37,6 +37,7 @@ mm_buffer_prepare(struct mm_buffer *buf)
 	mm_queue_prepare(&buf->chunks);
 	mm_buffer_iterator_prepare(&buf->head);
 	mm_buffer_iterator_prepare(&buf->tail);
+	buf->min_chunk_size = MM_BUFFER_MIN_CHUNK_SIZE;
 	buf->consumed_max = 0;
 
 	LEAVE();
@@ -59,6 +60,16 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 	mm_chunk_destroy_queue(&buf->chunks);
 
 	LEAVE();
+}
+
+void NONNULL(1)
+mm_buffer_setminchunksize(struct mm_buffer *buf, size_t size)
+{
+	if (size == 0)
+		size = MM_BUFFER_MIN_CHUNK_SIZE;
+	else if (size > MM_BUFFER_MAX_CHUNK_SIZE)
+		size = MM_BUFFER_MAX_CHUNK_SIZE;
+	buf->min_chunk_size = size;
 }
 
 size_t NONNULL(1, 2)
@@ -193,10 +204,10 @@ mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t 
 	// The chunk should have a reasonable size that does not put
 	// too much pressure on the memory allocator.
 	size_t size = max(size_hint, buf->consumed_max);
-	if (size > MM_BUFFER_MAX_CHUNK_SIZE)
+	if (size < buf->min_chunk_size)
+		size = buf->min_chunk_size;
+	else if (size > MM_BUFFER_MAX_CHUNK_SIZE)
 		size = MM_BUFFER_MAX_CHUNK_SIZE;
-	if (size < MM_BUFFER_MIN_CHUNK_SIZE)
-		size = MM_BUFFER_MIN_CHUNK_SIZE;
 	size = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
 
 	// Check if the first buffer chunk is to be created.

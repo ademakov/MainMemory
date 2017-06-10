@@ -121,6 +121,8 @@ struct mm_buffer
 	struct mm_buffer_iterator tail;
 	/* Entire buffer memory as a list of chunks. */
 	struct mm_queue chunks;
+	/* The minimum chunk size. */
+	uint32_t min_chunk_size;
 	/* The maximum consumed size. */
 	size_t consumed_max;
 };
@@ -382,6 +384,9 @@ mm_buffer_prepare(struct mm_buffer *buf);
 
 void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
+
+void NONNULL(1)
+mm_buffer_setminchunksize(struct mm_buffer *buf, size_t size);
 
 struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t size_hint);

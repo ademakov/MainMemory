@@ -50,13 +50,19 @@ mm_netbuf_cleanup(struct mm_netbuf_socket *sock);
 static inline void NONNULL(1)
 mm_netbuf_prepare_read_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
 {
-	mm_buffer_write_next(&sock->rxbuf, size_hint);
+	if (!mm_buffer_valid(&sock->rxbuf)) {
+		mm_buffer_setminchunksize(&sock->rxbuf, size_hint);
+		mm_buffer_extend(&sock->rxbuf, &sock->rxbuf.tail, size_hint);
+	}
 }
 
 static inline void NONNULL(1)
 mm_netbuf_prepare_write_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
 {
-	mm_buffer_write_next(&sock->txbuf, size_hint);
+	if (!mm_buffer_valid(&sock->txbuf)) {
+		mm_buffer_setminchunksize(&sock->txbuf, size_hint);
+		mm_buffer_extend(&sock->txbuf, &sock->txbuf.tail, size_hint);
+	}
 }
 
 ssize_t NONNULL(1)
