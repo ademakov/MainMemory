@@ -165,6 +165,7 @@ mc_parser_parse(struct mc_state *parser)
 	// Get the input buffer position.
 	char *s = mm_netbuf_rget(&parser->sock);
 	char *e = mm_netbuf_rend(&parser->sock);
+	DEBUG("%d %.*s", (int) (e - s), (int) (e - s), s);
 
 	// Skip any leading whitespace.
 	while (s < e && *s == ' ')
