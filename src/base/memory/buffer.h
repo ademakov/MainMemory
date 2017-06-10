@@ -498,7 +498,7 @@ mm_buffer_span(struct mm_buffer *buf, size_t cnt)
 		len = buf->tail.end - buf->head.ptr;
 	else
 		len = buf->head.end - buf->head.ptr;
-	return (len < cnt) || mm_buffer_span_slow(buf, cnt);
+	return (len >= cnt) || mm_buffer_span_slow(buf, cnt);
 }
 
 /* Seek for a given char and ensure a contiguous memory span up to it. */
