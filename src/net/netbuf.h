@@ -47,6 +47,18 @@ mm_netbuf_prepare(struct mm_netbuf_socket *sock);
 void NONNULL(1)
 mm_netbuf_cleanup(struct mm_netbuf_socket *sock);
 
+static inline void NONNULL(1)
+mm_netbuf_prepare_read_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
+{
+	mm_buffer_write_next(&sock->rxbuf, size_hint);
+}
+
+static inline void NONNULL(1)
+mm_netbuf_prepare_write_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
+{
+	mm_buffer_write_next(&sock->txbuf, size_hint);
+}
+
 ssize_t NONNULL(1)
 mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt);
 

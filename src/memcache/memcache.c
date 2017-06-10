@@ -74,6 +74,13 @@ mc_reader_routine(struct mm_net_socket *sock)
 
 	struct mc_state *state = containerof(sock, struct mc_state, sock);
 
+	// Set the initial size of the read buffer. This is ignored if it
+	// has already been initialized before. The parser wants to have at
+	// least 1024 bytes of look-ahead space for each command. Make the
+	// initial size more than that to parse a series of pipelined short
+	// commands without buffer reallocation.
+	mm_netbuf_prepare_read_buffer(&state->sock, 2000);
+
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
 	ssize_t n = mm_netbuf_fill(&state->sock, 1);
