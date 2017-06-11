@@ -21,6 +21,7 @@
 #include "base/cksum.h"
 #include "base/clock.h"
 #include "base/exit.h"
+#include "base/list.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/settings.h"
@@ -29,11 +30,141 @@
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
+#include "base/util/hook.h"
 
 #include <unistd.h>
 
 uint16_t mm_ncpus = 0;
 struct mm_domain *mm_regular_domain = NULL;
+
+/**********************************************************************
+ * Runtime start and stop hooks.
+ **********************************************************************/
+
+static struct mm_queue MM_QUEUE_INIT(mm_common_start_hook);
+static struct mm_queue MM_QUEUE_INIT(mm_common_stop_hook);
+
+static struct mm_queue MM_QUEUE_INIT(mm_regular_start_hook);
+static struct mm_queue MM_QUEUE_INIT(mm_regular_stop_hook);
+
+static struct mm_queue MM_QUEUE_INIT(mm_regular_thread_start_hook);
+static struct mm_queue MM_QUEUE_INIT(mm_regular_thread_stop_hook);
+
+static void
+mm_free_hooks(void)
+{
+	mm_hook_free(&mm_common_start_hook);
+	mm_hook_free(&mm_common_stop_hook);
+
+	mm_hook_free(&mm_regular_start_hook);
+	mm_hook_free(&mm_regular_stop_hook);
+
+	mm_hook_free(&mm_regular_thread_start_hook);
+	mm_hook_free(&mm_regular_thread_stop_hook);
+}
+
+void NONNULL(1)
+mm_common_start_hook_0(void (*proc)(void))
+{
+	mm_hook_tail_proc(&mm_common_start_hook, proc);
+}
+void NONNULL(1)
+mm_common_start_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_tail_data_proc(&mm_common_start_hook, proc, data);
+}
+
+void NONNULL(1)
+mm_common_stop_hook_0(void (*proc)(void))
+{
+	mm_hook_head_proc(&mm_common_stop_hook, proc);
+}
+void NONNULL(1)
+mm_common_stop_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_head_data_proc(&mm_common_stop_hook, proc, data);
+}
+
+void NONNULL(1)
+mm_regular_start_hook_0(void (*proc)(void))
+{
+	mm_hook_tail_proc(&mm_regular_start_hook, proc);
+}
+void NONNULL(1)
+mm_regular_start_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_tail_data_proc(&mm_regular_start_hook, proc, data);
+}
+
+void NONNULL(1)
+mm_regular_stop_hook_0(void (*proc)(void))
+{
+	mm_hook_head_proc(&mm_regular_stop_hook, proc);
+}
+void NONNULL(1)
+mm_regular_stop_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_head_data_proc(&mm_regular_stop_hook, proc, data);
+}
+
+void NONNULL(1)
+mm_regular_thread_start_hook_0(void (*proc)(void))
+{
+	mm_hook_tail_proc(&mm_regular_thread_start_hook, proc);
+}
+void NONNULL(1)
+mm_regular_thread_start_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_tail_data_proc(&mm_regular_thread_start_hook, proc, data);
+}
+
+void NONNULL(1)
+mm_regular_thread_stop_hook_0(void (*proc)(void))
+{
+	mm_hook_head_proc(&mm_regular_thread_stop_hook, proc);
+}
+void NONNULL(1)
+mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data)
+{
+	mm_hook_head_data_proc(&mm_regular_thread_stop_hook, proc, data);
+}
+
+void
+mm_call_common_start_hooks(void)
+{
+	mm_hook_call(&mm_common_start_hook, false);
+}
+void
+mm_call_common_stop_hooks(void)
+{
+	mm_hook_call(&mm_common_stop_hook, false);
+}
+
+void
+mm_call_regular_start_hooks(void)
+{
+	mm_hook_call(&mm_regular_start_hook, false);
+}
+void
+mm_call_regular_stop_hooks(void)
+{
+	mm_hook_call(&mm_regular_stop_hook, false);
+}
+
+void
+mm_call_regular_thread_start_hooks(void)
+{
+	mm_hook_call(&mm_regular_thread_start_hook, false);
+}
+void
+mm_call_regular_thread_stop_hooks(void)
+{
+	mm_hook_call(&mm_regular_thread_stop_hook, false);
+}
+
+/**********************************************************************
+ * General runtime routines.
+ **********************************************************************/
 
 static bool
 mm_base_validate_nthreads(uint32_t n)
@@ -76,20 +207,22 @@ mm_base_term(void)
 {
 	ENTER();
 
+	mm_free_hooks();
+
 	mm_domain_destroy(mm_regular_domain);
 	mm_memory_term();
 
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_base_loop(struct mm_base_params *params)
 {
 	ENTER();
 
 	// Determine the domain name.
 	const char *name = "regular";
-	if (params != NULL && params->regular_name != NULL)
+	if (params->regular_name != NULL)
 		name = params->regular_name;
 
 	// Set regular domain attributes.

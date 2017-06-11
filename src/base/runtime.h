@@ -36,13 +36,66 @@ struct mm_base_params
 extern uint16_t mm_ncpus;
 extern struct mm_domain *mm_regular_domain;
 
+/**********************************************************************
+ * Runtime start and stop hooks.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_common_start_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_common_start_hook_1(void (*proc)(void *), void *data);
+
+void NONNULL(1)
+mm_common_stop_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_common_stop_hook_1(void (*proc)(void *), void *data);
+
+void NONNULL(1)
+mm_regular_start_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_regular_start_hook_1(void (*proc)(void *), void *data);
+
+void NONNULL(1)
+mm_regular_stop_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_regular_stop_hook_1(void (*proc)(void *), void *data);
+
+void NONNULL(1)
+mm_regular_thread_start_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_regular_thread_start_hook_1(void (*proc)(void *), void *data);
+
+void NONNULL(1)
+mm_regular_thread_stop_hook_0(void (*proc)(void));
+void NONNULL(1)
+mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data);
+
+void
+mm_call_common_start_hooks(void);
+void
+mm_call_common_stop_hooks(void);
+
+void
+mm_call_regular_start_hooks(void);
+void
+mm_call_regular_stop_hooks(void);
+
+void
+mm_call_regular_thread_start_hooks(void);
+void
+mm_call_regular_thread_stop_hooks(void);
+
+/**********************************************************************
+ * General runtime routines.
+ **********************************************************************/
+
 void
 mm_base_init(void);
 
 void
 mm_base_term(void);
 
-void
+void NONNULL(1)
 mm_base_loop(struct mm_base_params *params);
 
 #endif /* BASE_RUNTIME_H */
