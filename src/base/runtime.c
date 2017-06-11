@@ -199,9 +199,6 @@ mm_base_init(void)
 	mm_cksum_init();
 	mm_clock_init();
 
-	// Invoke registered start hooks.
-	mm_call_common_start_hooks();
-
 	LEAVE();
 }
 
@@ -213,8 +210,6 @@ mm_base_term(void)
 	// Free regular thread domain.
 	mm_domain_destroy(mm_regular_domain);
 
-	// Invoke registered stop hooks.
-	mm_call_common_stop_hooks();
 	// Free all registered hooks.
 	mm_free_hooks();
 
@@ -228,6 +223,9 @@ void NONNULL(1)
 mm_base_loop(struct mm_base_params *params)
 {
 	ENTER();
+
+	// Invoke registered start hooks.
+	mm_call_common_start_hooks();
 
 	// Determine the domain name.
 	const char *name = "regular";
@@ -267,6 +265,9 @@ mm_base_loop(struct mm_base_params *params)
 
 	// Wait for regular threads completion.
 	mm_domain_join(mm_regular_domain);
+
+	// Invoke registered stop hooks.
+	mm_call_common_stop_hooks();
 
 	mm_log_str("exiting...\n");
 

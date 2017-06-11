@@ -130,11 +130,6 @@ struct mm_core
 void mm_core_init(void);
 void mm_core_term(void);
 
-void mm_core_hook_start(void (*proc)(void));
-void mm_core_hook_param_start(void (*proc)(void *), void *data);
-void mm_core_hook_stop(void (*proc)(void));
-void mm_core_hook_param_stop(void (*proc)(void *), void *data);
-
 void NONNULL(1)
 mm_core_register_server(struct mm_net_server *srv);
 

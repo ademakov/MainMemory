@@ -31,6 +31,7 @@
 #include "base/bitops.h"
 #include "base/list.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/memory/chunk.h"
 #include "base/memory/pool.h"
 
@@ -204,9 +205,8 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		port = config->port;
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto, addr, port);
-
-	mm_core_hook_start(mc_memcache_start);
-	mm_core_hook_stop(mc_memcache_stop);
+	mm_regular_start_hook_0(mc_memcache_start);
+	mm_regular_stop_hook_0(mc_memcache_stop);
 
 	// Determine the maximal data size in memcache table.
 	if (config != NULL && config->volume)

@@ -19,9 +19,8 @@
 
 #include "core/future.h"
 
-#include "core/core.h"
-
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/memory/pool.h"
 
 // The memory pool for futures.
@@ -109,8 +108,9 @@ mm_future_init(void)
 {
 	ENTER();
 
-	mm_core_hook_start(mm_future_shared_start);
-	mm_core_hook_stop(mm_future_shared_stop);
+	// TODO: switch to common hooks
+	mm_regular_start_hook_0(mm_future_shared_start);
+	mm_regular_stop_hook_0(mm_future_shared_stop);
 
 	LEAVE();
 }

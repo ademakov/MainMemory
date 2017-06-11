@@ -25,6 +25,7 @@
 
 #include "base/logger.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/memory/pool.h"
 
 // An entry for a waiting task.
@@ -82,8 +83,9 @@ mm_wait_init(void)
 {
 	ENTER();
 
-	mm_core_hook_start(mm_wait_start);
-	mm_core_hook_stop(mm_wait_stop);
+	// TODO: switch to common hooks
+	mm_regular_start_hook_0(mm_wait_start);
+	mm_regular_stop_hook_0(mm_wait_stop);
 
 	LEAVE();
 }

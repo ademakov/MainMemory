@@ -569,64 +569,6 @@ mm_core_stats(void)
 }
 
 /**********************************************************************
- * Core start and stop hooks.
- **********************************************************************/
-
-static struct mm_queue MM_QUEUE_INIT(mm_core_start_hook);
-static struct mm_queue MM_QUEUE_INIT(mm_core_stop_hook);
-
-static void
-mm_core_free_hooks(void)
-{
-	ENTER();
-
-	mm_hook_free(&mm_core_start_hook);
-	mm_hook_free(&mm_core_stop_hook);
-
-	LEAVE();
-}
-
-void
-mm_core_hook_start(void (*proc)(void))
-{
-	ENTER();
-
-	mm_hook_tail_proc(&mm_core_start_hook, proc);
-
-	LEAVE();
-}
-
-void
-mm_core_hook_param_start(void (*proc)(void *), void *data)
-{
-	ENTER();
-
-	mm_hook_tail_data_proc(&mm_core_start_hook, proc, data);
-
-	LEAVE();
-}
-
-void
-mm_core_hook_stop(void (*proc)(void))
-{
-	ENTER();
-
-	mm_hook_tail_proc(&mm_core_stop_hook, proc);
-
-	LEAVE();
-}
-
-void
-mm_core_hook_param_stop(void (*proc)(void *), void *data)
-{
-	ENTER();
-
-	mm_hook_tail_data_proc(&mm_core_stop_hook, proc, data);
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Core Initialization and Termination.
  **********************************************************************/
 
@@ -637,11 +579,13 @@ mm_core_boot_init(struct mm_core *core)
 	if (MM_CORE_IS_PRIMARY(core)) {
 		struct mm_domain *domain = mm_domain_selfptr();
 
+		mm_timer_prepare(&core->time_manager, &space->xarena);
+
 		// Call the start hooks on the primary core.
 		mm_call_regular_start_hooks();
-		mm_hook_call(&mm_core_start_hook, false);
 		mm_thread_local_summary(domain);
 
+		mm_call_regular_thread_start_hooks();
 		mm_event_dispatch_prepare(&mm_core_dispatch, domain,
 					  domain->nthreads, domain->threads);
 
@@ -650,10 +594,10 @@ mm_core_boot_init(struct mm_core *core)
 		// Secondary cores have to wait until the primary core runs
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
-	}
 
-	mm_timer_prepare(&core->time_manager, &space->xarena);
-	mm_call_regular_thread_start_hooks();
+		mm_timer_prepare(&core->time_manager, &space->xarena);
+		mm_call_regular_thread_start_hooks();
+	}
 }
 
 static void
@@ -664,7 +608,6 @@ mm_core_boot_term(struct mm_core *core)
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_core_stats();
-		mm_hook_call(&mm_core_stop_hook, false);
 		mm_call_regular_stop_hooks();
 		mm_event_dispatch_cleanup(&mm_core_dispatch);
 	}
@@ -871,8 +814,6 @@ mm_core_term(void)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
 
-	mm_core_free_hooks();
-
 	mm_task_term();
 
 	mm_net_term();
@@ -888,10 +829,10 @@ mm_core_register_server(struct mm_net_server *srv)
 	ENTER();
 
 	// Register the server start hook.
-	mm_core_hook_param_start((mm_hook_rtn1) mm_net_start_server, srv);
+	mm_regular_start_hook_1((mm_hook_rtn1) mm_net_start_server, srv);
 
 	// Register the server stop hook.
-	mm_core_hook_param_stop((mm_hook_rtn1) mm_net_stop_server, srv);
+	mm_regular_stop_hook_1((mm_hook_rtn1) mm_net_stop_server, srv);
 
 	LEAVE();
 }
