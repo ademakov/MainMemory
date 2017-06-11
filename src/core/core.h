@@ -138,12 +138,6 @@ void mm_core_hook_param_stop(void (*proc)(void *), void *data);
 void NONNULL(1)
 mm_core_register_server(struct mm_net_server *srv);
 
-void NONNULL(1)
-mm_core_set_event_affinity(const struct mm_bitset *mask);
-
-const struct mm_bitset *
-mm_core_get_event_affinity(void);
-
 void mm_core_start(void);
 void mm_core_stop(void);
 

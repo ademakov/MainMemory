@@ -54,9 +54,6 @@ struct mm_core *mm_core_set;
 // A core associated with the running thread.
 __thread struct mm_core *__mm_core_self;
 
-// The set of cores with event loops.
-static struct mm_bitset mm_core_event_affinity;
-
 // Common event dispatch.
 static struct mm_event_dispatch mm_core_dispatch;
 
@@ -859,8 +856,6 @@ mm_core_init(void)
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i]);
 
-	mm_bitset_prepare(&mm_core_event_affinity, &mm_common_space.xarena, mm_core_num);
-
 	LEAVE();
 }
 
@@ -869,8 +864,6 @@ mm_core_term(void)
 {
 	ENTER();
 	ASSERT(mm_core_num > 0);
-
-	mm_bitset_cleanup(&mm_core_event_affinity, &mm_common_space.xarena);
 
 	for (mm_core_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
@@ -899,23 +892,6 @@ mm_core_register_server(struct mm_net_server *srv)
 	mm_core_hook_param_stop((mm_hook_rtn1) mm_net_stop_server, srv);
 
 	LEAVE();
-}
-
-void NONNULL(1)
-mm_core_set_event_affinity(const struct mm_bitset *mask)
-{
-	ENTER();
-
-	mm_bitset_clear_all(&mm_core_event_affinity);
-	mm_bitset_or(&mm_core_event_affinity, mask);
-
-	LEAVE();
-}
-
-const struct mm_bitset *
-mm_core_get_event_affinity(void)
-{
-	return &mm_core_event_affinity;
 }
 
 void

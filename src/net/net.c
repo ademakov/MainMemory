@@ -1025,14 +1025,9 @@ mm_net_start_server(struct mm_net_server *srv)
 	ASSERT(srv->event.fd == -1);
 
 	// Find the cores to run the server on.
-	if (mm_bitset_any(&srv->affinity))
-		mm_bitset_and(&srv->affinity, mm_core_get_event_affinity());
-	else
-		mm_bitset_or(&srv->affinity, mm_core_get_event_affinity());
-	size_t core_num = mm_bitset_count(&srv->affinity);
-	if (core_num == 0)
-		mm_fatal(0, "the server cannot be bound to any core");
 	size_t srv_core = mm_bitset_find(&srv->affinity, 0);
+	if (srv_core == MM_BITSET_NONE)
+		srv_core = 0;
 
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);

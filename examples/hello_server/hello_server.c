@@ -125,12 +125,6 @@ main(int ac, char *av[])
 						 "0.0.0.0", port);
 	mm_core_register_server(hello_server);
 
-	// Assign event loop to the first core.
-	struct mm_bitset event_loop_cores;
-	mm_bitset_prepare(&event_loop_cores, &mm_global_arena, 4);
-	mm_bitset_set(&event_loop_cores, 0);
-	mm_core_set_event_affinity(&event_loop_cores);
-
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {
 		mm_daemon_start();

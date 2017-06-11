@@ -85,15 +85,6 @@ mm_server_init(void)
 {
 	ENTER();
 
-	// Assign event loops to the first four cores.
-	struct mm_bitset event_loop_cores;
-	mm_bitset_prepare(&event_loop_cores, &mm_global_arena, 4);
-	mm_bitset_set(&event_loop_cores, 0);
-	mm_bitset_set(&event_loop_cores, 1);
-	mm_bitset_set(&event_loop_cores, 2);
-	mm_bitset_set(&event_loop_cores, 3);
-	mm_core_set_event_affinity(&event_loop_cores);
-
 	const char *addr = mm_settings_get("memcache-ip", "127.0.0.1");
 	uint32_t port = mm_settings_get_uint32("memcache-port", 11211);
 	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", 64);
