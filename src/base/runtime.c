@@ -129,12 +129,12 @@ mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data)
 	mm_hook_head_data_proc(&mm_regular_thread_stop_hook, proc, data);
 }
 
-void
+static void
 mm_call_common_start_hooks(void)
 {
 	mm_hook_call(&mm_common_start_hook, false);
 }
-void
+static void
 mm_call_common_stop_hooks(void)
 {
 	mm_hook_call(&mm_common_stop_hook, false);
@@ -199,6 +199,9 @@ mm_base_init(void)
 	mm_cksum_init();
 	mm_clock_init();
 
+	// Invoke registered start hooks.
+	mm_call_common_start_hooks();
+
 	LEAVE();
 }
 
@@ -207,9 +210,15 @@ mm_base_term(void)
 {
 	ENTER();
 
+	// Free regular thread domain.
+	mm_domain_destroy(mm_regular_domain);
+
+	// Invoke registered stop hooks.
+	mm_call_common_stop_hooks();
+	// Free all registered hooks.
 	mm_free_hooks();
 
-	mm_domain_destroy(mm_regular_domain);
+	// Cleanup memory spaces.
 	mm_memory_term();
 
 	LEAVE();

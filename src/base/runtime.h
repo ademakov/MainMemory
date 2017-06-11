@@ -71,11 +71,6 @@ void NONNULL(1)
 mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data);
 
 void
-mm_call_common_start_hooks(void);
-void
-mm_call_common_stop_hooks(void);
-
-void
 mm_call_regular_start_hooks(void);
 void
 mm_call_regular_stop_hooks(void);

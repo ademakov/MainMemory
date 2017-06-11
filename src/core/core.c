@@ -637,9 +637,8 @@ mm_core_boot_init(struct mm_core *core)
 	if (MM_CORE_IS_PRIMARY(core)) {
 		struct mm_domain *domain = mm_domain_selfptr();
 
-		mm_timer_prepare(&core->time_manager, &space->xarena);
-
 		// Call the start hooks on the primary core.
+		mm_call_regular_start_hooks();
 		mm_hook_call(&mm_core_start_hook, false);
 		mm_thread_local_summary(domain);
 
@@ -651,9 +650,10 @@ mm_core_boot_init(struct mm_core *core)
 		// Secondary cores have to wait until the primary core runs
 		// the start hooks that initialize shared resources.
 		mm_thread_domain_barrier();
-
-		mm_timer_prepare(&core->time_manager, &space->xarena);
 	}
+
+	mm_timer_prepare(&core->time_manager, &space->xarena);
+	mm_call_regular_thread_start_hooks();
 }
 
 static void
@@ -665,9 +665,11 @@ mm_core_boot_term(struct mm_core *core)
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_core_stats();
 		mm_hook_call(&mm_core_stop_hook, false);
+		mm_call_regular_stop_hooks();
 		mm_event_dispatch_cleanup(&mm_core_dispatch);
 	}
 
+	mm_call_regular_thread_stop_hooks();
 	mm_timer_cleanup(&core->time_manager);
 
 	// TODO:
