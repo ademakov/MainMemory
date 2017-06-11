@@ -21,13 +21,13 @@
 
 #include "core/core.h"
 
-#include "base/base.h"
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/conf.h"
 #include "base/daemon.h"
 #include "base/init.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/settings.h"
 #include "base/event/event.h"
 #include "base/memory/global.h"

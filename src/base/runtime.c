@@ -1,7 +1,7 @@
 /*
- * base/base.c - Base library setup.
+ * base/runtime.c - Base library runtime.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/base.h"
+#include "base/runtime.h"
 #include "base/cksum.h"
 #include "base/clock.h"
 #include "base/exit.h"

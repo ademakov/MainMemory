@@ -18,10 +18,10 @@
  */
 
 #include "common.h"
-#include "base/base.h"
 #include "base/daemon.h"
 #include "base/exit.h"
 #include "base/init.h"
+#include "base/runtime.h"
 #include "base/memory/global.h"
 #include "base/settings.h"
 #include "base/stdcall.h"

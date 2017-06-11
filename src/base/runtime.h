@@ -1,7 +1,7 @@
 /*
- * base/base.h - Base library setup.
+ * base/runtime.h - Base library runtime.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_BASE_H
-#define BASE_BASE_H
+#ifndef BASE_RUNTIME_H
+#define BASE_RUNTIME_H
 
 #include "common.h"
 #include "base/thread/domain.h"
@@ -45,4 +45,4 @@ mm_base_term(void);
 void
 mm_base_loop(struct mm_base_params *params);
 
-#endif /* BASE_BASE_H */
+#endif /* BASE_RUNTIME_H */

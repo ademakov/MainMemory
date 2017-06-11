@@ -7,7 +7,6 @@ AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 libmmbase_la_SOURCES = \
 	args.c args.h \
 	atomic.h \
-	base.c base.h \
 	bitops.h \
 	bitset.c bitset.h \
 	bytes.h \
@@ -28,6 +27,7 @@ libmmbase_la_SOURCES = \
 	logger.c logger.h \
 	report.c report.h \
 	ring.c ring.h \
+	runtime.c runtime.h \
 	scan.c scan.h \
 	settings.c settings.h \
 	stdcall.h \

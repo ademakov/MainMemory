@@ -22,10 +22,10 @@
 #include "core/task.h"
 #include "core/work.h"
 
-#include "base/base.h"
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
+#include "base/runtime.h"
 #include "base/event/dispatch.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
