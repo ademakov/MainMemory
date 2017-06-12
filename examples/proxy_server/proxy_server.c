@@ -105,7 +105,7 @@ main(int ac, char *av[])
 	// Create the server.
 	proxy_server = mm_net_create_inet_server("hello", &proxy_proto,
 						 "0.0.0.0", port);
-	mm_core_register_server(proxy_server);
+	mm_net_setup_server(proxy_server);
 
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {

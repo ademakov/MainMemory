@@ -123,7 +123,7 @@ main(int ac, char *av[])
 	// Create the server.
 	hello_server = mm_net_create_inet_server("hello", &hello_proto,
 						 "0.0.0.0", port);
-	mm_core_register_server(hello_server);
+	mm_net_setup_server(hello_server);
 
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {

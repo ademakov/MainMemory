@@ -823,20 +823,6 @@ mm_core_term(void)
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_core_register_server(struct mm_net_server *srv)
-{
-	ENTER();
-
-	// Register the server start hook.
-	mm_regular_start_hook_1((mm_hook_rtn1) mm_net_start_server, srv);
-
-	// Register the server stop hook.
-	mm_regular_stop_hook_1((mm_hook_rtn1) mm_net_stop_server, srv);
-
-	LEAVE();
-}
-
 void
 mm_core_start(void)
 {

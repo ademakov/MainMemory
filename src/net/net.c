@@ -19,7 +19,6 @@
 
 #include "net/net.h"
 
-#include "core/async.h"
 #include "core/core.h"
 #include "core/task.h"
 #include "core/timer.h"
@@ -27,6 +26,7 @@
 #include "base/exit.h"
 #include "base/format.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/stdcall.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
@@ -1056,6 +1056,20 @@ mm_net_stop_server(struct mm_net_server *srv)
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->event.fd);
 	srv->event.fd = -1;
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_net_setup_server(struct mm_net_server *srv)
+{
+	ENTER();
+
+	// Register the server start hook.
+	mm_regular_start_hook_1((void (*)(void *)) mm_net_start_server, srv);
+
+	// Register the server stop hook.
+	mm_regular_stop_hook_1((void (*)(void *)) mm_net_stop_server, srv);
 
 	LEAVE();
 }

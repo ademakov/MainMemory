@@ -167,7 +167,6 @@ mc_memcache_start(void)
 
 	mc_table_start(&mc_config);
 	mc_action_start();
-	mm_net_start_server(mc_tcp_server);
 
 	LEAVE();
 }
@@ -177,7 +176,6 @@ mc_memcache_stop(void)
 {
 	ENTER();
 
-	mm_net_stop_server(mc_tcp_server);
 	mc_action_stop();
 	mc_table_stop();
 
@@ -205,6 +203,8 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		port = config->port;
 
 	mc_tcp_server = mm_net_create_inet_server("memcache", &proto, addr, port);
+	mm_net_setup_server(mc_tcp_server);
+
 	mm_regular_start_hook_0(mc_memcache_start);
 	mm_regular_stop_hook_0(mc_memcache_stop);
 

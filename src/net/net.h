@@ -201,6 +201,9 @@ mm_net_start_server(struct mm_net_server *srv);
 void NONNULL(1)
 mm_net_stop_server(struct mm_net_server *srv);
 
+void NONNULL(1)
+mm_net_setup_server(struct mm_net_server *srv);
+
 /**********************************************************************
  * Network I/O tasks for server sockets.
  **********************************************************************/
