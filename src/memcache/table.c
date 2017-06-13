@@ -25,6 +25,7 @@
 #include "base/hash.h"
 #include "base/report.h"
 #include "base/fiber/task.h"
+#include "base/memory/memory.h"
 
 #include <sys/mman.h>
 

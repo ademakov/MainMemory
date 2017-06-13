@@ -28,14 +28,8 @@
 #include "base/fiber/runq.h"
 #include "base/fiber/timer.h"
 #include "base/fiber/wait.h"
-#include "base/memory/chunk.h"
-#include "base/memory/memory.h"
-#include "base/memory/pool.h"
 
 /* Forward declarations. */
-struct mm_bitset;
-struct mm_chunk;
-struct mm_net_server;
 struct mm_task;
 struct mm_work;
 

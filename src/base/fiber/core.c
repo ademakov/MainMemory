@@ -29,6 +29,7 @@
 #include "base/fiber/work.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
+#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"

@@ -20,6 +20,7 @@
 #include "memcache/state.h"
 
 #include "base/event/event.h"
+#include "base/memory/memory.h"
 
 struct mm_net_socket *
 mc_state_create(void)

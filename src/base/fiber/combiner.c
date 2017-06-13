@@ -23,6 +23,7 @@
 #include "base/report.h"
 #include "base/fiber/core.h"
 #include "base/fiber/task.h"
+#include "base/memory/memory.h"
 #include "base/memory/space.h"
 #include "base/thread/domain.h"
 

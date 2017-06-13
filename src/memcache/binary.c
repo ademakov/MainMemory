@@ -23,6 +23,7 @@
 
 #include "base/bytes.h"
 #include "base/report.h"
+#include "base/memory/memory.h"
 
 static struct mc_command_type *mc_binary_commands[256] = {
 	[MC_BINARY_OPCODE_GET]		= &mc_command_binary_get,
