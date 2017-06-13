@@ -26,6 +26,7 @@
 #include "base/report.h"
 #include "base/settings.h"
 #include "base/topology.h"
+#include "base/event/dispatch.h"
 #include "base/event/event.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
@@ -36,6 +37,9 @@
 
 uint16_t mm_ncpus = 0;
 struct mm_domain *mm_regular_domain = NULL;
+
+// Event dispatch for regular thread domain.
+static struct mm_event_dispatch mm_regular_dispatch;
 
 /**********************************************************************
  * Runtime start and stop hooks.
@@ -167,7 +171,7 @@ mm_call_regular_thread_stop_hooks(void)
  **********************************************************************/
 
 static bool
-mm_base_validate_nthreads(uint32_t n)
+mm_validate_nthreads(uint32_t n)
 {
 #if ENABLE_SMP
 	return n <= UINT16_MAX;
@@ -176,13 +180,32 @@ mm_base_validate_nthreads(uint32_t n)
 #endif
 }
 
+static void
+mm_regular_start(void)
+{
+	// Allocate event dispatch memory and system resources.
+	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_domain,
+				  mm_regular_domain->nthreads, mm_regular_domain->threads);
+}
+
+static void
+mm_regular_stop(void)
+{
+	// Print statistics.
+	mm_event_dispatch_stats(&mm_regular_dispatch);
+	mm_lock_stats();
+
+	// Release event dispatch memory and system resources.
+	mm_event_dispatch_cleanup(&mm_regular_dispatch);
+}
+
 void
 mm_base_init(void)
 {
 	ENTER();
 
 	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
-	if (nthreads != 0 && !mm_base_validate_nthreads(nthreads)) {
+	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
 		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
 		nthreads = 0;
 	}
@@ -198,6 +221,10 @@ mm_base_init(void)
 	mm_thread_init();
 	mm_cksum_init();
 	mm_clock_init();
+
+	// Setup basic start and stop hooks for regular domain.
+	mm_regular_start_hook_0(mm_regular_start);
+	mm_regular_stop_hook_0(mm_regular_stop);
 
 	LEAVE();
 }

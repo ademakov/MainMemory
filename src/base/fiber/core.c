@@ -55,9 +55,6 @@ struct mm_core *mm_core_set;
 // A core associated with the running thread.
 __thread struct mm_core *__mm_core_self;
 
-// Common event dispatch.
-static struct mm_event_dispatch mm_core_dispatch;
-
 /**********************************************************************
  * Yield routine for backoff on busy waiting.
  **********************************************************************/
@@ -564,9 +561,6 @@ mm_core_stats(void)
 #endif
 			   (unsigned long) core->nworkers);
 	}
-
-	mm_event_dispatch_stats(&mm_core_dispatch);
-	mm_lock_stats();
 }
 
 /**********************************************************************
@@ -585,10 +579,7 @@ mm_core_boot_init(struct mm_core *core)
 		// Call the start hooks on the primary core.
 		mm_call_regular_start_hooks();
 		mm_thread_local_summary(domain);
-
 		mm_call_regular_thread_start_hooks();
-		mm_event_dispatch_prepare(&mm_core_dispatch, domain,
-					  domain->nthreads, domain->threads);
 
 		mm_thread_domain_barrier();
 	} else {
@@ -610,7 +601,6 @@ mm_core_boot_term(struct mm_core *core)
 	if (MM_CORE_IS_PRIMARY(core)) {
 		mm_core_stats();
 		mm_call_regular_stop_hooks();
-		mm_event_dispatch_cleanup(&mm_core_dispatch);
 	}
 
 	mm_call_regular_thread_stop_hooks();

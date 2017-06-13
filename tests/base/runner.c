@@ -27,22 +27,8 @@ struct thread
 
 	uint64_t time;
 
-#if ENABLE_LOCK_STATS
-	struct mm_lock_stat lock_stat;
-#endif
-
 	char name[128];
 };
-
-#if ENABLE_LOCK_STATS
-__thread struct thread *g_this_thread;
-
-struct mm_lock_stat *
-mm_lock_getstat(struct mm_lock_stat_info *info __attribute((unused)))
-{
-	return &g_this_thread->lock_stat;
-}
-#endif
 
 static void *
 thread_runner(void *arg)
@@ -50,12 +36,6 @@ thread_runner(void *arg)
 	struct thread *thr = arg;
 	struct timeval start_time;
 	struct timeval finish_time;
-
-#if ENABLE_LOCK_STATS
-	g_this_thread = thr;
-	thr->lock_stat.lock_count = 0;
-	thr->lock_stat.fail_count = 0;
-#endif
 
 	mm_thread_barrier_local_prepare(&thr->barrier);
 	mm_thread_barrier_wait(&g_barrier, &thr->barrier);
