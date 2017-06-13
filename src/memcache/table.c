@@ -21,11 +21,10 @@
 #include "memcache/action.h"
 #include "memcache/entry.h"
 
-#include "core/task.h"
-
 #include "base/combiner.h"
 #include "base/hash.h"
 #include "base/report.h"
+#include "base/fiber/task.h"
 
 #include <sys/mman.h>
 

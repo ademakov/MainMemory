@@ -25,13 +25,12 @@
 #include "memcache/state.h"
 #include "memcache/table.h"
 
-#include "core/core.h"
-#include "core/future.h"
-
 #include "base/bitops.h"
 #include "base/list.h"
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/fiber/core.h"
+#include "base/fiber/future.h"
 #include "base/memory/chunk.h"
 #include "base/memory/pool.h"
 

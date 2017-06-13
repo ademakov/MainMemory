@@ -23,9 +23,9 @@
 #include "memcache/state.h"
 #include "memcache/table.h"
 
-#include "core/task.h"
 #include "base/bytes.h"
 #include "base/report.h"
+#include "base/fiber/task.h"
 #include "base/memory/buffer.h"
 
 #include "net/net.h"

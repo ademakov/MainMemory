@@ -1,7 +1,7 @@
 /*
- * core/combiner.c - MainMemory task combining synchronization.
+ * base/fiber/combiner.c - MainMemory task combining synchronization.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,11 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/combiner.h"
-#include "core/core.h"
-#include "core/task.h"
+#include "base/fiber/combiner.h"
+
 #include "base/bitops.h"
 #include "base/report.h"
+#include "base/fiber/core.h"
+#include "base/fiber/task.h"
 #include "base/memory/space.h"
 #include "base/thread/domain.h"
 

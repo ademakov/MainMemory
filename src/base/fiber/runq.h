@@ -1,7 +1,7 @@
 /*
- * core/runq.h - MainMemory task run queue.
+ * base/fiber/runq.h - MainMemory task run queue.
  *
- * Copyright (C) 2013,2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_RUNQ_H
-#define CORE_RUNQ_H
+#ifndef BASE_FIBER_RUNQ_H
+#define BASE_FIBER_RUNQ_H
 
 #include "common.h"
 #include "base/list.h"
@@ -66,4 +66,4 @@ mm_runq_put(struct mm_runq *runq, struct mm_task *task);
 void NONNULL(1, 2)
 mm_runq_delete(struct mm_runq *runq, struct mm_task *task);
 
-#endif /* CORE_RUNQ_H */
+#endif /* BASE_FIBER_RUNQ_H */

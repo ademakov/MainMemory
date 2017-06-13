@@ -1,7 +1,7 @@
 /*
- * core/async.c - MainMemory asynchronous operations.
+ * base/fiber/async.c - MainMemory asynchronous operations.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,13 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/async.h"
-
-#include "core/core.h"
-#include "core/task.h"
+#include "base/fiber/async.h"
 
 #include "base/list.h"
 #include "base/report.h"
+#include "base/fiber/core.h"
+#include "base/fiber/task.h"
 #include "base/thread/request.h"
 
 #include <sys/uio.h>

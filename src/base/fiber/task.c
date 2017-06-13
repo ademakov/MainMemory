@@ -1,5 +1,5 @@
 /*
- * core/task.c - MainMemory tasks.
+ * base/fiber/task.c - MainMemory tasks.
  *
  * Copyright (C) 2012-2017  Aleksey Demakov
  *
@@ -17,13 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/task.h"
-#include "core/core.h"
-#include "core/timer.h"
+#include "base/fiber/task.h"
 
 #include "base/bitops.h"
 #include "base/logger.h"
 #include "base/report.h"
+#include "base/fiber/core.h"
+#include "base/fiber/timer.h"
 #include "base/memory/pool.h"
 #include "base/thread/thread.h"
 

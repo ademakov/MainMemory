@@ -1,5 +1,5 @@
 /*
- * core/timer.h - MainMemory timers.
+ * base/fiber/timer.h - MainMemory timers.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_TIMER_H
-#define CORE_TIMER_H
+#ifndef BASE_FIBER_TIMER_H
+#define BASE_FIBER_TIMER_H
 
 #include "common.h"
 #include "base/clock.h"
@@ -135,4 +135,4 @@ mm_timer_block(mm_timeout_t timeout);
 
 #endif
 
-#endif /* CORE_TIMER_H */
+#endif /* BASE_FIBER_TIMER_H */

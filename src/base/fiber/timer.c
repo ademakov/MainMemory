@@ -1,5 +1,5 @@
 /*
- * core/timer.c - MainMemory timers.
+ * base/fiber/timer.c - MainMemory timers.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -17,11 +17,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/timer.h"
+#include "base/fiber/timer.h"
 
-#include "core/core.h"
-#include "core/task.h"
-#include "core/work.h"
+#include "base/fiber/core.h"
+#include "base/fiber/task.h"
+#include "base/fiber/work.h"
 
 #define MM_TIMER_QUEUE_MAX_WIDTH	500
 #define MM_TIMER_QUEUE_MAX_COUNT	2000

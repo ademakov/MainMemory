@@ -1,7 +1,7 @@
 /*
- * core/wait.h - MainMemory wait queues.
+ * base/fiber/wait.h - MainMemory wait queues.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_WAIT_H
-#define CORE_WAIT_H
+#ifndef BASE_FIBER_WAIT_H
+#define BASE_FIBER_WAIT_H
 
 #include "common.h"
 #include "base/list.h"
@@ -121,4 +121,4 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout);
 void NONNULL(1)
 mm_waitset_unique_signal(struct mm_waitset *waitset);
 
-#endif /* CORE_WAIT_H */
+#endif /* BASE_FIBER_WAIT_H */

@@ -19,10 +19,6 @@
 
 #include "net/net.h"
 
-#include "core/core.h"
-#include "core/task.h"
-#include "core/timer.h"
-
 #include "base/exit.h"
 #include "base/format.h"
 #include "base/report.h"
@@ -30,6 +26,9 @@
 #include "base/stdcall.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
+#include "base/fiber/core.h"
+#include "base/fiber/task.h"
+#include "base/fiber/timer.h"
 #include "base/memory/global.h"
 #include "base/memory/pool.h"
 

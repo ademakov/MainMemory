@@ -1,7 +1,7 @@
 /*
- * core/work.h - MainMemory work items.
+ * base/fiber/work.h - MainMemory work items.
  *
- * Copyright (C) 2013-2014  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,12 +17,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_WORK_H
-#define CORE_WORK_H
+#ifndef BASE_FIBER_WORK_H
+#define BASE_FIBER_WORK_H
 
 #include "common.h"
 #include "base/list.h"
-#include "core/core.h"
+#include "base/fiber/core.h"
 
 #define MM_WORK_VTABLE_1(name, r)			\
 	static const struct mm_work_vtable name = {	\
@@ -69,4 +69,4 @@ mm_work_prepare(struct mm_work *work, const struct mm_work_vtable *vtable)
 	work->vtable = vtable;
 }
 
-#endif /* CORE_WORK_H */
+#endif /* BASE_FIBER_WORK_H */

@@ -23,11 +23,11 @@
 #include "base/init.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/memory/global.h"
-#include "base/memory/memory.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "core/core.h"
+#include "base/fiber/core.h"
+#include "base/memory/global.h"
+#include "base/memory/memory.h"
 #include "net/netbuf.h"
 
 #include <stdio.h>

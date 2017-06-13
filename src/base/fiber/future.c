@@ -1,7 +1,7 @@
 /*
- * core/future.c - MainMemory delayed computation.
+ * base/fiber/future.c - MainMemory delayed computation.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/future.h"
+#include "base/fiber/future.h"
 
 #include "base/report.h"
 #include "base/runtime.h"

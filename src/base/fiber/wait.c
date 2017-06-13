@@ -1,7 +1,7 @@
 /*
- * core/wait.c - MainMemory wait queues.
+ * base/fiber/wait.c - MainMemory wait queues.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,15 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/wait.h"
-
-#include "core/core.h"
-#include "core/task.h"
-#include "core/timer.h"
+#include "base/fiber/wait.h"
 
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/fiber/core.h"
+#include "base/fiber/task.h"
+#include "base/fiber/timer.h"
 #include "base/memory/pool.h"
 
 // An entry for a waiting task.

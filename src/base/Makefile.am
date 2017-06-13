@@ -45,6 +45,15 @@ libmmbase_la_SOURCES = \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \
 	event/selfpipe.c event/selfpipe.h \
+	fiber/async.c fiber/async.h \
+	fiber/combiner.c fiber/combiner.h \
+	fiber/core.c fiber/core.h \
+	fiber/future.c fiber/future.h \
+	fiber/runq.c fiber/runq.h \
+	fiber/task.c fiber/task.h \
+	fiber/timer.c fiber/timer.h \
+	fiber/wait.c fiber/wait.h \
+	fiber/work.c fiber/work.h \
 	memory/alloc.h \
 	memory/arena.h \
 	memory/buffer.c memory/buffer.h \

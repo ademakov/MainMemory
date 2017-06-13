@@ -1,5 +1,5 @@
 /*
- * core/core.c - MainMemory core.
+ * base/fiber/core.c - MainMemory core.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -17,16 +17,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "core/core.h"
-#include "core/future.h"
-#include "core/task.h"
-#include "core/work.h"
+#include "base/fiber/core.h"
 
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
 #include "base/runtime.h"
 #include "base/event/dispatch.h"
+#include "base/fiber/future.h"
+#include "base/fiber/task.h"
+#include "base/fiber/work.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"

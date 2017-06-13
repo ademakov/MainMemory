@@ -23,8 +23,8 @@
 #include "memcache/memcache.h"
 
 #include "base/list.h"
+#include "base/fiber/core.h"
 #include "base/memory/alloc.h"
-#include "core/core.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
 # include "base/atomic.h"

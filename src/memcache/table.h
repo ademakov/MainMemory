@@ -23,10 +23,9 @@
 #include "memcache/memcache.h"
 #include "memcache/entry.h"
 
-#include "core/work.h"
-
 #include "base/bitops.h"
 #include "base/list.h"
+#include "base/fiber/work.h"
 #include "base/memory/space.h"
 
 #if ENABLE_MEMCACHE_LOCKING

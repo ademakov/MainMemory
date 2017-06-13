@@ -1,5 +1,5 @@
 /*
- * core/core.h - MainMemory core.
+ * base/fiber/core.h - MainMemory core.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -17,18 +17,17 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_CORE_H
-#define CORE_CORE_H
+#ifndef BASE_FIBER_CORE_H
+#define BASE_FIBER_CORE_H
 
 #include "common.h"
-
-#include "core/runq.h"
-#include "core/timer.h"
-#include "core/wait.h"
 
 #include "base/list.h"
 #include "base/report.h"
 #include "base/ring.h"
+#include "base/fiber/runq.h"
+#include "base/fiber/timer.h"
+#include "base/fiber/wait.h"
 #include "base/memory/chunk.h"
 #include "base/memory/memory.h"
 #include "base/memory/pool.h"
@@ -218,4 +217,4 @@ mm_core_print_tasks(struct mm_core *core);
 void
 mm_core_stats(void);
 
-#endif /* CORE_CORE_H */
+#endif /* BASE_FIBER_CORE_H */

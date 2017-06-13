@@ -1,7 +1,7 @@
 /*
- * core/future.h - MainMemory delayed computation tasks.
+ * base/fiber/future.h - MainMemory delayed computation tasks.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,14 +17,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_FUTURE_H
-#define CORE_FUTURE_H
+#ifndef BASE_FIBER_FUTURE_H
+#define BASE_FIBER_FUTURE_H
 
 #include "common.h"
 #include "base/lock.h"
-#include "core/task.h"
-#include "core/wait.h"
-#include "core/work.h"
+#include "base/fiber/task.h"
+#include "base/fiber/wait.h"
+#include "base/fiber/work.h"
 
 struct mm_future
 {
@@ -133,4 +133,4 @@ mm_future_is_finished(struct mm_future *future)
 	return value != MM_RESULT_NOTREADY && value != MM_RESULT_DEFERRED;
 }
 
-#endif /* CORE_FUTURE_H */
+#endif /* BASE_FIBER_FUTURE_H */

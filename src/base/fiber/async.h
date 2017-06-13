@@ -1,7 +1,7 @@
 /*
- * core/async.h - MainMemory asynchronous operations.
+ * base/fiber/async.h - MainMemory asynchronous operations.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_ASYNC_H
-#define CORE_ASYNC_H
+#ifndef BASE_FIBER_ASYNC_H
+#define BASE_FIBER_ASYNC_H
 
 #include "common.h"
 #include "base/syscall.h"
@@ -92,4 +92,4 @@ mm_async_close(int fd)
 	return mm_async_syscall_1(domain, "close", MM_SYSCALL_N(SYS_close), fd);
 }
 
-#endif /* CORE_ASYNC_H */
+#endif /* BASE_FIBER_ASYNC_H */

@@ -19,8 +19,6 @@
 
 #include "common.h"
 
-#include "core/core.h"
-
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/conf.h"
@@ -30,6 +28,7 @@
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/event/event.h"
+#include "base/fiber/core.h"
 #include "base/memory/global.h"
 
 #include "net/net.h"

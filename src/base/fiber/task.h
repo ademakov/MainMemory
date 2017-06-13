@@ -1,5 +1,5 @@
 /*
- * core/task.h - MainMemory tasks.
+ * base/fiber/task.h - MainMemory tasks.
  *
  * Copyright (C) 2012-2017  Aleksey Demakov
  *
@@ -17,13 +17,13 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_TASK_H
-#define CORE_TASK_H
+#ifndef BASE_FIBER_TASK_H
+#define BASE_FIBER_TASK_H
 
 #include "common.h"
 #include "base/cstack.h"
 #include "base/list.h"
-#include "core/core.h"
+#include "base/fiber/core.h"
 
 #define ENABLE_TASK_LOCATION	0
 #define ENABLE_TASK_IO_FLAGS	0
@@ -303,4 +303,4 @@ mm_task_setcancelstate(int new_value, int *old_value_ptr);
 void NONNULL(1)
 mm_task_cancel(struct mm_task *task);
 
-#endif /* CORE_TASK_H */
+#endif /* BASE_FIBER_TASK_H */

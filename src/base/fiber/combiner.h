@@ -1,7 +1,7 @@
 /*
- * core/combiner.h - MainMemory task combining synchronization.
+ * base/fiber/combiner.h - MainMemory task combining synchronization.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef CORE_COMBINER_H
-#define CORE_COMBINER_H
+#ifndef BASE_FIBER_COMBINER_H
+#define BASE_FIBER_COMBINER_H
 
 #include "common.h"
 #include "base/combiner.h"
@@ -47,4 +47,4 @@ void NONNULL(1, 2)
 mm_task_combiner_execute(struct mm_task_combiner *combiner,
 			 mm_combiner_routine_t routine, uintptr_t data);
 
-#endif /* CORE_COMBINER_H */
+#endif /* BASE_FIBER_COMBINER_H */
