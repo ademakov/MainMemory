@@ -48,8 +48,8 @@ struct mm_waitset
 		struct mm_task *task;
 	};
 	/* The core the wait-set is pinned to. It is equal to
-	   MM_CORE_NONE in case the wait-set is not pinned. */
-	mm_core_t core;
+	   MM_THREAD_NONE in case the wait-set is not pinned. */
+	mm_thread_t core;
 	/* The wait-set has single waiting task. */
 	bool signal;
 };
@@ -94,7 +94,7 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock);
  **********************************************************************/
 
 void NONNULL(1)
-mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core);
+mm_waitset_local_prepare(struct mm_waitset *waitset, mm_thread_t core);
 
 void NONNULL(1)
 mm_waitset_local_wait(struct mm_waitset *waitset);

@@ -220,12 +220,12 @@ mm_task_selfptr(void)
 }
 
 struct mm_task *
-mm_task_getptr(mm_task_t id);
+mm_task_getptr(mm_fiber_t id);
 
-mm_task_t NONNULL(1)
+mm_fiber_t NONNULL(1)
 mm_task_getid(const struct mm_task *task);
 
-static inline mm_task_t
+static inline mm_fiber_t
 mm_task_self()
 {
 	return mm_task_getid(mm_task_selfptr());

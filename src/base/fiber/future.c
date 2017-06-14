@@ -194,7 +194,7 @@ mm_future_destroy(struct mm_future *future)
 }
 
 mm_value_t NONNULL(1)
-mm_future_start(struct mm_future *future, mm_core_t core)
+mm_future_start(struct mm_future *future, mm_thread_t core)
 {
 	ENTER();
 
@@ -221,7 +221,7 @@ mm_future_wait(struct mm_future *future)
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED)
-		result = mm_future_start(future, MM_CORE_NONE);
+		result = mm_future_start(future, MM_THREAD_NONE);
 
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {
@@ -261,7 +261,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED)
-		result = mm_future_start(future, MM_CORE_NONE);
+		result = mm_future_start(future, MM_THREAD_NONE);
 
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {
@@ -370,7 +370,7 @@ mm_future_unique_destroy(struct mm_future *future)
 }
 
 mm_value_t NONNULL(1)
-mm_future_unique_start(struct mm_future *future, mm_core_t core)
+mm_future_unique_start(struct mm_future *future, mm_thread_t core)
 {
 	ENTER();
 
@@ -391,7 +391,7 @@ mm_future_unique_wait(struct mm_future *future)
 	ENTER();
 
 	// Start the future if it has not been started already.
-	mm_value_t result = mm_future_start(future, MM_CORE_NONE);
+	mm_value_t result = mm_future_start(future, MM_THREAD_NONE);
 
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {
@@ -420,7 +420,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	mm_timeval_t deadline = mm_core_gettime(core) + timeout;
 
 	// Start the future if it has not been started already.
-	mm_value_t result = mm_future_start(future, MM_CORE_NONE);
+	mm_value_t result = mm_future_start(future, MM_THREAD_NONE);
 
 	// Wait for future completion.
 	while (result == MM_RESULT_NOTREADY) {

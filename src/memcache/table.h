@@ -64,7 +64,7 @@ struct mc_tpart
 #if ENABLE_MEMCACHE_COMBINER
 	struct mm_combiner *combiner;
 #elif ENABLE_MEMCACHE_DELEGATE
-	mm_core_t core;
+	mm_thread_t core;
 #elif ENABLE_MEMCACHE_LOCKING
 	mm_regular_lock_t lookup_lock;
 	mm_regular_lock_t freelist_lock;
@@ -92,7 +92,7 @@ struct mc_table
 	/* Table partitions. */
 	struct mc_tpart *parts;
 	/* The number of table partitions. */
-	mm_core_t nparts;
+	mm_thread_t nparts;
 
 	/* The hash value bits that identify partition. */
 	uint16_t part_bits;

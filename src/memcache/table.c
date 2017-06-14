@@ -206,9 +206,9 @@ mc_table_start_striding(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post_work(MM_CORE_SELF, &part->stride_work);
+	mm_core_post_work(MM_THREAD_SELF, &part->stride_work);
 #else
-	mm_core_post_work(MM_CORE_NONE, &part->stride_work);
+	mm_core_post_work(MM_THREAD_NONE, &part->stride_work);
 #endif
 
 	LEAVE();
@@ -262,9 +262,9 @@ mc_table_start_evicting(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post_work(MM_CORE_SELF, &part->evict_work);
+	mm_core_post_work(MM_THREAD_SELF, &part->evict_work);
 #else
-	mm_core_post_work(MM_CORE_NONE, &part->evict_work);
+	mm_core_post_work(MM_THREAD_NONE, &part->evict_work);
 #endif
 
 	LEAVE();
@@ -307,7 +307,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_core_t index, mm_core_t core UNUSED)
+mc_table_init_part(mm_thread_t index, mm_thread_t core UNUSED)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
@@ -373,7 +373,7 @@ mc_table_start(const struct mm_memcache_config *config)
 	ENTER();
 
 	// Round the number of table partitions to a power of 2.
-	mm_core_t nparts;
+	mm_thread_t nparts;
 #if ENABLE_MEMCACHE_DELEGATE
 	nparts = mm_bitset_count(&config->affinity);
 #else
@@ -445,16 +445,16 @@ mc_table_start(const struct mm_memcache_config *config)
 
 	// Initialize the table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_t index = 0;
+	mm_thread_t index = 0;
 	ASSERT(nparts <= mm_core_getnum());
-	for (mm_core_t core = 0; core < mm_core_getnum(); core++) {
+	for (mm_thread_t core = 0; core < mm_core_getnum(); core++) {
 		if (mm_bitset_test(&config->affinity, core)) {
 			mc_table_init_part(index++, core);
 		}
 	}
 #else
-	for (mm_core_t index = 0; index < nparts; index++) {
-		mc_table_init_part(index, MM_CORE_NONE);
+	for (mm_thread_t index = 0; index < nparts; index++) {
+		mc_table_init_part(index, MM_THREAD_NONE);
 	}
 #endif
 
@@ -467,7 +467,7 @@ mc_table_stop(void)
 	ENTER();
 
 	// Free the table entries.
-	for (mm_core_t p = 0; p < mc_table.nparts; p++) {
+	for (mm_thread_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
 		mm_private_space_cleanup(&part->data_space);
 	}

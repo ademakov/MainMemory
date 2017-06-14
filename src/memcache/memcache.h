@@ -63,7 +63,7 @@ struct mm_memcache_config
 	uint16_t port;
 
 	size_t volume;
-	mm_core_t nparts;
+	mm_thread_t nparts;
 
 #if ENABLE_MEMCACHE_DELEGATE
 	struct mm_bitset affinity;

@@ -72,10 +72,10 @@ struct mm_core
 	uint32_t nwork;
 
 	/* Current and maximum number of worker tasks. */
-	mm_task_t nidle;
-	mm_task_t nworkers;
-	mm_task_t nworkers_min;
-	mm_task_t nworkers_max;
+	mm_fiber_t nidle;
+	mm_fiber_t nworkers;
+	mm_fiber_t nworkers_min;
+	mm_fiber_t nworkers_max;
 
 	/* The counter of task context switches. */
 	uint64_t loop_count;
@@ -131,7 +131,7 @@ void mm_core_stop(void);
  **********************************************************************/
 
 void NONNULL(2)
-mm_core_post_work(mm_core_t core_id, struct mm_work *work);
+mm_core_post_work(mm_thread_t core_id, struct mm_work *work);
 
 void NONNULL(1)
 mm_core_run_task(struct mm_task *task);
@@ -143,7 +143,7 @@ mm_core_execute_requests(struct mm_core *core);
  * Core information.
  **********************************************************************/
 
-extern mm_core_t mm_core_num;
+extern mm_thread_t mm_core_num;
 extern struct mm_core *mm_core_set;
 
 extern __thread struct mm_core *__mm_core_self;
@@ -154,7 +154,7 @@ mm_core_selfptr(void)
 	return __mm_core_self;
 }
 
-static inline mm_core_t
+static inline mm_thread_t
 mm_core_getnum(void)
 {
 #if ENABLE_SMP
@@ -164,26 +164,26 @@ mm_core_getnum(void)
 #endif
 }
 
-static inline mm_core_t
+static inline mm_thread_t
 mm_core_getid(struct mm_core *core)
 {
 	if (unlikely(core == NULL))
-		return MM_CORE_NONE;
-	return (mm_core_t) (core - mm_core_set);
+		return MM_THREAD_NONE;
+	return (mm_thread_t) (core - mm_core_set);
 }
 
 static inline struct mm_core *
-mm_core_getptr(mm_core_t core)
+mm_core_getptr(mm_thread_t core)
 {
-	if (core == MM_CORE_NONE)
+	if (core == MM_THREAD_NONE)
 		return NULL;
-	if (core == MM_CORE_SELF)
+	if (core == MM_THREAD_SELF)
 		return mm_core_selfptr();
 	ASSERT(core < mm_core_num);
 	return &mm_core_set[core];
 }
 
-static inline mm_core_t
+static inline mm_thread_t
 mm_core_self(void)
 {
 	return mm_core_getid(mm_core_selfptr());

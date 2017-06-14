@@ -200,7 +200,7 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 	ENTER();
 
 	mm_stack_prepare(&waitset->set);
-	waitset->core = MM_CORE_NONE;
+	waitset->core = MM_THREAD_NONE;
 
 	LEAVE();
 }
@@ -289,10 +289,10 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
  **********************************************************************/
 
 void NONNULL(1)
-mm_waitset_local_prepare(struct mm_waitset *waitset, mm_core_t core)
+mm_waitset_local_prepare(struct mm_waitset *waitset, mm_thread_t core)
 {
 	ENTER();
-	ASSERT(core != MM_CORE_NONE && core != MM_CORE_SELF);
+	ASSERT(core != MM_THREAD_NONE && core != MM_THREAD_SELF);
 
 	mm_stack_prepare(&waitset->set);
 	waitset->core = core;
@@ -380,7 +380,7 @@ mm_waitset_unique_prepare(struct mm_waitset *waitset)
 	ENTER();
 
 	waitset->task = NULL;
-	waitset->core = MM_CORE_SELF;
+	waitset->core = MM_THREAD_SELF;
 
 	LEAVE();
 }

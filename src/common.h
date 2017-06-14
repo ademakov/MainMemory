@@ -122,14 +122,11 @@
 
 /* A non-existent thread. */
 #define MM_THREAD_NONE		((mm_thread_t) -1)
+/* A pseudo-thread corresponding to the current one. */
+#define MM_THREAD_SELF		((mm_thread_t) -2)
 
-/* A non-existent core. */
-#define MM_CORE_NONE		((mm_core_t) -1)
-/* A pseudo-core corresponding to the current one. */
-#define MM_CORE_SELF		((mm_core_t) -2)
-
-/* A non-existent task. */
-#define MM_TASK_NONE		((mm_task_t) -1)
+/* A non-existent fiber. */
+#define MM_FIBER_NONE		((mm_fiber_t) -1)
 
 /* Time value (in microseconds). */
 typedef int64_t			mm_timeval_t;
@@ -143,11 +140,8 @@ typedef uint32_t		mm_stamp_t;
 /* Thread ID. */
 typedef uint16_t 		mm_thread_t;
 
-/* Core ID. */
-typedef uint16_t		mm_core_t;
-
-/* Task ID. */
-typedef uint32_t		mm_task_t;
+/* Fiber ID. */
+typedef uint32_t		mm_fiber_t;
 
 /* Task execution result. */
 typedef uintptr_t		mm_value_t;

@@ -49,7 +49,7 @@
 #endif
 
 // The core set.
-mm_core_t mm_core_num;
+mm_thread_t mm_core_num;
 struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
@@ -186,7 +186,7 @@ mm_core_post_work_req(uintptr_t *arguments)
 }
 
 void NONNULL(2)
-mm_core_post_work(mm_core_t core_id, struct mm_work *work)
+mm_core_post_work(mm_thread_t core_id, struct mm_work *work)
 {
 	ENTER();
 
@@ -214,7 +214,7 @@ mm_core_post_work(mm_core_t core_id, struct mm_work *work)
 #else
 
 void
-mm_core_post_work(mm_core_t core_id, struct mm_work *work)
+mm_core_post_work(mm_thread_t core_id, struct mm_work *work)
 {
 	ENTER();
 
@@ -544,8 +544,8 @@ mm_core_print_tasks(struct mm_core *core)
 void
 mm_core_stats(void)
 {
-	mm_core_t n = mm_core_getnum();
-	for (mm_core_t i = 0; i < n; i++) {
+	mm_thread_t n = mm_core_getnum();
+	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_core *core = mm_core_getptr(i);
 		mm_verbose("core %d: cycles=%llu, cswitches=%llu/%llu/%llu,"
 			   " requests=%llu/%llu, workers=%lu", i,
@@ -789,7 +789,7 @@ mm_core_init(void)
 #endif
 
 	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
-	for (mm_core_t i = 0; i < mm_core_num; i++)
+	for (mm_thread_t i = 0; i < mm_core_num; i++)
 		mm_core_init_single(&mm_core_set[i]);
 
 	LEAVE();
@@ -801,7 +801,7 @@ mm_core_term(void)
 	ENTER();
 	ASSERT(mm_core_num > 0);
 
-	for (mm_core_t i = 0; i < mm_core_num; i++)
+	for (mm_thread_t i = 0; i < mm_core_num; i++)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
 
@@ -841,7 +841,7 @@ mm_core_stop(void)
 	ASSERT(mm_core_num > 0);
 
 	// Set stop flag for core threads.
-	for (mm_core_t i = 0; i < mm_core_num; i++) {
+	for (mm_thread_t i = 0; i < mm_core_num; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
 		mm_thread_wakeup(core->thread);

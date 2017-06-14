@@ -137,7 +137,7 @@ mc_command_flush(uint32_t exptime)
 	mm_timeval_t real_time = mm_core_getrealtime(core);
 	mc_exptime = real_time / 1000000 + exptime;
 
-	for (mm_core_t i = 0; i < mc_table.nparts; i++) {
+	for (mm_thread_t i = 0; i < mc_table.nparts; i++) {
 #if ENABLE_MEMCACHE_DELEGATE
 		struct mc_tpart *part = &mc_table.parts[i];
 		mm_core_post(part->core, mc_command_flush_routine, i);

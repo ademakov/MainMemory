@@ -322,12 +322,12 @@ mm_task_destroy(struct mm_task *task)
  **********************************************************************/
 
 struct mm_task *
-mm_task_getptr(mm_task_t id)
+mm_task_getptr(mm_fiber_t id)
 {
 	return mm_pool_idx2ptr(&mm_task_pool, id);
 }
 
-mm_task_t NONNULL(1)
+mm_fiber_t NONNULL(1)
 mm_task_getid(const struct mm_task *task)
 {
 	return mm_pool_ptr2idx(&mm_task_pool, task);
