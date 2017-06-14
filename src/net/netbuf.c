@@ -20,6 +20,7 @@
 #include "net/netbuf.h"
 
 #include "base/fiber/core.h"
+#include "base/thread/thread.h"
 
 #define MM_NETBUF_MAXIOV	64
 
