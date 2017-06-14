@@ -27,18 +27,18 @@
 #include "base/fiber/timer.h"
 #include "base/memory/pool.h"
 
-// An entry for a waiting task.
+// An entry for a waiting fiber.
 struct mm_wait
 {
 	struct mm_slink link;
-	struct mm_fiber *task;
+	struct mm_fiber *fiber;
 };
 
 /**********************************************************************
  * Wait entry pool.
  **********************************************************************/
 
-// The memory pool for waiting tasks.
+// The memory pool for wait entries.
 static struct mm_pool mm_wait_pool;
 
 static void
@@ -171,8 +171,8 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 		while (!mm_stack_empty(&pending)) {
 			struct mm_slink *link = mm_stack_remove(&pending);
 			struct mm_wait *wait = containerof(link, struct mm_wait, link);
-			struct mm_fiber *task = mm_memory_load(wait->task);
-			if (task != NULL) {
+			struct mm_fiber *fiber = mm_memory_load(wait->fiber);
+			if (fiber != NULL) {
 				// Add used wait entry to the pending list.
 				mm_wait_add_pending(cache, wait);
 			} else {
@@ -210,10 +210,10 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 {
 	ENTER();
 
-	// Enqueue the task.
+	// Enqueue the fiber.
 	struct mm_core *core = mm_core_selfptr();
 	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->task = mm_fiber_selfptr();
+	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
@@ -222,8 +222,8 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	// Wait for a wakeup signal.
 	mm_fiber_block();
 
-	// Reset the task reference.
-	mm_memory_store(wait->task, NULL);
+	// Reset the fiber reference.
+	mm_memory_store(wait->fiber, NULL);
 
 	LEAVE();
 }
@@ -233,10 +233,10 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 {
 	ENTER();
 
-	// Enqueue the task.
+	// Enqueue the fiber.
 	struct mm_core *core = mm_core_selfptr();
 	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->task = mm_fiber_selfptr();
+	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
@@ -245,8 +245,8 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	// Wait for a wakeup signal.
 	mm_timer_block(timeout);
 
-	// Reset the task reference.
-	mm_memory_store(wait->task, NULL);
+	// Reset the fiber reference.
+	mm_memory_store(wait->fiber, NULL);
 
 	LEAVE();
 }
@@ -267,12 +267,12 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 		// Get the next wait entry.
 		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
-		struct mm_fiber *task = mm_memory_load(wait->task);
+		struct mm_fiber *fiber = mm_memory_load(wait->fiber);
 		struct mm_core *core = mm_core_selfptr();
 
-		if (likely(task != NULL)) {
-			// Run the task if it has not been reset.
-			mm_core_run_fiber(task);
+		if (likely(fiber != NULL)) {
+			// Run the fiber if it has not been reset.
+			mm_core_run_fiber(fiber);
 			// Add used wait entry to the pending list.
 			mm_wait_add_pending(&core->wait_cache, wait);
 		} else {
@@ -306,16 +306,17 @@ mm_waitset_local_wait(struct mm_waitset *waitset)
 	ENTER();
 	ASSERT(waitset->core == mm_core_self());
 
-	// Enqueue the task.
+	// Enqueue the fiber.
 	struct mm_core *core = mm_core_selfptr();
 	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->task = mm_fiber_selfptr();
+	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
 	mm_fiber_block();
 
-	wait->task = NULL;
+	// Reset the fiber reference.
+	wait->fiber = NULL;
 
 	LEAVE();
 }
@@ -326,16 +327,17 @@ mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	ENTER();
 	ASSERT(waitset->core == mm_core_self());
 
-	// Enqueue the task.
+	// Enqueue the fiber.
 	struct mm_core *core = mm_core_selfptr();
 	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->task = mm_fiber_selfptr();
+	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Wait for a wakeup signal.
 	mm_timer_block(timeout);
 
-	wait->task = NULL;
+	// Reset the fiber reference.
+	wait->fiber = NULL;
 
 	LEAVE();
 }
@@ -354,12 +356,12 @@ mm_waitset_local_broadcast(struct mm_waitset *waitset)
 		// Get the next wait entry.
 		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
-		struct mm_fiber *task = wait->task;
+		struct mm_fiber *fiber = wait->fiber;
 
-		if (likely(task != NULL)) {
-			// Run the task if it has not been reset.
-			wait->task = NULL;
-			mm_fiber_run(task);
+		if (likely(fiber != NULL)) {
+			// Run the fiber if it has not been reset.
+			wait->fiber = NULL;
+			mm_fiber_run(fiber);
 		}
 
 		// Return unused wait entry to the pool.
@@ -371,7 +373,7 @@ mm_waitset_local_broadcast(struct mm_waitset *waitset)
 }
 
 /**********************************************************************
- * Shared inter-core wait-set with single waiter task.
+ * Shared inter-core wait-set with single waiter fiber.
  **********************************************************************/
 
 void NONNULL(1)
@@ -379,7 +381,7 @@ mm_waitset_unique_prepare(struct mm_waitset *waitset)
 {
 	ENTER();
 
-	waitset->task = NULL;
+	waitset->fiber = NULL;
 	waitset->core = MM_THREAD_SELF;
 
 	LEAVE();
@@ -390,8 +392,8 @@ mm_waitset_unique_wait(struct mm_waitset *waitset)
 {
 	ENTER();
 
-	// Advertise the waiting task.
-	mm_memory_store(waitset->task, mm_fiber_selfptr());
+	// Advertise the waiting fiber.
+	mm_memory_store(waitset->fiber, mm_fiber_selfptr());
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {
@@ -399,10 +401,10 @@ mm_waitset_unique_wait(struct mm_waitset *waitset)
 		mm_fiber_block();
 	}
 
-	// Reset the task reference.
+	// Reset the fiber reference.
 	mm_memory_store(waitset->signal, false);
 	mm_memory_store_fence();
-	mm_memory_store(waitset->task, NULL);
+	mm_memory_store(waitset->fiber, NULL);
 
 	LEAVE();
 }
@@ -412,8 +414,8 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 {
 	ENTER();
 
-	// Advertise the waiting task.
-	mm_memory_store(waitset->task, mm_fiber_selfptr());
+	// Advertise the waiting fiber.
+	mm_memory_store(waitset->fiber, mm_fiber_selfptr());
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {
@@ -421,10 +423,10 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 		mm_timer_block(timeout);
 	}
 
-	// Reset the task reference.
+	// Reset the fiber reference.
 	mm_memory_store(waitset->signal, false);
 	mm_memory_store_fence();
-	mm_memory_store(waitset->task, NULL);
+	mm_memory_store(waitset->fiber, NULL);
 
 	LEAVE();
 }
@@ -438,10 +440,10 @@ mm_waitset_unique_signal(struct mm_waitset *waitset)
 	mm_memory_store(waitset->signal, true);
 	mm_memory_strict_fence(); // TODO: store_load fence
 
-	// Wake up the waiting task, if any.
-	struct mm_fiber *task = mm_memory_load(waitset->task);
-	if (likely(task != NULL))
-		mm_core_run_fiber(task);
+	// Wake up the waiting fiber if any.
+	struct mm_fiber *fiber = mm_memory_load(waitset->fiber);
+	if (likely(fiber != NULL))
+		mm_core_run_fiber(fiber);
 
 	LEAVE();
 }

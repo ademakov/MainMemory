@@ -38,19 +38,20 @@ struct mm_wait_cache
 	uint32_t cache_size;
 };
 
-/* A set of tasks waiting on an entity shared between cores. */
+/* A set of fibers waiting on an entity shared between cores. */
 struct mm_waitset
 {
 	union
 	{
-		/* The task queue. */
+		/* Queue of waiting fibers. */
 		struct mm_stack set;
-		struct mm_fiber *task;
+		/* A single waiting fiber. */
+		struct mm_fiber *fiber;
 	};
 	/* The core the wait-set is pinned to. It is equal to
 	   MM_THREAD_NONE in case the wait-set is not pinned. */
 	mm_thread_t core;
-	/* The wait-set has single waiting task. */
+	/* The wait-set has single waiting fiber. */
 	bool signal;
 };
 
@@ -106,7 +107,7 @@ void NONNULL(1)
 mm_waitset_local_broadcast(struct mm_waitset *waitset);
 
 /**********************************************************************
- * Shared inter-core wait-set with single waiter task.
+ * Shared inter-core wait-set with single waiter fiber.
  **********************************************************************/
 
 void NONNULL(1)
