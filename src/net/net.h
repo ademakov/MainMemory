@@ -33,7 +33,7 @@
 #include <sys/un.h>
 
 /* Forward declaration. */
-struct mm_task;
+struct mm_fiber;
 
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x000001
@@ -97,7 +97,7 @@ struct mm_net_server
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* Acceptor task is active. */
+	/* Acceptor fiber is active. */
 	bool acceptor_active;
 
 	/* Work items for server tasks. */
@@ -119,9 +119,9 @@ struct mm_net_socket
 	/* Event handling data. */
 	struct mm_event_fd event;
 
-	/* Tasks bound to perform socket I/O. */
-	struct mm_task *reader;
-	struct mm_task *writer;
+	/* Fibers bound to perform socket I/O. */
+	struct mm_fiber *reader;
+	struct mm_fiber *writer;
 
 	/* I/O timeouts. */
 	mm_timeout_t read_timeout;

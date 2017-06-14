@@ -1,5 +1,5 @@
 /*
- * base/fiber/combiner.h - MainMemory task combining synchronization.
+ * base/fiber/combiner.h - MainMemory fiber combining synchronization.
  *
  * Copyright (C) 2014-2017  Aleksey Demakov
  *
@@ -25,7 +25,7 @@
 #include "base/list.h"
 #include "base/thread/local.h"
 
-struct mm_task_combiner
+struct mm_fiber_combiner
 {
 	/* Per-core wait list of pending requests. */
 	MM_THREAD_LOCAL(struct mm_list, wait_queue);
@@ -33,18 +33,18 @@ struct mm_task_combiner
 	struct mm_combiner combiner;
 };
 
-struct mm_task_combiner *
-mm_task_combiner_create(const char *name, size_t size, size_t handoff);
+struct mm_fiber_combiner *
+mm_fiber_combiner_create(const char *name, size_t size, size_t handoff);
 
 void NONNULL(1)
-mm_task_combiner_destroy(struct mm_task_combiner *combiner);
+mm_fiber_combiner_destroy(struct mm_fiber_combiner *combiner);
 
 void NONNULL(1)
-mm_task_combiner_prepare(struct mm_task_combiner *combiner, const char *name,
-			 size_t size, size_t handoff);
+mm_fiber_combiner_prepare(struct mm_fiber_combiner *combiner, const char *name,
+			  size_t size, size_t handoff);
 
 void NONNULL(1, 2)
-mm_task_combiner_execute(struct mm_task_combiner *combiner,
-			 mm_combiner_routine_t routine, uintptr_t data);
+mm_fiber_combiner_execute(struct mm_fiber_combiner *combiner,
+			  mm_combiner_routine_t routine, uintptr_t data);
 
 #endif /* BASE_FIBER_COMBINER_H */

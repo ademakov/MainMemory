@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/lock.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/wait.h"
 #include "base/fiber/work.h"
 
@@ -32,7 +32,7 @@ struct mm_future
 	struct mm_work work;
 
 	/* The future task if running. */
-	struct mm_task *task;
+	struct mm_fiber *task;
 
 	/* The future task parameters. */
 	mm_routine_t start;

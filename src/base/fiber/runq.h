@@ -1,5 +1,5 @@
 /*
- * base/fiber/runq.h - MainMemory task run queue.
+ * base/fiber/runq.h - MainMemory fiber run queue.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -24,7 +24,7 @@
 #include "base/list.h"
 
 /* Forward declaration. */
-struct mm_task;
+struct mm_fiber;
 
 /* The number of priority bins in the run queue. */
 #define MM_RUNQ_BINS 32
@@ -43,27 +43,27 @@ struct mm_runq
 void NONNULL(1)
 mm_runq_prepare(struct mm_runq *runq);
 
-/* Check to see if there are no pending tasks with given priorities. */
+/* Check to see if there are no pending fibers with given priorities. */
 static inline bool NONNULL(1)
 mm_runq_empty(struct mm_runq *runq, uint32_t mask)
 {
 	return (runq->bmap & mask) == 0;
 }
 
-/* Check to see if there are no pending tasks with priorities above the given one. */
+/* Check to see if there are no pending fibers with priorities above the given one. */
 static inline bool NONNULL(1)
 mm_runq_empty_above(struct mm_runq *runq, int prio)
 {
 	return mm_runq_empty(runq, (1u << prio) - 1);
 }
 
-struct mm_task * NONNULL(1)
+struct mm_fiber * NONNULL(1)
 mm_runq_get(struct mm_runq *runq);
 
 void NONNULL(1, 2)
-mm_runq_put(struct mm_runq *runq, struct mm_task *task);
+mm_runq_put(struct mm_runq *runq, struct mm_fiber *fiber);
 
 void NONNULL(1, 2)
-mm_runq_delete(struct mm_runq *runq, struct mm_task *task);
+mm_runq_delete(struct mm_runq *runq, struct mm_fiber *fiber);
 
 #endif /* BASE_FIBER_RUNQ_H */

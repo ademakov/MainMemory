@@ -20,7 +20,7 @@
 #include "base/fiber/timer.h"
 
 #include "base/fiber/core.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/work.h"
 
 #define MM_TIMER_QUEUE_MAX_WIDTH	500
@@ -63,7 +63,7 @@ struct mm_timer_resume
 	struct mm_time_manager *manager;
 
 	/* The task to schedule. */
-	struct mm_task *task;
+	struct mm_fiber *task;
 };
 
 
@@ -80,7 +80,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 
 	if (entry->ident == MM_TIMER_BLOCK) {
 		struct mm_timer_resume *resume = containerof(entry, struct mm_timer_resume, entry);
-		mm_task_run(resume->task);
+		mm_fiber_run(resume->task);
 	} else {
 		struct mm_timer *timer = containerof(entry, struct mm_timer, entry);
 
@@ -308,19 +308,19 @@ mm_timer_block(mm_timeout_t timeout)
 	DEBUG("time: %llu", time);
 
 	struct mm_timer_resume timer = { .manager = manager,
-					 .task = mm_task_selfptr() };
+					 .task = mm_fiber_selfptr() };
 	mm_timeq_entry_init(&timer.entry, time, MM_TIMER_BLOCK);
 
-	mm_task_cleanup_push(mm_timer_block_cleanup, &timer);
+	mm_fiber_cleanup_push(mm_timer_block_cleanup, &timer);
 
 	mm_timeq_insert(manager->time_queue, &timer.entry);
-#if ENABLE_TIMER_LOCATION && ENABLE_TASK_LOCATION
-	mm_task_block_at(location, function);
+#if ENABLE_TIMER_LOCATION && ENABLE_FIBER_LOCATION
+	mm_fiber_block_at(location, function);
 #else
-	mm_task_block();
+	mm_fiber_block();
 #endif
 
-	mm_task_cleanup_pop(mm_timer_is_armed(&timer.entry));
+	mm_fiber_cleanup_pop(mm_timer_is_armed(&timer.entry));
 
 	LEAVE();
 }

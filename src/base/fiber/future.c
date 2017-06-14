@@ -62,7 +62,7 @@ mm_future_routine(struct mm_work *work)
 	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
 
 	// Advertise that the future task is running.
-	mm_memory_store(future->task, mm_task_selfptr());
+	mm_memory_store(future->task, mm_fiber_selfptr());
 	mm_memory_store_fence();
 
 	// Actually start the future unless already canceled.
@@ -227,7 +227,7 @@ mm_future_wait(struct mm_future *future)
 	while (result == MM_RESULT_NOTREADY) {
 
 		// Check if the task has been canceled.
-		mm_task_testcancel();
+		mm_fiber_testcancel();
 
 		// Make a synchronized check of the future status.
 		mm_regular_lock(&future->lock);
@@ -267,7 +267,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	while (result == MM_RESULT_NOTREADY) {
 
 		// Check if the task has been canceled.
-		mm_task_testcancel();
+		mm_fiber_testcancel();
 
 		// Check if timed out.
 		if (deadline <= mm_core_gettime(core)) {
@@ -397,7 +397,7 @@ mm_future_unique_wait(struct mm_future *future)
 	while (result == MM_RESULT_NOTREADY) {
 
 		// Check if the task has been canceled.
-		mm_task_testcancel();
+		mm_fiber_testcancel();
 
 		// Wait for completion notification.
 		mm_waitset_unique_wait(&future->waitset);
@@ -426,7 +426,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	while (result == MM_RESULT_NOTREADY) {
 
 		// Check if the task has been canceled.
-		mm_task_testcancel();
+		mm_fiber_testcancel();
 
 		// Check if timed out.
 		if (deadline <= mm_core_gettime(core)) {
@@ -461,12 +461,12 @@ mm_future_cancel(struct mm_future *future)
 
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_NOTREADY) {
-		struct mm_task *task = mm_memory_load(future->task);
+		struct mm_fiber *task = mm_memory_load(future->task);
 		if (task != NULL) {
 			// TODO: task cancel across cores
 			// TODO: catch and stop cancel in the future routine.
 #if 0
-			mm_task_cancel(task);
+			mm_fiber_cancel(task);
 #else
 			mm_warning(0, "running future cancellation is not implemented");
 #endif

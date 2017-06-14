@@ -22,7 +22,7 @@
 #include "base/list.h"
 #include "base/report.h"
 #include "base/fiber/core.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 #include "base/thread/request.h"
 
 #include <sys/uio.h>
@@ -33,8 +33,8 @@ struct mm_async_node
 	/* Link in the per-core list of async operations. */
 	struct mm_link link;
 
-	/* The task that requested the operation. */
-	struct mm_task *task;
+	/* The fiber that requested the operation. */
+	struct mm_fiber *fiber;
 
 	/* Operation status. */
 	mm_value_t status;
@@ -65,7 +65,7 @@ mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
 	mm_memory_store(node->status, 0);
 
 	// Notify the caller.
-	mm_core_run_task(node->task);
+	mm_core_run_fiber(node->fiber);
 }
 
 static void
@@ -133,15 +133,15 @@ mm_async_syscall_4_handler(uintptr_t *arguments)
 static void
 mm_async_setup(struct mm_async_node *node, const char *desc)
 {
-	// TODO: disable async task cancel
+	// TODO: disable async fiber cancel
 
 	// Initialize the debugging info.
 	node->description = desc;
 
-	// Register as a waiting task.
+	// Register as a waiting fiber.
 	struct mm_core *core = mm_core_selfptr();
-	node->task = core->task;
-	node->task->flags |= MM_TASK_WAITING;
+	node->fiber = core->fiber;
+	node->fiber->flags |= MM_FIBER_WAITING;
 	mm_list_append(&core->async, &node->link);
 
 	// Initialize the result.
@@ -156,7 +156,7 @@ mm_async_wait(struct mm_async_node *node)
 
 	// Wait for the operation completion.
 	while (mm_memory_load(node->status) == MM_RESULT_DEFERRED)
-		mm_task_block();
+		mm_fiber_block();
 
 	// Ensure the result is visible.
 	mm_memory_load_fence();
@@ -167,7 +167,7 @@ mm_async_wait(struct mm_async_node *node)
 		errno = node->error;
 
 	// Cleanup.
-	node->task->flags &= ~MM_TASK_WAITING;
+	node->fiber->flags &= ~MM_FIBER_WAITING;
 	mm_list_delete(&node->link);
 
 	return result;

@@ -25,7 +25,7 @@
 #include "base/lock.h"
 
 /* Forward declaration. */
-struct mm_task;
+struct mm_fiber;
 
 /* A cache of free wait entries. */
 struct mm_wait_cache
@@ -45,7 +45,7 @@ struct mm_waitset
 	{
 		/* The task queue. */
 		struct mm_stack set;
-		struct mm_task *task;
+		struct mm_fiber *task;
 	};
 	/* The core the wait-set is pinned to. It is equal to
 	   MM_THREAD_NONE in case the wait-set is not pinned. */

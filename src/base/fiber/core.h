@@ -30,7 +30,7 @@
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
-struct mm_task;
+struct mm_fiber;
 struct mm_work;
 
 typedef enum
@@ -44,19 +44,19 @@ typedef enum
 /* Virtual core state. */
 struct mm_core
 {
-	/* Currently running task. */
-	struct mm_task *task;
+	/* Currently running fiber. */
+	struct mm_fiber *fiber;
 
-	/* Queue of ready to run tasks. */
+	/* Queue of ready to run fibers. */
 	struct mm_runq runq;
 
-	/* Queue of tasks waiting for work items. */
+	/* Queue of fibers waiting for work items. */
 	struct mm_list idle;
 
-	/* List of tasks that have finished. */
+	/* List of fibers that have finished. */
 	struct mm_list dead;
 
-	/* Queue of blocked tasks. */
+	/* Queue of blocked fibers. */
 	struct mm_list block;
 
 	/* List of asynchronous operations. */
@@ -71,13 +71,13 @@ struct mm_core
 	/* The number of items in the work queue. */
 	uint32_t nwork;
 
-	/* Current and maximum number of worker tasks. */
+	/* Current and maximum number of worker fibers. */
 	mm_fiber_t nidle;
 	mm_fiber_t nworkers;
 	mm_fiber_t nworkers_min;
 	mm_fiber_t nworkers_max;
 
-	/* The counter of task context switches. */
+	/* The counter of fiber context switches. */
 	uint64_t loop_count;
 	uint64_t cswitch_count;
 	uint64_t cswitch_denied_in_cswitch_state;
@@ -95,14 +95,14 @@ struct mm_core
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
 
-	/* Master task. */
-	struct mm_task *master;
+	/* Master fiber. */
+	struct mm_fiber *master;
 
-	/* Dealer task. */
-	struct mm_task *dealer;
+	/* Dealer fiber. */
+	struct mm_fiber *dealer;
 
-	/* The bootstrap task. */
-	struct mm_task *boot;
+	/* The bootstrap fiber. */
+	struct mm_fiber *boot;
 
 	/* The underlying thread. */
 	struct mm_thread *thread;
@@ -134,7 +134,7 @@ void NONNULL(2)
 mm_core_post_work(mm_thread_t core_id, struct mm_work *work);
 
 void NONNULL(1)
-mm_core_run_task(struct mm_task *task);
+mm_core_run_fiber(struct mm_fiber *fiber);
 
 void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core);
@@ -206,7 +206,7 @@ mm_core_getrealtime(struct mm_core *core)
  **********************************************************************/
 
 void NONNULL(1)
-mm_core_print_tasks(struct mm_core *core);
+mm_core_print_fibers(struct mm_core *core);
 
 void
 mm_core_stats(void);

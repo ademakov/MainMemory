@@ -48,9 +48,9 @@ libmmbase_la_SOURCES = \
 	fiber/async.c fiber/async.h \
 	fiber/combiner.c fiber/combiner.h \
 	fiber/core.c fiber/core.h \
+	fiber/fiber.c fiber/fiber.h \
 	fiber/future.c fiber/future.h \
 	fiber/runq.c fiber/runq.h \
-	fiber/task.c fiber/task.h \
 	fiber/timer.c fiber/timer.h \
 	fiber/wait.c fiber/wait.h \
 	fiber/work.c fiber/work.h \

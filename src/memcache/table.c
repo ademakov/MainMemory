@@ -24,7 +24,7 @@
 #include "base/combiner.h"
 #include "base/hash.h"
 #include "base/report.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 #include "base/memory/memory.h"
 
 #include <sys/mman.h>
@@ -173,7 +173,7 @@ mc_table_stride_routine(struct mm_work *work)
 	ENTER();
 
 	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
-	ASSERT(part->striding);
+	//ASSERT(part->striding);
 
 	struct mc_action action;
 	action.part = part;
@@ -189,7 +189,7 @@ mc_table_stride_complete(struct mm_work *work, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
-	ASSERT(part->striding);
+	//ASSERT(part->striding);
 
 #if ENABLE_SMP
 	mm_regular_unlock(&part->striding);
@@ -224,7 +224,7 @@ mc_table_evict_routine(struct mm_work *work)
 	ENTER();
 
 	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
-	ASSERT(part->evicting);
+	//ASSERT(part->evicting);
 
 	struct mc_action action;
 	action.part = part;
@@ -232,7 +232,7 @@ mc_table_evict_routine(struct mm_work *work)
 	size_t reserve = MC_TABLE_VOLUME_RESERVE / mc_table.nparts;
 	while (mc_table_check_volume(part, reserve)) {
 		mc_action_evict(&action);
-		mm_task_yield();
+		mm_fiber_yield();
 	}
 
 	LEAVE();
@@ -245,7 +245,7 @@ mm_table_evict_complete(struct mm_work *work, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
-	ASSERT(part->evicting);
+	//ASSERT(part->evicting);
 
 #if ENABLE_SMP
 	mm_regular_unlock(&part->evicting);

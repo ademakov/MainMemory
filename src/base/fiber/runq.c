@@ -1,5 +1,5 @@
 /*
- * base/fiber/runq.c - MainMemory task run queue.
+ * base/fiber/runq.c - MainMemory fiber run queue.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -21,7 +21,7 @@
 
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 
 void NONNULL(1)
 mm_runq_prepare(struct mm_runq *runq)
@@ -36,7 +36,7 @@ mm_runq_prepare(struct mm_runq *runq)
 	LEAVE();
 }
 
-struct mm_task * NONNULL(1)
+struct mm_fiber * NONNULL(1)
 mm_runq_get(struct mm_runq *runq)
 {
 	ASSERT(runq->bmap != 0);
@@ -46,32 +46,32 @@ mm_runq_get(struct mm_runq *runq)
 	ASSERT(!mm_list_empty(&runq->bins[priority]));
 
 	struct mm_link *link = mm_list_remove_head(&runq->bins[priority]);
-	struct mm_task *task = containerof(link, struct mm_task, queue);
+	struct mm_fiber *fiber = containerof(link, struct mm_fiber, queue);
 	if (mm_list_empty(&runq->bins[priority]))
 		runq->bmap &= ~(1 << priority);
-	ASSERT(priority == task->priority);
+	ASSERT(priority == fiber->priority);
 
-	return task;
+	return fiber;
 }
 
 void NONNULL(1, 2)
-mm_runq_put(struct mm_runq *runq, struct mm_task *task)
+mm_runq_put(struct mm_runq *runq, struct mm_fiber *fiber)
 {
-	int priority = task->priority;
+	int priority = fiber->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 
 	runq->bmap |= (1 << priority);
-	mm_list_append(&runq->bins[priority], &task->queue);
+	mm_list_append(&runq->bins[priority], &fiber->queue);
 }
 
 void NONNULL(1, 2)
-mm_runq_delete(struct mm_runq *runq, struct mm_task *task)
+mm_runq_delete(struct mm_runq *runq, struct mm_fiber *fiber)
 {
-	int priority = task->priority;
+	int priority = fiber->priority;
 	ASSERT(priority >= 0 && priority < MM_RUNQ_BINS);
 	ASSERT(!mm_list_empty(&runq->bins[priority]));
 
-	mm_list_delete(&task->queue);
+	mm_list_delete(&fiber->queue);
 	if (mm_list_empty(&runq->bins[priority]))
 		runq->bmap &= ~(1 << priority);
 }

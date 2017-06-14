@@ -27,7 +27,7 @@
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/core.h"
-#include "base/fiber/task.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/timer.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
@@ -306,13 +306,13 @@ mm_net_reclaim_routine(struct mm_work *work)
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed socks
 	while (sock->reader != NULL || sock->writer != NULL) {
-		struct mm_task *task = mm_task_selfptr();
-		mm_priority_t priority = MM_PRIO_UPPER(task->priority, 1);
+		struct mm_fiber *fiber = mm_fiber_selfptr();
+		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
 		if (sock->reader != NULL)
-			mm_task_hoist(sock->reader, priority);
+			mm_fiber_hoist(sock->reader, priority);
  		if (sock->writer != NULL)
-			mm_task_hoist(sock->writer, priority);
-		mm_task_yield();
+			mm_fiber_hoist(sock->writer, priority);
+		mm_fiber_yield();
 	}
 
 	// Destroy the socket.
@@ -474,7 +474,7 @@ mm_net_acceptor(struct mm_work *work)
 
 	// Accept incoming connections.
 	while (mm_net_accept(srv))
-		mm_task_yield();
+		mm_fiber_yield();
 
 	LEAVE();
 	return 0;
@@ -486,7 +486,7 @@ mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
 	// Find the pertinent server.
 	struct mm_net_server *srv = containerof(work, struct mm_net_server, acceptor_work);
 
-	// Indicate that the acceptor task is deactivated.
+	// Indicate that the acceptor work is done.
 	srv->acceptor_active = false;
 }
 
@@ -498,9 +498,9 @@ mm_net_accept_handler(mm_event_t event, void *data)
 	struct mm_net_server *srv = containerof(data, struct mm_net_server, event);
 
 	if (likely(event == MM_EVENT_INPUT) && !srv->acceptor_active) {
-		// Indicate that the acceptor task is activated.
+		// Indicate that the acceptor work is in progress.
 		srv->acceptor_active = true;
-		// Really queue the acceptor task for running.
+		// Really queue the acceptor work for running.
 		mm_thread_t thread = mm_event_target(&srv->event);
 		mm_core_post_work(thread, &srv->acceptor_work);
 	}
@@ -539,8 +539,8 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 	sock->flags |= flags;
 
 	if (sock->reader != NULL) {
-		// Run the reader task presumably blocked on the socket.
-		mm_task_run(sock->reader);
+		// Run the reader fiber presumably blocked on the socket.
+		mm_fiber_run(sock->reader);
 	} else {
 		// Check to see if a new reader should be spawned.
 		flags = sock->flags & (MM_NET_READER_SPAWNED | MM_NET_READER_PENDING);
@@ -570,8 +570,8 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 	sock->flags |= flags;
 
 	if (sock->writer != NULL) {
-		// Run the writer task presumably blocked on the socket.
-		mm_task_run(sock->writer);
+		// Run the writer fiber presumably blocked on the socket.
+		mm_fiber_run(sock->writer);
 	} else {
 		// Check to see if a new writer should be spawned.
 		flags = sock->flags & (MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING);
@@ -660,7 +660,7 @@ mm_net_socket_handler(mm_event_t event, void *data)
 	case MM_EVENT_RECLAIM:
 		// At this time there are no and will not be any I/O messages
 		// related to this socket in the event processing pipeline.
-		// But there still may be active reader/writer tasks or pending
+		// But there still may be active reader/writer fibers or pending
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
@@ -701,7 +701,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		mm_core_post_work(target, &sock->read_work);
 
 		// Let it start immediately.
-		mm_task_yield();
+		mm_fiber_yield();
 	}
 
 leave:
@@ -731,7 +731,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		mm_core_post_work(target, &sock->write_work);
 
 		// Let it start immediately.
-		mm_task_yield();
+		mm_fiber_yield();
 	}
 
 leave:
@@ -744,13 +744,13 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
-#if ENABLE_TASK_IO_FLAGS
-	struct mm_task *task = mm_task_self();
-	if (unlikely((task->flags & MM_TASK_READING) == 0))
+#if ENABLE_FIBER_IO_FLAGS
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	if (unlikely((fiber->flags & MM_FIBER_READING) == 0))
 		goto leave;
 
-	// Unbind the current task from the socket.
-	task->flags &= ~MM_TASK_READING;
+	// Unbind the current fiber from the socket.
+	fiber->flags &= ~MM_FIBER_READING;
 #endif
 
 	// Bail out if the socket is shutdown.
@@ -784,13 +784,13 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 	ENTER();
 	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
 
-#if ENABLE_TASK_IO_FLAGS
-	struct mm_task *task = mm_task_self();
-	if (unlikely((task->flags & MM_TASK_WRITING) == 0))
+#if ENABLE_FIBER_IO_FLAGS
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	if (unlikely((fiber->flags & MM_FIBER_WRITING) == 0))
 		goto leave;
 
-	// Unbind the current task from the socket.
-	task->flags &= ~MM_TASK_WRITING;
+	// Unbind the current fiber from the socket.
+	fiber->flags &= ~MM_FIBER_WRITING;
 #endif
 
 	// Bail out if the socket is shutdown.
@@ -828,10 +828,10 @@ mm_net_reader_routine(struct mm_work *work)
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
-#if ENABLE_TASK_IO_FLAGS
-	// Register the reader task.
-	struct mm_task *task = mm_task_self();
-	task->flags |= MM_TASK_READING;
+#if ENABLE_FIBER_IO_FLAGS
+	// Register the reader fiber.
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	fiber->flags |= MM_FIBER_READING;
 #endif
 
 	// Run the protocol handler routine.
@@ -852,10 +852,10 @@ mm_net_writer_routine(struct mm_work *work)
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
-#if ENABLE_TASK_IO_FLAGS
-	// Register the writer task.
-	struct mm_task *task = mm_task_self();
-	task->flags |= MM_TASK_WRITING;
+#if ENABLE_FIBER_IO_FLAGS
+	// Register the writer fiber.
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	fiber->flags |= MM_FIBER_WRITING;
 #endif
 
 	// Run the protocol handler routine.
@@ -1168,11 +1168,11 @@ retry:
 			    MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_BOUND);
 	mm_event_register_fd(&sock->event);
 
-	// Block the task waiting for connection completion.
-	sock->writer = mm_task_selfptr();
+	// Block the fiber waiting for connection completion.
+	sock->writer = mm_fiber_selfptr();
 	while ((sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR)) == 0) {
-		mm_task_block();
-		// TODO: mm_task_testcancel();
+		mm_fiber_block();
+		// TODO: mm_fiber_testcancel();
 	}
 	sock->writer = NULL;
 
@@ -1259,16 +1259,16 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	// Block the task waiting for the socket to become read ready.
+	// Block the fiber waiting for the socket to become read ready.
 	struct mm_core *core = mm_core_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->reader = mm_task_selfptr();
-		mm_task_block();
+		sock->reader = mm_fiber_selfptr();
+		mm_fiber_block();
 		sock->reader = NULL;
 		rc = 0;
 	} else if (mm_core_gettime(core) < deadline) {
 		mm_timeout_t timeout = deadline - mm_core_gettime(core);
-		sock->reader = mm_task_selfptr();
+		sock->reader = mm_fiber_selfptr();
 		mm_timer_block(timeout);
 		sock->reader = NULL;
 		rc = 0;
@@ -1281,8 +1281,8 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	// Check if the task is canceled.
-	mm_task_testcancel();
+	// Check if the fiber is canceled.
+	mm_fiber_testcancel();
 
 leave:
 	LEAVE();
@@ -1308,16 +1308,16 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	// Block the task waiting for the socket to become write ready.
+	// Block the fiber waiting for the socket to become write ready.
 	struct mm_core *core = mm_core_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->writer = mm_task_selfptr();
-		mm_task_block();
+		sock->writer = mm_fiber_selfptr();
+		mm_fiber_block();
 		sock->writer = NULL;
 		rc = 0;
 	} else if (mm_core_gettime(core) < deadline) {
 		mm_timeout_t timeout = deadline - mm_core_gettime(core);
-		sock->writer = mm_task_selfptr();
+		sock->writer = mm_fiber_selfptr();
 		mm_timer_block(timeout);
 		sock->writer = NULL;
 		rc = 0;
@@ -1330,8 +1330,8 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 		goto leave;
 	}
 
-	// Check if the task is canceled.
-	mm_task_testcancel();
+	// Check if the fiber is canceled.
+	mm_fiber_testcancel();
 
 leave:
 	LEAVE();

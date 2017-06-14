@@ -24,8 +24,8 @@
 #include "base/logger.h"
 #include "base/runtime.h"
 #include "base/event/dispatch.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
-#include "base/fiber/task.h"
 #include "base/fiber/work.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
@@ -59,21 +59,21 @@ __thread struct mm_core *__mm_core_self;
  * Yield routine for backoff on busy waiting.
  **********************************************************************/
 
-#if ENABLE_TASK_LOCATION
+#if ENABLE_FIBER_LOCATION
 static void
 mm_core_relax(void)
 {
-	mm_task_yield();
+	mm_fiber_yield();
 }
 #endif
 
 static void
 mm_core_enable_yield(struct mm_core *core)
 {
-#if ENABLE_TASK_LOCATION
+#if ENABLE_FIBER_LOCATION
 	mm_thread_setrelax(core->thread, mm_core_relax);
 #else
-	mm_thread_setrelax(core->thread, mm_task_yield);
+	mm_thread_setrelax(core->thread, mm_fiber_yield);
 #endif
 }
 
@@ -92,27 +92,27 @@ mm_core_idle(struct mm_core *core, bool tail)
 {
 	ENTER();
 
-	// Put the task into the wait queue.
-	struct mm_task *task = core->task;
+	// Put the fiber into the wait queue.
+	struct mm_fiber *fiber = core->fiber;
 	if (tail)
-		mm_list_append(&core->idle, &task->wait_queue);
+		mm_list_append(&core->idle, &fiber->wait_queue);
 	else
-		mm_list_insert(&core->idle, &task->wait_queue);
+		mm_list_insert(&core->idle, &fiber->wait_queue);
 
-	ASSERT((task->flags & MM_TASK_WAITING) == 0);
-	task->flags |= MM_TASK_WAITING;
+	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
+	fiber->flags |= MM_FIBER_WAITING;
 	core->nidle++;
 
 	// Wait until poked.
-	mm_task_block();
+	mm_fiber_block();
 
-	// Normally an idle task starts after being poked and
+	// Normally an idle fiber starts after being poked and
 	// in this case it should already be removed from the
-	// wait list. But if the task has started for another
+	// wait list. But if the fiber has started for another
 	// reason it must be removed from the wait list here.
-	if (unlikely((task->flags & MM_TASK_WAITING) != 0)) {
-		mm_list_delete(&task->wait_queue);
-		task->flags &= ~MM_TASK_WAITING;
+	if (unlikely((fiber->flags & MM_FIBER_WAITING) != 0)) {
+		mm_list_delete(&fiber->wait_queue);
+		fiber->flags &= ~MM_FIBER_WAITING;
 		core->nidle--;
 	}
 
@@ -126,16 +126,16 @@ mm_core_poke(struct mm_core *core)
 
 	if (likely(!mm_list_empty(&core->idle))) {
 		struct mm_link *link = mm_list_head(&core->idle);
-		struct mm_task *task = containerof(link, struct mm_task, wait_queue);
+		struct mm_fiber *fiber = containerof(link, struct mm_fiber, wait_queue);
 
-		// Get a task from the wait queue.
-		ASSERT((task->flags & MM_TASK_WAITING) != 0);
-		mm_list_delete(&task->wait_queue);
-		task->flags &= ~MM_TASK_WAITING;
+		// Get a fiber from the wait queue.
+		ASSERT((fiber->flags & MM_FIBER_WAITING) != 0);
+		mm_list_delete(&fiber->wait_queue);
+		fiber->flags &= ~MM_FIBER_WAITING;
 		core->nidle--;
 
-		// Put the task to the run queue.
-		mm_task_run(task);
+		// Put the fiber to the run queue.
+		mm_fiber_run(fiber);
 	}
 
 	LEAVE();
@@ -168,7 +168,7 @@ mm_core_add_work(struct mm_core *core, struct mm_work *work)
 	mm_queue_append(&core->workq, &work->link);
 	core->nwork++;
 
-	// If there is a task waiting for work then let it run now.
+	// If there is a fiber waiting for work then let it run now.
 	mm_core_poke(core);
 }
 
@@ -227,45 +227,45 @@ mm_core_post_work(mm_thread_t core_id, struct mm_work *work)
 #endif
 
 /**********************************************************************
- * Task queue.
+ * Fiber queue.
  **********************************************************************/
 
 #if ENABLE_SMP
 static void
-mm_core_run_task_req(uintptr_t *arguments)
+mm_core_run_fiber_req(uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_task *task = (struct mm_task *) arguments[0];
-	mm_task_run(task);
+	struct mm_fiber *fiber = (struct mm_fiber *) arguments[0];
+	mm_fiber_run(fiber);
 
 	LEAVE();
 }
 #endif
 
 void NONNULL(1)
-mm_core_run_task(struct mm_task *task)
+mm_core_run_fiber(struct mm_fiber *fiber)
 {
 	ENTER();
 
 #if ENABLE_SMP
-	if (task->core == mm_core_selfptr()) {
-		// Put the task to the core run queue directly.
-		mm_task_run(task);
+	if (fiber->core == mm_core_selfptr()) {
+		// Put the fiber to the core run queue directly.
+		mm_fiber_run(fiber);
 	} else {
-		// Submit the task to the thread request queue.
-		struct mm_thread *thread = task->core->thread;
-		mm_thread_post_1(thread, mm_core_run_task_req, (uintptr_t) task);
+		// Submit the fiber to the thread request queue.
+		struct mm_thread *thread = fiber->core->thread;
+		mm_thread_post_1(thread, mm_core_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
-	mm_task_run(task);
+	mm_fiber_run(fiber);
 #endif
 
 	LEAVE();
 }
 
 /**********************************************************************
- * Worker task.
+ * Worker fiber.
  **********************************************************************/
 
 static void
@@ -280,7 +280,7 @@ mm_core_worker_cleanup(uintptr_t arg)
 
 	// Wake up the master possibly waiting for worker availability.
 	if (core->nworkers == core->nworkers_max)
-		mm_task_run(core->master);
+		mm_fiber_run(core->master);
 
 	// Account for the exiting worker.
 	core->nworkers--;
@@ -295,7 +295,7 @@ mm_core_worker(mm_value_t arg)
 	struct mm_work *cancel = NULL;
 
 	// Ensure cleanup on exit.
-	mm_task_cleanup_push(mm_core_worker_cleanup, &cancel);
+	mm_fiber_cleanup_push(mm_core_worker_cleanup, &cancel);
 
 	// Handle the work item supplied by the master.
 	if (arg) {
@@ -327,7 +327,7 @@ mm_core_worker(mm_value_t arg)
 	}
 
 	// Cleanup on return.
-	mm_task_cleanup_pop(true);
+	mm_fiber_cleanup_pop(true);
 
 	LEAVE();
 	return 0;
@@ -339,15 +339,15 @@ mm_core_worker_create(struct mm_core *core, mm_value_t arg)
 	ENTER();
 
 	// Make a unique worker name.
-	char name[MM_TASK_NAME_SIZE];
-	snprintf(name, MM_TASK_NAME_SIZE, "worker %u:%u", mm_core_getid(core), core->nworkers);
+	char name[MM_FIBER_NAME_SIZE];
+	snprintf(name, MM_FIBER_NAME_SIZE, "worker %u:%u", mm_core_getid(core), core->nworkers);
 
-	// Make a new worker task and start it.
-	struct mm_task_attr attr;
-	mm_task_attr_init(&attr);
-	mm_task_attr_setpriority(&attr, MM_PRIO_WORKER);
-	mm_task_attr_setname(&attr, name);
-	mm_task_create(&attr, mm_core_worker, arg);
+	// Make a new worker fiber and start it.
+	struct mm_fiber_attr attr;
+	mm_fiber_attr_init(&attr);
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_WORKER);
+	mm_fiber_attr_setname(&attr, name);
+	mm_fiber_create(&attr, mm_core_worker, arg);
 
 	// Account for the newcomer worker.
 	core->nworkers++;
@@ -356,7 +356,7 @@ mm_core_worker_create(struct mm_core *core, mm_value_t arg)
 }
 
 /**********************************************************************
- * Master task.
+ * Master fiber.
  **********************************************************************/
 
 static mm_value_t
@@ -374,7 +374,7 @@ mm_core_master(mm_value_t arg)
 	while (!mm_memory_load(core->stop)) {
 		// Check to see if there are enough workers.
 		if (core->nworkers >= core->nworkers_max) {
-			mm_task_block();
+			mm_fiber_block();
 			continue;
 		}
 
@@ -387,12 +387,12 @@ mm_core_master(mm_value_t arg)
 			// Take the first available work item.
 			struct mm_work *work = mm_core_get_work(core);
 
-			// Make a new worker task to handle it.
+			// Make a new worker fiber to handle it.
 			mm_core_worker_create(core, (mm_value_t) work);
 
-			// Inform about the status of all tasks.
+			// Inform about the status of all fibers.
 			if (verbose)
-				mm_core_print_tasks(core);
+				mm_core_print_fibers(core);
 		}
 	}
 
@@ -401,7 +401,7 @@ mm_core_master(mm_value_t arg)
 }
 
 /**********************************************************************
- * Dealer task.
+ * Dealer fiber.
  **********************************************************************/
 
 // Dealer loop sleep time - 10 seconds
@@ -498,13 +498,13 @@ mm_core_dealer(mm_value_t arg)
 		// Count the loop cycles.
 		core->loop_count++;
 
-		// Run the queued tasks if any.
-		mm_task_yield();
+		// Run the queued fibers if any.
+		mm_fiber_yield();
 
-		// Release excessive resources allocated by tasks.
+		// Release excessive resources allocated by fibers.
 		mm_core_trim(core);
 
-		// Enter the state that forbids task switches.
+		// Enter the state that forbids fiber switches.
 		core->state = MM_CORE_WAITING;
 		// Halt waiting for incoming requests.
 		mm_core_halt(core);
@@ -521,24 +521,24 @@ mm_core_dealer(mm_value_t arg)
  **********************************************************************/
 
 static void
-mm_core_print_task_list(struct mm_list *list)
+mm_core_print_fiber_list(struct mm_list *list)
 {
 	struct mm_link *link = &list->base;
 	while (!mm_list_is_tail(list, link)) {
 		link = link->next;
-		struct mm_task *task = containerof(link, struct mm_task, queue);
-		mm_task_print_status(task);
+		struct mm_fiber *fiber = containerof(link, struct mm_fiber, queue);
+		mm_fiber_print_status(fiber);
 	}
 }
 
 void NONNULL(1)
-mm_core_print_tasks(struct mm_core *core)
+mm_core_print_fibers(struct mm_core *core)
 {
-	mm_brief("tasks on core %d (#idle=%u, #work=%u):",
+	mm_brief("fibers on core %d (#idle=%u, #work=%u):",
 		 mm_core_getid(core), core->nidle, core->nwork);
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
-		mm_core_print_task_list(&core->runq.bins[i]);
-	mm_core_print_task_list(&core->block);
+		mm_core_print_fiber_list(&core->runq.bins[i]);
+	mm_core_print_fiber_list(&core->block);
 }
 
 void
@@ -607,25 +607,25 @@ mm_core_boot_term(struct mm_core *core)
 	mm_timer_cleanup(&core->time_manager);
 
 	// TODO:
-	//mm_task_destroy(core->master);
-	//mm_task_destroy(core->dealer);
+	//mm_fiber_destroy(core->master);
+	//mm_fiber_destroy(core->dealer);
 }
 
 static void
 mm_core_start_basic_tasks(struct mm_core *core)
 {
-	struct mm_task_attr attr;
-	mm_task_attr_init(&attr);
+	struct mm_fiber_attr attr;
+	mm_fiber_attr_init(&attr);
 
-	// Create the master task for this core and schedule it for execution.
-	mm_task_attr_setpriority(&attr, MM_PRIO_MASTER);
-	mm_task_attr_setname(&attr, "master");
-	core->master = mm_task_create(&attr, mm_core_master, (mm_value_t) core);
+	// Create the master fiber for this core and schedule it for execution.
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_MASTER);
+	mm_fiber_attr_setname(&attr, "master");
+	core->master = mm_fiber_create(&attr, mm_core_master, (mm_value_t) core);
 
-	// Create the dealer task for this core and schedule it for execution.
-	mm_task_attr_setpriority(&attr, MM_PRIO_DEALER);
-	mm_task_attr_setname(&attr, "dealer");
-	core->dealer = mm_task_create(&attr, mm_core_dealer, (mm_value_t) core);
+	// Create the dealer fiber for this core and schedule it for execution.
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_DEALER);
+	mm_fiber_attr_setname(&attr, "dealer");
+	core->dealer = mm_fiber_create(&attr, mm_core_dealer, (mm_value_t) core);
 }
 
 /* A per-core thread entry point. */
@@ -640,40 +640,40 @@ mm_core_boot(mm_value_t arg)
 	// Set the thread-specific data.
 	__mm_core_self = core;
 
-	// Set pointer to the running task.
-	core->task = core->boot;
-	core->task->state = MM_TASK_RUNNING;
+	// Set pointer to the running fiber.
+	core->fiber = core->boot;
+	core->fiber->state = MM_FIBER_RUNNING;
 
 #if ENABLE_TRACE
-	mm_trace_context_prepare(&core->task->trace, "[%s][%d %s]",
+	mm_trace_context_prepare(&core->fiber->trace, "[%s][%d %s]",
 				 mm_thread_getname(core->thread),
-				 mm_task_getid(core->task),
-				 mm_task_getname(core->task));
+				 mm_fiber_getid(core->fiber),
+				 mm_fiber_getname(core->fiber));
 #endif
 
 	// Initialize per-core resources.
 	mm_core_boot_init(core);
 
-	// Start master & dealer tasks.
+	// Start master & dealer fibers.
 	mm_core_start_basic_tasks(core);
 
-	// Enable yielding to other tasks on busy waiting.
+	// Enable yielding to other fibers on busy waiting.
 	mm_core_enable_yield(core);
 
-	// Run the other tasks while there are any.
+	// Run the other fibers while there are any.
 	core->state = MM_CORE_RUNNING;
-	mm_task_yield();
+	mm_fiber_yield();
 	core->state = MM_CORE_INVALID;
 
-	// Disable yielding to other tasks.
+	// Disable yielding to other fibers.
 	mm_core_disable_yield(core);
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);
 
-	// Invalidate the boot task.
-	core->task->state = MM_TASK_INVALID;
-	core->task = NULL;
+	// Invalidate the boot fiber.
+	core->fiber->state = MM_FIBER_INVALID;
+	core->fiber = NULL;
 
 	// Abandon the core.
 	__mm_core_self = NULL;
@@ -720,13 +720,13 @@ mm_core_init_single(struct mm_core *core)
 
 	core->stop = false;
 
-	// Create the core bootstrap task.
-	struct mm_task_attr attr;
-	mm_task_attr_init(&attr);
-	mm_task_attr_setflags(&attr, MM_TASK_BOOT | MM_TASK_CANCEL_DISABLE);
-	mm_task_attr_setpriority(&attr, MM_PRIO_BOOT);
-	mm_task_attr_setname(&attr, "boot");
-	core->boot = mm_task_create(&attr, mm_core_boot, (mm_value_t) core);
+	// Create the core bootstrap fiber.
+	struct mm_fiber_attr attr;
+	mm_fiber_attr_init(&attr);
+	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
+	mm_fiber_attr_setname(&attr, "boot");
+	core->boot = mm_fiber_create(&attr, mm_core_boot, (mm_value_t) core);
 
 	LEAVE();
 }
@@ -738,7 +738,7 @@ mm_core_term_single(struct mm_core *core)
 
 	mm_wait_cache_cleanup(&core->wait_cache);
 
-	mm_task_destroy(core->boot);
+	mm_fiber_destroy(core->boot);
 
 	// Flush logs before memory space with possible log chunks is unmapped.
 	mm_log_relay();
@@ -754,7 +754,7 @@ mm_core_gettracecontext(void)
 {
 	struct mm_core *core = mm_core_selfptr();
 	if (core != NULL)
-		return &core->task->trace;
+		return &core->fiber->trace;
 	struct mm_thread *thread = mm_thread_selfptr();
 	if (unlikely(thread == NULL))
 		ABORT();
@@ -780,7 +780,7 @@ mm_core_init(void)
 
 	mm_net_init();
 
-	mm_task_init();
+	mm_fiber_init();
 	mm_wait_init();
 	mm_future_init();
 
@@ -805,7 +805,7 @@ mm_core_term(void)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
 
-	mm_task_term();
+	mm_fiber_term();
 
 	mm_net_term();
 
