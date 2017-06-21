@@ -213,7 +213,7 @@ mm_base_init(void)
 
 	// Determine the machine topology.
 	uint16_t ncpus = mm_topology_getncpus();
-	mm_brief("running on %d cores", mm_regular_nthreads);
+	mm_brief("running on %d cores", ncpus);
 
 	// Determine the number of regular threads.
 	mm_regular_nthreads = nthreads ? nthreads : ncpus;
