@@ -194,63 +194,6 @@ mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 }
 
 /**********************************************************************
- * Server table.
- **********************************************************************/
-
-static struct mm_net_server *mm_srv_table;
-static uint32_t mm_srv_table_size;
-static uint32_t mm_srv_count;
-
-static void
-mm_net_init_server_table(void)
-{
-	ENTER();
-
-	mm_srv_table_size = 4;
-	mm_srv_table = mm_global_alloc(mm_srv_table_size * sizeof(struct mm_net_server));
-	mm_srv_count = 0;
-
-	LEAVE();
-}
-
-static void
-mm_net_free_server_table(void)
-{
-	ENTER();
-
-	for (uint32_t i = 0; i < mm_srv_count; i++) {
-		struct mm_net_server *srv = &mm_srv_table[i];
-		mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
-		mm_global_free(srv->name);
-	}
-
-	mm_global_free(mm_srv_table);
-
-	LEAVE();
-}
-
-static struct mm_net_server *
-mm_net_alloc_server(void)
-{
-	ENTER();
-
-	if (mm_srv_table_size == mm_srv_count) {
-		mm_srv_table_size += 4;
-		mm_srv_table = mm_global_realloc(
-			mm_srv_table,
-			mm_srv_table_size * sizeof(struct mm_net_server));
-	}
-
-	struct mm_net_server *srv = &mm_srv_table[mm_srv_count++];
-	srv->event.fd = -1;
-
-	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
-
-	LEAVE();
-	return srv;
-}
-
-/**********************************************************************
  * Socket create and destroy routines.
  **********************************************************************/
 
@@ -867,156 +810,97 @@ leave:
 }
 
 /**********************************************************************
- * Network subsystem initialization and termination.
+ * Network servers.
  **********************************************************************/
 
-static int mm_net_initialized = 0;
+/* Global server list. */
+static struct mm_list MM_LIST_INIT(mm_server_list);
 
 static void
 mm_net_exit_cleanup(void)
 {
 	ENTER();
 
-	if (!mm_net_initialized)
-		goto leave;
-
-	for (uint32_t i = 0; i < mm_srv_count; i++) {
-		struct mm_net_server *srv = &mm_srv_table[i];
-		if (srv->event.fd >= 0) {
-			mm_net_remove_unix_socket(&srv->addr);
-		}
-	}
-
-leave:
-	LEAVE();
-}
-
-void
-mm_net_init(void)
-{
-	ENTER();
-
-	mm_atexit(mm_net_exit_cleanup);
-
-	mm_net_init_server_table();
-
-	mm_net_initialized = 1;
-
-	LEAVE();
-}
-
-void
-mm_net_term(void)
-{
-	ENTER();
-
-	mm_net_initialized = 0;
-
-	for (uint32_t i = 0; i < mm_srv_count; i++) {
-		struct mm_net_server *srv = &mm_srv_table[i];
+	// Go through the the global server list and remove files
+	// associated with unix-domain sockets.
+	while (!mm_list_empty(&mm_server_list)) {
+		struct mm_link *link = mm_list_head(&mm_server_list);
+		struct mm_net_server *srv = containerof(link, struct mm_net_server, link);
 		if (srv->event.fd >= 0)
-			mm_net_close_server_socket(&srv->addr, srv->event.fd);
+			mm_net_remove_unix_socket(&srv->addr);
 	}
-
-	mm_net_free_server_table();
 
 	LEAVE();
 }
 
-/**********************************************************************
- * Network servers.
- **********************************************************************/
+static void
+mm_net_shutdown_server(struct mm_net_server *srv)
+{
+	ENTER();
+
+	// Remove a server from the global list.
+	mm_list_delete(&srv->link);
+
+	// Close the server socket if it's open.
+	if (srv->event.fd >= 0)
+		mm_net_close_server_socket(&srv->addr, srv->event.fd);
+
+	// Free all the server data.
+	mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
+	mm_global_free(srv->name);
+	mm_global_free(srv);
+
+	LEAVE();
+}
 
 static mm_value_t
 mm_net_register_server(struct mm_work *work)
 {
 	ENTER();
 
+	// Register a server for events.
 	struct mm_net_server *srv = containerof(work, struct mm_net_server, register_work);
 	ASSERT(srv->event.fd >= 0);
-
 	mm_event_register_fd(&srv->event);
 
 	LEAVE();
 	return 0;
 }
 
-static void
-mm_net_prepare_server(struct mm_net_server *srv, struct mm_net_proto *proto)
+static struct mm_net_server *
+mm_net_alloc_server(struct mm_net_proto *proto)
 {
+	ENTER();
+
+	// Allocate a server.
+	struct mm_net_server *srv = mm_global_alloc(sizeof(struct mm_net_server));
+
+	// Initialize its data.
+	srv->event.fd = -1;
 	srv->proto = proto;
 	srv->acceptor_active = false;
-
+	srv->name = NULL;
 	MM_WORK_VTABLE_2(acceptor_vtable, mm_net_acceptor, mm_net_acceptor_complete);
 	mm_work_prepare(&srv->acceptor_work, &acceptor_vtable);
-
 	MM_WORK_VTABLE_1(register_vtable, mm_net_register_server);
 	mm_work_prepare(&srv->register_work, &register_vtable);
-}
+	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
 
-struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
-			  const char *path)
-{
-	ENTER();
+	// On the very first server register the server cleanup routine.
+	if (mm_list_empty(&mm_server_list))
+		mm_atexit(mm_net_exit_cleanup);
 
-	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_format(&mm_global_arena, "%s (%s)", name, path);
-	mm_net_prepare_server(srv, proto);
+	// Register the server stop hook.
+	mm_common_stop_hook_1((void (*)(void *)) mm_net_shutdown_server, srv);
 
-	if (!mm_net_set_unix_addr(&srv->addr, path))
-		mm_fatal(0, "failed to create '%s' server with path '%s'", name, path);
+	// Link it to the global server list.
+	mm_list_append(&mm_server_list, &srv->link);
 
 	LEAVE();
 	return srv;
 }
 
-struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
-			  const char *addrstr, uint16_t port)
-{
-	ENTER();
-
-	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
-	mm_net_prepare_server(srv, proto);
-
-	if (!mm_net_set_inet_addr(&srv->addr, addrstr, port))
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
-
-	LEAVE();
-	return srv;
-}
-
-struct mm_net_server * NONNULL(1, 2, 3)
-mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
-			   const char *addrstr, uint16_t port)
-{
-	ENTER();
-
-	struct mm_net_server *srv = mm_net_alloc_server();
-	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
-	mm_net_prepare_server(srv, proto);
-
-	if (!mm_net_set_inet6_addr(&srv->addr, addrstr, port))
-		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
-
-	LEAVE();
-	return srv;
-}
-
-void NONNULL(1, 2)
-mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
-{
-	ENTER();
-
-	mm_bitset_clear_all(&srv->affinity);
-	mm_bitset_or(&srv->affinity, mask);
-
-	LEAVE();
-}
-
-void NONNULL(1)
+static void NONNULL(1)
 mm_net_start_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -1041,7 +925,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	LEAVE();
 }
 
-void NONNULL(1)
+static void NONNULL(1)
 mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
@@ -1056,6 +940,62 @@ mm_net_stop_server(struct mm_net_server *srv)
 	// Close the socket.
 	mm_net_close_server_socket(&srv->addr, srv->event.fd);
 	srv->event.fd = -1;
+
+	LEAVE();
+}
+
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
+			  const char *path)
+{
+	ENTER();
+
+	struct mm_net_server *srv = mm_net_alloc_server(proto);
+	srv->name = mm_format(&mm_global_arena, "%s (%s)", name, path);
+	if (!mm_net_set_unix_addr(&srv->addr, path))
+		mm_fatal(0, "failed to create '%s' server with path '%s'", name, path);
+
+	LEAVE();
+	return srv;
+}
+
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
+			  const char *addrstr, uint16_t port)
+{
+	ENTER();
+
+	struct mm_net_server *srv = mm_net_alloc_server(proto);
+	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
+	if (!mm_net_set_inet_addr(&srv->addr, addrstr, port))
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
+
+	LEAVE();
+	return srv;
+}
+
+struct mm_net_server * NONNULL(1, 2, 3)
+mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
+			   const char *addrstr, uint16_t port)
+{
+	ENTER();
+
+	struct mm_net_server *srv = mm_net_alloc_server(proto);
+	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
+	if (!mm_net_set_inet6_addr(&srv->addr, addrstr, port))
+		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
+
+	LEAVE();
+	return srv;
+}
+
+void NONNULL(1, 2)
+mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
+{
+	ENTER();
+
+	mm_bitset_clear_all(&srv->affinity);
+	mm_bitset_or(&srv->affinity, mask);
 
 	LEAVE();
 }

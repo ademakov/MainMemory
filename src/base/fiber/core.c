@@ -769,7 +769,6 @@ mm_core_init(void)
 
 	mm_base_init();
 
-	mm_net_init();
 	mm_fiber_init();
 	mm_wait_init();
 	mm_future_init();
@@ -796,8 +795,6 @@ mm_core_term(void)
 	mm_global_free(mm_core_set);
 
 	mm_fiber_term();
-
-	mm_net_term();
 
 	mm_base_term();
 

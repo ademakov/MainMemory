@@ -104,6 +104,9 @@ struct mm_net_server
 	struct mm_work acceptor_work;
 	struct mm_work register_work;
 
+	/* Global server list link. */
+	struct mm_link link;
+
 	/* Core affinity. */
 	struct mm_bitset affinity;
 
@@ -160,13 +163,6 @@ struct mm_net_proto
 };
 
 /**********************************************************************
- * Network subsystem initialization and termination.
- **********************************************************************/
-
-void mm_net_init(void);
-void mm_net_term(void);
-
-/**********************************************************************
  * Network address manipulation routines.
  **********************************************************************/
 
@@ -194,12 +190,6 @@ mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto, const c
 
 void NONNULL(1, 2)
 mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask);
-
-void NONNULL(1)
-mm_net_start_server(struct mm_net_server *srv);
-
-void NONNULL(1)
-mm_net_stop_server(struct mm_net_server *srv);
 
 void NONNULL(1)
 mm_net_setup_server(struct mm_net_server *srv);
