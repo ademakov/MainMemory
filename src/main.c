@@ -163,7 +163,7 @@ main(int argc, char *argv[])
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 
 	// Initialize subsystems.
-	mm_core_init();
+	mm_base_init();
 
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {
@@ -183,7 +183,7 @@ main(int argc, char *argv[])
 	mm_core_start();
 
 	// Terminate subsystems.
-	mm_core_term();
+	mm_base_term();
 	mm_term();
 
 	LEAVE();

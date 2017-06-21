@@ -28,6 +28,7 @@
 #include "base/topology.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
+#include "base/fiber/core.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
@@ -232,6 +233,9 @@ mm_base_init(void)
 	mm_regular_start_hook_0(mm_regular_start);
 	mm_regular_stop_hook_0(mm_regular_stop);
 
+	// Initialize fiber subsystem.
+	mm_core_init();
+
 	LEAVE();
 }
 
@@ -239,6 +243,9 @@ void
 mm_base_term(void)
 {
 	ENTER();
+
+	// Cleanup fiber subsystem.
+	mm_core_term();
 
 	// Free regular thread domain.
 	mm_domain_destroy(mm_regular_domain);

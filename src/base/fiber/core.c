@@ -765,9 +765,7 @@ void
 mm_core_init(void)
 {
 	ENTER();
-	ASSERT(mm_regular_nthreads == 0);
-
-	mm_base_init();
+	ASSERT(mm_regular_nthreads > 0);
 
 	mm_fiber_init();
 	mm_wait_init();
@@ -795,8 +793,6 @@ mm_core_term(void)
 	mm_global_free(mm_core_set);
 
 	mm_fiber_term();
-
-	mm_base_term();
 
 	LEAVE();
 }

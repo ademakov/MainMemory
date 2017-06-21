@@ -100,7 +100,7 @@ main(int ac, char *av[])
 	}
 
 	// Initialize subsystems.
-	mm_core_init();
+	mm_base_init();
 
 	// Create the server.
 	proxy_server = mm_net_create_inet_server("hello", &proxy_proto,
@@ -118,7 +118,7 @@ main(int ac, char *av[])
 	mm_core_start();
 
 	// Terminate subsystems.
-	mm_core_term();
+	mm_base_term();
 	mm_term();
 
 	return MM_EXIT_SUCCESS;
