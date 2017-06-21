@@ -27,6 +27,8 @@
  * Double-linked circular list.
  **********************************************************************/
 
+#define MM_LIST_INIT(list) list = { { &list.base, &list.base } };
+
 struct mm_link
 {
 	struct mm_link *next;
