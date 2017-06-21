@@ -22,7 +22,6 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
-#include "base/runtime.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
@@ -49,7 +48,6 @@
 #endif
 
 // The core set.
-mm_thread_t mm_core_num;
 struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
@@ -767,19 +765,11 @@ void
 mm_core_init(void)
 {
 	ENTER();
-	ASSERT(mm_core_num == 0);
+	ASSERT(mm_regular_nthreads == 0);
 
 	mm_base_init();
 
-	// Find the number of CPU cores.
-	mm_core_num = mm_ncpus;
-	if (mm_core_num == 1)
-		mm_brief("running on 1 core.");
-	else
-		mm_brief("running on %d cores.", mm_core_num);
-
 	mm_net_init();
-
 	mm_fiber_init();
 	mm_wait_init();
 	mm_future_init();
@@ -788,8 +778,8 @@ mm_core_init(void)
 	mm_trace_set_getcontext(mm_core_gettracecontext);
 #endif
 
-	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_core_num * sizeof(struct mm_core));
-	for (mm_thread_t i = 0; i < mm_core_num; i++)
+	mm_core_set = mm_global_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_core));
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_core_init_single(&mm_core_set[i]);
 
 	LEAVE();
@@ -799,9 +789,9 @@ void
 mm_core_term(void)
 {
 	ENTER();
-	ASSERT(mm_core_num > 0);
+	ASSERT(mm_regular_nthreads > 0);
 
-	for (mm_thread_t i = 0; i < mm_core_num; i++)
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_core_term_single(&mm_core_set[i]);
 	mm_global_free(mm_core_set);
 
@@ -818,7 +808,7 @@ void
 mm_core_start(void)
 {
 	ENTER();
-	ASSERT(mm_core_num > 0);
+	ASSERT(mm_regular_nthreads > 0);
 
 	// Set the base library params.
 	struct mm_base_params params = {
@@ -838,10 +828,10 @@ void
 mm_core_stop(void)
 {
 	ENTER();
-	ASSERT(mm_core_num > 0);
+	ASSERT(mm_regular_nthreads > 0);
 
 	// Set stop flag for core threads.
-	for (mm_thread_t i = 0; i < mm_core_num; i++) {
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_memory_store(core->stop, true);
 		mm_thread_wakeup(core->thread);

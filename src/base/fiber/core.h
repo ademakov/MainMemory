@@ -24,6 +24,7 @@
 
 #include "base/list.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/ring.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/timer.h"
@@ -143,7 +144,6 @@ mm_core_execute_requests(struct mm_core *core);
  * Core information.
  **********************************************************************/
 
-extern mm_thread_t mm_core_num;
 extern struct mm_core *mm_core_set;
 
 extern __thread struct mm_core *__mm_core_self;
@@ -158,7 +158,7 @@ static inline mm_thread_t
 mm_core_getnum(void)
 {
 #if ENABLE_SMP
-	return mm_core_num;
+	return mm_regular_nthreads;
 #else
 	return 1;
 #endif
@@ -179,7 +179,7 @@ mm_core_getptr(mm_thread_t core)
 		return NULL;
 	if (core == MM_THREAD_SELF)
 		return mm_core_selfptr();
-	ASSERT(core < mm_core_num);
+	ASSERT(core < mm_regular_nthreads);
 	return &mm_core_set[core];
 }
 

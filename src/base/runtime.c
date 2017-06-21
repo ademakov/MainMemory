@@ -35,7 +35,7 @@
 
 #include <unistd.h>
 
-uint16_t mm_ncpus = 0;
+mm_thread_t mm_regular_nthreads = 0;
 struct mm_domain *mm_regular_domain = NULL;
 
 // Event dispatch for regular thread domain.
@@ -174,7 +174,7 @@ static bool
 mm_validate_nthreads(uint32_t n)
 {
 #if ENABLE_SMP
-	return n <= UINT16_MAX;
+	return n < MM_THREAD_SELF;
 #else
 	return n == 1;
 #endif
@@ -204,6 +204,7 @@ mm_base_init(void)
 {
 	ENTER();
 
+	// Try to get thread number parameter possibly provided by user.
 	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
 	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
 		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
@@ -211,10 +212,15 @@ mm_base_init(void)
 	}
 
 	// Determine the machine topology.
-	if (nthreads == 0)
-		mm_ncpus = mm_topology_getncpus();
+	uint16_t ncpus = mm_topology_getncpus();
+	mm_brief("running on %d cores", mm_regular_nthreads);
+
+	// Determine the number of regular threads.
+	mm_regular_nthreads = nthreads ? nthreads : ncpus;
+	if (mm_regular_nthreads == 1)
+		mm_brief("using 1 thread");
 	else
-		mm_ncpus = nthreads;
+		mm_brief("using %d threads", mm_regular_nthreads);
 
 	// Initialize basic subsystems.
 	mm_memory_init();
@@ -263,17 +269,17 @@ mm_base_loop(struct mm_base_params *params)
 	struct mm_domain_attr attr;
 	mm_domain_attr_prepare(&attr);
 	mm_domain_attr_setname(&attr, name);
-	mm_domain_attr_setnumber(&attr, mm_ncpus);
+	mm_domain_attr_setnumber(&attr, mm_regular_nthreads);
 	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
 	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
 	mm_domain_attr_setspace(&attr, true);
-	mm_domain_attr_setdomainqueue(&attr, mm_ncpus * 32);
-	mm_domain_attr_setthreadqueue(&attr, mm_ncpus * 32);
+	mm_domain_attr_setdomainqueue(&attr, mm_regular_nthreads * 32);
+	mm_domain_attr_setthreadqueue(&attr, mm_regular_nthreads * 32);
 
 	bool thread_affinity = mm_settings_get_bool("thread-affinity", false);
 	if (thread_affinity) {
 		mm_verbose("set thread affinity");
-		for (mm_thread_t i = 0; i < mm_ncpus; i++)
+		for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 			mm_domain_attr_setcputag(&attr, i, i);
 	}
 

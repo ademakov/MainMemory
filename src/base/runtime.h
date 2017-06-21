@@ -21,7 +21,9 @@
 #define BASE_RUNTIME_H
 
 #include "common.h"
-#include "base/thread/domain.h"
+
+/* Forward declarations. */
+struct mm_domain;
 
 struct mm_base_params
 {
@@ -33,7 +35,11 @@ struct mm_base_params
 	mm_routine_t thread_routine;
 };
 
-extern uint16_t mm_ncpus;
+/**********************************************************************
+ * Runtime information.
+ **********************************************************************/
+
+extern mm_thread_t mm_regular_nthreads;
 extern struct mm_domain *mm_regular_domain;
 
 /**********************************************************************
