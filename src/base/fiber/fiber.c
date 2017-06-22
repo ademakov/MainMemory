@@ -120,9 +120,8 @@ mm_fiber_entry(void)
 	struct mm_fiber *fiber = mm_fiber_selfptr();
 
 #if ENABLE_TRACE
-	mm_trace_context_prepare(&fiber->trace, "[%s][%d %s]",
+	mm_trace_context_prepare(&fiber->trace, "[%s %s]",
 				 mm_thread_getname(mm_thread_selfptr()),
-				 mm_fiber_getid(fiber),
 				 mm_fiber_getname(fiber));
 #endif
 

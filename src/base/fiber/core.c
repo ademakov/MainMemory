@@ -338,7 +338,7 @@ mm_core_worker_create(struct mm_core *core, mm_value_t arg)
 
 	// Make a unique worker name.
 	char name[MM_FIBER_NAME_SIZE];
-	snprintf(name, MM_FIBER_NAME_SIZE, "worker %u:%u", mm_core_getid(core), core->nworkers);
+	snprintf(name, MM_FIBER_NAME_SIZE, "worker %u", core->nworkers);
 
 	// Make a new worker fiber and start it.
 	struct mm_fiber_attr attr;
@@ -643,9 +643,8 @@ mm_core_boot(mm_value_t arg)
 	core->fiber->state = MM_FIBER_RUNNING;
 
 #if ENABLE_TRACE
-	mm_trace_context_prepare(&core->fiber->trace, "[%s][%d %s]",
+	mm_trace_context_prepare(&core->fiber->trace, "[%s %s]",
 				 mm_thread_getname(core->thread),
-				 mm_fiber_getid(core->fiber),
 				 mm_fiber_getname(core->fiber));
 #endif
 
@@ -805,7 +804,6 @@ mm_core_start(void)
 
 	// Set the base library params.
 	struct mm_base_params params = {
-		.regular_name = "core",
 		.thread_stack_size = MM_PAGE_SIZE,
 		.thread_guard_size = MM_PAGE_SIZE,
 		.thread_routine = mm_core_boot,

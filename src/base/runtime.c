@@ -267,15 +267,10 @@ mm_base_loop(struct mm_base_params *params)
 	// Invoke registered start hooks.
 	mm_call_common_start_hooks();
 
-	// Determine the domain name.
-	const char *name = "regular";
-	if (params->regular_name != NULL)
-		name = params->regular_name;
-
 	// Set regular domain attributes.
 	struct mm_domain_attr attr;
 	mm_domain_attr_prepare(&attr);
-	mm_domain_attr_setname(&attr, name);
+	mm_domain_attr_setname(&attr, "regular");
 	mm_domain_attr_setnumber(&attr, mm_regular_nthreads);
 	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
 	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
