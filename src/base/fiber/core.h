@@ -124,7 +124,7 @@ struct mm_core
 void mm_core_init(void);
 void mm_core_term(void);
 
-void mm_core_start(void);
+mm_value_t mm_core_boot(mm_value_t arg);
 void mm_core_stop(void);
 
 /**********************************************************************

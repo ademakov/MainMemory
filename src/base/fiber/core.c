@@ -627,7 +627,7 @@ mm_core_start_basic_tasks(struct mm_core *core)
 }
 
 /* A per-core thread entry point. */
-static mm_value_t
+mm_value_t
 mm_core_boot(mm_value_t arg)
 {
 	ENTER();
@@ -794,25 +794,6 @@ mm_core_term(void)
 	mm_fiber_term();
 
 	LEAVE();
-}
-
-void
-mm_core_start(void)
-{
-	ENTER();
-	ASSERT(mm_regular_nthreads > 0);
-
-	// Set the base library params.
-	struct mm_base_params params = {
-		.thread_stack_size = MM_PAGE_SIZE,
-		.thread_guard_size = MM_PAGE_SIZE,
-		.thread_routine = mm_core_boot,
-	};
-
-	// Run core threads.
-	mm_base_loop(&params);
-
- 	LEAVE();
 }
 
 void

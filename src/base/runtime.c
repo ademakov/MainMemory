@@ -259,8 +259,8 @@ mm_base_term(void)
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_base_loop(struct mm_base_params *params)
+void
+mm_base_loop(void)
 {
 	ENTER();
 
@@ -272,8 +272,8 @@ mm_base_loop(struct mm_base_params *params)
 	mm_domain_attr_prepare(&attr);
 	mm_domain_attr_setname(&attr, "regular");
 	mm_domain_attr_setnumber(&attr, mm_regular_nthreads);
-	mm_domain_attr_setstacksize(&attr, params->thread_stack_size);
-	mm_domain_attr_setguardsize(&attr, params->thread_guard_size);
+	mm_domain_attr_setstacksize(&attr, MM_PAGE_SIZE); // enough for fiber bootstrap
+	mm_domain_attr_setguardsize(&attr, MM_PAGE_SIZE);
 	mm_domain_attr_setspace(&attr, true);
 	mm_domain_attr_setdomainqueue(&attr, mm_regular_nthreads * 32);
 	mm_domain_attr_setthreadqueue(&attr, mm_regular_nthreads * 32);
@@ -286,7 +286,7 @@ mm_base_loop(struct mm_base_params *params)
 	}
 
 	// Start regular threads.
-	mm_regular_domain = mm_domain_create(&attr, params->thread_routine);
+	mm_regular_domain = mm_domain_create(&attr, mm_core_boot);
 
 	// Release domain creation attributes.
 	mm_domain_attr_cleanup(&attr);

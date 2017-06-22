@@ -133,7 +133,7 @@ main(int ac, char *av[])
 	}
 
 	// Execute the main loop.
-	mm_core_start();
+	mm_base_loop();
 
 	// Terminate subsystems.
 	mm_base_term();

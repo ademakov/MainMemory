@@ -25,14 +25,6 @@
 /* Forward declarations. */
 struct mm_domain;
 
-struct mm_base_params
-{
-	uint32_t thread_stack_size;
-	uint32_t thread_guard_size;
-
-	mm_routine_t thread_routine;
-};
-
 /**********************************************************************
  * Runtime information.
  **********************************************************************/
@@ -94,7 +86,7 @@ mm_base_init(void);
 void
 mm_base_term(void);
 
-void NONNULL(1)
-mm_base_loop(struct mm_base_params *params);
+void
+mm_base_loop(void);
 
 #endif /* BASE_RUNTIME_H */
