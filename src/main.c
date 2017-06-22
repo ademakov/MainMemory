@@ -184,7 +184,6 @@ main(int argc, char *argv[])
 
 	// Terminate subsystems.
 	mm_base_term();
-	mm_term();
 
 	LEAVE();
 	return MM_EXIT_SUCCESS;

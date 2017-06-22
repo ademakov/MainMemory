@@ -26,7 +26,4 @@
 void NONNULL(2)
 mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info);
 
-void
-mm_term(void);
-
 #endif /* BASE_INIT_H */

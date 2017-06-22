@@ -39,10 +39,3 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 
 	LEAVE();
 }
-
-void
-mm_term(void)
-{
-	ENTER();
-	LEAVE();
-}

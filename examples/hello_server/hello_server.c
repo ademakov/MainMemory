@@ -137,7 +137,6 @@ main(int ac, char *av[])
 
 	// Terminate subsystems.
 	mm_base_term();
-	mm_term();
 
 	return MM_EXIT_SUCCESS;
 }
