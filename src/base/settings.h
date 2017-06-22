@@ -1,7 +1,7 @@
 /*
  * base/settings.h - MainMemory settings.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,9 +31,6 @@ typedef enum
 
 void
 mm_settings_init(void);
-
-void
-mm_settings_term(void);
 
 void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite);

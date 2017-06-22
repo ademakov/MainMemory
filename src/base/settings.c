@@ -1,7 +1,7 @@
 /*
  * base/settings.c - MainMemory settings.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include "base/settings.h"
 
+#include "base/exit.h"
 #include "base/hashmap.h"
 #include "base/report.h"
 #include "base/scan.h"
@@ -45,16 +46,25 @@ mm_settings_map_free(struct mm_hashmap *map UNUSED, struct mm_hashmap_entry *hep
 	mm_global_free(sep);
 }
 
-void
-mm_settings_init(void)
+static void
+mm_settings_cleanup(void)
 {
-	mm_hashmap_prepare(&mm_settings_map, &mm_global_arena);
+	ENTER();
+
+	mm_hashmap_cleanup(&mm_settings_map, mm_settings_map_free);
+
+	LEAVE();
 }
 
 void
-mm_settings_term(void)
+mm_settings_init(void)
 {
-	mm_hashmap_cleanup(&mm_settings_map, mm_settings_map_free);
+	ENTER();
+
+	mm_hashmap_prepare(&mm_settings_map, &mm_global_arena);
+	mm_atexit(mm_settings_cleanup);
+
+	LEAVE();
 }
 
 void NONNULL(1)

@@ -44,9 +44,5 @@ void
 mm_term(void)
 {
 	ENTER();
-
-	// Release the settings storage.
-	mm_settings_term();
-
 	LEAVE();
 }
