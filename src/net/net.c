@@ -823,11 +823,12 @@ mm_net_exit_cleanup(void)
 
 	// Go through the the global server list and remove files
 	// associated with unix-domain sockets.
-	while (!mm_list_empty(&mm_server_list)) {
-		struct mm_link *link = mm_list_head(&mm_server_list);
+	struct mm_link *link = mm_list_head(&mm_server_list);
+	while (!mm_list_is_tail(&mm_server_list, link)) {
 		struct mm_net_server *srv = containerof(link, struct mm_net_server, link);
 		if (srv->event.fd >= 0)
 			mm_net_remove_unix_socket(&srv->addr);
+		link = link->next;
 	}
 
 	LEAVE();
