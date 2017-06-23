@@ -1,7 +1,7 @@
 /*
  * base/exit.h - MainMemory exit handling.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,24 +42,6 @@
 #else
 # define MM_EXIT_CONFIG		(EXIT_FAILURE + 2)
 #endif
-
-/**********************************************************************
- * Exit Signal Handling.
- **********************************************************************/
-
-extern int mm_exit_flag;
-
-static inline void
-mm_exit_set(void)
-{
-	mm_memory_store(mm_exit_flag, 1);
-}
-
-static inline bool
-mm_exit_test(void)
-{
-	return mm_memory_load(mm_exit_flag) != 0;
-}
 
 /**********************************************************************
  * Exit Handling.

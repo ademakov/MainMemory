@@ -19,13 +19,10 @@
 
 #include "common.h"
 #include "base/daemon.h"
-#include "base/exit.h"
-#include "base/init.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "base/fiber/core.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "net/netbuf.h"
@@ -85,7 +82,7 @@ main(int ac, char *av[])
 	// Handle the help option.
 	if (mm_settings_get("help", NULL)) {
 		mm_args_usage(args_cnt, args_tbl);
-		mm_exit(MM_EXIT_SUCCESS);
+		return EXIT_SUCCESS;
 	}
 
 	// Parse the required port number parameter.
@@ -100,7 +97,7 @@ main(int ac, char *av[])
 	}
 
 	// Initialize subsystems.
-	mm_base_init();
+	mm_runtime_init();
 
 	// Create the server.
 	proxy_server = mm_net_create_inet_server("hello", &proxy_proto,
@@ -115,9 +112,9 @@ main(int ac, char *av[])
 	}
 
 	// Execute the main loop.
-	mm_base_loop();
+	mm_start();
 
-	return MM_EXIT_SUCCESS;
+	return EXIT_SUCCESS;
 }
 
 // Create a command.

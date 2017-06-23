@@ -23,12 +23,9 @@
 #include "base/exit.h"
 #include "base/conf.h"
 #include "base/daemon.h"
-#include "base/init.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/settings.h"
-#include "base/event/event.h"
-#include "base/fiber/core.h"
 #include "base/memory/global.h"
 
 #include "net/net.h"
@@ -46,8 +43,7 @@ mm_term_handler(int signo UNUSED)
 {
 	ENTER();
 
-	mm_core_stop();
-	mm_exit_set();
+	mm_stop();
 
 	LEAVE();
 }
@@ -163,7 +159,7 @@ main(int argc, char *argv[])
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 
 	// Initialize subsystems.
-	mm_base_init();
+	mm_runtime_init();
 
 	// Daemonize if needed.
 	if (mm_settings_get("daemon", NULL) != NULL) {
@@ -180,7 +176,7 @@ main(int argc, char *argv[])
 	mm_server_init();
 
 	// Execute the main loop.
-	mm_base_loop();
+	mm_start();
 
 	LEAVE();
 	return MM_EXIT_SUCCESS;

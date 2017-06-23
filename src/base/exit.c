@@ -1,7 +1,7 @@
 /*
  * base/exit.c - MainMemory exit handling.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,12 +25,6 @@
 
 #include <stdlib.h>
 #include <unistd.h>
-
-/**********************************************************************
- * Exit Signal Handling.
- **********************************************************************/
-
-int mm_exit_flag = 0;
 
 /**********************************************************************
  * Exit Handling.

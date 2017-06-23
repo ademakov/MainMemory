@@ -21,6 +21,7 @@
 #define BASE_RUNTIME_H
 
 #include "common.h"
+#include "base/args.h"
 
 /* Forward declarations. */
 struct mm_domain;
@@ -80,10 +81,16 @@ mm_call_regular_thread_stop_hooks(void);
  * General runtime routines.
  **********************************************************************/
 
-void
-mm_base_init(void);
+void NONNULL(2)
+mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info);
 
 void
-mm_base_loop(void);
+mm_runtime_init(void);
+
+void
+mm_start(void);
+
+void
+mm_stop(void);
 
 #endif /* BASE_RUNTIME_H */

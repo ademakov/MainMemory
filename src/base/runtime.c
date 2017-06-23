@@ -42,6 +42,9 @@ struct mm_domain *mm_regular_domain = NULL;
 // Event dispatch for regular thread domain.
 static struct mm_event_dispatch mm_regular_dispatch;
 
+// Runtime stop flag.
+static int mm_stop_flag;
+
 /**********************************************************************
  * Runtime start and stop hooks.
  **********************************************************************/
@@ -200,8 +203,25 @@ mm_regular_stop(void)
 	mm_event_dispatch_cleanup(&mm_regular_dispatch);
 }
 
+void NONNULL(2)
+mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
+{
+	ENTER();
+
+	// Prepare for graceful exit.
+	mm_exit_init();
+
+	// Prepare the settings storage.
+	mm_settings_init();
+
+	// Parse the command line arguments.
+	mm_args_init(argc, argv, ninfo, info);
+
+	LEAVE();
+}
+
 void
-mm_base_init(void)
+mm_runtime_init(void)
 {
 	ENTER();
 
@@ -237,7 +257,7 @@ mm_base_init(void)
 }
 
 void
-mm_base_loop(void)
+mm_start(void)
 {
 	ENTER();
 
@@ -273,7 +293,7 @@ mm_base_loop(void)
 
 	// Loop until stopped.
 	mm_log_relay();
-	while (!mm_exit_test()) {
+	while (mm_memory_load(mm_stop_flag) == 0) {
 		size_t logged = mm_log_flush();
 		usleep(logged ? 30000 : 3000000);
 	}
@@ -294,6 +314,18 @@ mm_base_loop(void)
 	mm_domain_destroy(mm_regular_domain);
 	// Cleanup memory spaces.
 	mm_memory_term();
+
+	LEAVE();
+}
+
+void
+mm_stop(void)
+{
+	ENTER();
+
+	mm_core_stop();
+
+	mm_memory_store(mm_stop_flag, 1);
 
 	LEAVE();
 }
