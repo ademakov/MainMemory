@@ -1,7 +1,7 @@
 /*
  * hello_server.c - MainMemory sample server.
  *
- * Copyright (C) 2016  Aleksey Demakov
+ * Copyright (C) 2016-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -134,9 +134,6 @@ main(int ac, char *av[])
 
 	// Execute the main loop.
 	mm_base_loop();
-
-	// Terminate subsystems.
-	mm_base_term();
 
 	return MM_EXIT_SUCCESS;
 }

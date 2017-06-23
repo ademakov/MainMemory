@@ -233,29 +233,6 @@ mm_base_init(void)
 	mm_regular_start_hook_0(mm_regular_start);
 	mm_regular_stop_hook_0(mm_regular_stop);
 
-	// Initialize fiber subsystem.
-	mm_core_init();
-
-	LEAVE();
-}
-
-void
-mm_base_term(void)
-{
-	ENTER();
-
-	// Cleanup fiber subsystem.
-	mm_core_term();
-
-	// Free regular thread domain.
-	mm_domain_destroy(mm_regular_domain);
-
-	// Free all registered hooks.
-	mm_free_hooks();
-
-	// Cleanup memory spaces.
-	mm_memory_term();
-
 	LEAVE();
 }
 
@@ -263,6 +240,9 @@ void
 mm_base_loop(void)
 {
 	ENTER();
+
+	// Initialize fiber subsystem.
+	mm_core_init();
 
 	// Invoke registered start hooks.
 	mm_call_common_start_hooks();
@@ -298,13 +278,22 @@ mm_base_loop(void)
 		usleep(logged ? 30000 : 3000000);
 	}
 
+	mm_log_str("exiting...\n");
+
 	// Wait for regular threads completion.
 	mm_domain_join(mm_regular_domain);
 
 	// Invoke registered stop hooks.
 	mm_call_common_stop_hooks();
+	// Free all registered hooks.
+	mm_free_hooks();
 
-	mm_log_str("exiting...\n");
+	// Cleanup fiber subsystem.
+	mm_core_term();
+	// Free regular thread domain.
+	mm_domain_destroy(mm_regular_domain);
+	// Cleanup memory spaces.
+	mm_memory_term();
 
 	LEAVE();
 }

@@ -84,9 +84,6 @@ void
 mm_base_init(void);
 
 void
-mm_base_term(void);
-
-void
 mm_base_loop(void);
 
 #endif /* BASE_RUNTIME_H */

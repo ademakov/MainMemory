@@ -182,9 +182,6 @@ main(int argc, char *argv[])
 	// Execute the main loop.
 	mm_base_loop();
 
-	// Terminate subsystems.
-	mm_base_term();
-
 	LEAVE();
 	return MM_EXIT_SUCCESS;
 }
