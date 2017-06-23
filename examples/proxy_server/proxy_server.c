@@ -18,7 +18,6 @@
  */
 
 #include "common.h"
-#include "base/daemon.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/settings.h"
@@ -96,6 +95,10 @@ main(int ac, char *av[])
 		mm_fatal(0, "\nInvalid port number is provided.");
 	}
 
+	// Daemonize if needed.
+	if (mm_settings_get("daemon", NULL) != NULL)
+		mm_set_daemon_mode("proxy_server.log");
+
 	// Initialize subsystems.
 	mm_runtime_init();
 
@@ -103,13 +106,6 @@ main(int ac, char *av[])
 	proxy_server = mm_net_create_inet_server("hello", &proxy_proto,
 						 "0.0.0.0", port);
 	mm_net_setup_server(proxy_server);
-
-	// Daemonize if needed.
-	if (mm_settings_get("daemon", NULL) != NULL) {
-		mm_daemon_start();
-		mm_daemon_stdio(NULL, "proxy_server.log");
-		mm_daemon_notify();
-	}
 
 	// Execute the main loop.
 	mm_start();

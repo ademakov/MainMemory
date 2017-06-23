@@ -18,7 +18,6 @@
  */
 
 #include "common.h"
-#include "base/daemon.h"
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
@@ -114,6 +113,10 @@ main(int ac, char *av[])
 		hello_len = strlen(hello_msg);
 	}
 
+	// Daemonize if needed.
+	if (mm_settings_get("daemon", NULL) != NULL)
+		mm_set_daemon_mode("hello_server.log");
+
 	// Initialize subsystems.
 	mm_runtime_init();
 
@@ -121,13 +124,6 @@ main(int ac, char *av[])
 	hello_server = mm_net_create_inet_server("hello", &hello_proto,
 						 "0.0.0.0", port);
 	mm_net_setup_server(hello_server);
-
-	// Daemonize if needed.
-	if (mm_settings_get("daemon", NULL) != NULL) {
-		mm_daemon_start();
-		mm_daemon_stdio(NULL, "hello_server.log");
-		mm_daemon_notify();
-	}
 
 	// Execute the main loop.
 	mm_start();

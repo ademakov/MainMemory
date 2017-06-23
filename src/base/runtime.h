@@ -85,6 +85,9 @@ void NONNULL(2)
 mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info);
 
 void
+mm_set_daemon_mode(const char *log_file);
+
+void
 mm_runtime_init(void);
 
 void

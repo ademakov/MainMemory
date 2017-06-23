@@ -22,7 +22,6 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/conf.h"
-#include "base/daemon.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/settings.h"
@@ -35,8 +34,6 @@
 #include <signal.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-static bool mm_daemonize = false;
 
 static void
 mm_term_handler(int signo UNUSED)
@@ -157,17 +154,11 @@ main(int argc, char *argv[])
 	mm_conf_load(mm_settings_get("config-file", NULL));
 	mm_set_verbose_enabled(mm_settings_get("verbose", NULL) != NULL);
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
+	if (mm_settings_get("daemon", NULL) != NULL)
+		mm_set_daemon_mode("mmd.log");
 
 	// Initialize subsystems.
 	mm_runtime_init();
-
-	// Daemonize if needed.
-	if (mm_settings_get("daemon", NULL) != NULL) {
-		mm_daemonize = true;
-		mm_daemon_start();
-		mm_daemon_stdio(NULL, "mmem.log");
-		mm_daemon_notify();
-	}
 
 	// Set signal handlers.
 	mm_signal_init();

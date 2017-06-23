@@ -22,6 +22,7 @@
 #include "base/clock.h"
 #include "base/exit.h"
 #include "base/list.h"
+#include "base/daemon.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/settings.h"
@@ -29,6 +30,7 @@
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
 #include "base/fiber/core.h"
+#include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
@@ -42,8 +44,12 @@ struct mm_domain *mm_regular_domain = NULL;
 // Event dispatch for regular thread domain.
 static struct mm_event_dispatch mm_regular_dispatch;
 
+// Run in a daemon mode.
+static bool mm_daemonize = false;
+static char *mm_log_file_name = NULL;
+
 // Runtime stop flag.
-static int mm_stop_flag;
+static int mm_stop_flag = 0;
 
 /**********************************************************************
  * Runtime start and stop hooks.
@@ -203,6 +209,13 @@ mm_regular_stop(void)
 	mm_event_dispatch_cleanup(&mm_regular_dispatch);
 }
 
+static void
+mm_daemon_cleanup(void)
+{
+	if (mm_log_file_name != NULL)
+		mm_global_free(mm_log_file_name);
+}
+
 void NONNULL(2)
 mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 {
@@ -216,6 +229,22 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 
 	// Parse the command line arguments.
 	mm_args_init(argc, argv, ninfo, info);
+
+	LEAVE();
+}
+
+void
+mm_set_daemon_mode(const char *log_file)
+{
+	ENTER();
+
+	mm_daemonize = true;
+
+	VERIFY(mm_log_file_name == NULL);
+	if (log_file != NULL) {
+		mm_log_file_name = mm_global_strdup(log_file);
+		mm_atexit(mm_daemon_cleanup);
+	}
 
 	LEAVE();
 }
@@ -260,6 +289,13 @@ void
 mm_start(void)
 {
 	ENTER();
+
+	// Daemonize if needed.
+	if (mm_daemonize) {
+		mm_daemon_start();
+		mm_daemon_stdio(NULL, mm_log_file_name);
+		mm_daemon_notify();
+	}
 
 	// Initialize fiber subsystem.
 	mm_core_init();
