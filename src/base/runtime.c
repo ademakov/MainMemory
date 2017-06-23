@@ -191,22 +191,52 @@ mm_validate_nthreads(uint32_t n)
 }
 
 static void
+mm_common_start(void)
+{
+	ENTER();
+
+	// Initialize fiber subsystem.
+	mm_core_init();
+
+	LEAVE();
+}
+
+static void
+mm_common_stop(void)
+{
+	ENTER();
+
+	// Cleanup fiber subsystem.
+	mm_core_term();
+
+	LEAVE();
+}
+
+static void
 mm_regular_start(void)
 {
+	ENTER();
+
 	// Allocate event dispatch memory and system resources.
 	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_domain,
 				  mm_regular_domain->nthreads, mm_regular_domain->threads);
+
+	LEAVE();
 }
 
 static void
 mm_regular_stop(void)
 {
+	ENTER();
+
 	// Print statistics.
 	mm_event_dispatch_stats(&mm_regular_dispatch);
 	mm_lock_stats();
 
 	// Release event dispatch memory and system resources.
 	mm_event_dispatch_cleanup(&mm_regular_dispatch);
+
+	LEAVE();
 }
 
 static void
@@ -230,6 +260,40 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	// Parse the command line arguments.
 	mm_args_init(argc, argv, ninfo, info);
 
+	// Initialize the most basic facilities that do not have any
+	// dependencies.
+	mm_clock_init();
+	mm_cksum_init();
+	mm_thread_init();
+
+	// Initialize the memory spaces.
+	mm_memory_init();
+
+	// Setup the basic common start hook.
+	mm_common_start_hook_0(mm_common_start);
+	mm_common_stop_hook_0(mm_common_stop);
+	// Setup basic start and stop hooks for regular domain.
+	mm_regular_start_hook_0(mm_regular_start);
+	mm_regular_stop_hook_0(mm_regular_stop);
+
+	// Try to get thread number parameter possibly provided by user.
+	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
+	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
+		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
+		nthreads = 0;
+	}
+
+	// Determine the machine topology.
+	uint16_t ncpus = mm_topology_getncpus();
+	mm_brief("running on %d cores", ncpus);
+
+	// Determine the number of regular threads.
+	mm_regular_nthreads = nthreads ? nthreads : ncpus;
+	if (mm_regular_nthreads == 1)
+		mm_brief("using 1 thread");
+	else
+		mm_brief("using %d threads", mm_regular_nthreads);
+
 	LEAVE();
 }
 
@@ -250,42 +314,6 @@ mm_set_daemon_mode(const char *log_file)
 }
 
 void
-mm_runtime_init(void)
-{
-	ENTER();
-
-	// Try to get thread number parameter possibly provided by user.
-	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
-	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
-		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
-		nthreads = 0;
-	}
-
-	// Determine the machine topology.
-	uint16_t ncpus = mm_topology_getncpus();
-	mm_brief("running on %d cores", ncpus);
-
-	// Determine the number of regular threads.
-	mm_regular_nthreads = nthreads ? nthreads : ncpus;
-	if (mm_regular_nthreads == 1)
-		mm_brief("using 1 thread");
-	else
-		mm_brief("using %d threads", mm_regular_nthreads);
-
-	// Initialize basic subsystems.
-	mm_memory_init();
-	mm_thread_init();
-	mm_cksum_init();
-	mm_clock_init();
-
-	// Setup basic start and stop hooks for regular domain.
-	mm_regular_start_hook_0(mm_regular_start);
-	mm_regular_stop_hook_0(mm_regular_stop);
-
-	LEAVE();
-}
-
-void
 mm_start(void)
 {
 	ENTER();
@@ -296,9 +324,6 @@ mm_start(void)
 		mm_daemon_stdio(NULL, mm_log_file_name);
 		mm_daemon_notify();
 	}
-
-	// Initialize fiber subsystem.
-	mm_core_init();
 
 	// Invoke registered start hooks.
 	mm_call_common_start_hooks();
@@ -343,9 +368,6 @@ mm_start(void)
 	mm_call_common_stop_hooks();
 	// Free all registered hooks.
 	mm_free_hooks();
-
-	// Cleanup fiber subsystem.
-	mm_core_term();
 	// Free regular thread domain.
 	mm_domain_destroy(mm_regular_domain);
 	// Cleanup memory spaces.

@@ -117,9 +117,6 @@ main(int ac, char *av[])
 	if (mm_settings_get("daemon", NULL) != NULL)
 		mm_set_daemon_mode("hello_server.log");
 
-	// Initialize subsystems.
-	mm_runtime_init();
-
 	// Create the server.
 	hello_server = mm_net_create_inet_server("hello", &hello_proto,
 						 "0.0.0.0", port);

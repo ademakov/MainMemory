@@ -88,9 +88,6 @@ void
 mm_set_daemon_mode(const char *log_file);
 
 void
-mm_runtime_init(void);
-
-void
 mm_start(void);
 
 void

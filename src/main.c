@@ -157,9 +157,6 @@ main(int argc, char *argv[])
 	if (mm_settings_get("daemon", NULL) != NULL)
 		mm_set_daemon_mode("mmd.log");
 
-	// Initialize subsystems.
-	mm_runtime_init();
-
 	// Set signal handlers.
 	mm_signal_init();
 
