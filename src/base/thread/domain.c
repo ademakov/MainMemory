@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.c - MainMemory thread domain.
  *
- * Copyright (C) 2014-2016  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@
 
 #include "base/bitops.h"
 #include "base/cstack.h"
+#include "base/logger.h"
 #include "base/ring.h"
 #include "base/memory/global.h"
 #include "base/thread/local.h"
@@ -167,6 +168,11 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 
 	// Initialize per-thread data.
 	mm_thread_local_init(domain);
+	MM_THREAD_LOCAL_ALLOC(domain, "domain barrier slot", domain->barrier_local);
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
+		struct mm_thread_barrier_local *barrier_local = MM_THREAD_LOCAL_DEREF(i, domain->barrier_local);
+		mm_thread_barrier_local_prepare(barrier_local);
+	}
 
 	// Set thread attributes.
 	struct mm_thread_attr thread_attr;
@@ -175,8 +181,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	uint32_t guard_size = 0;
 	if (attr != NULL) {
 		mm_thread_attr_setspace(&thread_attr, attr->private_space);
-		mm_thread_attr_setrequestqueue(&thread_attr,
-					       attr->thread_request_queue);
+		mm_thread_attr_setrequestqueue(&thread_attr, attr->thread_request_queue);
 
 		stack_size = mm_round_up(attr->stack_size, MM_PAGE_SIZE);
 		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
@@ -190,15 +195,12 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		mm_thread_attr_setdomain(&thread_attr, domain, i);
 		if (attr == NULL || attr->threads_attr == NULL)
-			mm_thread_attr_setcputag(&thread_attr,
-						 MM_THREAD_CPU_ANY);
+			mm_thread_attr_setcputag(&thread_attr, MM_THREAD_CPU_ANY);
 		else
-			mm_thread_attr_setcputag(&thread_attr,
-						 attr->threads_attr[i].cpu_tag);
+			mm_thread_attr_setcputag(&thread_attr, attr->threads_attr[i].cpu_tag);
 
 		if (stack_size) {
-			void *stack = mm_cstack_create(stack_size + guard_size,
-						       guard_size);
+			void *stack = mm_cstack_create(stack_size + guard_size, guard_size);
 			void *stack_base = ((char *) stack) + guard_size;
 			mm_thread_attr_setstack(&thread_attr, stack_base, stack_size);
 		} else if (guard_size) {
@@ -253,6 +255,25 @@ mm_domain_join(struct mm_domain *domain)
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		struct mm_thread *thread = domain->threads[i];
 		mm_thread_join(thread);
+	}
+
+	LEAVE();
+}
+
+
+void
+mm_domain_barrier(void)
+{
+	ENTER();
+
+	struct mm_thread *thread = mm_thread_selfptr();
+	struct mm_domain *domain = mm_thread_getdomain(thread);
+	if (domain != NULL) {
+		mm_log_relay();
+
+		mm_thread_t n = mm_thread_getnumber(thread);
+		struct mm_thread_barrier_local *barrier_local = MM_THREAD_LOCAL_DEREF(n, domain->barrier_local);
+		mm_thread_barrier_wait(&domain->barrier, barrier_local);
 	}
 
 	LEAVE();

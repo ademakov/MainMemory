@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.h - MainMemory thread domain.
  *
- * Copyright (C) 2014-2016  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #include "base/lock.h"
 #include "base/report.h"
 #include "base/thread/barrier.h"
+#include "base/thread/local.h"
 #include "base/thread/request.h"
 #include "base/thread/thread.h"
 
@@ -85,12 +86,11 @@ struct mm_domain
 
 	/* Thread start/stop barrier. */
 	struct mm_thread_barrier barrier;
+	MM_THREAD_LOCAL(struct mm_thread_barrier_local, barrier_local);
 
 	/* Domain name. */
 	char name[MM_DOMAIN_NAME_SIZE];
 };
-
-extern __thread struct mm_domain *__mm_domain_self;
 
 /**********************************************************************
  * Domain creation routines.
@@ -137,6 +137,8 @@ mm_domain_destroy(struct mm_domain *domain);
  * Domain information.
  **********************************************************************/
 
+extern __thread struct mm_domain *__mm_domain_self;
+
 static inline struct mm_domain *
 mm_domain_selfptr(void)
 {
@@ -162,6 +164,9 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
 
 void NONNULL(1)
 mm_domain_join(struct mm_domain *domain);
+
+void
+mm_domain_barrier(void);
 
 /**********************************************************************
  * Domain requests.

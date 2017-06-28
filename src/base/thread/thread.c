@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.c - MainMemory threads.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -258,15 +258,6 @@ mm_thread_entry(void *arg)
 # endif
 #endif
 
-	// Wait until all threads from the same domain start.
-	// This ensures that domain thread data is complete and
-	// threads might communicate.
-	if (thread->domain != NULL) {
-		mm_thread_barrier_local_prepare(&thread->domain_barrier);
-		mm_thread_barrier_wait(&thread->domain->barrier,
-				       &thread->domain_barrier);
-	}
-
 	// Run the required routine.
 	thread->start(thread->start_arg);
 
@@ -425,22 +416,6 @@ mm_thread_yield(void)
 #else
 	sched_yield();
 #endif
-
-	LEAVE();
-}
-
-void
-mm_thread_domain_barrier(void)
-{
-	ENTER();
-
-	struct mm_thread *thread = mm_thread_selfptr();
-	if (thread->domain != NULL) {
-		mm_log_relay();
-
-		mm_thread_barrier_wait(&thread->domain->barrier,
-				       &thread->domain_barrier);
-	}
 
 	LEAVE();
 }

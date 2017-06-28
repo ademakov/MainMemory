@@ -544,7 +544,7 @@ mm_core_stats(void)
 {
 	mm_thread_t n = mm_core_getnum();
 	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_core *core = mm_core_getptr(i);
+		struct mm_core *core = &mm_core_set[i];
 		mm_verbose("core %d: cycles=%llu, cswitches=%llu/%llu/%llu,"
 			   " requests=%llu/%llu, workers=%lu", i,
 			   (unsigned long long) core->loop_count,
@@ -568,22 +568,25 @@ mm_core_stats(void)
 static void
 mm_core_boot_init(struct mm_core *core)
 {
+	// Wait until all threads from the same domain start. This ensures
+	// that all the thread data is initialized and so it is safe to use
+	// any of them from the start hooks.
+	mm_domain_barrier();
+
 	struct mm_private_space *space = mm_private_space_get();
 	if (MM_CORE_IS_PRIMARY(core)) {
-		struct mm_domain *domain = mm_domain_selfptr();
-
 		mm_timer_prepare(&core->time_manager, &space->xarena);
 
 		// Call the start hooks on the primary core.
 		mm_call_regular_start_hooks();
-		mm_thread_local_summary(domain);
+		mm_thread_local_summary(mm_domain_selfptr());
 		mm_call_regular_thread_start_hooks();
 
-		mm_thread_domain_barrier();
+		mm_domain_barrier();
 	} else {
 		// Secondary cores have to wait until the primary core runs
 		// the start hooks that initialize shared resources.
-		mm_thread_domain_barrier();
+		mm_domain_barrier();
 
 		mm_timer_prepare(&core->time_manager, &space->xarena);
 		mm_call_regular_thread_start_hooks();
@@ -593,7 +596,7 @@ mm_core_boot_init(struct mm_core *core)
 static void
 mm_core_boot_term(struct mm_core *core)
 {
-	mm_thread_domain_barrier();
+	mm_domain_barrier();
 
 	// Call the stop hooks on the primary core.
 	if (MM_CORE_IS_PRIMARY(core)) {

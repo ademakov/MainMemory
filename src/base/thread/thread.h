@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.h - MainMemory threads.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -108,9 +108,6 @@ struct mm_thread
 
 	/* Underlying system thread. */
 	pthread_t system_thread;
-
-	/* Domain threads start/stop synchronization. */
-	struct mm_thread_barrier_local domain_barrier;
 
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
@@ -245,9 +242,8 @@ mm_thread_wakeup(struct mm_thread *thread);
 void NONNULL(1)
 mm_thread_join(struct mm_thread *thread);
 
-void mm_thread_yield(void);
-
-void mm_thread_domain_barrier(void);
+void
+mm_thread_yield(void);
 
 /**********************************************************************
  * Thread backoff routines.
