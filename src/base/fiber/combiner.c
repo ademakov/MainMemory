@@ -86,9 +86,9 @@ mm_fiber_combiner_execute(struct mm_fiber_combiner *combiner,
 	int cancelstate;
 	mm_fiber_setcancelstate(MM_FIBER_CANCEL_DISABLE, &cancelstate);
 
-	// Get per-core queue of pending requests.
-	mm_thread_t core = mm_core_self();
-	struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(core, combiner->wait_queue);
+	// Get per-thread queue of pending requests.
+	mm_thread_t n = mm_thread_getnumber(mm_thread_selfptr());
+	struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(n, combiner->wait_queue);
 
 	// Add the current request to the per-core queue.
 	struct mm_fiber *fiber = mm_fiber_selfptr();
