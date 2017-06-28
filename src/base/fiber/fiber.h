@@ -219,18 +219,6 @@ mm_fiber_selfptr(void)
 	return mm_core_selfptr()->fiber;
 }
 
-struct mm_fiber *
-mm_fiber_getptr(mm_fiber_t id);
-
-mm_fiber_t NONNULL(1)
-mm_fiber_getid(const struct mm_fiber *fiber);
-
-static inline mm_fiber_t
-mm_fiber_self()
-{
-	return mm_fiber_getid(mm_fiber_selfptr());
-}
-
 static inline const char * NONNULL(1)
 mm_fiber_getname(const struct mm_fiber *fiber)
 {

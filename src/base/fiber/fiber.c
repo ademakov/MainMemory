@@ -318,18 +318,6 @@ mm_fiber_destroy(struct mm_fiber *fiber)
  * Fiber utilities.
  **********************************************************************/
 
-struct mm_fiber *
-mm_fiber_getptr(mm_fiber_t id)
-{
-	return mm_pool_idx2ptr(&mm_fiber_pool, id);
-}
-
-mm_fiber_t NONNULL(1)
-mm_fiber_getid(const struct mm_fiber *fiber)
-{
-	return mm_pool_ptr2idx(&mm_fiber_pool, fiber);
-}
-
 /* Set or change the fiber name. */
 void NONNULL(1)
 mm_fiber_setname(struct mm_fiber *fiber, const char *name)
@@ -422,9 +410,8 @@ void NONNULL(1)
 mm_fiber_run(struct mm_fiber *fiber)
 {
 	ENTER();
-	TRACE("queue fiber: [%d %s], state: %d, priority: %d",
-	      mm_fiber_getid(fiber), mm_fiber_getname(fiber),
-	      fiber->state, fiber->priority);
+	TRACE("queue fiber: [%s], state: %d, priority: %d",
+	      mm_fiber_getname(fiber), fiber->state, fiber->priority);
 	ASSERT(fiber->core == mm_core_selfptr());
 	ASSERT(fiber->priority < MM_PRIO_BOOT);
 
@@ -444,9 +431,8 @@ void NONNULL(1)
 mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority)
 {
 	ENTER();
-	TRACE("hoist fiber: [%d %s], state: %d, priority: %d, %d",
-	      mm_fiber_getid(fiber), mm_fiber_getname(fiber),
-	      fiber->state, fiber->priority, priority);
+	TRACE("hoist fiber: [%s], state: %d, priority: %d, %d",
+	      mm_fiber_getname(fiber), fiber->state, fiber->priority, priority);
 	ASSERT(fiber->core == mm_core_selfptr());
 	ASSERT(fiber->priority < MM_PRIO_BOOT);
 
