@@ -200,7 +200,6 @@ mm_waitset_prepare(struct mm_waitset *waitset)
 	ENTER();
 
 	mm_stack_prepare(&waitset->set);
-	waitset->core = MM_THREAD_NONE;
 
 	LEAVE();
 }
@@ -285,94 +284,6 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 }
 
 /**********************************************************************
- * Private single-core wait-sets.
- **********************************************************************/
-
-void NONNULL(1)
-mm_waitset_local_prepare(struct mm_waitset *waitset, mm_thread_t core)
-{
-	ENTER();
-	ASSERT(core != MM_THREAD_NONE && core != MM_THREAD_SELF);
-
-	mm_stack_prepare(&waitset->set);
-	waitset->core = core;
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_waitset_local_wait(struct mm_waitset *waitset)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_self());
-
-	// Enqueue the fiber.
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->fiber = mm_fiber_selfptr();
-	mm_stack_insert(&waitset->set, &wait->link);
-
-	// Wait for a wakeup signal.
-	mm_fiber_block();
-
-	// Reset the fiber reference.
-	wait->fiber = NULL;
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_waitset_local_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_self());
-
-	// Enqueue the fiber.
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
-	wait->fiber = mm_fiber_selfptr();
-	mm_stack_insert(&waitset->set, &wait->link);
-
-	// Wait for a wakeup signal.
-	mm_timer_block(timeout);
-
-	// Reset the fiber reference.
-	wait->fiber = NULL;
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_waitset_local_broadcast(struct mm_waitset *waitset)
-{
-	ENTER();
-	ASSERT(waitset->core == mm_core_self());
-
-	// Capture the waitset.
-	struct mm_stack set = waitset->set;
-	mm_stack_prepare(&waitset->set);
-
-	while (!mm_stack_empty(&set)) {
-		// Get the next wait entry.
-		struct mm_slink *link = mm_stack_remove(&set);
-		struct mm_wait *wait = containerof(link, struct mm_wait, link);
-		struct mm_fiber *fiber = wait->fiber;
-
-		if (likely(fiber != NULL)) {
-			// Run the fiber if it has not been reset.
-			wait->fiber = NULL;
-			mm_fiber_run(fiber);
-		}
-
-		// Return unused wait entry to the pool.
-		struct mm_core *core = mm_core_selfptr();
-		mm_wait_cache_put(&core->wait_cache, wait);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Shared inter-core wait-set with single waiter fiber.
  **********************************************************************/
 
@@ -382,7 +293,6 @@ mm_waitset_unique_prepare(struct mm_waitset *waitset)
 	ENTER();
 
 	waitset->fiber = NULL;
-	waitset->core = MM_THREAD_SELF;
 
 	LEAVE();
 }
