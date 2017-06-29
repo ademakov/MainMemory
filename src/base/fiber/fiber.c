@@ -379,16 +379,12 @@ mm_fiber_switch(mm_fiber_state_t state)
 		}
 	}
 
-	// Enter the state that forbids a recursive fiber switch.
-	core->state = MM_CORE_CSWITCH;
 	// Execute requests associated with the core. Sometimes this might
 	// touch the currently running fiber. For instance, it might be put
 	// to the run queue after just being blocked. So at this point the
 	// fiber must already be in completely consistent state. That is no
-	// manipulation with old_fiber below this point is allowed.
+	// manipulation with old_fiber is allowed below this point.
 	mm_core_execute_requests(core);
-	// Restore normal running state.
-	core->state = MM_CORE_RUNNING;
 
 	// Get the next fiber from the run queue.  As long as this function
 	// is called there is at least a boot fiber in the run queue.  So
