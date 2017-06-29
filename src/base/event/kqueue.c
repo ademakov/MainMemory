@@ -25,6 +25,7 @@
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
+#include "base/fiber/strand.h"
 
 #include <time.h>
 
@@ -304,7 +305,12 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
 	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
 
-	// TODO: Protect against fiber yield with following re-enter.
+	// Enter the state that forbids fiber yield to avoid possible
+	// problems with re-entering from another fiber.
+	// TODO: don't call mm_strand_selfptr(), get it through the listener
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_strand_state_t strand_state = strand->state;
+	strand->state = MM_STRAND_CSWITCH;
 
 	// If any event sinks are to be unregistered then start a reclamation epoch.
 	if (storage->nunregister != 0)
@@ -322,6 +328,9 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 	// If a reclamation epoch is active then attempt to advance it and possibly finish.
 	if (mm_event_epoch_active(&listener->epoch))
 		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
+
+	// Restore normal running state.
+	strand->state = strand_state;
 
 	LEAVE();
 }
