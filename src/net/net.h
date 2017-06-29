@@ -107,7 +107,7 @@ struct mm_net_server
 	/* Global server list link. */
 	struct mm_link link;
 
-	/* Core affinity. */
+	/* Thread affinity. */
 	struct mm_bitset affinity;
 
 	/* Server name. */

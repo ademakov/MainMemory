@@ -74,7 +74,7 @@ void NONNULL(1)
 mm_future_destroy(struct mm_future *future);
 
 mm_value_t NONNULL(1)
-mm_future_start(struct mm_future *future, mm_thread_t core);
+mm_future_start(struct mm_future *future, mm_thread_t target);
 
 mm_value_t NONNULL(1)
 mm_future_wait(struct mm_future *future);
@@ -99,7 +99,7 @@ void NONNULL(1)
 mm_future_unique_destroy(struct mm_future *future);
 
 mm_value_t NONNULL(1)
-mm_future_unique_start(struct mm_future *future, mm_thread_t core);
+mm_future_unique_start(struct mm_future *future, mm_thread_t target);
 
 mm_value_t NONNULL(1)
 mm_future_unique_wait(struct mm_future *future);

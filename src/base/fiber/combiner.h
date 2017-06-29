@@ -27,7 +27,7 @@
 
 struct mm_fiber_combiner
 {
-	/* Per-core wait list of pending requests. */
+	/* Per-thread wait list of pending requests. */
 	MM_THREAD_LOCAL(struct mm_list, wait_queue);
 
 	struct mm_combiner combiner;

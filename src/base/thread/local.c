@@ -172,7 +172,7 @@ mm_thread_local_summary(struct mm_domain *domain)
 	struct mm_qlink *entry_link = mm_queue_head(&domain->per_thread_entry_list);
 	for (; entry_link != NULL; entry_link = entry_link->next) {
 		struct mm_thread_local_entry *entry = containerof(entry_link, struct mm_thread_local_entry, link);
-		mm_verbose("core local data entry (%s): %lu bytes",
+		mm_verbose("thread local data entry (%s): %lu bytes",
 			   entry->name, (unsigned long) entry->size);
 		nentries++;
 	}

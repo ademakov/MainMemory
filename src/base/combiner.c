@@ -95,7 +95,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 	struct mm_ring_node *const ring = combiner->ring.ring;
 	const mm_stamp_t mask = base->mask;
 
-	// Get a request slot in the bounded MPMC queue shared between cores.
+	// Get a request slot in the bounded MPMC queue shared between threads.
 	const mm_stamp_t tail = mm_ring_atomic_fai(&base->tail);
 	struct mm_ring_node *node = &ring[tail & mask];
 

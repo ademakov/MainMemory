@@ -18,20 +18,19 @@
  */
 
 #include "base/thread/backoff.h"
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/thread/thread.h"
 
 uint32_t
 mm_thread_backoff_slow(uint32_t count)
 {
-	struct mm_core *core = mm_core_selfptr();
-	if (core != NULL) {
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (strand != NULL) {
 		// Execute any pending thread requests.
-		mm_core_execute_requests(core);
+		mm_strand_execute_requests(strand);
 		// If there are any waiting working fibers and this is a
 		// working fiber too then yield to let them make progress.
-		if (!mm_runq_empty_above(&core->runq, MM_PRIO_IDLE) && core->fiber->priority < MM_PRIO_IDLE) {
+		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_IDLE) && strand->fiber->priority < MM_PRIO_IDLE) {
 			mm_fiber_yield();
 			return count + count + 1;
 		}

@@ -23,7 +23,7 @@
 #include "common.h"
 #include "base/cstack.h"
 #include "base/list.h"
-#include "base/fiber/core.h"
+#include "base/fiber/strand.h"
 
 #define ENABLE_FIBER_LOCATION	0
 #define ENABLE_FIBER_IO_FLAGS	0
@@ -147,8 +147,8 @@ struct mm_fiber
 	mm_priority_t priority;
 	mm_priority_t original_priority;
 
-	/* The fiber core. */
-	struct mm_core *core;
+	/* The fiber strand. */
+	struct mm_strand *strand;
 
 	/* The list of fiber cleanup records. */
 	struct mm_fiber_cleanup_rec *cleanup;
@@ -216,7 +216,7 @@ mm_fiber_destroy(struct mm_fiber *fiber);
 static inline struct mm_fiber *
 mm_fiber_selfptr(void)
 {
-	return mm_core_selfptr()->fiber;
+	return mm_strand_selfptr()->fiber;
 }
 
 static inline const char * NONNULL(1)

@@ -22,7 +22,9 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "base/fiber/core.h"
+
+/* Forward declaration. */
+struct mm_work;
 
 #define MM_WORK_VTABLE_1(name, r)			\
 	static const struct mm_work_vtable name = {	\

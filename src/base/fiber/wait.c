@@ -22,7 +22,6 @@
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/timer.h"
 #include "base/memory/pool.h"
@@ -90,7 +89,7 @@ mm_wait_init(void)
 }
 
 /**********************************************************************
- * Per-core wait entry cache initialization and cleanup.
+ * Per-strand wait entry cache initialization and cleanup.
  **********************************************************************/
 
 #define MM_WAIT_CACHE_MAX	(256)
@@ -191,7 +190,7 @@ mm_wait_cache_truncate(struct mm_wait_cache *cache)
 }
 
 /**********************************************************************
- * Shared inter-core wait-sets with locking.
+ * Shared inter-strand wait-sets with locking.
  **********************************************************************/
 
 void NONNULL(1)
@@ -210,8 +209,8 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
 	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
@@ -233,8 +232,8 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_wait *wait = mm_wait_cache_get(&core->wait_cache);
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
 	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
 
@@ -267,16 +266,16 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_fiber *fiber = mm_memory_load(wait->fiber);
-		struct mm_core *core = mm_core_selfptr();
+		struct mm_strand *strand = mm_strand_selfptr();
 
 		if (likely(fiber != NULL)) {
 			// Run the fiber if it has not been reset.
-			mm_core_run_fiber(fiber);
+			mm_strand_run_fiber(fiber);
 			// Add used wait entry to the pending list.
-			mm_wait_add_pending(&core->wait_cache, wait);
+			mm_wait_add_pending(&strand->wait_cache, wait);
 		} else {
 			// Return unused wait entry to the pool.
-			mm_wait_cache_put(&core->wait_cache, wait);
+			mm_wait_cache_put(&strand->wait_cache, wait);
 		}
 	}
 
@@ -284,7 +283,7 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 }
 
 /**********************************************************************
- * Shared inter-core wait-set with single waiter fiber.
+ * Shared inter-strand wait-set with single waiter fiber.
  **********************************************************************/
 
 void NONNULL(1)
@@ -353,7 +352,7 @@ mm_waitset_unique_signal(struct mm_waitset *waitset)
 	// Wake up the waiting fiber if any.
 	struct mm_fiber *fiber = mm_memory_load(waitset->fiber);
 	if (likely(fiber != NULL))
-		mm_core_run_fiber(fiber);
+		mm_strand_run_fiber(fiber);
 
 	LEAVE();
 }

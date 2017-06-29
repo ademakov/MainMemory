@@ -132,14 +132,14 @@ static void
 mc_command_flush(uint32_t exptime)
 {
 	// TODO: really use the exptime.
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t real_time = mm_core_getrealtime(core);
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t real_time = mm_strand_getrealtime(strand);
 	mc_exptime = real_time / 1000000 + exptime;
 
 	for (mm_thread_t i = 0; i < mc_table.nparts; i++) {
 #if ENABLE_MEMCACHE_DELEGATE
 		struct mc_tpart *part = &mc_table.parts[i];
-		mm_core_post(part->core, mc_command_flush_routine, i);
+		mm_strand_post(part->target, mc_command_flush_routine, i);
 #else
 		struct mc_action action;
 		action.part = &mc_table.parts[i];

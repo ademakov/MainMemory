@@ -26,7 +26,6 @@
 #include "base/stdcall.h"
 #include "base/event/event.h"
 #include "base/event/nonblock.h"
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/timer.h"
 #include "base/memory/global.h"
@@ -445,7 +444,7 @@ mm_net_accept_handler(mm_event_t event, void *data)
 		srv->acceptor_active = true;
 		// Really queue the acceptor work for running.
 		mm_thread_t thread = mm_event_target(&srv->event);
-		mm_core_post_work(thread, &srv->acceptor_work);
+		mm_strand_post_work(thread, &srv->acceptor_work);
 	}
 
 	LEAVE();
@@ -494,7 +493,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 			sock->flags |= MM_NET_READER_SPAWNED;
 			// Submit a reader work.
 			mm_thread_t target = mm_event_target(&sock->event);
-			mm_core_post_work(target, &sock->read_work);
+			mm_strand_post_work(target, &sock->read_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -525,7 +524,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 			sock->flags |= MM_NET_WRITER_SPAWNED;
 			// Submit a writer work.
 			mm_thread_t target = mm_event_target(&sock->event);
-			mm_core_post_work(target, &sock->write_work);
+			mm_strand_post_work(target, &sock->write_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -607,7 +606,7 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		mm_core_post_work(mm_event_target(&sock->event), &sock->reclaim_work);
+		mm_strand_post_work(mm_event_target(&sock->event), &sock->reclaim_work);
 		break;
 
 	default:
@@ -641,7 +640,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		sock->flags |= MM_NET_READER_SPAWNED;
 		// Submit a reader work.
 		mm_thread_t target = mm_event_target(&sock->event);
-		mm_core_post_work(target, &sock->read_work);
+		mm_strand_post_work(target, &sock->read_work);
 
 		// Let it start immediately.
 		mm_fiber_yield();
@@ -671,7 +670,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		// Submit a writer work.
 		mm_thread_t target = mm_event_target(&sock->event);
-		mm_core_post_work(target, &sock->write_work);
+		mm_strand_post_work(target, &sock->write_work);
 
 		// Let it start immediately.
 		mm_fiber_yield();
@@ -711,7 +710,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
 		mm_thread_t target = mm_event_target(&sock->event);
-		mm_core_post_work(target, &sock->read_work);
+		mm_strand_post_work(target, &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -751,7 +750,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
 		mm_thread_t target = mm_event_target(&sock->event);
-		mm_core_post_work(target, &sock->write_work);
+		mm_strand_post_work(target, &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -909,10 +908,10 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_brief("start server '%s'", srv->name);
 	ASSERT(srv->event.fd == -1);
 
-	// Find the cores to run the server on.
-	size_t srv_core = mm_bitset_find(&srv->affinity, 0);
-	if (srv_core == MM_BITSET_NONE)
-		srv_core = 0;
+	// Find the thread to run the server on.
+	size_t target = mm_bitset_find(&srv->affinity, 0);
+	if (target == MM_BITSET_NONE)
+		target = 0;
 
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);
@@ -921,7 +920,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
-	mm_core_post_work(srv_core, &srv->register_work);
+	mm_strand_post_work(target, &srv->register_work);
 
 	LEAVE();
 }
@@ -1201,14 +1200,14 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	}
 
 	// Block the fiber waiting for the socket to become read ready.
-	struct mm_core *core = mm_core_selfptr();
+	struct mm_strand *strand = mm_strand_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
 		sock->reader = mm_fiber_selfptr();
 		mm_fiber_block();
 		sock->reader = NULL;
 		rc = 0;
-	} else if (mm_core_gettime(core) < deadline) {
-		mm_timeout_t timeout = deadline - mm_core_gettime(core);
+	} else if (mm_strand_gettime(strand) < deadline) {
+		mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
 		sock->reader = mm_fiber_selfptr();
 		mm_timer_block(timeout);
 		sock->reader = NULL;
@@ -1250,14 +1249,14 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	}
 
 	// Block the fiber waiting for the socket to become write ready.
-	struct mm_core *core = mm_core_selfptr();
+	struct mm_strand *strand = mm_strand_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
 		sock->writer = mm_fiber_selfptr();
 		mm_fiber_block();
 		sock->writer = NULL;
 		rc = 0;
-	} else if (mm_core_gettime(core) < deadline) {
-		mm_timeout_t timeout = deadline - mm_core_gettime(core);
+	} else if (mm_strand_gettime(strand) < deadline) {
+		mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
 		sock->writer = mm_fiber_selfptr();
 		mm_timer_block(timeout);
 		sock->writer = NULL;
@@ -1289,8 +1288,8 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		struct mm_core *core = mm_core_selfptr();
-		deadline = mm_core_gettime(core) + sock->read_timeout;
+		struct mm_strand *strand = mm_strand_selfptr();
+		deadline = mm_strand_gettime(strand) + sock->read_timeout;
 	}
 
 retry:
@@ -1338,8 +1337,8 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 	// Remember the wait time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		struct mm_core *core = mm_core_selfptr();
-		deadline = mm_core_gettime(core) + sock->write_timeout;
+		struct mm_strand *strand = mm_strand_selfptr();
+		deadline = mm_strand_gettime(strand) + sock->write_timeout;
 	}
 
 retry:
@@ -1387,8 +1386,8 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ss
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		struct mm_core *core = mm_core_selfptr();
-		deadline = mm_core_gettime(core) + sock->read_timeout;
+		struct mm_strand *strand = mm_strand_selfptr();
+		deadline = mm_strand_gettime(strand) + sock->read_timeout;
 	}
 
 retry:
@@ -1436,8 +1435,8 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, s
 	// Remember the start time.
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		struct mm_core *core = mm_core_selfptr();
-		deadline = mm_core_gettime(core) + sock->write_timeout;
+		struct mm_strand *strand = mm_strand_selfptr();
+		deadline = mm_strand_gettime(strand) + sock->write_timeout;
 	}
 
 retry:

@@ -24,13 +24,13 @@
 #include "memcache/table.h"
 #include "base/hash.h"
 #include "base/cksum.h"
-#include "base/fiber/core.h"
+#include "base/fiber/strand.h"
 
 #if ENABLE_MEMCACHE_COMBINER
 # include "base/combiner.h"
 #endif
 #if ENABLE_MEMCACHE_DELEGATE
-# include "core/future.h"
+# include "base/fiber/future.h"
 #endif
 
 typedef enum
@@ -171,7 +171,7 @@ mc_delegate_execute(struct mc_action *action, void (*routine)(struct mc_action *
 	mm_future_unique_prepare(&action->future,
 				 (mm_routine_t) routine,
 				 (mm_value_t) action);
-	mm_future_unique_start(&action->future, action->part->core);
+	mm_future_unique_start(&action->future, action->part->target);
 	mc_action_wait(action);
 }
 #endif

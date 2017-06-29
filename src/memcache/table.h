@@ -64,7 +64,7 @@ struct mc_tpart
 #if ENABLE_MEMCACHE_COMBINER
 	struct mm_combiner *combiner;
 #elif ENABLE_MEMCACHE_DELEGATE
-	mm_thread_t core;
+	mm_thread_t target;
 #elif ENABLE_MEMCACHE_LOCKING
 	mm_regular_lock_t lookup_lock;
 	mm_regular_lock_t freelist_lock;

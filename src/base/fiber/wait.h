@@ -38,7 +38,7 @@ struct mm_wait_cache
 	uint32_t cache_size;
 };
 
-/* A set of fibers waiting on an entity shared between cores. */
+/* A set of fibers waiting on an entity shared between threads. */
 struct mm_waitset
 {
 	union
@@ -59,7 +59,7 @@ struct mm_waitset
 void mm_wait_init(void);
 
 /**********************************************************************
- * Per-core wait entry cache initialization and cleanup.
+ * Per-strand wait entry cache initialization and cleanup.
  **********************************************************************/
 
 void NONNULL(1)
@@ -72,7 +72,7 @@ void NONNULL(1)
 mm_wait_cache_truncate(struct mm_wait_cache *cache);
 
 /**********************************************************************
- * Shared inter-core wait-sets with locking.
+ * Shared inter-thread wait-sets with locking.
  **********************************************************************/
 
 void NONNULL(1)
@@ -88,7 +88,7 @@ void NONNULL(1, 2)
 mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock);
 
 /**********************************************************************
- * Shared inter-core wait-set with single waiter fiber.
+ * Shared inter-thread wait-set with single waiter fiber.
  **********************************************************************/
 
 void NONNULL(1)

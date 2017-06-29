@@ -41,12 +41,12 @@ mc_action_get_exp_time(void)
 }
 
 static mm_value_t
-mc_action_exp_time_handler(mm_value_t value)
+mc_action_exp_time_handler(mm_value_t value UNUSED)
 {
 	ENTER();
 
-	struct mm_core *core = mm_core_getptr(value);
-	mm_timeval_t real_time = mm_core_getrealtime(core);
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t real_time = mm_strand_getrealtime(strand);
 	mc_action_exp_time = real_time / 1000000; // useconds -> seconds.
 
 	LEAVE();
@@ -58,7 +58,7 @@ mc_action_exp_time_start(void)
 {
 	mc_action_exp_timer = mm_timer_create(MM_CLOCK_REALTIME,
 					      mc_action_exp_time_handler,
-					      mm_core_self());
+					      0);
 	mm_timer_settime(mc_action_exp_timer, false, 0, 1000000);
 }
 
@@ -73,8 +73,8 @@ mc_action_exp_time_stop(void)
 static uint32_t
 mc_action_get_exp_time(void)
 {
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t real_time = mm_core_getrealtime(core);
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t real_time = mm_strand_getrealtime(strand);
 	return real_time / 1000000; // useconds -> seconds.
 }
 
@@ -222,8 +222,8 @@ mc_action_find_victims(struct mc_tpart *part,
 	uint32_t nvictims = 0;
 	mm_stack_prepare(victims);
 
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t real_time = mm_core_getrealtime(core);
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t real_time = mm_strand_getrealtime(strand);
 	uint32_t time = real_time / 1000000; // useconds -> seconds.
 
 	bool end = false;

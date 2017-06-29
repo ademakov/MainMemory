@@ -19,7 +19,6 @@
 
 #include "base/fiber/timer.h"
 
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/work.h"
 
@@ -89,7 +88,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 				mm_warning(0, "timer is still active");
 			} else {
 				timer->active = true;
-				mm_core_post_work(MM_THREAD_SELF, &timer->work);
+				mm_strand_post_work(MM_THREAD_SELF, &timer->work);
 			}
 		}
 
@@ -192,8 +191,8 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_time_manager *manager = &core->time_manager;
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_time_manager *manager = &strand->time_manager;
 	struct mm_timer *timer = mm_pool_alloc(&manager->timer_pool);
 	mm_timer_t timer_id = mm_pool_ptr2idx(&manager->timer_pool, timer);
 
@@ -227,8 +226,8 @@ mm_timer_destroy(mm_timer_t timer_id)
 {
 	ENTER();
 
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_time_manager *manager = &core->time_manager;
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_time_manager *manager = &strand->time_manager;
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
@@ -247,8 +246,8 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timev
 {
 	ENTER();
 
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_time_manager *manager = &core->time_manager;
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_time_manager *manager = &strand->time_manager;
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
@@ -302,8 +301,8 @@ mm_timer_block(mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_core *core = mm_core_selfptr();
-	struct mm_time_manager *manager = &core->time_manager;
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_time_manager *manager = &strand->time_manager;
 	mm_timeval_t time = mm_timer_getclocktime(manager) + timeout;
 	DEBUG("time: %llu", time);
 

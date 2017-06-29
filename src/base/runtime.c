@@ -29,7 +29,7 @@
 #include "base/topology.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
-#include "base/fiber/core.h"
+#include "base/fiber/strand.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
@@ -196,7 +196,7 @@ mm_common_start(void)
 	ENTER();
 
 	// Initialize fiber subsystem.
-	mm_core_init();
+	mm_strand_init();
 
 	LEAVE();
 }
@@ -207,7 +207,7 @@ mm_common_stop(void)
 	ENTER();
 
 	// Cleanup fiber subsystem.
-	mm_core_term();
+	mm_strand_term();
 
 	LEAVE();
 }
@@ -347,7 +347,7 @@ mm_start(void)
 	}
 
 	// Start regular threads.
-	mm_regular_domain = mm_domain_create(&attr, mm_core_boot);
+	mm_regular_domain = mm_domain_create(&attr, mm_strand_boot);
 
 	// Release domain creation attributes.
 	mm_domain_attr_cleanup(&attr);
@@ -381,7 +381,7 @@ mm_stop(void)
 {
 	ENTER();
 
-	mm_core_stop();
+	mm_strand_stop();
 
 	mm_memory_store(mm_stop_flag, 1);
 

@@ -1,5 +1,5 @@
 /*
- * base/fiber/core.h - MainMemory core.
+ * base/fiber/strand.h - MainMemory fiber strand.
  *
  * Copyright (C) 2013-2017  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_FIBER_CORE_H
-#define BASE_FIBER_CORE_H
+#ifndef BASE_FIBER_STRAND_H
+#define BASE_FIBER_STRAND_H
 
 #include "common.h"
 
@@ -36,13 +36,13 @@ struct mm_work;
 
 typedef enum
 {
-	MM_CORE_INVALID = -1,
-	MM_CORE_RUNNING,
-	MM_CORE_CSWITCH,
-} mm_core_state_t;
+	MM_STRAND_INVALID = -1,
+	MM_STRAND_RUNNING,
+	MM_STRAND_CSWITCH,
+} mm_strand_state_t;
 
-/* Virtual core state. */
-struct mm_core
+/* Strand of fibers. */
+struct mm_strand
 {
 	/* The counter of fiber context switches. */
 	uint64_t cswitch_count;
@@ -50,8 +50,8 @@ struct mm_core
 	/* Currently running fiber. */
 	struct mm_fiber *fiber;
 
-	/* The core status. */
-	mm_core_state_t state;
+	/* The strand status. */
+	mm_strand_state_t state;
 
 	/* Queue of blocked fibers. */
 	struct mm_list block;
@@ -105,7 +105,7 @@ struct mm_core
 	struct mm_thread *thread;
 
 	/*
-	 * The fields below engage in cross-core communication.
+	 * The fields below engage in cross-strand communication.
 	 */
 
 	/* Stop flag. */
@@ -114,60 +114,60 @@ struct mm_core
 } CACHE_ALIGN;
 
 /**********************************************************************
- * Core subsystem initialization and termination.
+ * Strand subsystem initialization and termination.
  **********************************************************************/
 
-void mm_core_init(void);
-void mm_core_term(void);
+void mm_strand_init(void);
+void mm_strand_term(void);
 
-mm_value_t mm_core_boot(mm_value_t arg);
-void mm_core_stop(void);
+mm_value_t mm_strand_boot(mm_value_t arg);
+void mm_strand_stop(void);
 
 /**********************************************************************
- * Core task execution.
+ * Strand fiber execution.
  **********************************************************************/
 
 void NONNULL(2)
-mm_core_post_work(mm_thread_t core_id, struct mm_work *work);
+mm_strand_post_work(mm_thread_t target, struct mm_work *work);
 
 void NONNULL(1)
-mm_core_run_fiber(struct mm_fiber *fiber);
+mm_strand_run_fiber(struct mm_fiber *fiber);
 
 void NONNULL(1)
-mm_core_execute_requests(struct mm_core *core);
+mm_strand_execute_requests(struct mm_strand *strand);
 
 /**********************************************************************
- * Core information.
+ * Strand information.
  **********************************************************************/
 
-extern __thread struct mm_core *__mm_core_self;
+extern __thread struct mm_strand *__mm_strand_self;
 
-static inline struct mm_core *
-mm_core_selfptr(void)
+static inline struct mm_strand *
+mm_strand_selfptr(void)
 {
-	return __mm_core_self;
+	return __mm_strand_self;
 }
 
 static inline mm_timeval_t
-mm_core_gettime(struct mm_core *core)
+mm_strand_gettime(struct mm_strand *strand)
 {
-	return mm_timer_getclocktime(&core->time_manager);
+	return mm_timer_getclocktime(&strand->time_manager);
 }
 
 static inline mm_timeval_t
-mm_core_getrealtime(struct mm_core *core)
+mm_strand_getrealtime(struct mm_strand *strand)
 {
-	return mm_timer_getrealclocktime(&core->time_manager);
+	return mm_timer_getrealclocktime(&strand->time_manager);
 }
 
 /**********************************************************************
- * Core diagnostics and statistics.
+ * Strand diagnostics and statistics.
  **********************************************************************/
 
 void NONNULL(1)
-mm_core_print_fibers(struct mm_core *core);
+mm_strand_print_fibers(struct mm_strand *strand);
 
 void
-mm_core_stats(void);
+mm_strand_stats(void);
 
-#endif /* BASE_FIBER_CORE_H */
+#endif /* BASE_FIBER_STRAND_H */

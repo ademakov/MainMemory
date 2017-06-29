@@ -194,7 +194,7 @@ mm_future_destroy(struct mm_future *future)
 }
 
 mm_value_t NONNULL(1)
-mm_future_start(struct mm_future *future, mm_thread_t core)
+mm_future_start(struct mm_future *future, mm_thread_t target)
 {
 	ENTER();
 
@@ -205,7 +205,7 @@ mm_future_start(struct mm_future *future, mm_thread_t core)
 
 	// Initiate execution of the future routine.
 	if (result == MM_RESULT_DEFERRED) {
-		mm_core_post_work(core, &future->work);
+		mm_strand_post_work(target, &future->work);
 		result = MM_RESULT_NOTREADY;
 	}
 
@@ -255,8 +255,8 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t deadline = mm_core_gettime(core) + timeout;
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t deadline = mm_strand_gettime(strand) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
@@ -270,7 +270,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_core_gettime(core)) {
+		if (deadline <= mm_strand_gettime(strand)) {
 			DEBUG("future timed out");
 			break;
 		}
@@ -370,7 +370,7 @@ mm_future_unique_destroy(struct mm_future *future)
 }
 
 mm_value_t NONNULL(1)
-mm_future_unique_start(struct mm_future *future, mm_thread_t core)
+mm_future_unique_start(struct mm_future *future, mm_thread_t target)
 {
 	ENTER();
 
@@ -378,7 +378,7 @@ mm_future_unique_start(struct mm_future *future, mm_thread_t core)
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED) {
 		future->result = result = MM_RESULT_NOTREADY;
-		mm_core_post_work(core, &future->work);
+		mm_strand_post_work(target, &future->work);
 	}
 
 	LEAVE();
@@ -416,8 +416,8 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_core *core = mm_core_selfptr();
-	mm_timeval_t deadline = mm_core_gettime(core) + timeout;
+	struct mm_strand *strand = mm_strand_selfptr();
+	mm_timeval_t deadline = mm_strand_gettime(strand) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_future_start(future, MM_THREAD_NONE);
@@ -429,7 +429,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_core_gettime(core)) {
+		if (deadline <= mm_strand_gettime(strand)) {
 			DEBUG("future timed out");
 			break;
 		}
@@ -463,7 +463,7 @@ mm_future_cancel(struct mm_future *future)
 	if (result == MM_RESULT_NOTREADY) {
 		struct mm_fiber *task = mm_memory_load(future->task);
 		if (task != NULL) {
-			// TODO: task cancel across cores
+			// TODO: task cancel across threads
 			// TODO: catch and stop cancel in the future routine.
 #if 0
 			mm_fiber_cancel(task);

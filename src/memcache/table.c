@@ -206,9 +206,9 @@ mc_table_start_striding(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post_work(MM_THREAD_SELF, &part->stride_work);
+	mm_strand_post_work(MM_THREAD_SELF, &part->stride_work);
 #else
-	mm_core_post_work(MM_THREAD_NONE, &part->stride_work);
+	mm_strand_post_work(MM_THREAD_NONE, &part->stride_work);
 #endif
 
 	LEAVE();
@@ -262,9 +262,9 @@ mc_table_start_evicting(struct mc_tpart *part)
 	ENTER();
 
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_core_post_work(MM_THREAD_SELF, &part->evict_work);
+	mm_strand_post_work(MM_THREAD_SELF, &part->evict_work);
 #else
-	mm_core_post_work(MM_THREAD_NONE, &part->evict_work);
+	mm_strand_post_work(MM_THREAD_NONE, &part->evict_work);
 #endif
 
 	LEAVE();
@@ -307,7 +307,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_thread_t index, mm_thread_t core UNUSED)
+mc_table_init_part(mm_thread_t index, mm_thread_t target UNUSED)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
@@ -337,8 +337,8 @@ mc_table_init_part(mm_thread_t index, mm_thread_t core UNUSED)
 	part->combiner = mm_combiner_create(MC_COMBINER_SIZE,
 					    MC_COMBINER_HANDOFF);
 #elif ENABLE_MEMCACHE_DELEGATE
-	mm_verbose("bind partition %d to core %d", index, core);
-	part->core = core;
+	mm_verbose("bind partition %d to thread %d", index, target);
+	part->target = target;
 #elif ENABLE_MEMCACHE_LOCKING
 	part->lookup_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	part->freelist_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
@@ -446,10 +446,10 @@ mc_table_start(const struct mm_memcache_config *config)
 	// Initialize the table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_thread_t index = 0;
-	ASSERT(nparts <= mm_core_getnum());
-	for (mm_thread_t core = 0; core < mm_core_getnum(); core++) {
-		if (mm_bitset_test(&config->affinity, core)) {
-			mc_table_init_part(index++, core);
+	ASSERT(nparts <= mm_regular_nthreads);
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
+		if (mm_bitset_test(&config->affinity, i)) {
+			mc_table_init_part(index++, i);
 		}
 	}
 #else

@@ -21,7 +21,6 @@
 
 #include "base/list.h"
 #include "base/report.h"
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/thread/request.h"
 
@@ -30,7 +29,7 @@
 /* Asynchronous operation information. */
 struct mm_async_node
 {
-	/* Link in the per-core list of async operations. */
+	/* Link in the per-thread list of async operations. */
 	struct mm_link link;
 
 	/* The fiber that requested the operation. */
@@ -65,7 +64,7 @@ mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
 	mm_memory_store(node->status, 0);
 
 	// Notify the caller.
-	mm_core_run_fiber(node->fiber);
+	mm_strand_run_fiber(node->fiber);
 }
 
 static void
@@ -139,10 +138,10 @@ mm_async_setup(struct mm_async_node *node, const char *desc)
 	node->description = desc;
 
 	// Register as a waiting fiber.
-	struct mm_core *core = mm_core_selfptr();
-	node->fiber = core->fiber;
+	struct mm_strand *strand = mm_strand_selfptr();
+	node->fiber = strand->fiber;
 	node->fiber->flags |= MM_FIBER_WAITING;
-	mm_list_append(&core->async, &node->link);
+	mm_list_append(&strand->async, &node->link);
 
 	// Initialize the result.
 	node->status = MM_RESULT_DEFERRED;

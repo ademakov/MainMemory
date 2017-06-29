@@ -21,7 +21,6 @@
 
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/fiber/core.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/memory.h"
 #include "base/memory/space.h"
@@ -68,8 +67,8 @@ mm_fiber_combiner_prepare(struct mm_fiber_combiner *combiner, const char *name,
 
 	struct mm_domain *domain = mm_domain_selfptr();
 	MM_THREAD_LOCAL_ALLOC(domain, name, combiner->wait_queue);
-	for (mm_thread_t core = 0; core < domain->nthreads; core++) {
-		struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(core, combiner->wait_queue);
+	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
+		struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(i, combiner->wait_queue);
 		mm_list_prepare(wait_queue);
 	}
 
@@ -91,23 +90,23 @@ mm_fiber_combiner_execute(struct mm_fiber_combiner *combiner,
 	mm_thread_t n = mm_thread_getnumber(mm_thread_selfptr());
 	struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(n, combiner->wait_queue);
 
-	// Add the current request to the per-core queue.
+	// Add the current request to the per-thread queue.
 	struct mm_fiber *fiber = mm_fiber_selfptr();
 	fiber->flags |= MM_FIBER_COMBINING;
 	mm_list_append(wait_queue, &fiber->wait_queue);
 
 	// Wait until the current request becomes the head of the
-	// per-core queue.
+	// per-thread queue.
 	while (mm_list_head(wait_queue) != &fiber->wait_queue)
 		mm_fiber_block();
 
 	mm_combiner_execute(&combiner->combiner, routine, data);
 
-	// Remove the request from the per-core queue.
+	// Remove the request from the per-thread queue.
 	mm_list_delete(&fiber->wait_queue);
 	fiber->flags &= ~MM_FIBER_COMBINING;
 
-	// If the per-core queue is not empty then let its new head take
+	// If the per-thread queue is not empty then let its new head take
 	// the next turn.
 	if (!mm_list_empty(wait_queue)) {
 		struct mm_link *link = mm_list_head(wait_queue);

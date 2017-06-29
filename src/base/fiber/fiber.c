@@ -22,7 +22,6 @@
 #include "base/bitops.h"
 #include "base/logger.h"
 #include "base/report.h"
-#include "base/fiber/core.h"
 #include "base/fiber/timer.h"
 #include "base/memory/pool.h"
 #include "base/thread/thread.h"
@@ -158,8 +157,8 @@ mm_fiber_new(void)
 	// Allocate a fiber.
 	struct mm_fiber *fiber = mm_pool_alloc(&mm_fiber_pool);
 
-	// Store the core that owns the fiber.
-	fiber->core = mm_core_selfptr();
+	// Store the strand that owns the fiber.
+	fiber->strand = mm_strand_selfptr();
 
 	// Initialize the fiber stack info.
 	fiber->stack_size = 0;
@@ -227,10 +226,10 @@ mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t
 	uint32_t stack_size = mm_fiber_attr_getstacksize(attr);
 
 	// Try to reuse a dead fiber.
-	struct mm_core *core = mm_core_selfptr();
-	if (core != NULL && !mm_list_empty(&core->dead)) {
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (strand != NULL && !mm_list_empty(&strand->dead)) {
 		// Get the last dead fiber.
-		struct mm_link *link = mm_list_head(&core->dead);
+		struct mm_link *link = mm_list_head(&strand->dead);
 		struct mm_fiber *dead = containerof(link, struct mm_fiber, queue);
 
 		// Check it against the required stack size.
@@ -263,9 +262,9 @@ mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t
 	fiber->start_arg = start_arg;
 
 	// Add it to the blocked fiber list.
-	if (core != NULL && stack_size) {
+	if (strand != NULL && stack_size) {
 		fiber->state = MM_FIBER_BLOCKED;
-		mm_list_append(&core->block, &fiber->queue);
+		mm_list_append(&strand->block, &fiber->queue);
 	} else {
 		fiber->state = MM_FIBER_INVALID;
 	}
@@ -352,49 +351,49 @@ mm_fiber_print_status(const struct mm_fiber *fiber)
 static void
 mm_fiber_switch(mm_fiber_state_t state)
 {
-	struct mm_core *core = mm_core_selfptr();
+	struct mm_strand *strand = mm_strand_selfptr();
 
-	// Bail out if the core is not in the normal running state.
-	if (unlikely(core->state != MM_CORE_RUNNING))
+	// Bail out if the strand is not in the normal running state.
+	if (unlikely(strand->state != MM_STRAND_RUNNING))
 		return;
 
 	// Get the currently running fiber.
-	struct mm_fiber *old_fiber = core->fiber;
+	struct mm_fiber *old_fiber = strand->fiber;
 	ASSERT(old_fiber->state == MM_FIBER_RUNNING);
 
 	// Bring it to the requested state.
 	old_fiber->state = state;
 	if (unlikely(state == MM_FIBER_INVALID)) {
 		// Add it to the dead fiber list.
-		mm_list_append(&core->dead, &old_fiber->queue);
+		mm_list_append(&strand->dead, &old_fiber->queue);
 	} else {
 		// Reset the priority that could have been temporary raised.
 		old_fiber->priority = old_fiber->original_priority;
 		if (state == MM_FIBER_BLOCKED) {
 			// Add it to the blocked fiber list.
-			mm_list_append(&core->block, &old_fiber->queue);
+			mm_list_append(&strand->block, &old_fiber->queue);
 		} else {
 			// Add it to the run queue.
-			mm_runq_put(&core->runq, old_fiber);
+			mm_runq_put(&strand->runq, old_fiber);
 		}
 	}
 
-	// Execute requests associated with the core. Sometimes this might
+	// Execute requests associated with the strand. Sometimes this might
 	// touch the currently running fiber. For instance, it might be put
 	// to the run queue after just being blocked. So at this point the
 	// fiber must already be in completely consistent state. That is no
 	// manipulation with old_fiber is allowed below this point.
-	mm_core_execute_requests(core);
+	mm_strand_execute_requests(strand);
 
 	// Get the next fiber from the run queue.  As long as this function
 	// is called there is at least a boot fiber in the run queue.  So
 	// there should never be a NULL value returned.
-	struct mm_fiber *new_fiber = mm_runq_get(&core->runq);
+	struct mm_fiber *new_fiber = mm_runq_get(&strand->runq);
 	new_fiber->state = MM_FIBER_RUNNING;
-	core->fiber = new_fiber;
+	strand->fiber = new_fiber;
 
 	// Count the context switch.
-	core->cswitch_count++;
+	strand->cswitch_count++;
 
 	// Switch to the new fiber relinquishing CPU control for a while.
 	mm_cstack_switch(&old_fiber->stack_ctx, &new_fiber->stack_ctx);
@@ -407,7 +406,7 @@ mm_fiber_run(struct mm_fiber *fiber)
 	ENTER();
 	TRACE("queue fiber: [%s], state: %d, priority: %d",
 	      mm_fiber_getname(fiber), fiber->state, fiber->priority);
-	ASSERT(fiber->core == mm_core_selfptr());
+	ASSERT(fiber->strand == mm_strand_selfptr());
 	ASSERT(fiber->priority < MM_PRIO_BOOT);
 
 	if (fiber->state == MM_FIBER_BLOCKED) {
@@ -415,7 +414,7 @@ mm_fiber_run(struct mm_fiber *fiber)
 		mm_list_delete(&fiber->queue);
 		// Add it to the run queue.
 		fiber->state = MM_FIBER_PENDING;
-		mm_runq_put(&fiber->core->runq, fiber);
+		mm_runq_put(&fiber->strand->runq, fiber);
 	}
 
 	LEAVE();
@@ -428,7 +427,7 @@ mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority)
 	ENTER();
 	TRACE("hoist fiber: [%s], state: %d, priority: %d, %d",
 	      mm_fiber_getname(fiber), fiber->state, fiber->priority, priority);
-	ASSERT(fiber->core == mm_core_selfptr());
+	ASSERT(fiber->strand == mm_strand_selfptr());
 	ASSERT(fiber->priority < MM_PRIO_BOOT);
 
 	if (fiber->state == MM_FIBER_BLOCKED
@@ -440,14 +439,14 @@ mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority)
 			fiber->state = MM_FIBER_PENDING;
 		} else {
 			// Remove it from the run queue.
-			mm_runq_delete(&fiber->core->runq, fiber);
+			mm_runq_delete(&fiber->strand->runq, fiber);
 		}
 
 		if (fiber->priority > priority)
 			fiber->priority = priority;
 
 		// Add it to the run queue with raised priority.
-		mm_runq_put(&fiber->core->runq, fiber);
+		mm_runq_put(&fiber->strand->runq, fiber);
 	}
 
 	LEAVE();

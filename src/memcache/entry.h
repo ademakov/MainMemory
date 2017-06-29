@@ -23,7 +23,7 @@
 #include "memcache/memcache.h"
 
 #include "base/list.h"
-#include "base/fiber/core.h"
+#include "base/fiber/strand.h"
 #include "base/memory/alloc.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
@@ -66,8 +66,8 @@ static inline uint32_t
 mc_entry_fix_exptime(uint32_t exptime)
 {
 	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30)) {
-		struct mm_core *core = mm_core_selfptr();
-		exptime += mm_core_getrealtime(core) / 1000000;
+		struct mm_strand *strand = mm_strand_selfptr();
+		exptime += mm_strand_getrealtime(strand) / 1000000;
 	}
 	return exptime;
 }
