@@ -438,6 +438,9 @@ mm_core_halt(struct mm_core *core)
 {
 	ENTER();
 
+	// Count it.
+	core->halt_count++;
+
 	// Get the closest expiring timer if any.
 	mm_timeval_t wake_time = mm_timer_next(&core->time_manager);
 	if (wake_time != MM_TIMEVAL_MAX) {
@@ -479,24 +482,16 @@ mm_core_dealer(mm_value_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 
 	while (!mm_memory_load(core->stop)) {
+		// Run the queued fibers if any.
 		do {
-			// Count the loop cycles.
-			core->loop_count++;
-
-			// Run the queued fibers if any.
 			mm_fiber_yield();
-
 		} while (mm_core_pull_domain_request(core));
 
 		// Release excessive resources allocated by fibers.
 		mm_core_trim(core);
 
-		// Enter the state that forbids fiber switches.
-		core->state = MM_CORE_WAITING;
 		// Halt waiting for incoming requests.
 		mm_core_halt(core);
-		// Restore normal running state.
-		core->state = MM_CORE_RUNNING;
 	}
 
 	LEAVE();
@@ -533,18 +528,11 @@ mm_core_stats(void)
 {
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
 		struct mm_core *core = &mm_core_set[i];
-		mm_verbose("core %d: cycles=%llu, cswitches=%llu/%llu/%llu,"
-			   " requests=%llu/%llu, workers=%lu", i,
-			   (unsigned long long) core->loop_count,
+		mm_verbose("core %d: cycles=%llu, cswitches=%llu, requests=%llu/%llu, workers=%lu",
+			   i, (unsigned long long) core->halt_count,
 			   (unsigned long long) core->cswitch_count,
-			   (unsigned long long) core->cswitch_denied_in_waiting_state,
-			   (unsigned long long) core->cswitch_denied_in_cswitch_state,
 			   (unsigned long long) core->thread_request_count,
-#if ENABLE_SMP
 			   (unsigned long long) core->domain_request_count,
-#else
-			   (unsigned long long) 0,
-#endif
 			   (unsigned long) core->nworkers);
 	}
 }
@@ -686,14 +674,10 @@ mm_core_init_single(struct mm_core *core)
 	core->nworkers_min = MM_NWORKERS_MIN;
 	core->nworkers_max = MM_NWORKERS_MAX;
 
+	core->halt_count = 0;
 	core->cswitch_count = 0;
-	core->cswitch_denied_in_cswitch_state = 0;
-	core->cswitch_denied_in_waiting_state = 0;
-
 	core->thread_request_count = 0;
-#if ENABLE_SMP
 	core->domain_request_count = 0;
-#endif
 
 	core->master = NULL;
 	core->dealer = NULL;

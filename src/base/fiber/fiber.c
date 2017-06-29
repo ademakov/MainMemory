@@ -276,8 +276,7 @@ mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t
 
 		// Allocate a new stack if needed.
 		if (fiber->stack_base == NULL)
-			fiber->stack_base = mm_cstack_create(total_size,
-							    MM_PAGE_SIZE);
+			fiber->stack_base = mm_cstack_create(total_size, MM_PAGE_SIZE);
 		fiber->stack_size = stack_size;
 
 		// Setup the fiber entry point on the stack and queue
@@ -356,19 +355,15 @@ mm_fiber_switch(mm_fiber_state_t state)
 	struct mm_core *core = mm_core_selfptr();
 
 	// Bail out if the core is not in the normal running state.
-	if (unlikely(core->state != MM_CORE_RUNNING)) {
-		if (core->state == MM_CORE_CSWITCH)
-			core->cswitch_denied_in_cswitch_state++;
-		else
-			core->cswitch_denied_in_waiting_state++;
+	if (unlikely(core->state != MM_CORE_RUNNING))
 		return;
-	}
 
-	// Move the currently running fiber to a new state.
+	// Get the currently running fiber.
 	struct mm_fiber *old_fiber = core->fiber;
 	ASSERT(old_fiber->state == MM_FIBER_RUNNING);
-	old_fiber->state = state;
 
+	// Bring it to the requested state.
+	old_fiber->state = state;
 	if (unlikely(state == MM_FIBER_INVALID)) {
 		// Add it to the dead fiber list.
 		mm_list_append(&core->dead, &old_fiber->queue);
@@ -386,7 +381,11 @@ mm_fiber_switch(mm_fiber_state_t state)
 
 	// Enter the state that forbids a recursive fiber switch.
 	core->state = MM_CORE_CSWITCH;
-	// Execute requests associated with the core.
+	// Execute requests associated with the core. Sometimes this might
+	// touch the currently running fiber. For instance, it might be put
+	// to the run queue after just being blocked. So at this point the
+	// fiber must already be in completely consistent state. That is no
+	// manipulation with old_fiber below this point is allowed.
 	mm_core_execute_requests(core);
 	// Restore normal running state.
 	core->state = MM_CORE_RUNNING;

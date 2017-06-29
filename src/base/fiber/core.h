@@ -39,14 +39,22 @@ typedef enum
 	MM_CORE_INVALID = -1,
 	MM_CORE_RUNNING,
 	MM_CORE_CSWITCH,
-	MM_CORE_WAITING,
 } mm_core_state_t;
 
 /* Virtual core state. */
 struct mm_core
 {
+	/* The counter of fiber context switches. */
+	uint64_t cswitch_count;
+
 	/* Currently running fiber. */
 	struct mm_fiber *fiber;
+
+	/* The core status. */
+	mm_core_state_t state;
+
+	/* Queue of blocked fibers. */
+	struct mm_list block;
 
 	/* Queue of ready to run fibers. */
 	struct mm_runq runq;
@@ -57,17 +65,11 @@ struct mm_core
 	/* List of fibers that have finished. */
 	struct mm_list dead;
 
-	/* Queue of blocked fibers. */
-	struct mm_list block;
-
 	/* List of asynchronous operations. */
 	struct mm_list async;
 
 	/* Queue of pending work items. */
 	struct mm_queue workq;
-
-	/* The core status. */
-	mm_core_state_t state;
 
 	/* The number of items in the work queue. */
 	uint32_t nwork;
@@ -78,17 +80,11 @@ struct mm_core
 	mm_fiber_t nworkers_min;
 	mm_fiber_t nworkers_max;
 
-	/* The counter of fiber context switches. */
-	uint64_t loop_count;
-	uint64_t cswitch_count;
-	uint64_t cswitch_denied_in_cswitch_state;
-	uint64_t cswitch_denied_in_waiting_state;
-
+	/* The counter of halting (and listening for events). */
+	uint64_t halt_count;
 	/* The counter of thread requests. */
 	uint64_t thread_request_count;
-#if ENABLE_SMP
 	uint64_t domain_request_count;
-#endif
 
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;
