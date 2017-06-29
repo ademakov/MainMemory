@@ -103,7 +103,7 @@ void NONNULL(1)
 mm_domain_attr_cleanup(struct mm_domain_attr *attr);
 
 void NONNULL(1)
-mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number);
+mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size);
 
 void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
@@ -146,7 +146,7 @@ mm_domain_selfptr(void)
 }
 
 static inline mm_thread_t
-mm_domain_getnumber(const struct mm_domain *domain)
+mm_domain_getsize(const struct mm_domain *domain)
 {
 	return domain->nthreads;
 }

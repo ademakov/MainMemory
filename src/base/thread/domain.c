@@ -50,10 +50,10 @@ mm_domain_attr_cleanup(struct mm_domain_attr *attr)
 }
 
 void NONNULL(1)
-mm_domain_attr_setnumber(struct mm_domain_attr *attr, mm_thread_t number)
+mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size)
 {
-	if (attr->nthreads != number) {
-		attr->nthreads = number;
+	if (attr->nthreads != size) {
+		attr->nthreads = size;
 		if (attr->threads_attr != NULL) {
 			mm_global_free(attr->threads_attr);
 			attr->threads_attr = NULL;

@@ -332,7 +332,7 @@ mm_start(void)
 	struct mm_domain_attr attr;
 	mm_domain_attr_prepare(&attr);
 	mm_domain_attr_setname(&attr, "regular");
-	mm_domain_attr_setnumber(&attr, mm_regular_nthreads);
+	mm_domain_attr_setsize(&attr, mm_regular_nthreads);
 	mm_domain_attr_setstacksize(&attr, MM_PAGE_SIZE); // enough for fiber bootstrap
 	mm_domain_attr_setguardsize(&attr, MM_PAGE_SIZE);
 	mm_domain_attr_setspace(&attr, true);

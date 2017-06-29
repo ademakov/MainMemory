@@ -358,7 +358,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 	if (cdata->cache_size < MM_POOL_FREE_THRESHOLD) {
 		cdata->cache_full = false;
 	} else {
-		mm_thread_t n = mm_domain_getnumber(mm_domain_selfptr());
+		mm_thread_t n = mm_domain_getsize(mm_domain_selfptr());
 		uint32_t aver = pool->item_last / n;
 		if (cdata->cache_full) {
 			if (cdata->cache_size < (aver - aver / 8))
@@ -379,7 +379,7 @@ mm_pool_shared_free_low(mm_thread_t thread, struct mm_pool *pool, void *item)
 		// Collect items that might be subjects to ABA-problem.
 		int nguards = 0;
 		struct mm_slink **guards = cdata->guard_buffer;
-		mm_thread_t n = mm_domain_getnumber(mm_domain_selfptr());
+		mm_thread_t n = mm_domain_getsize(mm_domain_selfptr());
 		for (mm_thread_t i = 0; i < n; i++) {
 			struct mm_pool_shared_cdata *cd =
 				MM_THREAD_LOCAL_DEREF(i, pool->shared_data.cdata);
@@ -477,7 +477,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	char *cdata_name = mm_format(&mm_common_space.xarena,
 				     "'%s' memory pool", name);
 	MM_THREAD_LOCAL_ALLOC(domain, cdata_name, pool->shared_data.cdata);
-	mm_thread_t n = mm_domain_getnumber(domain);
+	mm_thread_t n = mm_domain_getsize(domain);
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_pool_shared_cdata *cdata =
 			MM_THREAD_LOCAL_DEREF(i, pool->shared_data.cdata);
