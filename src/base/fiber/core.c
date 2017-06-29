@@ -383,20 +383,24 @@ void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core)
 {
 	ENTER();
-	struct mm_thread *thread = core->thread;
 
-	// Enter the state that forbids a recursive fiber switch.
-	core->state = MM_CORE_CSWITCH;
+	struct mm_thread *thread = core->thread;
 
 	// Execute requests.
 	struct mm_request_data request;
-	while (mm_thread_receive(thread, &request)) {
-		mm_request_execute(&request);
-		core->thread_request_count++;
-	}
+	if (mm_thread_receive(thread, &request)) {
+		// Enter the state that forbids a recursive fiber switch.
+		mm_core_state_t state = core->state;
+		core->state = MM_CORE_CSWITCH;
 
-	// Restore normal running state.
-	core->state = MM_CORE_RUNNING;
+		do {
+			mm_request_execute(&request);
+			core->thread_request_count++;
+		} while (mm_thread_receive(thread, &request));
+
+		// Restore normal running state.
+		core->state = state;
+	}
 
 	LEAVE();
 }
