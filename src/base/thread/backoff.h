@@ -1,7 +1,7 @@
 /*
  * base/thread/backoff.h - MainMemory contention back off.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -41,12 +41,10 @@ mm_thread_backoff_fixed(uint32_t count)
 static inline uint32_t
 mm_thread_backoff(uint32_t count)
 {
-	if (count < MM_BACKOFF_SMALL) {
-		mm_thread_backoff_fixed(count);
-		return count + count + 1;
-	} else {
+	if (count >= MM_BACKOFF_SMALL)
 		return mm_thread_backoff_slow(count);
-	}
+	mm_thread_backoff_fixed(count);
+	return count + count + 1;
 }
 
 #endif /* BASE_THREAD_BACKOFF_H */

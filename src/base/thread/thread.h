@@ -85,9 +85,6 @@ struct mm_thread
 	struct mm_domain *domain;
 	mm_thread_t domain_number;
 
-	/* Synchronization backoff routine. */
-	mm_thread_relax_t relax;
-
 	/* Thread request queue. */
 	struct mm_ring_mpmc *request_queue;
 
@@ -244,31 +241,6 @@ mm_thread_join(struct mm_thread *thread);
 
 void
 mm_thread_yield(void);
-
-/**********************************************************************
- * Thread backoff routines.
- **********************************************************************/
-
-static inline void NONNULL(1)
-mm_thread_relax_low(struct mm_thread *thread)
-{
-	if (thread->relax != NULL)
-		(thread->relax)();
-	else
-		mm_thread_yield();
-}
-
-static inline void
-mm_thread_relax(void)
-{
-	mm_thread_relax_low(mm_thread_selfptr());
-}
-
-static inline void NONNULL(1)
-mm_thread_setrelax(struct mm_thread *thread, mm_thread_relax_t relax)
-{
-	thread->relax = relax;
-}
 
 /**********************************************************************
  * Thread requests.

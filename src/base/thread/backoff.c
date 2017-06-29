@@ -1,7 +1,7 @@
 /*
  * base/thread/backoff.c - MainMemory contention back off.
  *
- * Copyright (C) 2014-2015  Aleksey Demakov
+ * Copyright (C) 2014-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,20 +18,31 @@
  */
 
 #include "base/thread/backoff.h"
+#include "base/fiber/core.h"
+#include "base/fiber/fiber.h"
 #include "base/thread/thread.h"
 
 uint32_t
 mm_thread_backoff_slow(uint32_t count)
 {
-	if (count > 0xffff) {
+	struct mm_core *core = mm_core_selfptr();
+	if (core != NULL) {
+		// Execute any pending thread requests.
+		mm_core_execute_requests(core);
+		// If there are any waiting working fibers and this is a
+		// working fiber too then yield to let them make progress.
+		if (!mm_runq_empty_above(&core->runq, MM_PRIO_IDLE) && core->fiber->priority < MM_PRIO_IDLE) {
+			mm_fiber_yield();
+			return count + count + 1;
+		}
+	}
+
+	// If spinning for too long then yield the CPU to another thread/process.
+	if (count >= 0xffff) {
 		mm_thread_yield();
 		return 0;
-	} else {
-		struct mm_thread *thread = mm_thread_selfptr();
-		if (thread->relax != NULL)
-			mm_thread_relax_low(thread);
-		else
-			mm_thread_backoff_fixed(count & 0xfff);
-		return count + count + 1;
 	}
+
+	mm_thread_backoff_fixed(count & 0xfff);
+	return count + count + 1;
 }

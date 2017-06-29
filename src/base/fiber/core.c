@@ -54,34 +54,6 @@ static struct mm_core *mm_core_set;
 __thread struct mm_core *__mm_core_self;
 
 /**********************************************************************
- * Yield routine for backoff on busy waiting.
- **********************************************************************/
-
-#if ENABLE_FIBER_LOCATION
-static void
-mm_core_relax(void)
-{
-	mm_fiber_yield();
-}
-#endif
-
-static void
-mm_core_enable_yield(struct mm_core *core)
-{
-#if ENABLE_FIBER_LOCATION
-	mm_thread_setrelax(core->thread, mm_core_relax);
-#else
-	mm_thread_setrelax(core->thread, mm_fiber_yield);
-#endif
-}
-
-static void
-mm_core_disable_yield(struct mm_core *core)
-{
-	mm_thread_setrelax(core->thread, NULL);
-}
-
-/**********************************************************************
  * Idle queue.
  **********************************************************************/
 
@@ -411,24 +383,37 @@ void NONNULL(1)
 mm_core_execute_requests(struct mm_core *core)
 {
 	ENTER();
-	struct mm_request_data request;
 
-	struct mm_thread *const thread = core->thread;
+	struct mm_thread *thread = core->thread;
+
+	struct mm_request_data request;
 	while (mm_thread_receive(thread, &request)) {
 		mm_request_execute(&request);
 		core->thread_request_count++;
 	}
 
+	LEAVE();
+}
+
+static bool NONNULL(1)
+mm_core_pull_domain_request(struct mm_core *core UNUSED)
+{
+	ENTER();
+	bool rc = false;
+
 #if ENABLE_SMP
-	struct mm_domain *const domain = mm_thread_getdomain(thread);
-	while (mm_runq_empty_above(&core->runq, MM_PRIO_IDLE)
-	       && mm_domain_receive(domain, &request)) {
+	struct mm_domain *domain = mm_thread_getdomain(core->thread);
+
+	struct mm_request_data request;
+	if (mm_domain_receive(domain, &request)) {
 		mm_request_execute(&request);
 		core->domain_request_count++;
+		rc = true;
 	}
 #endif
 
 	LEAVE();
+	return rc;
 }
 
 static void
@@ -494,12 +479,14 @@ mm_core_dealer(mm_value_t arg)
 	struct mm_core *core = (struct mm_core *) arg;
 
 	while (!mm_memory_load(core->stop)) {
+		do {
+			// Count the loop cycles.
+			core->loop_count++;
 
-		// Count the loop cycles.
-		core->loop_count++;
+			// Run the queued fibers if any.
+			mm_fiber_yield();
 
-		// Run the queued fibers if any.
-		mm_fiber_yield();
+		} while (mm_core_pull_domain_request(core));
 
 		// Release excessive resources allocated by fibers.
 		mm_core_trim(core);
@@ -658,16 +645,10 @@ mm_core_boot(mm_value_t arg)
 	// Start master & dealer fibers.
 	mm_core_start_basic_tasks(core);
 
-	// Enable yielding to other fibers on busy waiting.
-	mm_core_enable_yield(core);
-
 	// Run the other fibers while there are any.
 	core->state = MM_CORE_RUNNING;
 	mm_fiber_yield();
 	core->state = MM_CORE_INVALID;
-
-	// Disable yielding to other fibers.
-	mm_core_disable_yield(core);
 
 	// Destroy per-core resources.
 	mm_core_boot_term(core);
