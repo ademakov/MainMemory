@@ -144,49 +144,12 @@ mm_core_execute_requests(struct mm_core *core);
  * Core information.
  **********************************************************************/
 
-extern struct mm_core *mm_core_set;
-
 extern __thread struct mm_core *__mm_core_self;
 
 static inline struct mm_core *
 mm_core_selfptr(void)
 {
 	return __mm_core_self;
-}
-
-static inline mm_thread_t
-mm_core_getnum(void)
-{
-#if ENABLE_SMP
-	return mm_regular_nthreads;
-#else
-	return 1;
-#endif
-}
-
-static inline mm_thread_t
-mm_core_getid(struct mm_core *core)
-{
-	if (unlikely(core == NULL))
-		return MM_THREAD_NONE;
-	return (mm_thread_t) (core - mm_core_set);
-}
-
-static inline struct mm_core *
-mm_core_getptr(mm_thread_t core)
-{
-	if (core == MM_THREAD_NONE)
-		return NULL;
-	if (core == MM_THREAD_SELF)
-		return mm_core_selfptr();
-	ASSERT(core < mm_regular_nthreads);
-	return &mm_core_set[core];
-}
-
-static inline mm_thread_t
-mm_core_self(void)
-{
-	return mm_core_getid(mm_core_selfptr());
 }
 
 static inline mm_timeval_t

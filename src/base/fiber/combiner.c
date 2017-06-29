@@ -66,8 +66,9 @@ mm_fiber_combiner_prepare(struct mm_fiber_combiner *combiner, const char *name,
 
 	mm_combiner_prepare(&combiner->combiner, size, handoff);
 
-	MM_THREAD_LOCAL_ALLOC(mm_domain_selfptr(), name, combiner->wait_queue);
-	for (mm_thread_t core = 0; core < mm_core_getnum(); core++) {
+	struct mm_domain *domain = mm_domain_selfptr();
+	MM_THREAD_LOCAL_ALLOC(domain, name, combiner->wait_queue);
+	for (mm_thread_t core = 0; core < domain->nthreads; core++) {
 		struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(core, combiner->wait_queue);
 		mm_list_prepare(wait_queue);
 	}

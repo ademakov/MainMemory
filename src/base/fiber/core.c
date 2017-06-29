@@ -48,7 +48,7 @@
 #endif
 
 // The core set.
-struct mm_core *mm_core_set;
+static struct mm_core *mm_core_set;
 
 // A core associated with the running thread.
 __thread struct mm_core *__mm_core_self;
@@ -188,22 +188,24 @@ mm_core_post_work(mm_thread_t core_id, struct mm_work *work)
 {
 	ENTER();
 
-	// Get the target core.
-	struct mm_core *core = mm_core_getptr(core_id);
-
 	// Dispatch the work item.
-	if (core == mm_core_selfptr()) {
-		// Enqueue it directly if on the same core.
-		mm_core_add_work(core, work);
-	} else if (core == NULL) {
-		// Submit it to the domain request queue.
+	if (core_id == MM_THREAD_NONE) {
+		// Submit the work item to the domain request queue.
 		struct mm_domain *domain = mm_domain_selfptr();
 		mm_domain_post_1(domain, mm_core_post_work_req, (uintptr_t) work);
 		mm_domain_notify(domain);
 	} else {
-		// Submit it to the thread request queue.
-		struct mm_thread *thread = core->thread;
-		mm_thread_post_1(thread, mm_core_post_work_req, (uintptr_t) work);
+		struct mm_core *self = mm_core_selfptr();
+		ASSERT(core_id == MM_THREAD_SELF || core_id < mm_regular_nthreads);
+		struct mm_core *dest = core_id == MM_THREAD_SELF ? self: &mm_core_set[core_id];
+		if (dest == self) {
+			// Enqueue it directly if on the same core.
+			mm_core_add_work(dest, work);
+		} else {
+			// Submit it to the thread request queue.
+			struct mm_thread *thread = dest->thread;
+			mm_thread_post_1(thread, mm_core_post_work_req, (uintptr_t) work);
+		}
 	}
 
 	LEAVE();
@@ -532,8 +534,8 @@ mm_core_print_fiber_list(struct mm_list *list)
 void NONNULL(1)
 mm_core_print_fibers(struct mm_core *core)
 {
-	mm_brief("fibers on core %d (#idle=%u, #work=%u):",
-		 mm_core_getid(core), core->nidle, core->nwork);
+	mm_brief("fibers on thread %d (#idle=%u, #work=%u):",
+		 mm_thread_getnumber(core->thread), core->nidle, core->nwork);
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_core_print_fiber_list(&core->runq.bins[i]);
 	mm_core_print_fiber_list(&core->block);
@@ -542,8 +544,7 @@ mm_core_print_fibers(struct mm_core *core)
 void
 mm_core_stats(void)
 {
-	mm_thread_t n = mm_core_getnum();
-	for (mm_thread_t i = 0; i < n; i++) {
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
 		struct mm_core *core = &mm_core_set[i];
 		mm_verbose("core %d: cycles=%llu, cswitches=%llu/%llu/%llu,"
 			   " requests=%llu/%llu, workers=%lu", i,

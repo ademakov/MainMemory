@@ -885,7 +885,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	mm_work_prepare(&srv->acceptor_work, &acceptor_vtable);
 	MM_WORK_VTABLE_1(register_vtable, mm_net_register_server);
 	mm_work_prepare(&srv->register_work, &register_vtable);
-	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_core_getnum());
+	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_regular_nthreads);
 
 	// On the very first server register the server cleanup routine.
 	if (mm_list_empty(&mm_server_list))
