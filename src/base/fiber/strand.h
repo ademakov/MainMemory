@@ -114,14 +114,19 @@ struct mm_strand
 } CACHE_ALIGN;
 
 /**********************************************************************
- * Strand subsystem initialization and termination.
+ * Strand initialization and termination.
  **********************************************************************/
 
-void mm_strand_init(void);
-void mm_strand_term(void);
+void NONNULL(1)
+mm_strand_prepare(struct mm_strand *strand);
+
+void NONNULL(1)
+mm_strand_cleanup(struct mm_strand *strand);
 
 mm_value_t mm_strand_boot(mm_value_t arg);
-void mm_strand_stop(void);
+
+void NONNULL(1)
+mm_strand_stop(struct mm_strand *strand);
 
 /**********************************************************************
  * Strand fiber execution.

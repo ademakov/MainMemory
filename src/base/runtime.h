@@ -32,6 +32,7 @@ struct mm_domain;
 
 extern mm_thread_t mm_regular_nthreads;
 extern struct mm_domain *mm_regular_domain;
+extern struct mm_strand *mm_regular_strands;
 
 /**********************************************************************
  * Runtime start and stop hooks.

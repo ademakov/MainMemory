@@ -29,6 +29,8 @@
 #include "base/topology.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
+#include "base/fiber/fiber.h"
+#include "base/fiber/future.h"
 #include "base/fiber/strand.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
@@ -40,6 +42,9 @@
 
 mm_thread_t mm_regular_nthreads = 0;
 struct mm_domain *mm_regular_domain = NULL;
+
+// Strands for regular domain threads.
+struct mm_strand *mm_regular_strands;
 
 // Event dispatch for regular thread domain.
 static struct mm_event_dispatch mm_regular_dispatch;
@@ -190,13 +195,38 @@ mm_validate_nthreads(uint32_t n)
 #endif
 }
 
+#if ENABLE_TRACE
+
+static struct mm_trace_context *
+mm_strand_gettracecontext(void)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (strand != NULL)
+		return &strand->fiber->trace;
+	struct mm_thread *thread = mm_thread_selfptr();
+	if (unlikely(thread == NULL))
+		ABORT();
+	return mm_thread_gettracecontext(thread);
+}
+
+#endif
+
 static void
 mm_common_start(void)
 {
 	ENTER();
 
-	// Initialize fiber subsystem.
-	mm_strand_init();
+	mm_fiber_init();
+	mm_wait_init();
+	mm_future_init();
+
+#if ENABLE_TRACE
+	mm_trace_set_getcontext(mm_strand_gettracecontext);
+#endif
+
+	mm_regular_strands = mm_global_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_strand_prepare(&mm_regular_strands[i]);
 
 	LEAVE();
 }
@@ -207,7 +237,10 @@ mm_common_stop(void)
 	ENTER();
 
 	// Cleanup fiber subsystem.
-	mm_strand_term();
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_strand_cleanup(&mm_regular_strands[i]);
+	mm_global_free(mm_regular_strands);
+	mm_fiber_term();
 
 	LEAVE();
 }
@@ -276,24 +309,6 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	mm_regular_start_hook_0(mm_regular_start);
 	mm_regular_stop_hook_0(mm_regular_stop);
 
-	// Try to get thread number parameter possibly provided by user.
-	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
-	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
-		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
-		nthreads = 0;
-	}
-
-	// Determine the machine topology.
-	uint16_t ncpus = mm_topology_getncpus();
-	mm_brief("running on %d cores", ncpus);
-
-	// Determine the number of regular threads.
-	mm_regular_nthreads = nthreads ? nthreads : ncpus;
-	if (mm_regular_nthreads == 1)
-		mm_brief("using 1 thread");
-	else
-		mm_brief("using %d threads", mm_regular_nthreads);
-
 	LEAVE();
 }
 
@@ -317,6 +332,24 @@ void
 mm_start(void)
 {
 	ENTER();
+
+	// Try to get thread number parameter possibly provided by user.
+	uint32_t nthreads = mm_settings_get_uint32("thread-number", 0);
+	if (nthreads != 0 && !mm_validate_nthreads(nthreads)) {
+		mm_error(0, "ignore unsupported thread number value: %u", nthreads);
+		nthreads = 0;
+	}
+
+	// Determine the machine topology.
+	uint16_t ncpus = mm_topology_getncpus();
+	mm_brief("running on %d cores", ncpus);
+
+	// Determine the number of regular threads.
+	mm_regular_nthreads = nthreads ? nthreads : ncpus;
+	if (mm_regular_nthreads == 1)
+		mm_brief("using 1 thread");
+	else
+		mm_brief("using %d threads", mm_regular_nthreads);
 
 	// Daemonize if needed.
 	if (mm_daemonize) {
@@ -381,8 +414,8 @@ mm_stop(void)
 {
 	ENTER();
 
-	mm_strand_stop();
-
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_strand_stop(&mm_regular_strands[i]);
 	mm_memory_store(mm_stop_flag, 1);
 
 	LEAVE();

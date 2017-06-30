@@ -24,7 +24,6 @@
 #include "base/logger.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/future.h"
 #include "base/fiber/work.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
@@ -42,13 +41,10 @@
 #define MM_NWORKERS_MAX		256
 
 #if ENABLE_SMP
-# define MM_STRAND_IS_PRIMARY(strand)	(strand == mm_strand_set)
+# define MM_STRAND_IS_PRIMARY(strand)	(strand == mm_regular_strands)
 #else
 # define MM_STRAND_IS_PRIMARY(strand)	(true)
 #endif
-
-// The strand set.
-static struct mm_strand *mm_strand_set;
 
 // A strand associated with the running thread.
 __thread struct mm_strand *__mm_strand_self;
@@ -169,7 +165,7 @@ mm_strand_post_work(mm_thread_t target, struct mm_work *work)
 	} else {
 		struct mm_strand *self = mm_strand_selfptr();
 		ASSERT(target == MM_THREAD_SELF || target < mm_regular_nthreads);
-		struct mm_strand *dest = target == MM_THREAD_SELF ? self: &mm_strand_set[target];
+		struct mm_strand *dest = target == MM_THREAD_SELF ? self: &mm_regular_strands[target];
 		if (dest == self) {
 			// Enqueue it directly if on the same strand.
 			mm_strand_add_work(dest, work);
@@ -537,7 +533,7 @@ void
 mm_strand_stats(void)
 {
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
-		struct mm_strand *strand = &mm_strand_set[i];
+		struct mm_strand *strand = &mm_regular_strands[i];
 		mm_verbose("strand %d: cycles=%llu, cswitches=%llu, requests=%llu/%llu, workers=%lu",
 			   i, (unsigned long long) strand->halt_count,
 			   (unsigned long long) strand->cswitch_count,
@@ -548,8 +544,69 @@ mm_strand_stats(void)
 }
 
 /**********************************************************************
- * Strand Initialization and Termination.
+ * Strand initialization and termination.
  **********************************************************************/
+
+void NONNULL(1)
+mm_strand_prepare(struct mm_strand *strand)
+{
+	ENTER();
+
+	mm_runq_prepare(&strand->runq);
+	mm_list_prepare(&strand->idle);
+	mm_list_prepare(&strand->dead);
+	mm_list_prepare(&strand->block);
+	mm_list_prepare(&strand->async);
+	mm_queue_prepare(&strand->workq);
+
+	mm_wait_cache_prepare(&strand->wait_cache);
+
+	strand->state = MM_STRAND_INVALID;
+
+	strand->nwork = 0;
+	strand->nidle = 0;
+	strand->nworkers = 0;
+	strand->nworkers_min = MM_NWORKERS_MIN;
+	strand->nworkers_max = MM_NWORKERS_MAX;
+
+	strand->halt_count = 0;
+	strand->cswitch_count = 0;
+	strand->thread_request_count = 0;
+	strand->domain_request_count = 0;
+
+	strand->master = NULL;
+	strand->dealer = NULL;
+
+	strand->thread = NULL;
+
+	strand->stop = false;
+
+	// Create the strand bootstrap fiber.
+	struct mm_fiber_attr attr;
+	mm_fiber_attr_init(&attr);
+	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
+	mm_fiber_attr_setname(&attr, "boot");
+	strand->boot = mm_fiber_create(&attr, mm_strand_boot, (mm_value_t) strand);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_strand_cleanup(struct mm_strand *strand)
+{
+	ENTER();
+
+	mm_wait_cache_cleanup(&strand->wait_cache);
+
+	mm_fiber_destroy(strand->boot);
+
+	// Flush logs before memory space with possible log chunks is unmapped.
+	mm_log_relay();
+	mm_log_flush();
+
+	LEAVE();
+}
 
 static void
 mm_strand_boot_init(struct mm_strand *strand)
@@ -621,7 +678,7 @@ mm_strand_boot(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_strand *strand = &mm_strand_set[arg];
+	struct mm_strand *strand = &mm_regular_strands[arg];
 	strand->thread = mm_thread_selfptr();
 
 	// Set the thread-specific data.
@@ -662,131 +719,9 @@ mm_strand_boot(mm_value_t arg)
 	return 0;
 }
 
-static void
-mm_strand_init_single(struct mm_strand *strand)
+void NONNULL(1)
+mm_strand_stop(struct mm_strand *strand)
 {
-	ENTER();
-
-	mm_runq_prepare(&strand->runq);
-	mm_list_prepare(&strand->idle);
-	mm_list_prepare(&strand->dead);
-	mm_list_prepare(&strand->block);
-	mm_list_prepare(&strand->async);
-	mm_queue_prepare(&strand->workq);
-
-	mm_wait_cache_prepare(&strand->wait_cache);
-
-	strand->state = MM_STRAND_INVALID;
-
-	strand->nwork = 0;
-	strand->nidle = 0;
-	strand->nworkers = 0;
-	strand->nworkers_min = MM_NWORKERS_MIN;
-	strand->nworkers_max = MM_NWORKERS_MAX;
-
-	strand->halt_count = 0;
-	strand->cswitch_count = 0;
-	strand->thread_request_count = 0;
-	strand->domain_request_count = 0;
-
-	strand->master = NULL;
-	strand->dealer = NULL;
-
-	strand->thread = NULL;
-
-	strand->stop = false;
-
-	// Create the strand bootstrap fiber.
-	struct mm_fiber_attr attr;
-	mm_fiber_attr_init(&attr);
-	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
-	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
-	mm_fiber_attr_setname(&attr, "boot");
-	strand->boot = mm_fiber_create(&attr, mm_strand_boot, (mm_value_t) strand);
-
-	LEAVE();
-}
-
-static void
-mm_strand_term_single(struct mm_strand *strand)
-{
-	ENTER();
-
-	mm_wait_cache_cleanup(&strand->wait_cache);
-
-	mm_fiber_destroy(strand->boot);
-
-	// Flush logs before memory space with possible log chunks is unmapped.
-	mm_log_relay();
-	mm_log_flush();
-
-	LEAVE();
-}
-
-#if ENABLE_TRACE
-
-static struct mm_trace_context *
-mm_strand_gettracecontext(void)
-{
-	struct mm_strand *strand = mm_strand_selfptr();
-	if (strand != NULL)
-		return &strand->fiber->trace;
-	struct mm_thread *thread = mm_thread_selfptr();
-	if (unlikely(thread == NULL))
-		ABORT();
-	return mm_thread_gettracecontext(thread);
-}
-
-#endif
-
-void
-mm_strand_init(void)
-{
-	ENTER();
-	ASSERT(mm_regular_nthreads > 0);
-
-	mm_fiber_init();
-	mm_wait_init();
-	mm_future_init();
-
-#if ENABLE_TRACE
-	mm_trace_set_getcontext(mm_strand_gettracecontext);
-#endif
-
-	mm_strand_set = mm_global_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
-		mm_strand_init_single(&mm_strand_set[i]);
-
-	LEAVE();
-}
-
-void
-mm_strand_term(void)
-{
-	ENTER();
-	ASSERT(mm_regular_nthreads > 0);
-
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
-		mm_strand_term_single(&mm_strand_set[i]);
-	mm_global_free(mm_strand_set);
-
-	mm_fiber_term();
-
-	LEAVE();
-}
-
-void
-mm_strand_stop(void)
-{
-	ENTER();
-	ASSERT(mm_regular_nthreads > 0);
-
-	// Set stop flag for strands.
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
-		struct mm_strand *strand = &mm_strand_set[i];
-		mm_memory_store(strand->stop, true);
-		mm_thread_wakeup(strand->thread);
-	}
-
-	LEAVE();
+	mm_memory_store(strand->stop, true);
+	mm_thread_wakeup(strand->thread);
 }
