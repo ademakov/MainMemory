@@ -223,9 +223,6 @@ mm_fiber_getname(const struct mm_fiber *fiber)
 }
 
 void NONNULL(1)
-mm_fiber_setname(struct mm_fiber *fiber, const char *name);
-
-void NONNULL(1)
 mm_fiber_print_status(const struct mm_fiber *fiber);
 
 /**********************************************************************

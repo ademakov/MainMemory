@@ -313,21 +313,6 @@ mm_fiber_create_boot(void)
  * Fiber utilities.
  **********************************************************************/
 
-/* Set or change the fiber name. */
-void NONNULL(1)
-mm_fiber_setname(struct mm_fiber *fiber, const char *name)
-{
-	size_t len = 0;
-	if (likely(name != NULL)) {
-		len = strlen(name);
-		if (len >= sizeof fiber->name)
-			len = sizeof fiber->name - 1;
-
-		memcpy(fiber->name, name, len);
-	}
-	fiber->name[len] = 0;
-}
-
 void NONNULL(1)
 mm_fiber_print_status(const struct mm_fiber *fiber)
 {
@@ -522,9 +507,6 @@ mm_fiber_exit(mm_value_t result)
 #else
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
 #endif
-
-	// Reset the fiber name.
-	mm_fiber_setname(fiber, "dead");
 
 	// Give the control to still running fibers.
 	mm_fiber_switch(MM_FIBER_INVALID);
