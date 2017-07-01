@@ -195,22 +195,6 @@ mm_validate_nthreads(uint32_t n)
 #endif
 }
 
-#if ENABLE_TRACE
-
-static struct mm_trace_context *
-mm_strand_gettracecontext(void)
-{
-	struct mm_strand *strand = mm_strand_selfptr();
-	if (strand != NULL)
-		return &strand->fiber->trace;
-	struct mm_thread *thread = mm_thread_selfptr();
-	if (unlikely(thread == NULL))
-		ABORT();
-	return mm_thread_gettracecontext(thread);
-}
-
-#endif
-
 static void
 mm_common_start(void)
 {
@@ -219,10 +203,6 @@ mm_common_start(void)
 	mm_fiber_init();
 	mm_wait_init();
 	mm_future_init();
-
-#if ENABLE_TRACE
-	mm_trace_set_getcontext(mm_strand_gettracecontext);
-#endif
 
 	mm_regular_strands = mm_global_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)

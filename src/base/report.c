@@ -1,7 +1,7 @@
 /*
  * base/report.c - MainMemory message logging.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@
 #include "base/exit.h"
 #include "base/format.h"
 #include "base/logger.h"
+#include "base/fiber/fiber.h"
 #include "base/memory/global.h"
 #include "base/thread/thread.h"
 
@@ -214,23 +215,15 @@ mm_debug(const char *restrict location,
 #if ENABLE_TRACE
 
 static struct mm_trace_context *
-mm_trace_getcontext_default(void)
+mm_trace_getcontext(void)
 {
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (strand != NULL)
+		return &strand->fiber->trace;
 	struct mm_thread *thread = mm_thread_selfptr();
 	if (unlikely(thread == NULL))
 		ABORT();
 	return mm_thread_gettracecontext(thread);
-}
-
-static mm_trace_getcontext_t mm_trace_getcontext = mm_trace_getcontext_default;
-
-void
-mm_trace_set_getcontext(mm_trace_getcontext_t getcontext)
-{
-	if (getcontext == NULL)
-		mm_trace_getcontext = mm_trace_getcontext_default;
-	else
-		mm_trace_getcontext = getcontext;
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)

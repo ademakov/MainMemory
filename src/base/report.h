@@ -1,7 +1,7 @@
 /*
  * base/report.h - MainMemory message logging.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -133,11 +133,6 @@ struct mm_trace_context
 	/* Trace recursion detection (to avoid infinite recursion). */
 	int recur;
 };
-
-typedef struct mm_trace_context * (*mm_trace_getcontext_t)(void);
-
-void
-mm_trace_set_getcontext(mm_trace_getcontext_t getcontext);
 
 void NONNULL(1, 2) FORMAT(2, 3)
 mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict fmt, ...);
