@@ -523,18 +523,16 @@ mm_strand_print_fibers(struct mm_strand *strand)
 	mm_strand_print_fiber_list(&strand->block);
 }
 
-void
-mm_strand_stats(void)
+void NONNULL(1)
+mm_strand_stats(struct mm_strand *strand)
 {
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
-		struct mm_strand *strand = &mm_regular_strands[i];
-		mm_verbose("strand %d: cycles=%llu, cswitches=%llu, requests=%llu/%llu, workers=%lu",
-			   i, (unsigned long long) strand->halt_count,
-			   (unsigned long long) strand->cswitch_count,
-			   (unsigned long long) strand->thread_request_count,
-			   (unsigned long long) strand->domain_request_count,
-			   (unsigned long) strand->nworkers);
-	}
+	mm_verbose("thread %d: cycles=%llu, cswitches=%llu, requests=%llu/%llu, workers=%lu",
+		   mm_thread_getnumber(strand->thread),
+		   (unsigned long long) strand->halt_count,
+		   (unsigned long long) strand->cswitch_count,
+		   (unsigned long long) strand->thread_request_count,
+		   (unsigned long long) strand->domain_request_count,
+		   (unsigned long) strand->nworkers);
 }
 
 /**********************************************************************

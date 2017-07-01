@@ -225,10 +225,8 @@ mm_regular_boot_call_stop_hooks(struct mm_strand *strand)
 	mm_domain_barrier();
 
 	// Call the stop hooks on the primary strand.
-	if (MM_STRAND_IS_PRIMARY(strand)) {
-		mm_strand_stats();
+	if (MM_STRAND_IS_PRIMARY(strand))
 		mm_regular_call_stop_hooks();
-	}
 
 	mm_regular_call_thread_stop_hooks();
 	mm_timer_cleanup(&strand->time_manager);
@@ -293,10 +291,7 @@ mm_common_start(void)
 {
 	ENTER();
 
-	mm_wait_init();
-	mm_future_init();
-
-	mm_regular_strands = mm_global_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
+	mm_regular_strands = mm_common_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
@@ -311,7 +306,7 @@ mm_common_stop(void)
 	// Cleanup fiber subsystem.
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_cleanup(&mm_regular_strands[i]);
-	mm_global_free(mm_regular_strands);
+	mm_common_free(mm_regular_strands);
 
 	LEAVE();
 }
@@ -334,6 +329,8 @@ mm_regular_stop(void)
 	ENTER();
 
 	// Print statistics.
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_strand_stats(&mm_regular_strands[i]);
 	mm_event_dispatch_stats(&mm_regular_dispatch);
 	mm_lock_stats();
 
@@ -379,6 +376,10 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	// Setup basic start and stop hooks for regular domain.
 	mm_regular_start_hook_0(mm_regular_start);
 	mm_regular_stop_hook_0(mm_regular_stop);
+
+	// Register hooks required by various subsystems.
+	mm_wait_init();
+	mm_future_init();
 
 	LEAVE();
 }
