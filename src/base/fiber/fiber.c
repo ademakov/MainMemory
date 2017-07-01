@@ -174,13 +174,8 @@ static uint32_t
 mm_fiber_attr_getstacksize(const struct mm_fiber_attr *attr)
 {
 	/* Handle default stack size cases. */
-	if (attr == NULL)
+	if (attr == NULL || attr->stack_size == 0)
 		return MM_FIBER_STACK_DEFAULT;
-	if (!attr->stack_size) {
-		if (!(attr->flags & MM_FIBER_BOOT))
-			return MM_FIBER_STACK_DEFAULT;
-		return 0;
-	}
 
 	/* Sanitize specified stack size value. */
 	if (attr->stack_size < MM_FIBER_STACK_MIN)
@@ -216,7 +211,7 @@ mm_fiber_set_attr(struct mm_fiber *fiber, const struct mm_fiber_attr *attr)
 }
 
 /* Create a new fiber. */
-struct mm_fiber *
+struct mm_fiber * NONNULL(2)
 mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
@@ -227,7 +222,7 @@ mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t
 
 	// Try to reuse a dead fiber.
 	struct mm_strand *strand = mm_strand_selfptr();
-	if (strand != NULL && !mm_list_empty(&strand->dead)) {
+	if (!mm_list_empty(&strand->dead)) {
 		// Get the last dead fiber.
 		struct mm_link *link = mm_list_head(&strand->dead);
 		struct mm_fiber *dead = containerof(link, struct mm_fiber, queue);
@@ -262,28 +257,22 @@ mm_fiber_create(const struct mm_fiber_attr *attr, mm_routine_t start, mm_value_t
 	fiber->start_arg = start_arg;
 
 	// Add it to the blocked fiber list.
-	if (strand != NULL && stack_size) {
-		fiber->state = MM_FIBER_BLOCKED;
-		mm_list_append(&strand->block, &fiber->queue);
-	} else {
-		fiber->state = MM_FIBER_INVALID;
-	}
+	fiber->state = MM_FIBER_BLOCKED;
+	mm_list_append(&strand->block, &fiber->queue);
 
-	if (stack_size) {
-		// Determine combined stack and guard page size.
-		uint32_t total_size = stack_size + MM_PAGE_SIZE;
+	// Determine combined stack and guard page size.
+	uint32_t total_size = stack_size + MM_PAGE_SIZE;
 
-		// Allocate a new stack if needed.
-		if (fiber->stack_base == NULL)
-			fiber->stack_base = mm_cstack_create(total_size, MM_PAGE_SIZE);
-		fiber->stack_size = stack_size;
+	// Allocate a new stack if needed.
+	if (fiber->stack_base == NULL)
+		fiber->stack_base = mm_cstack_create(total_size, MM_PAGE_SIZE);
+	fiber->stack_size = stack_size;
 
-		// Setup the fiber entry point on the stack and queue
-		// it for execution.
-		mm_cstack_prepare(&fiber->stack_ctx, mm_fiber_entry,
-				  fiber->stack_base, total_size);
-		mm_fiber_run(fiber);
-	}
+	// Setup the fiber entry point on the stack and queue
+	// it for execution.
+	mm_cstack_prepare(&fiber->stack_ctx, mm_fiber_entry,
+			  fiber->stack_base, total_size);
+	mm_fiber_run(fiber);
 
 	LEAVE();
 	return fiber;
@@ -310,6 +299,41 @@ mm_fiber_destroy(struct mm_fiber *fiber)
 	mm_pool_free(&mm_fiber_pool, fiber);
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Fiber bootstrap.
+ **********************************************************************/
+
+/* Create a dummy fiber without its own stack. It is used to switch from a
+   stack that belongs to a kernel thread to a properly created fiber (that
+   is with the mm_fiber_create() function). It might be possible to use a
+   bare stack context for the same purpose. However at the expense of few
+   extra bytes the dummy fiber approach saves from the need to handle any
+   special cases on the very hot code path -- during fiber switch. */
+struct mm_fiber *
+mm_fiber_create_boot(void)
+{
+	ENTER();
+
+	// Allocate a fiber.
+	struct mm_fiber *fiber = mm_fiber_new();
+
+	// Prepare the bootstrap fiber attributes.
+	struct mm_fiber_attr attr;
+	mm_fiber_attr_init(&attr);
+	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
+	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
+	mm_fiber_attr_setname(&attr, "boot");
+
+	// Initialize the bootstrap fiber.
+	mm_fiber_set_attr(fiber, &attr);
+	fiber->start = NULL;
+	fiber->start_arg = 0;
+	fiber->state = MM_FIBER_INVALID;
+
+	LEAVE();
+	return fiber;
 }
 
 /**********************************************************************

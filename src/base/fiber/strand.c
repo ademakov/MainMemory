@@ -40,12 +40,6 @@
 #define MM_NWORKERS_MIN		2
 #define MM_NWORKERS_MAX		256
 
-#if ENABLE_SMP
-# define MM_STRAND_IS_PRIMARY(strand)	(strand == mm_regular_strands)
-#else
-# define MM_STRAND_IS_PRIMARY(strand)	(true)
-#endif
-
 // A strand associated with the running thread.
 __thread struct mm_strand *__mm_strand_self;
 
@@ -582,12 +576,7 @@ mm_strand_prepare(struct mm_strand *strand)
 	strand->stop = false;
 
 	// Create the strand bootstrap fiber.
-	struct mm_fiber_attr attr;
-	mm_fiber_attr_init(&attr);
-	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
-	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
-	mm_fiber_attr_setname(&attr, "boot");
-	strand->boot = mm_fiber_create(&attr, mm_strand_boot, (mm_value_t) strand);
+	strand->boot = mm_fiber_create_boot();
 
 	LEAVE();
 }
@@ -599,6 +588,9 @@ mm_strand_cleanup(struct mm_strand *strand)
 
 	mm_wait_cache_cleanup(&strand->wait_cache);
 
+	// TODO:
+	//mm_fiber_destroy(strand->master);
+	//mm_fiber_destroy(strand->dealer);
 	mm_fiber_destroy(strand->boot);
 
 	// Flush logs before memory space with possible log chunks is unmapped.
@@ -608,115 +600,29 @@ mm_strand_cleanup(struct mm_strand *strand)
 	LEAVE();
 }
 
-static void
-mm_strand_boot_init(struct mm_strand *strand)
-{
-	// Wait until all threads from the same domain start. This ensures
-	// that all the thread data is initialized and so it is safe to use
-	// any of them from the start hooks.
-	mm_domain_barrier();
-
-	struct mm_private_space *space = mm_private_space_get();
-	if (MM_STRAND_IS_PRIMARY(strand)) {
-		mm_timer_prepare(&strand->time_manager, &space->xarena);
-
-		// Call the start hooks on the primary strand.
-		mm_call_regular_start_hooks();
-		mm_thread_local_summary(mm_domain_selfptr());
-		mm_call_regular_thread_start_hooks();
-
-		mm_domain_barrier();
-	} else {
-		// Secondary strands have to wait until the primary strand runs
-		// the start hooks that initialize shared resources.
-		mm_domain_barrier();
-
-		mm_timer_prepare(&strand->time_manager, &space->xarena);
-		mm_call_regular_thread_start_hooks();
-	}
-}
-
-static void
-mm_strand_boot_term(struct mm_strand *strand)
-{
-	mm_domain_barrier();
-
-	// Call the stop hooks on the primary strand.
-	if (MM_STRAND_IS_PRIMARY(strand)) {
-		mm_strand_stats();
-		mm_call_regular_stop_hooks();
-	}
-
-	mm_call_regular_thread_stop_hooks();
-	mm_timer_cleanup(&strand->time_manager);
-
-	// TODO:
-	//mm_fiber_destroy(strand->master);
-	//mm_fiber_destroy(strand->dealer);
-}
-
-static void
-mm_strand_start_basic_tasks(struct mm_strand *strand)
+void NONNULL(1)
+mm_strand_start(struct mm_strand *strand)
 {
 	struct mm_fiber_attr attr;
-	mm_fiber_attr_init(&attr);
 
-	// Create the master fiber for this strand and schedule it for execution.
+	// Create a master fiber and schedule it for execution.
+	mm_fiber_attr_init(&attr);
 	mm_fiber_attr_setpriority(&attr, MM_PRIO_MASTER);
 	mm_fiber_attr_setname(&attr, "master");
 	strand->master = mm_fiber_create(&attr, mm_strand_master, (mm_value_t) strand);
 
-	// Create the dealer fiber for this strand and schedule it for execution.
+	// Create a dealer fiber and schedule it for execution.
+	mm_fiber_attr_init(&attr);
 	mm_fiber_attr_setpriority(&attr, MM_PRIO_DEALER);
 	mm_fiber_attr_setname(&attr, "dealer");
 	strand->dealer = mm_fiber_create(&attr, mm_strand_dealer, (mm_value_t) strand);
-}
 
-/* A per-strand thread entry point. */
-mm_value_t
-mm_strand_boot(mm_value_t arg)
-{
-	ENTER();
-
-	struct mm_strand *strand = &mm_regular_strands[arg];
-	strand->thread = mm_thread_selfptr();
-
-	// Set the thread-specific data.
-	__mm_strand_self = strand;
-
-	// Set pointer to the running fiber.
-	strand->fiber = strand->boot;
-	strand->fiber->state = MM_FIBER_RUNNING;
-
-#if ENABLE_TRACE
-	mm_trace_context_prepare(&strand->fiber->trace, "[%s %s]",
-				 mm_thread_getname(strand->thread),
-				 mm_fiber_getname(strand->fiber));
-#endif
-
-	// Initialize per-strand resources.
-	mm_strand_boot_init(strand);
-
-	// Start master & dealer fibers.
-	mm_strand_start_basic_tasks(strand);
-
-	// Run the other fibers while there are any.
+	// Relinquish control to the created fibers. Once these fibers and
+	// any worker fibers (created by the master) exit then control will
+	// return here.
 	strand->state = MM_STRAND_RUNNING;
 	mm_fiber_yield();
 	strand->state = MM_STRAND_INVALID;
-
-	// Destroy per-strand resources.
-	mm_strand_boot_term(strand);
-
-	// Invalidate the boot fiber.
-	strand->fiber->state = MM_FIBER_INVALID;
-	strand->fiber = NULL;
-
-	// Abandon the strand.
-	__mm_strand_self = NULL;
-
-	LEAVE();
-	return 0;
 }
 
 void NONNULL(1)

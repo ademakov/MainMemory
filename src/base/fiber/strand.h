@@ -123,7 +123,8 @@ mm_strand_prepare(struct mm_strand *strand);
 void NONNULL(1)
 mm_strand_cleanup(struct mm_strand *strand);
 
-mm_value_t mm_strand_boot(mm_value_t arg);
+void NONNULL(1)
+mm_strand_start(struct mm_strand *strand);
 
 void NONNULL(1)
 mm_strand_stop(struct mm_strand *strand);

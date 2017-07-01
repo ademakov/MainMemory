@@ -149,36 +149,129 @@ mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data)
 }
 
 static void
-mm_call_common_start_hooks(void)
+mm_common_call_start_hooks(void)
 {
 	mm_hook_call(&mm_common_start_hook, false);
 }
 static void
-mm_call_common_stop_hooks(void)
+mm_common_call_stop_hooks(void)
 {
 	mm_hook_call(&mm_common_stop_hook, false);
 }
 
-void
-mm_call_regular_start_hooks(void)
+static void
+mm_regular_call_start_hooks(void)
 {
 	mm_hook_call(&mm_regular_start_hook, false);
 }
-void
-mm_call_regular_stop_hooks(void)
+static void
+mm_regular_call_stop_hooks(void)
 {
 	mm_hook_call(&mm_regular_stop_hook, false);
 }
 
-void
-mm_call_regular_thread_start_hooks(void)
+static void
+mm_regular_call_thread_start_hooks(void)
 {
 	mm_hook_call(&mm_regular_thread_start_hook, false);
 }
-void
-mm_call_regular_thread_stop_hooks(void)
+static void
+mm_regular_call_thread_stop_hooks(void)
 {
 	mm_hook_call(&mm_regular_thread_stop_hook, false);
+}
+
+/**********************************************************************
+ * Regular threads entry point.
+ **********************************************************************/
+
+#if ENABLE_SMP
+# define MM_STRAND_IS_PRIMARY(strand)	(strand == mm_regular_strands)
+#else
+# define MM_STRAND_IS_PRIMARY(strand)	(true)
+#endif
+
+static void
+mm_regular_boot_call_start_hooks(struct mm_strand *strand)
+{
+	// Wait until all threads from the same domain start. This ensures
+	// that all the thread data is initialized and so it is safe to use
+	// any of them from the start hooks.
+	mm_domain_barrier();
+
+	struct mm_private_space *space = mm_private_space_get();
+	if (MM_STRAND_IS_PRIMARY(strand)) {
+		mm_timer_prepare(&strand->time_manager, &space->xarena);
+
+		// Call the start hooks on the primary strand.
+		mm_regular_call_start_hooks();
+		mm_thread_local_summary(mm_domain_selfptr());
+		mm_regular_call_thread_start_hooks();
+
+		mm_domain_barrier();
+	} else {
+		// Secondary strands have to wait until the primary strand runs
+		// the start hooks that initialize shared resources.
+		mm_domain_barrier();
+
+		mm_timer_prepare(&strand->time_manager, &space->xarena);
+		mm_regular_call_thread_start_hooks();
+	}
+}
+
+static void
+mm_regular_boot_call_stop_hooks(struct mm_strand *strand)
+{
+	mm_domain_barrier();
+
+	// Call the stop hooks on the primary strand.
+	if (MM_STRAND_IS_PRIMARY(strand)) {
+		mm_strand_stats();
+		mm_regular_call_stop_hooks();
+	}
+
+	mm_regular_call_thread_stop_hooks();
+	mm_timer_cleanup(&strand->time_manager);
+}
+
+/* A per-strand thread entry point. */
+static mm_value_t
+mm_regular_boot(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_strand *strand = &mm_regular_strands[arg];
+	strand->thread = mm_thread_selfptr();
+
+	// Set the thread-specific data.
+	__mm_strand_self = strand;
+	// Set pointer to the running fiber.
+	strand->fiber = strand->boot;
+	strand->fiber->state = MM_FIBER_RUNNING;
+
+#if ENABLE_TRACE
+	mm_trace_context_prepare(&strand->fiber->trace, "[%s %s]",
+				 mm_thread_getname(strand->thread),
+				 mm_fiber_getname(strand->fiber));
+#endif
+
+	// Initialize per-strand resources.
+	mm_regular_boot_call_start_hooks(strand);
+
+	// Start fibers machinery.
+	mm_strand_start(strand);
+
+	// Destroy per-strand resources.
+	mm_regular_boot_call_stop_hooks(strand);
+
+	// Invalidate the boot fiber.
+	strand->fiber->state = MM_FIBER_INVALID;
+	strand->fiber = NULL;
+	// Abandon the strand.
+	__mm_strand_self = NULL;
+
+	LEAVE();
+	return 0;
 }
 
 /**********************************************************************
@@ -339,7 +432,7 @@ mm_start(void)
 	}
 
 	// Invoke registered start hooks.
-	mm_call_common_start_hooks();
+	mm_common_call_start_hooks();
 
 	// Set regular domain attributes.
 	struct mm_domain_attr attr;
@@ -360,7 +453,7 @@ mm_start(void)
 	}
 
 	// Start regular threads.
-	mm_regular_domain = mm_domain_create(&attr, mm_strand_boot);
+	mm_regular_domain = mm_domain_create(&attr, mm_regular_boot);
 
 	// Release domain creation attributes.
 	mm_domain_attr_cleanup(&attr);
@@ -378,7 +471,7 @@ mm_start(void)
 	mm_domain_join(mm_regular_domain);
 
 	// Invoke registered stop hooks.
-	mm_call_common_stop_hooks();
+	mm_common_call_stop_hooks();
 	// Free all registered hooks.
 	mm_free_hooks();
 	// Free regular thread domain.
