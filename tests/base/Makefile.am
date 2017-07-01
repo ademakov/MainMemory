@@ -2,7 +2,7 @@
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra
 
-LDADD = $(top_builddir)/src/base/libmmbase.la
+LDADD = $(top_builddir)/src/base/libmainbase.la
 
 noinst_PROGRAMS = combiner-bench lock-bench ring-mpmc-bench ring-spsc-bench
 

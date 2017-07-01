@@ -1,10 +1,10 @@
 
-noinst_LTLIBRARIES = libmmbase.la
+noinst_LTLIBRARIES = libmainbase.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
 
-libmmbase_la_SOURCES = \
+libmainbase_la_SOURCES = \
 	args.c args.h \
 	atomic.h \
 	bitops.h \
@@ -74,7 +74,7 @@ libmmbase_la_SOURCES = \
 	util/libcall.c util/libcall.h
 
 if ARCH_X86
-libmmbase_la_SOURCES += \
+libmainbase_la_SOURCES += \
 	arch/x86/asm.h \
 	arch/x86/atomic.h \
 	arch/x86/basic.h \
@@ -84,7 +84,7 @@ libmmbase_la_SOURCES += \
 endif
 
 if ARCH_X86_64
-libmmbase_la_SOURCES += \
+libmainbase_la_SOURCES += \
 	arch/x86-64/asm.h \
 	arch/x86-64/atomic.h \
 	arch/x86-64/basic.h \
@@ -94,7 +94,7 @@ libmmbase_la_SOURCES += \
 endif
 
 if ARCH_GENERIC
-libmmbase_la_SOURCES += \
+libmainbase_la_SOURCES += \
 	arch/generic/atomic.h \
 	arch/generic/basic.h \
 	arch/generic/cstack.c \

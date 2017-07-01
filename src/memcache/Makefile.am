@@ -1,10 +1,10 @@
 
-noinst_LIBRARIES = libmemcache.a
+noinst_LIBRARIES = libmaincache.a
 
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra
 
-libmemcache_a_SOURCES = \
+libmaincache_a_SOURCES = \
 	action.c action.h \
 	binary.c binary.h \
 	command.c command.h \

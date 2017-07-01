@@ -71,7 +71,7 @@ mm_conf_load(const char *name)
 	bool fatal = true;
 	if (name == NULL) {
 		fatal = false;
-		name = "mmem.json";
+		name = "maind.json";
 	}
 
 	mm_brief("load configuration: %s", name);
