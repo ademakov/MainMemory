@@ -884,7 +884,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	mm_work_prepare(&srv->acceptor_work, &acceptor_vtable);
 	MM_WORK_VTABLE_1(register_vtable, mm_net_register_server);
 	mm_work_prepare(&srv->register_work, &register_vtable);
-	mm_bitset_prepare(&srv->affinity, &mm_global_arena, mm_regular_nthreads);
+	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
 
 	// On the very first server register the server cleanup routine.
 	if (mm_list_empty(&mm_server_list))
@@ -909,9 +909,12 @@ mm_net_start_server(struct mm_net_server *srv)
 	ASSERT(srv->event.fd == -1);
 
 	// Find the thread to run the server on.
-	size_t target = mm_bitset_find(&srv->affinity, 0);
-	if (target == MM_BITSET_NONE)
-		target = 0;
+	size_t target = 0;
+	if (mm_bitset_size(&srv->affinity)) {
+		target = mm_bitset_find(&srv->affinity, 0);
+		if (target == MM_BITSET_NONE)
+			target = 0;
+	}
 
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);
@@ -994,7 +997,16 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
 {
 	ENTER();
 
-	mm_bitset_clear_all(&srv->affinity);
+	// Reset the old affinity mask value.
+	size_t size = mm_bitset_size(mask);
+	if (mm_bitset_size(&srv->affinity) == size) {
+		mm_bitset_clear_all(&srv->affinity);
+	} else {
+		mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
+		mm_bitset_prepare(&srv->affinity, &mm_global_arena, size);
+	}
+
+	// Assign the new affinity mask value.
 	mm_bitset_or(&srv->affinity, mask);
 
 	LEAVE();
