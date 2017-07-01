@@ -293,7 +293,6 @@ mm_common_start(void)
 {
 	ENTER();
 
-	mm_fiber_init();
 	mm_wait_init();
 	mm_future_init();
 
@@ -313,7 +312,6 @@ mm_common_stop(void)
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_cleanup(&mm_regular_strands[i]);
 	mm_global_free(mm_regular_strands);
-	mm_fiber_term();
 
 	LEAVE();
 }

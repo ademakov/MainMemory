@@ -23,7 +23,7 @@
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/fiber/timer.h"
-#include "base/memory/pool.h"
+#include "base/memory/memory.h"
 #include "base/thread/thread.h"
 
 /* Regular fiber stack size. */
@@ -31,33 +31,6 @@
 
 /* Minimum fiber stack size. */
 #define MM_FIBER_STACK_MIN		(1 * MM_PAGE_SIZE)
-
-// The memory pool for fibers.
-static struct mm_pool mm_fiber_pool;
-
-/**********************************************************************
- * Fiber subsystem initialization and termination.
- **********************************************************************/
-
-void
-mm_fiber_init(void)
-{
-	ENTER();
-
-	mm_pool_prepare_global(&mm_fiber_pool, "fiber", sizeof (struct mm_fiber));
-
-	LEAVE();
-}
-
-void
-mm_fiber_term(void)
-{
-	ENTER();
-
-	mm_pool_cleanup(&mm_fiber_pool);
-
-	LEAVE();
-}
 
 /**********************************************************************
  * Fiber creation attributes.
@@ -155,7 +128,7 @@ static struct mm_fiber *
 mm_fiber_new(void)
 {
 	// Allocate a fiber.
-	struct mm_fiber *fiber = mm_pool_alloc(&mm_fiber_pool);
+	struct mm_fiber *fiber = mm_common_alloc(sizeof(struct mm_fiber));
 
 	// Store the strand that owns the fiber.
 	fiber->strand = mm_strand_selfptr();
@@ -296,7 +269,7 @@ mm_fiber_destroy(struct mm_fiber *fiber)
 		mm_cstack_destroy(fiber->stack_base, fiber->stack_size);
 
 	// At last free the fiber struct.
-	mm_pool_free(&mm_fiber_pool, fiber);
+	mm_common_free(fiber);
 
 	LEAVE();
 }
