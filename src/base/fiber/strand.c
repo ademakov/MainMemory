@@ -586,11 +586,25 @@ mm_strand_cleanup(struct mm_strand *strand)
 {
 	ENTER();
 
+	// Destroy the cache of wait-set entries.
 	mm_wait_cache_cleanup(&strand->wait_cache);
 
-	// TODO:
-	//mm_fiber_destroy(strand->master);
-	//mm_fiber_destroy(strand->dealer);
+	// Destroy all the blocked fibers.
+	while (!mm_list_empty(&strand->block)) {
+		struct mm_link *link = mm_list_remove_head(&strand->block);
+		struct mm_fiber *fiber = containerof(link, struct mm_fiber, queue);
+		DEBUG("blocked fiber: %s", mm_fiber_getname(fiber));
+		mm_fiber_destroy(fiber);
+
+	}
+	// Destroy all the dead fibers.
+	while (!mm_list_empty(&strand->dead)) {
+		struct mm_link *link = mm_list_remove_head(&strand->dead);
+		struct mm_fiber *fiber = containerof(link, struct mm_fiber, queue);
+		DEBUG("dead fiber: %s", mm_fiber_getname(fiber));
+		mm_fiber_destroy(fiber);
+	}
+	// Destroy the boot fiber.
 	mm_fiber_destroy(strand->boot);
 
 	// Flush logs before memory space with possible log chunks is unmapped.
