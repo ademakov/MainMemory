@@ -259,9 +259,9 @@ mm_fiber_destroy(struct mm_fiber *fiber)
 	ENTER();
 	ASSERT(fiber->state == MM_FIBER_INVALID || fiber->state == MM_FIBER_BLOCKED);
 #if ENABLE_FIBER_IO_FLAGS
-	ASSERT((fiber->flags & (MM_FIBER_WAITING | MM_FIBER_READING | MM_FIBER_WRITING)) == 0);
+	ASSERT((fiber->flags & (MM_FIBER_WAITING | MM_FIBER_READING | MM_FIBER_WRITING)) == 0  || fiber->strand->stop);
 #else
-	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
+	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0 || fiber->strand->stop);
 #endif
 
 	// Free the stack.
