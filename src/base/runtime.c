@@ -194,11 +194,6 @@ mm_regular_call_thread_stop_hooks(void)
 static void
 mm_regular_boot_call_start_hooks(struct mm_strand *strand)
 {
-	// Wait until all threads from the same domain start. This ensures
-	// that all the thread data is initialized and so it is safe to use
-	// any of them from the start hooks.
-	mm_domain_barrier();
-
 	struct mm_private_space *space = mm_private_space_get();
 	if (MM_STRAND_IS_PRIMARY(strand)) {
 		mm_timer_prepare(&strand->time_manager, &space->xarena);
