@@ -132,6 +132,9 @@ mm_strand_stop(struct mm_strand *strand);
  * Strand fiber execution.
  **********************************************************************/
 
+void NONNULL(1, 2)
+mm_strand_add_work(struct mm_strand *strand, struct mm_work *work);
+
 void NONNULL(2)
 mm_strand_post_work(mm_thread_t target, struct mm_work *work);
 

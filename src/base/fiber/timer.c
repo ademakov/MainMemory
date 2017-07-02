@@ -88,7 +88,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 				mm_warning(0, "timer is still active");
 			} else {
 				timer->active = true;
-				mm_strand_post_work(MM_THREAD_SELF, &timer->work);
+				mm_strand_add_work(mm_strand_selfptr(), &timer->work);
 			}
 		}
 

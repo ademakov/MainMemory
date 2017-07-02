@@ -275,7 +275,7 @@ static bool
 mm_validate_nthreads(uint32_t n)
 {
 #if ENABLE_SMP
-	return n < MM_THREAD_SELF;
+	return n < MM_THREAD_NONE;
 #else
 	return n == 1;
 #endif

@@ -121,15 +121,20 @@ mm_strand_get_work(struct mm_strand *strand)
 	return containerof(link, struct mm_work, link);
 }
 
-static void
+void NONNULL(1, 2)
 mm_strand_add_work(struct mm_strand *strand, struct mm_work *work)
 {
+	ENTER();
+	ASSERT(strand == mm_strand_selfptr());
+
 	// Enqueue the work item.
 	mm_queue_append(&strand->workq, &work->link);
 	strand->nwork++;
 
 	// If there is a fiber waiting for work then let it run now.
 	mm_strand_poke(strand);
+
+	LEAVE();
 }
 
 #if ENABLE_SMP
@@ -157,10 +162,9 @@ mm_strand_post_work(mm_thread_t target, struct mm_work *work)
 		mm_domain_post_1(domain, mm_strand_post_work_req, (uintptr_t) work);
 		mm_domain_notify(domain);
 	} else {
-		struct mm_strand *self = mm_strand_selfptr();
-		ASSERT(target == MM_THREAD_SELF || target < mm_regular_nthreads);
-		struct mm_strand *dest = target == MM_THREAD_SELF ? self: &mm_regular_strands[target];
-		if (dest == self) {
+		ASSERT(target < mm_regular_nthreads);
+		struct mm_strand *dest = &mm_regular_strands[target];
+		if (dest == mm_strand_selfptr()) {
 			// Enqueue it directly if on the same strand.
 			mm_strand_add_work(dest, work);
 		} else {

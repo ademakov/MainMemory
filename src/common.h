@@ -122,8 +122,6 @@
 
 /* A non-existent thread. */
 #define MM_THREAD_NONE		((mm_thread_t) -1)
-/* A pseudo-thread corresponding to the current one. */
-#define MM_THREAD_SELF		((mm_thread_t) -2)
 
 /* A non-existent fiber. */
 #define MM_FIBER_NONE		((mm_fiber_t) -1)
