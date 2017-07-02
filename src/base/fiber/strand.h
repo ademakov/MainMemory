@@ -25,7 +25,6 @@
 #include "base/list.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/ring.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/timer.h"
 #include "base/fiber/wait.h"
