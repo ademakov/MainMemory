@@ -291,40 +291,19 @@ mm_common_start(void)
 {
 	ENTER();
 
+	// Allocate a fiber strand for each regular thread.
 	mm_regular_strands = mm_common_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_prepare(&mm_regular_strands[i]);
+
+	// Allocate event dispatch memory and system resources.
+	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads);
 
 	LEAVE();
 }
 
 static void
 mm_common_stop(void)
-{
-	ENTER();
-
-	// Cleanup fiber subsystem.
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
-		mm_strand_cleanup(&mm_regular_strands[i]);
-	mm_common_free(mm_regular_strands);
-
-	LEAVE();
-}
-
-static void
-mm_regular_start(void)
-{
-	ENTER();
-
-	// Allocate event dispatch memory and system resources.
-	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_domain,
-				  mm_regular_domain->nthreads, mm_regular_domain->threads);
-
-	LEAVE();
-}
-
-static void
-mm_regular_stop(void)
 {
 	ENTER();
 
@@ -336,6 +315,11 @@ mm_regular_stop(void)
 
 	// Release event dispatch memory and system resources.
 	mm_event_dispatch_cleanup(&mm_regular_dispatch);
+
+	// Cleanup fiber subsystem.
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_strand_cleanup(&mm_regular_strands[i]);
+	mm_common_free(mm_regular_strands);
 
 	LEAVE();
 }
@@ -373,9 +357,6 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	// Setup the basic common start hook.
 	mm_common_start_hook_0(mm_common_start);
 	mm_common_stop_hook_0(mm_common_stop);
-	// Setup basic start and stop hooks for regular domain.
-	mm_regular_start_hook_0(mm_regular_start);
-	mm_regular_stop_hook_0(mm_regular_stop);
 
 	// Register hooks required by various subsystems.
 	mm_wait_init();
@@ -443,6 +424,7 @@ mm_start(void)
 	mm_domain_attr_setspace(&attr, true);
 	mm_domain_attr_setdomainqueue(&attr, mm_regular_nthreads * 32);
 	mm_domain_attr_setthreadqueue(&attr, mm_regular_nthreads * 32);
+	mm_domain_attr_setdispatch(&attr, &mm_regular_dispatch);
 
 	bool thread_affinity = mm_settings_get_bool("thread-affinity", false);
 	if (thread_affinity) {

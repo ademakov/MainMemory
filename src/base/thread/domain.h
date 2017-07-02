@@ -55,6 +55,9 @@ struct mm_domain_attr
 	uint32_t domain_request_queue;
 	uint32_t thread_request_queue;
 
+	/* Associated event dispatcher. */
+	struct mm_event_dispatch *event_dispatch;
+
 	/* Common stack parameters for domain's threads. */
 	uint32_t stack_size;
 	uint32_t guard_size;
@@ -115,6 +118,9 @@ void NONNULL(1)
 mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size);
 
 void NONNULL(1)
+mm_domain_attr_setdispatch(struct mm_domain_attr *attr, struct mm_event_dispatch *dispatch);
+
+void NONNULL(1)
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size);
 
 void NONNULL(1)
@@ -158,6 +164,12 @@ mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
 	return domain->threads[n];
 }
 
+static inline struct mm_event_dispatch *
+mm_domain_getdispatch(struct mm_domain *domain)
+{
+	return domain->event_dispatch;
+}
+
 /**********************************************************************
  * Domain control routines.
  **********************************************************************/
@@ -199,19 +211,6 @@ mm_domain_barrier(void);
 		return mm_ring_mpmc_put_n(d->request_queue, v,		\
 					  MM_SEND_ARGC(n));		\
 	} while (0)
-
-static inline void NONNULL(1, 2)
-mm_domain_setdispatch(struct mm_domain *domain, struct mm_event_dispatch *dispatch)
-{
-	ASSERT(domain->event_dispatch == NULL);
-	domain->event_dispatch = dispatch;
-}
-
-static inline struct mm_event_dispatch *
-mm_domain_getdispatch(struct mm_domain *domain)
-{
-	return domain->event_dispatch;
-}
 
 static inline void NONNULL(1)
 mm_domain_notify(struct mm_domain *domain)

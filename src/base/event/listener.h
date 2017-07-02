@@ -142,9 +142,8 @@ struct mm_event_listener
  * Event listener initialization and cleanup.
  **********************************************************************/
 
-void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_thread *thread);
+void NONNULL(1, 2)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);

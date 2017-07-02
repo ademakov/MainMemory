@@ -29,7 +29,6 @@
 /* Forward declarations. */
 struct mm_domain;
 struct mm_event_listener;
-struct mm_thread;
 
 /* Event dispatcher. */
 struct mm_event_dispatch
@@ -65,11 +64,8 @@ struct mm_event_dispatch
 	uint16_t sink_queue_num;
 };
 
-void NONNULL(1, 2, 4)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
-			  struct mm_domain *domain,
-			  mm_thread_t nthreads,
-			  struct mm_thread *threads[]);
+void NONNULL(1)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads);
 
 void NONNULL(1)
 mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);

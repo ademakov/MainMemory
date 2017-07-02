@@ -22,6 +22,8 @@
 #include "base/bitops.h"
 #include "base/list.h"
 #include "base/logger.h"
+#include "base/event/dispatch.h"
+#include "base/event/listener.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"
 
@@ -299,8 +301,14 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 		thread->request_queue = NULL;
 	}
 
-	// Event listeners are not available at thread initialization.
-	thread->event_listener = NULL;
+	// Establish thread and event listener association.
+	if (thread->domain != NULL) {
+		struct mm_event_dispatch *dispatch = thread->domain->event_dispatch;
+		if (dispatch != NULL) {
+			thread->event_listener = &dispatch->listeners[thread->domain_number];
+			dispatch->listeners[thread->domain_number].thread = thread;
+		}
+	}
 
 	// Initialize private memory space if required.
 #if ENABLE_SMP

@@ -23,6 +23,7 @@
 #include "base/cstack.h"
 #include "base/logger.h"
 #include "base/ring.h"
+#include "base/event/dispatch.h"
 #include "base/memory/global.h"
 #include "base/thread/local.h"
 
@@ -77,6 +78,12 @@ void NONNULL(1)
 mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->thread_request_queue = size;
+}
+
+void NONNULL(1)
+mm_domain_attr_setdispatch(struct mm_domain_attr *attr, struct mm_event_dispatch *dispatch)
+{
+	attr->event_dispatch = dispatch;
 }
 
 void NONNULL(1)
@@ -144,8 +151,16 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 			mm_fatal(0, "invalid domain attributes.");
 	}
 
-	// Event dispatchers are not available at thread initialization.
-	domain->event_dispatch = NULL;
+	// Establish domain and event dispatch association.
+	if (attr == NULL) {
+		domain->event_dispatch = NULL;
+	} else {
+		domain->event_dispatch = attr->event_dispatch;
+		if (domain->event_dispatch != NULL) {
+			VERIFY(domain->event_dispatch->domain == NULL);
+			domain->event_dispatch->domain = domain;
+		}
+	}
 
 	// Create domain request queue if required.
 	if (attr != NULL && attr->domain_request_queue) {

@@ -25,18 +25,15 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
-void NONNULL(1, 2, 4)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
-			  struct mm_domain *domain,
-			  mm_thread_t nthreads,
-			  struct mm_thread *threads[])
+void NONNULL(1)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads)
 {
 	ENTER();
 	ASSERT(nthreads > 0);
 
-	// Store the associated domain.
-	dispatch->domain = domain;
-	mm_domain_setdispatch(domain, dispatch);
+	// Domain pointer is set when domain with corresponding dispatch
+	// attribute is created.
+	dispatch->domain = NULL;
 
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare(&dispatch->global_epoch);
@@ -44,10 +41,8 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch,
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
 	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < nthreads; i++) {
-		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, threads[i]);
-		mm_thread_setlistener(threads[i], &dispatch->listeners[i]);
-	}
+	for (mm_thread_t i = 0; i < nthreads; i++)
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);

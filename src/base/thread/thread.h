@@ -198,6 +198,12 @@ mm_thread_getnumber(const struct mm_thread *thread)
 	return thread->domain_number;
 }
 
+static inline struct mm_event_listener *
+mm_thread_getlistener(struct mm_thread *thread)
+{
+	return thread->event_listener;
+}
+
 static inline mm_thread_t
 mm_thread_self(void)
 {
@@ -287,19 +293,6 @@ mm_thread_yield(void);
 			mm_thread_notify(t, stamp);			\
 		return res;						\
 	} while (0)
-
-static inline void NONNULL(1, 2)
-mm_thread_setlistener(struct mm_thread *thread, struct mm_event_listener *listener)
-{
-	ASSERT(thread->event_listener == NULL);
-	thread->event_listener = listener;
-}
-
-static inline struct mm_event_listener *
-mm_thread_getlistener(struct mm_thread *thread)
-{
-	return thread->event_listener;
-}
 
 static inline void NONNULL(1)
 mm_thread_notify(struct mm_thread *thread, mm_stamp_t stamp)
