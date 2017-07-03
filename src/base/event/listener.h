@@ -45,6 +45,7 @@
 
 /* Forward declarations. */
 struct mm_event_dispatch;
+struct mm_strand;
 struct mm_thread;
 
 #define MM_EVENT_LISTENER_RETAIN_MIN	(3)
