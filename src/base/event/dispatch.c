@@ -21,12 +21,13 @@
 
 #include "base/logger.h"
 #include "base/event/listener.h"
+#include "base/fiber/strand.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
-void NONNULL(1)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads)
+void NONNULL(1, 3)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads, struct mm_strand *strands)
 {
 	ENTER();
 	ASSERT(nthreads > 0);
@@ -42,7 +43,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 	dispatch->nlisteners = nthreads;
 	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
 	for (mm_thread_t i = 0; i < nthreads; i++)
-		mm_event_listener_prepare(&dispatch->listeners[i], dispatch);
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, &strands[i]);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);

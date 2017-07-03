@@ -251,14 +251,16 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
  * Event listener initialization and cleanup.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch)
+void NONNULL(1, 2, 3)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
+			  struct mm_strand *strand)
 {
 	ENTER();
 
 	listener->state = 0;
 
 	// Remember the owners.
+	listener->strand = strand;
 	listener->target = listener - dispatch->listeners;
 	listener->dispatch = dispatch;
 

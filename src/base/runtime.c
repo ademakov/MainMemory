@@ -292,7 +292,7 @@ mm_common_start(void)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
 	// Allocate event dispatch memory and system resources.
-	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads);
+	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads, mm_regular_strands);
 
 	LEAVE();
 }

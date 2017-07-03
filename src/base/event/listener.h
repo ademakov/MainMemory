@@ -115,6 +115,8 @@ struct mm_event_listener
 	   the listener for appropriate event forwarding strategy. */
 	uint16_t direct_events_estimate;
 
+	/* Associated strand. */
+	struct mm_strand *strand;
 	/* Associated thread. */
 	mm_thread_t target;
 	struct mm_thread *thread;
@@ -142,8 +144,9 @@ struct mm_event_listener
  * Event listener initialization and cleanup.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch);
+void NONNULL(1, 2, 3)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
+			  struct mm_strand *strand);
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
