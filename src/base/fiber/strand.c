@@ -22,6 +22,7 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
+#include "base/runtime.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/work.h"
@@ -140,7 +141,7 @@ mm_strand_add_work(struct mm_strand *strand, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_strand_post_work_req(uintptr_t *arguments)
+mm_strand_add_work_req(uintptr_t *arguments)
 {
 	ENTER();
 
@@ -150,6 +151,47 @@ mm_strand_post_work_req(uintptr_t *arguments)
 	LEAVE();
 }
 
+#endif
+
+void NONNULL(1, 2)
+mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work)
+{
+	ENTER();
+
+#if ENABLE_SMP
+	if (strand == mm_strand_selfptr()) {
+		// Enqueue it directly if on the same strand.
+		mm_strand_add_work(strand, work);
+	} else {
+		// Submit the work item to the thread request queue.
+		mm_thread_post_1(strand->thread, mm_strand_add_work_req, (uintptr_t) work);
+	}
+#else
+	mm_strand_add_work(strand, work);
+#endif
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_strand_tender_work(struct mm_work *work)
+{
+	ENTER();
+
+#if ENABLE_SMP
+	// Submit the work item to the domain request queue.
+	struct mm_domain *domain = mm_domain_selfptr();
+	mm_domain_post_1(domain, mm_strand_add_work_req, (uintptr_t) work);
+	mm_domain_notify(domain);
+#else
+	mm_strand_add_work(mm_strand_selfptr(), work);
+#endif
+
+	LEAVE();
+}
+
+#if ENABLE_SMP
+
 void NONNULL(2)
 mm_strand_post_work(mm_thread_t target, struct mm_work *work)
 {
@@ -157,21 +199,11 @@ mm_strand_post_work(mm_thread_t target, struct mm_work *work)
 
 	// Dispatch the work item.
 	if (target == MM_THREAD_NONE) {
-		// Submit the work item to the domain request queue.
-		struct mm_domain *domain = mm_domain_selfptr();
-		mm_domain_post_1(domain, mm_strand_post_work_req, (uintptr_t) work);
-		mm_domain_notify(domain);
+		mm_strand_tender_work(work);
 	} else {
 		ASSERT(target < mm_regular_nthreads);
-		struct mm_strand *dest = &mm_regular_strands[target];
-		if (dest == mm_strand_selfptr()) {
-			// Enqueue it directly if on the same strand.
-			mm_strand_add_work(dest, work);
-		} else {
-			// Submit it to the thread request queue.
-			struct mm_thread *thread = dest->thread;
-			mm_thread_post_1(thread, mm_strand_post_work_req, (uintptr_t) work);
-		}
+		struct mm_strand *strand = &mm_regular_strands[target];
+		mm_strand_submit_work(strand, work);
 	}
 
 	LEAVE();

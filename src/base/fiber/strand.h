@@ -23,8 +23,6 @@
 #include "common.h"
 
 #include "base/list.h"
-#include "base/report.h"
-#include "base/runtime.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/timer.h"
 #include "base/fiber/wait.h"
@@ -134,6 +132,12 @@ mm_strand_stop(struct mm_strand *strand);
 
 void NONNULL(1, 2)
 mm_strand_add_work(struct mm_strand *strand, struct mm_work *work);
+
+void NONNULL(1, 2)
+mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work);
+
+void NONNULL(1)
+mm_strand_tender_work(struct mm_work *work);
 
 void NONNULL(2)
 mm_strand_post_work(mm_thread_t target, struct mm_work *work);
