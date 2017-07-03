@@ -1,14 +1,14 @@
 
 ASAP:
-* beautify netbuf interface
+* parallel polling mechanism
 * minimize memcache locks or non-blocking memcache table
-* optimize events again
-* add more config options
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
 ;;; against stock memcache.
 
 Essentials:
+* beautify netbuf interface
+* ensure open sockets are destroyed on shutdown
 * support signals
 * system call threads
 * disk I/O threads
@@ -23,11 +23,6 @@ Essentials:
 * refine memcache module:
 ** statistics
 ** add UDP protocol support
-* correct object destruction and graceful shutdown:
-** ensure worker & master & aux tasks are finished on shutdown
-** ensure destroyed socket & server objects are not accessed anymore
-** ensure safe task & port objects destruction
-** refcount? capabilities? some form of SMR?
 
 Larger items:
 * NUMA support:
