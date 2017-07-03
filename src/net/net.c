@@ -24,7 +24,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/stdcall.h"
-#include "base/event/event.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/timer.h"
@@ -243,7 +242,7 @@ mm_net_reclaim_routine(struct mm_work *work)
 	ENTER();
 
 	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, reclaim_work);
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed socks
@@ -443,8 +442,7 @@ mm_net_accept_handler(mm_event_t event, void *data)
 		// Indicate that the acceptor work is in progress.
 		srv->acceptor_active = true;
 		// Really queue the acceptor work for running.
-		mm_thread_t thread = mm_event_target(&srv->event);
-		mm_strand_post_work(thread, &srv->acceptor_work);
+		mm_strand_add_work(mm_net_get_server_strand(srv), &srv->acceptor_work);
 	}
 
 	LEAVE();
@@ -475,7 +473,7 @@ static void
 mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Update the read readiness flags.
 	sock->flags |= flags;
@@ -492,8 +490,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 			// Remember a reader has been started.
 			sock->flags |= MM_NET_READER_SPAWNED;
 			// Submit a reader work.
-			mm_thread_t target = mm_event_target(&sock->event);
-			mm_strand_post_work(target, &sock->read_work);
+			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -506,7 +503,7 @@ static void
 mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Update the write readiness flags.
 	sock->flags |= flags;
@@ -523,8 +520,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 			// Remember a writer has been started.
 			sock->flags |= MM_NET_WRITER_SPAWNED;
 			// Submit a writer work.
-			mm_thread_t target = mm_event_target(&sock->event);
-			mm_strand_post_work(target, &sock->write_work);
+			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -537,7 +533,7 @@ static void
 mm_net_reset_read_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	sock->flags &= ~MM_NET_READ_READY;
 	if ((sock->flags & MM_NET_INBOUND) == 0)
@@ -550,7 +546,7 @@ static void
 mm_net_reset_write_ready(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	sock->flags &= ~MM_NET_WRITE_READY;
 	if ((sock->flags & MM_NET_OUTBOUND) == 0)
@@ -606,7 +602,7 @@ mm_net_socket_handler(mm_event_t event, void *data)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		mm_strand_post_work(mm_event_target(&sock->event), &sock->reclaim_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->reclaim_work);
 		break;
 
 	default:
@@ -624,7 +620,7 @@ void
 mm_net_spawn_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -639,9 +635,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		// Remember a reader has been started.
 		sock->flags |= MM_NET_READER_SPAWNED;
 		// Submit a reader work.
-		mm_thread_t target = mm_event_target(&sock->event);
-		mm_strand_post_work(target, &sock->read_work);
-
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -654,7 +648,7 @@ void
 mm_net_spawn_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
@@ -669,9 +663,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		// Remember a writer has been started.
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		// Submit a writer work.
-		mm_thread_t target = mm_event_target(&sock->event);
-		mm_strand_post_work(target, &sock->write_work);
-
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -684,7 +676,7 @@ void
 mm_net_yield_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 #if ENABLE_FIBER_IO_FLAGS
 	struct mm_fiber *fiber = mm_fiber_selfptr();
@@ -709,8 +701,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
-		mm_thread_t target = mm_event_target(&sock->event);
-		mm_strand_post_work(target, &sock->read_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -724,7 +715,7 @@ void
 mm_net_yield_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 #if ENABLE_FIBER_IO_FLAGS
 	struct mm_fiber *fiber = mm_fiber_selfptr();
@@ -749,8 +740,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
-		mm_thread_t target = mm_event_target(&sock->event);
-		mm_strand_post_work(target, &sock->write_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -766,7 +756,7 @@ mm_net_reader_routine(struct mm_work *work)
 	ENTER();
 
 	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, read_work);
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
 
@@ -790,7 +780,7 @@ mm_net_writer_routine(struct mm_work *work)
 	ENTER();
 
 	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, write_work);
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
 
@@ -933,7 +923,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
-	ASSERT(mm_event_target(&srv->event) == mm_thread_self());
+	ASSERT(mm_net_get_server_strand(srv) == mm_strand_selfptr());
 
 	mm_brief("stop server: %s", srv->name);
 
@@ -1294,7 +1284,7 @@ ssize_t NONNULL(1, 2)
 mm_net_read(struct mm_net_socket *sock, void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	ssize_t n;
 
 	// Remember the wait time.
@@ -1343,7 +1333,7 @@ ssize_t NONNULL(1, 2)
 mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	ssize_t n;
 
 	// Remember the wait time.
@@ -1392,7 +1382,7 @@ ssize_t NONNULL(1, 2)
 mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	ssize_t n;
 
 	// Remember the start time.
@@ -1441,7 +1431,7 @@ ssize_t NONNULL(1, 2)
 mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	ssize_t n;
 
 	// Remember the start time.
@@ -1490,7 +1480,7 @@ void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1509,7 +1499,7 @@ void NONNULL(1)
 mm_net_reset(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1532,7 +1522,7 @@ void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -1551,7 +1541,7 @@ void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_event_target(&sock->event) == mm_thread_self());
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;

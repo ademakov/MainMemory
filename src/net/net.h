@@ -24,6 +24,7 @@
 #include "base/bitset.h"
 #include "base/list.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/fiber/work.h"
 
 #include <netinet/in.h>
@@ -194,6 +195,12 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask);
 void NONNULL(1)
 mm_net_setup_server(struct mm_net_server *srv);
 
+static inline struct mm_strand * NONNULL(1)
+mm_net_get_server_strand(struct mm_net_server *srv)
+{
+	return srv->event.listener->strand;
+}
+
 /**********************************************************************
  * Network I/O tasks for server sockets.
  **********************************************************************/
@@ -264,6 +271,12 @@ void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock);
 void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock);
+
+static inline struct mm_strand * NONNULL(1)
+mm_net_get_socket_strand(struct mm_net_socket *sock)
+{
+	return sock->event.listener->strand;
+}
 
 static inline bool NONNULL(1)
 mm_net_is_closed(struct mm_net_socket *sock)
