@@ -913,7 +913,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
-	mm_strand_post_work(target, &srv->register_work);
+	mm_strand_submit_work(&mm_regular_strands[target], &srv->register_work);
 
 	LEAVE();
 }

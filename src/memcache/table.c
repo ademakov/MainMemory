@@ -208,7 +208,7 @@ mc_table_start_striding(struct mc_tpart *part)
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_strand_add_work(mm_strand_selfptr(), &part->stride_work);
 #else
-	mm_strand_post_work(MM_THREAD_NONE, &part->stride_work);
+	mm_strand_tender_work(&part->stride_work);
 #endif
 
 	LEAVE();
@@ -264,7 +264,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_strand_add_work(mm_strand_selfptr(), &part->stride_work);
 #else
-	mm_strand_post_work(MM_THREAD_NONE, &part->evict_work);
+	mm_strand_tender_work(&part->evict_work);
 #endif
 
 	LEAVE();
