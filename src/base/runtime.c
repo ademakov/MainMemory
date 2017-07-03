@@ -40,7 +40,7 @@
 
 #include <unistd.h>
 
-mm_thread_t mm_regular_nthreads = 0;
+static mm_thread_t mm_regular_nthreads = 0;
 struct mm_domain *mm_regular_domain = NULL;
 
 // Strands for regular domain threads.
@@ -55,6 +55,22 @@ static char *mm_log_file_name = NULL;
 
 // Runtime stop flag.
 static int mm_stop_flag = 0;
+
+/**********************************************************************
+ * Runtime information.
+ **********************************************************************/
+
+mm_thread_t
+mm_number_of_regular_domains(void)
+{
+	return 1;
+}
+
+mm_thread_t
+mm_number_of_regular_threads(void)
+{
+	return mm_regular_nthreads;
+}
 
 /**********************************************************************
  * Runtime start and stop hooks.
@@ -268,7 +284,7 @@ mm_regular_boot(mm_value_t arg)
 }
 
 /**********************************************************************
- * General runtime routines.
+ * Runtime control routines.
  **********************************************************************/
 
 static bool

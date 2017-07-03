@@ -23,14 +23,16 @@
 #include "common.h"
 #include "base/args.h"
 
-/* Forward declarations. */
-struct mm_domain;
-
 /**********************************************************************
  * Runtime information.
  **********************************************************************/
 
-extern mm_thread_t mm_regular_nthreads;
+mm_thread_t
+mm_number_of_regular_domains(void);
+
+mm_thread_t
+mm_number_of_regular_threads(void);
+
 extern struct mm_domain *mm_regular_domain;
 extern struct mm_strand *mm_regular_strands;
 
@@ -69,7 +71,7 @@ void NONNULL(1)
 mm_regular_thread_stop_hook_1(void (*proc)(void *), void *data);
 
 /**********************************************************************
- * General runtime routines.
+ * Runtime control routines.
  **********************************************************************/
 
 void NONNULL(2)
