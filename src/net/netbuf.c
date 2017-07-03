@@ -41,7 +41,6 @@ ssize_t NONNULL(1)
 mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
 {
 	ENTER();
-	ASSERT(mm_netbuf_thread(sock) == mm_thread_self());
 	ssize_t rc;
 
 	struct mm_buffer *buf = &sock->rxbuf;
@@ -101,7 +100,6 @@ ssize_t NONNULL(1)
 mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_netbuf_thread(sock) == mm_thread_self());
 	ssize_t rc;
 
 	struct mm_buffer *buf = &sock->txbuf;

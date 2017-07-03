@@ -35,12 +35,6 @@ struct mm_netbuf_socket
 	struct mm_buffer txbuf;
 };
 
-static inline mm_thread_t NONNULL(1)
-mm_netbuf_thread(struct mm_netbuf_socket *sock)
-{
-	return mm_event_target(&sock->sock.event);
-}
-
 void NONNULL(1)
 mm_netbuf_prepare(struct mm_netbuf_socket *sock);
 
