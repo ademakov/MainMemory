@@ -139,9 +139,6 @@ mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work);
 void NONNULL(1)
 mm_strand_tender_work(struct mm_work *work);
 
-void NONNULL(2)
-mm_strand_post_work(mm_thread_t target, struct mm_work *work);
-
 void NONNULL(1)
 mm_strand_run_fiber(struct mm_fiber *fiber);
 

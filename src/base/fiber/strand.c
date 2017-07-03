@@ -22,7 +22,6 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
-#include "base/runtime.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/work.h"
@@ -190,39 +189,6 @@ mm_strand_tender_work(struct mm_work *work)
 	LEAVE();
 }
 
-#if ENABLE_SMP
-
-void NONNULL(2)
-mm_strand_post_work(mm_thread_t target, struct mm_work *work)
-{
-	ENTER();
-
-	// Dispatch the work item.
-	if (target == MM_THREAD_NONE) {
-		mm_strand_tender_work(work);
-	} else {
-		ASSERT(target < mm_regular_nthreads);
-		struct mm_strand *strand = &mm_regular_strands[target];
-		mm_strand_submit_work(strand, work);
-	}
-
-	LEAVE();
-}
-
-#else
-
-void
-mm_strand_post_work(mm_thread_t target, struct mm_work *work)
-{
-	ENTER();
-
-	(void) target;
-	mm_strand_add_work(mm_strand_selfptr(), work);
-
-	LEAVE();
-}
-
-#endif
 
 /**********************************************************************
  * Fiber queue.
