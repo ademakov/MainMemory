@@ -200,7 +200,7 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 				if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
 					sink->listener = listener;
 				} else {
-					mm_thread_t target = sink->listener->target;
+					mm_thread_t target = sink->listener - listener->dispatch->listeners;
 					uint32_t ntotal = listener->forward.buffers[target].ntotal;
 					if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
 						sink->listener = NULL;
@@ -261,7 +261,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Remember the owners.
 	listener->strand = strand;
-	listener->target = listener - dispatch->listeners;
 	listener->dispatch = dispatch;
 
 	// Thread pointer is set when domain with corresponding dispatch

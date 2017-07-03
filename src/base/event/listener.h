@@ -119,7 +119,6 @@ struct mm_event_listener
 	/* Associated strand. */
 	struct mm_strand *strand;
 	/* Associated thread. */
-	mm_thread_t target;
 	struct mm_thread *thread;
 
 	/* The top-level event dispatch data. */

@@ -26,13 +26,6 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
-mm_thread_t NONNULL(1)
-mm_event_target(const struct mm_event_fd *sink)
-{
-	struct mm_event_listener *listener = sink->listener;
-	return listener != NULL ? listener->target : MM_THREAD_NONE;
-}
-
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/

@@ -234,14 +234,15 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 {
 	ENTER();
 
-	mm_thread_t target = sink->listener->target;
+	struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
+	struct mm_event_dispatch *dispatch = listener->dispatch;
+
+	mm_thread_t target = sink->listener - dispatch->listeners;
 	struct mm_event_forward_buffer *buffer = &cache->buffers[target];
 
 	// Flush the buffer if it is full.
-	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE) {
-		struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
-		mm_event_forward_post(listener->dispatch, target, buffer);
-	}
+	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE)
+		mm_event_forward_post(dispatch, target, buffer);
 
 	// Add the event to the buffer.
 	uint8_t n = buffer->nsinks++;

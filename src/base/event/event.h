@@ -150,9 +150,6 @@ struct mm_event_fd
 	};
 };
 
-mm_thread_t NONNULL(1)
-mm_event_target(const struct mm_event_fd *sink);
-
 /**********************************************************************
  * Event sink activity.
  **********************************************************************/
