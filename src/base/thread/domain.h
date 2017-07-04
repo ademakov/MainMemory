@@ -166,6 +166,12 @@ mm_domain_ident(const struct mm_domain *domain)
 }
 
 static inline mm_thread_t NONNULL(1)
+mm_domain_first_thread_ident(const struct mm_domain *domain)
+{
+	return domain->thread_ident_base;
+}
+
+static inline mm_thread_t NONNULL(1)
 mm_domain_getsize(const struct mm_domain *domain)
 {
 	return domain->nthreads;

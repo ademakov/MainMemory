@@ -472,6 +472,8 @@ mm_start(void)
 
 	// Start regular threads.
 	mm_regular_domain = mm_domain_create(&attr, mm_regular_boot);
+	VERIFY(mm_domain_ident(mm_regular_domain) == 0);
+	VERIFY(mm_domain_first_thread_ident(mm_regular_domain) == 0);
 
 	// Release domain creation attributes.
 	mm_domain_attr_cleanup(&attr);
