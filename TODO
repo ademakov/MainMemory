@@ -4,6 +4,12 @@ v 0.2
 
 * parallel polling mechanism
 * cleanup and optimizations here and there
+** cleanup net and netbuf interfaces
+** ensure open sockets are destroyed on shutdown
+** optimize buffer usage for memtier with --pipeline=xx
+** optimize memcache txbuf flush for pipeined cmds
+** optimize memcache entry expiration checks
+** ...
 
 v 0.3
 =====
@@ -14,12 +20,9 @@ v 0.3
 ** buddy allocator (for chunks and slabs)
 * minimize memcache locks or non-blocking memcache table
 
-;;; At this point it becomes usable in simple cases and ready for benchmarks
-;;; against stock memcache.
+;;; At this point it becomes ready to challenge stock memcached
 
 Essentials:
-* beautify netbuf interface
-* ensure open sockets are destroyed on shutdown
 * support signals
 * system call threads
 * disk I/O threads
