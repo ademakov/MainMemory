@@ -46,6 +46,46 @@ struct mm_request_sender;
 /* Define ring data for a send request together with its arguments. */
 #define MM_SEND_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) mm_request_handler, (uintptr_t) __VA_ARGS__ }
 
+/* Post a request to a cross-thread request ring. */
+#define MM_POST(n, ring, notify, target, ...)				\
+	do {								\
+		mm_stamp_t s;						\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_POST_ARGC(n));	\
+		notify(target, s);					\
+	} while (0)
+
+/* Try to post a request to a cross-thread request ring. */
+#define MM_TRYPOST(n, ring, notify, target, ...)			\
+	do {								\
+		bool rc;						\
+		mm_stamp_t s;						\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_POST_ARGC(n));	\
+		if (rc)	{ notify(target, s); }				\
+		return rc;						\
+	} while (0)
+
+/* Send a request (with response) to a cross-thread request ring. */
+#define MM_SEND(n, ring, notify, target, ...)				\
+	do {								\
+		mm_stamp_t s;						\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_SEND_ARGC(n));	\
+		notify(target, s);					\
+	} while (0)
+
+/* Try to send a request (with response) to a cross-thread request ring. */
+#define MM_TRYSEND(n, ring, notify, target, ...)			\
+	do {								\
+		bool rc;						\
+		mm_stamp_t s;						\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_SEND_ARGC(n));	\
+		if (rc)	{ notify(target, s); }				\
+		return rc;						\
+	} while (0)
+
 /* Request routines. */
 typedef void (*mm_post_routine_t)(uintptr_t arguments[MM_POST_MAX]);
 typedef uintptr_t (*mm_request_routine_t)(uintptr_t arguments[MM_SEND_MAX]);

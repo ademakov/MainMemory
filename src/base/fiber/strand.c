@@ -181,7 +181,6 @@ mm_strand_tender_work(struct mm_work *work)
 	// Submit the work item to the domain request queue.
 	struct mm_domain *domain = mm_domain_selfptr();
 	mm_domain_post_1(domain, mm_strand_add_work_req, (uintptr_t) work);
-	mm_domain_notify(domain);
 #else
 	mm_strand_add_work(mm_strand_selfptr(), work);
 #endif
