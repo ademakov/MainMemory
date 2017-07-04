@@ -43,7 +43,7 @@
 // The number of regular threads.
 static mm_thread_t mm_regular_nthreads = 0;
 // The domain of regular threads.
-struct mm_domain *mm_regular_domain = NULL;
+static struct mm_domain *mm_regular_domain = NULL;
 
 // Strands for regular domain threads.
 static struct mm_strand *mm_regular_strands;

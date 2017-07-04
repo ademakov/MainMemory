@@ -84,8 +84,8 @@ mm_chunk_create(size_t size)
 	if (mm_private_space_ready(space))
 		return mm_chunk_create_private(size);
 #else
-	struct mm_domain *domain = mm_domain_selfptr();
-	if (domain == mm_regular_domain && mm_private_space_ready(&mm_regular_space))
+	struct mm_thread *thread = mm_thread_selfptr();
+	if (mm_thread_ident(thread) == 0 && mm_private_space_ready(&mm_regular_space))
 		return mm_chunk_create_regular(size);
 #endif
 
@@ -124,8 +124,8 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 		mm_regular_free(chunk);
 		return;
 #else
-		struct mm_domain *domain = mm_domain_selfptr();
-		if (domain == mm_regular_domain) {
+		struct mm_thread *thread = mm_thread_selfptr();
+		if (mm_thread_ident(thread) == 0) {
 			mm_regular_free(chunk);
 			return;
 		}
@@ -136,8 +136,7 @@ mm_chunk_destroy(struct mm_chunk *chunk)
 	// originating thread but it is a subject for asynchronous memory
 	// reclamation mechanism for any other thread.
 	struct mm_thread *thread = mm_thread_selfptr();
-	struct mm_domain *domain = mm_thread_getdomain(thread);
-	if (domain == mm_regular_domain && tag == mm_thread_getnumber(thread)) {
+	if (tag == mm_thread_ident(thread)) {
 		mm_private_free(chunk);
 		return;
 	}
@@ -191,12 +190,11 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 	while (!mm_stack_empty(&chunks)) {
 		struct mm_chunk *chunk = mm_chunk_stack_remove(&chunks);
 
-		struct mm_domain *domain = mm_regular_domain;
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
-		struct mm_thread *origin = mm_domain_getthread(domain, tag);
+		struct mm_thread *origin = mm_thread_ident_to_thread(tag);
 #else
-		struct mm_thread *origin = mm_domain_getthread(domain, 0);
+		struct mm_thread *origin = mm_thread_ident_to_thread(0);
 #endif
 		uint32_t backoff = 0;
 		while (!mm_thread_trypost_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {
