@@ -57,8 +57,8 @@ procedure is as follows:
 > make
 ```
 
-This produces few libraries and a binary file named 'mmem' located in the
-'src' subdirectory. The 'mmem' file could be used as a replacement for your
+This produces few libraries and a binary file named 'maind' located in the
+'src' subdirectory. The 'maind' file could be used as a replacement for your
 memcached.
 
 ## Single-Threaded and Multi-Threaded Builds
