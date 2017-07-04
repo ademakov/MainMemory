@@ -66,6 +66,7 @@ libmainbase_la_SOURCES = \
 	thread/backoff.c thread/backoff.h \
 	thread/barrier.c thread/barrier.h \
 	thread/domain.c thread/domain.h \
+	thread/ident.c thread/ident.h \
 	thread/local.c thread/local.h \
 	thread/monitor.c thread/monitor.h \
 	thread/request.c thread/request.h \
