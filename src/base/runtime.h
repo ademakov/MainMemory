@@ -33,6 +33,15 @@ mm_number_of_regular_domains(void);
 mm_thread_t
 mm_number_of_regular_threads(void);
 
+struct mm_domain *
+mm_domain_ident_to_domain(mm_thread_t ident);
+
+struct mm_thread *
+mm_thread_ident_to_thread(mm_thread_t ident);
+
+struct mm_strand *
+mm_thread_ident_to_strand(mm_thread_t ident);
+
 extern struct mm_domain *mm_regular_domain;
 extern struct mm_strand *mm_regular_strands;
 

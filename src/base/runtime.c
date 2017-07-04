@@ -72,6 +72,30 @@ mm_number_of_regular_threads(void)
 	return mm_regular_nthreads;
 }
 
+struct mm_domain *
+mm_domain_ident_to_domain(mm_thread_t ident)
+{
+	if (ident == 0)
+		return mm_regular_domain;
+	return NULL;
+}
+
+struct mm_thread *
+mm_thread_ident_to_thread(mm_thread_t ident)
+{
+	if (ident < mm_regular_nthreads)
+		return mm_domain_getthread(mm_regular_domain, ident);
+	return NULL;
+}
+
+struct mm_strand *
+mm_thread_ident_to_strand(mm_thread_t ident)
+{
+	if (ident < mm_regular_nthreads)
+		return &mm_regular_strands[ident];
+	return NULL;
+}
+
 /**********************************************************************
  * Runtime start and stop hooks.
  **********************************************************************/
