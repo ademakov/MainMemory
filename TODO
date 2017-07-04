@@ -1,6 +1,17 @@
 
-ASAP:
+v 0.2
+=====
+
 * parallel polling mechanism
+* cleanup and optimizations here and there
+
+v 0.3
+=====
+
+* new concurrent memory manager
+** https://github.com/cksystemsgroup/scalloc
+** slab allocator (to base object pools on)
+** buddy allocator (for chunks and slabs)
 * minimize memcache locks or non-blocking memcache table
 
 ;;; At this point it becomes usable in simple cases and ready for benchmarks
@@ -29,10 +40,6 @@ Larger items:
 ** NUMA-aware memory allocation
 ** NUMA-aware synchronization
 ** NUMA-aware work scheduling
-* memory management:
-** https://github.com/cksystemsgroup/scalloc
-** slab allocator (to base object pools on)
-** buddy allocator (for chunks and slabs)
 * persistence
 * replication
 * HTTP module
