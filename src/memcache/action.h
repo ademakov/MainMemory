@@ -168,9 +168,7 @@ mc_combiner_execute(struct mc_action *action, void (*routine)(struct mc_action *
 static inline void NONNULL(1, 2)
 mc_delegate_execute(struct mc_action *action, void (*routine)(struct mc_action *))
 {
-	mm_future_unique_prepare(&action->future,
-				 (mm_routine_t) routine,
-				 (mm_value_t) action);
+	mm_future_unique_prepare(&action->future, (mm_routine_t) routine, (mm_value_t) action);
 	mm_future_unique_start(&action->future, action->part->target);
 	mc_action_wait(action);
 }

@@ -32,7 +32,7 @@
 #include "base/fiber/future.h"
 #include "base/fiber/strand.h"
 #include "base/memory/chunk.h"
-#include "base/memory/pool.h"
+#include "base/memory/memory.h"
 
 struct mm_memcache_config mc_config;
 
@@ -215,7 +215,13 @@ mm_memcache_init(const struct mm_memcache_config *config)
 
 	// Determine the required memcache table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_bitset_prepare(&mc_config.affinity, &mm_common_space.arena, mm_regular_nthreads);
+	size_t nbits = 1;
+	if (config != NULL) {
+		nbits = mm_bitset_size(&config->affinity);
+		if (nbits == 0)
+			nbits = 1;
+	}
+	mm_bitset_prepare(&mc_config.affinity, &mm_common_space.xarena, nbits);
 	if (config != NULL)
 		mm_bitset_or(&mc_config.affinity, &config->affinity);
 	if (!mm_bitset_any(&mc_config.affinity))

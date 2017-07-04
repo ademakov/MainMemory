@@ -117,17 +117,6 @@ mc_command_quit(struct mc_state *state)
 	mm_netbuf_close(&state->sock);
 }
 
-#if ENABLE_MEMCACHE_DELEGATE
-static mm_value_t
-mc_command_flush_routine(mm_value_t arg)
-{
-	struct mc_action action;
-	action.part = &mc_table.parts[arg];
-	mc_action_flush(&action);
-	return 0;
-}
-#endif
-
 static void
 mc_command_flush(uint32_t exptime)
 {
@@ -137,14 +126,9 @@ mc_command_flush(uint32_t exptime)
 	mc_exptime = real_time / 1000000 + exptime;
 
 	for (mm_thread_t i = 0; i < mc_table.nparts; i++) {
-#if ENABLE_MEMCACHE_DELEGATE
-		struct mc_tpart *part = &mc_table.parts[i];
-		mm_strand_post(part->target, mc_command_flush_routine, i);
-#else
 		struct mc_action action;
 		action.part = &mc_table.parts[i];
 		mc_action_flush(&action);
-#endif
 	}
 
 }

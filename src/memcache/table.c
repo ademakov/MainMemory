@@ -24,6 +24,7 @@
 #include "base/combiner.h"
 #include "base/hash.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/memory.h"
 
@@ -307,7 +308,7 @@ mc_table_reserve_entries(struct mc_tpart *part)
  **********************************************************************/
 
 static void
-mc_table_init_part(mm_thread_t index, mm_thread_t target UNUSED)
+mc_table_init_part(mm_thread_t index, struct mm_strand *target UNUSED)
 {
 	struct mc_tpart *part = &mc_table.parts[index];
 
@@ -334,10 +335,9 @@ mc_table_init_part(mm_thread_t index, mm_thread_t target UNUSED)
 	part->volume = 0;
 
 #if ENABLE_MEMCACHE_COMBINER
-	part->combiner = mm_combiner_create(MC_COMBINER_SIZE,
-					    MC_COMBINER_HANDOFF);
+	part->combiner = mm_combiner_create(MC_COMBINER_SIZE, MC_COMBINER_HANDOFF);
 #elif ENABLE_MEMCACHE_DELEGATE
-	mm_verbose("bind partition %d to thread %d", index, target);
+	mm_verbose("bind partition %d to thread %d", index, mm_thread_getnumber(target->thread));
 	part->target = target;
 #elif ENABLE_MEMCACHE_LOCKING
 	part->lookup_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
@@ -445,16 +445,18 @@ mc_table_start(const struct mm_memcache_config *config)
 
 	// Initialize the table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_thread_t index = 0;
-	ASSERT(nparts <= mm_regular_nthreads);
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
-		if (mm_bitset_test(&config->affinity, i)) {
-			mc_table_init_part(index++, i);
+	mm_thread_t part = 0;
+	mm_thread_t count = mm_bitset_size(&config->affinity);
+	mm_thread_t nthreads = mm_number_of_regular_threads();
+	for (mm_thread_t bit = 0; bit < count; bit++) {
+		if (mm_bitset_test(&config->affinity, bit)) {
+			mm_thread_t index = bit % nthreads;
+			mc_table_init_part(part++, &mm_regular_strands[index]);
 		}
 	}
 #else
 	for (mm_thread_t index = 0; index < nparts; index++) {
-		mc_table_init_part(index, MM_THREAD_NONE);
+		mc_table_init_part(index, NULL);
 	}
 #endif
 

@@ -26,6 +26,7 @@
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/memory/global.h"
+#include "base/memory/memory.h"
 
 #include "net/net.h"
 
@@ -88,7 +89,7 @@ mm_server_init(void)
 	memcache_config.volume = mbytes * 1024 * 1024;
 	memcache_config.nparts = nparts;
 #if ENABLE_MEMCACHE_DELEGATE
-	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.arena, 8);
+	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.xarena, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
 	mm_bitset_set(&memcache_config.affinity, 7);
 #endif
