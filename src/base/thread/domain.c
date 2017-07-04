@@ -25,6 +25,7 @@
 #include "base/ring.h"
 #include "base/event/dispatch.h"
 #include "base/memory/global.h"
+#include "base/thread/ident.h"
 #include "base/thread/local.h"
 
 #include <stdio.h>
@@ -150,6 +151,10 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 		if (domain->nthreads == 0)
 			mm_fatal(0, "invalid domain attributes.");
 	}
+	struct mm_thread_ident_pair id_pair = mm_thread_ident_alloc(1, domain->nthreads);
+	VERIFY(id_pair.domain != MM_THREAD_NONE && id_pair.thread != MM_THREAD_NONE);
+	domain->domain_ident = id_pair.domain;
+	domain->thread_ident_base = id_pair.thread;
 
 	// Establish domain and event dispatch association.
 	if (attr == NULL) {
@@ -205,8 +210,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	}
 
 	// Create and start threads.
-	domain->threads = mm_global_calloc(domain->nthreads,
-					   sizeof(struct mm_thread *));
+	domain->threads = mm_global_calloc(domain->nthreads, sizeof(struct mm_thread *));
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		mm_thread_attr_setdomain(&thread_attr, domain, i);
 		if (attr == NULL || attr->threads_attr == NULL)

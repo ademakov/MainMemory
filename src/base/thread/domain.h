@@ -72,6 +72,14 @@ struct mm_domain_attr
 /* Domain run-time data. */
 struct mm_domain
 {
+	/* The domain identity. Must be unique among domains. */
+	mm_thread_t domain_ident;
+	/* The thread identity base value. The threads in the domain are
+	   created with identity values ranging from thread_ident_base to
+	   thread_ident_base + nthreads. The range must not contain other
+	   thread identities. */
+	mm_thread_t thread_ident_base;
+
 	/* Domain threads. */
 	mm_thread_t nthreads;
 	struct mm_thread **threads;
@@ -151,20 +159,26 @@ mm_domain_selfptr(void)
 	return __mm_domain_self;
 }
 
-static inline mm_thread_t
+static inline mm_thread_t NONNULL(1)
+mm_domain_ident(const struct mm_domain *domain)
+{
+	return domain->domain_ident;
+}
+
+static inline mm_thread_t NONNULL(1)
 mm_domain_getsize(const struct mm_domain *domain)
 {
 	return domain->nthreads;
 }
 
-static inline struct mm_thread *
+static inline struct mm_thread * NONNULL(1)
 mm_domain_getthread(struct mm_domain *domain, mm_thread_t n)
 {
 	ASSERT(n < domain->nthreads);
 	return domain->threads[n];
 }
 
-static inline struct mm_event_dispatch *
+static inline struct mm_event_dispatch * NONNULL(1)
 mm_domain_getdispatch(struct mm_domain *domain)
 {
 	return domain->event_dispatch;

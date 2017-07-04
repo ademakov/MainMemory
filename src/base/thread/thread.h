@@ -55,7 +55,7 @@ struct mm_thread_attr
 {
 	/* Thread domain. */
 	struct mm_domain *domain;
-	mm_thread_t domain_number;
+	mm_thread_t domain_index;
 
 	/* Enable private memory space. */
 	bool private_space;
@@ -83,7 +83,10 @@ struct mm_thread
 {
 	/* Thread domain. */
 	struct mm_domain *domain;
-	mm_thread_t domain_number;
+	mm_thread_t domain_index;
+
+	/* The thread identity. Must be unique among threads. */
+	mm_thread_t thread_ident;
 
 	/* Thread request queue. */
 	struct mm_ring_mpmc *request_queue;
@@ -136,7 +139,7 @@ void NONNULL(1)
 mm_thread_attr_prepare(struct mm_thread_attr *attr);
 
 void NONNULL(1, 2)
-mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t number);
+mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t index);
 
 void NONNULL(1)
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable);
@@ -180,6 +183,12 @@ mm_thread_selfptr(void)
 	return __mm_thread_self;
 }
 
+static inline mm_thread_t NONNULL(1)
+mm_thread_ident(const struct mm_thread *thread)
+{
+	return thread->thread_ident;
+}
+
 static inline const char * NONNULL(1)
 mm_thread_getname(const struct mm_thread *thread)
 {
@@ -195,7 +204,7 @@ mm_thread_getdomain(const struct mm_thread *thread)
 static inline mm_thread_t NONNULL(1)
 mm_thread_getnumber(const struct mm_thread *thread)
 {
-	return thread->domain_number;
+	return thread->domain_index;
 }
 
 static inline struct mm_event_listener *

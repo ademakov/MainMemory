@@ -26,6 +26,7 @@
 #include "base/event/listener.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"
+#include "base/thread/ident.h"
 
 #include <sched.h>
 
@@ -42,7 +43,8 @@
 #define MM_THREAD_QUEUE_MIN_SIZE	16
 
 static struct mm_thread mm_thread_main = {
-	.domain_number = MM_THREAD_NONE,
+	.domain_index = MM_THREAD_NONE,
+	.thread_ident = MM_THREAD_NONE,
 
 	.log_queue = {
 		.head = { NULL },
@@ -66,8 +68,6 @@ __thread struct mm_thread *__mm_thread_self = &mm_thread_main;
  * Global thread data initialization and termination.
  **********************************************************************/
 
-// TODO: have a global thread list used for debugging/statistics.
-
 void
 mm_thread_init()
 {
@@ -85,12 +85,10 @@ mm_thread_attr_prepare(struct mm_thread_attr *attr)
 }
 
 void NONNULL(1, 2)
-mm_thread_attr_setdomain(struct mm_thread_attr *attr,
-			 struct mm_domain *domain,
-			 mm_thread_t number)
+mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t index)
 {
 	attr->domain = domain;
-	attr->domain_number = number;
+	attr->domain_index = index;
 }
 
 void NONNULL(1)
@@ -283,12 +281,19 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 	// Set basic thread attributes.
 	if (attr == NULL) {
 		thread->domain = NULL;
-		thread->domain_number = 0;
+		thread->domain_index = 0;
 		thread->cpu_tag = 0;
 	} else {
 		thread->domain = attr->domain;
-		thread->domain_number = attr->domain_number;
+		thread->domain_index = attr->domain_index;
 		thread->cpu_tag = attr->cpu_tag;
+	}
+	if (thread->domain == NULL) {
+		struct mm_thread_ident_pair id_pair = mm_thread_ident_alloc(0, 1);
+		VERIFY(id_pair.domain == MM_THREAD_NONE && id_pair.thread != MM_THREAD_NONE);
+		thread->thread_ident = id_pair.thread;
+	} else {
+		thread->thread_ident = thread->domain->thread_ident_base + thread->domain_index;
 	}
 
 	// Create a thread request queue if required.
@@ -305,8 +310,8 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 	if (thread->domain != NULL) {
 		struct mm_event_dispatch *dispatch = thread->domain->event_dispatch;
 		if (dispatch != NULL) {
-			thread->event_listener = &dispatch->listeners[thread->domain_number];
-			dispatch->listeners[thread->domain_number].thread = thread;
+			thread->event_listener = &dispatch->listeners[thread->domain_index];
+			dispatch->listeners[thread->domain_index].thread = thread;
 		}
 	}
 
