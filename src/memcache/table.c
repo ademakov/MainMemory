@@ -451,7 +451,7 @@ mc_table_start(const struct mm_memcache_config *config)
 	for (mm_thread_t bit = 0; bit < count; bit++) {
 		if (mm_bitset_test(&config->affinity, bit)) {
 			mm_thread_t index = bit % nthreads;
-			mc_table_init_part(part++, &mm_regular_strands[index]);
+			mc_table_init_part(part++, mm_thread_ident_to_strand(index));
 		}
 	}
 #else

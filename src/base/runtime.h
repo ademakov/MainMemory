@@ -43,7 +43,6 @@ struct mm_strand *
 mm_thread_ident_to_strand(mm_thread_t ident);
 
 extern struct mm_domain *mm_regular_domain;
-extern struct mm_strand *mm_regular_strands;
 
 /**********************************************************************
  * Runtime start and stop hooks.

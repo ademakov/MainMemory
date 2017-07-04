@@ -40,11 +40,13 @@
 
 #include <unistd.h>
 
+// The number of regular threads.
 static mm_thread_t mm_regular_nthreads = 0;
+// The domain of regular threads.
 struct mm_domain *mm_regular_domain = NULL;
 
 // Strands for regular domain threads.
-struct mm_strand *mm_regular_strands;
+static struct mm_strand *mm_regular_strands;
 
 // Event dispatch for regular thread domain.
 static struct mm_event_dispatch mm_regular_dispatch;
