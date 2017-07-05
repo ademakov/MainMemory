@@ -258,6 +258,10 @@ mc_binary_parse(struct mc_state *state)
 	ENTER();
 	bool rc = true;
 
+	// Have enough contiguous space to read the command header.
+	if (!mm_netbuf_span(&state->sock, sizeof(struct mc_binary_header)))
+		ABORT();
+
 	size_t size = mm_netbuf_getleft(&state->sock);
 	DEBUG("available bytes: %lu", size);
 	if (size < sizeof(struct mc_binary_header)) {
@@ -265,29 +269,32 @@ mc_binary_parse(struct mc_state *state)
 		goto leave;
 	}
 
-	struct mc_binary_header header;
-	mm_netbuf_read(&state->sock, &header, sizeof header);
-	if (unlikely(header.magic != MC_BINARY_REQUEST)) {
+	// NB: The header pointer might be unaligned so numeric fields on
+	// non-x86 archs must be accessed with care.
+	struct mc_binary_header *header = (struct mc_binary_header *) mm_netbuf_rget(&state->sock);
+	if (unlikely(header->magic != MC_BINARY_REQUEST)) {
 		state->trash = true;
 		rc = false;
 		goto leave;
 	}
+	mm_netbuf_radd(&state->sock, sizeof(struct mc_binary_header));
 
 	struct mc_command *command = mc_command_create(state);
-	command->binary.opaque = header.opaque;
-	command->binary.opcode = header.opcode;
+	// The opaque field is not used so the host order is okay.
+	command->binary.opaque = mm_load_hl(&header->opaque);
+	command->binary.opcode = header->opcode;
 	state->command = command;
 
 	// The current command.
-	uint32_t body_len = mm_ntohl(header.body_len);
-	uint32_t key_len = mm_ntohs(header.key_len);
-	uint32_t ext_len = header.ext_len;
+	uint32_t body_len = mm_load_nl(&header->body_len);
+	uint32_t key_len = mm_load_ns(&header->key_len);
+	uint32_t ext_len = header->ext_len;
 	if (unlikely((key_len + ext_len) > body_len)) {
 		rc = mc_binary_invalid_arguments(state, body_len);
 		goto leave;
 	}
 
-	command->type = mc_binary_commands[header.opcode];
+	command->type = mc_binary_commands[header->opcode];
 	if (unlikely(command->type == NULL)) {
 		rc = mc_binary_unknown_command(state, body_len);
 		goto leave;
@@ -313,7 +320,7 @@ mc_binary_parse(struct mc_state *state)
 			goto leave;
 		}
 		rc = mc_binary_read_entry(state, body_len, key_len);
-		command->action.stamp = mm_ntohll(header.stamp);
+		command->action.stamp = mm_load_hll(&header->stamp);
 		break;
 
 	case MC_COMMAND_CONCAT:
@@ -323,7 +330,7 @@ mc_binary_parse(struct mc_state *state)
 			rc = mc_binary_invalid_arguments(state, body_len);
 			goto leave;
 		}
-		switch (header.opcode) {
+		switch (header->opcode) {
 		case MC_BINARY_OPCODE_APPEND:
 		case MC_BINARY_OPCODE_APPENDQ:
 			command->action.alter_type = MC_ACTION_ALTER_APPEND;
