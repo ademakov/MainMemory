@@ -95,18 +95,18 @@ mm_conf_load(const char *name)
 			break;
 
 		char *key = mm_json_reader_string_strdup(&reader);
-		mm_settings_type_t type = mm_settings_gettype(key);
+		mm_settings_info_t type = mm_settings_get_info(key);
 		if (type == MM_SETTINGS_UNKNOWN) {
 			mm_conf_skip(fd, key, &reader);
 		} else {
 			token = mm_conf_next(fd, name, &reader);
 			if (token == MM_JSON_TRUE) {
 				mm_settings_set(key, "true", false);
-			} else if (token == MM_JSON_STRING && type != MM_SETTINGS_TRIVIAL) {
+			} else if (token == MM_JSON_STRING && type != MM_SETTINGS_BOOLEAN) {
 				char *value = mm_json_reader_string_strdup(&reader);
 				mm_settings_set(key, value, false);
 				mm_arena_free(reader.arena, value);
-			} else if (token == MM_JSON_NUMBER && type != MM_SETTINGS_TRIVIAL) {
+			} else if (token == MM_JSON_NUMBER && type != MM_SETTINGS_BOOLEAN) {
 				char *value = mm_json_reader_strdup(&reader);
 				mm_settings_set(key, value, false);
 				mm_arena_free(reader.arena, value);

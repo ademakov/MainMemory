@@ -29,7 +29,7 @@ struct mm_settings_entry
 {
 	struct mm_hashmap_entry entry;
 	const char *value;
-	mm_settings_type_t type;
+	mm_settings_info_t info;
 };
 
 static const char *mm_settings_empty = "";
@@ -56,6 +56,10 @@ mm_settings_cleanup(void)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Settings subsystem initialization and configuration.
+ **********************************************************************/
+
 void
 mm_settings_init(void)
 {
@@ -66,6 +70,40 @@ mm_settings_init(void)
 
 	LEAVE();
 }
+
+
+void NONNULL(1)
+mm_settings_set_info(const char *key, mm_settings_info_t info)
+{
+	size_t len = strlen(key);
+	struct mm_hashmap_entry *hep = mm_hashmap_lookup(&mm_settings_map, key, len);
+	if (hep != NULL) {
+		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
+		sep->info = info;
+	} else {
+		struct mm_settings_entry *sep = mm_global_alloc(sizeof(struct mm_settings_entry));
+		mm_hashmap_setkey(&sep->entry, mm_global_memdup(key, len), len);
+		mm_hashmap_insert(&mm_settings_map, &sep->entry);
+		sep->value = NULL;
+		sep->info = info;
+	}
+}
+
+mm_settings_info_t NONNULL(1)
+mm_settings_get_info(const char *key)
+{
+	size_t len = strlen(key);
+	struct mm_hashmap_entry *hep = mm_hashmap_lookup(&mm_settings_map, key, len);
+	if (hep != NULL) {
+		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
+		return sep->info;
+	}
+	return MM_SETTINGS_UNKNOWN;
+}
+
+/**********************************************************************
+ * Type-oblivious access to settings.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite)
@@ -86,12 +124,12 @@ mm_settings_set(const char *key, const char *value, bool overwrite)
 			sep = mm_global_alloc(sizeof(struct mm_settings_entry));
 			mm_hashmap_setkey(&sep->entry, mm_global_memdup(key, len), len);
 			mm_hashmap_insert(&mm_settings_map, &sep->entry);
-			sep->type = MM_SETTINGS_UNKNOWN;
+			sep->info = MM_SETTINGS_UNKNOWN;
 		}
 		sep->value = *value ? mm_global_strdup(value) : mm_settings_empty;
 	} else if (hep != NULL && !overwrite) {
 		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
-		if (sep->type != MM_SETTINGS_UNKNOWN && sep->value != NULL) {
+		if (sep->info != MM_SETTINGS_UNKNOWN && sep->value != NULL) {
 			if (sep->value != mm_settings_empty)
 				mm_global_free((char *) sep->value);
 			sep->value = NULL;
@@ -114,6 +152,10 @@ mm_settings_get(const char *key, const char *def)
 	}
 	return def;
 }
+
+/**********************************************************************
+ * Type-conscious read-only access to settings.
+ **********************************************************************/
 
 bool NONNULL(1)
 mm_settings_get_bool(const char *key, bool def)
@@ -155,33 +197,4 @@ mm_settings_get_uint64(const char *key, uint64_t def)
 			mm_fatal(err, "invalid '%s' setting: '%s'", key, str);
 	}
 	return val;
-}
-
-void NONNULL(1)
-mm_settings_settype(const char *key, mm_settings_type_t type)
-{
-	size_t len = strlen(key);
-	struct mm_hashmap_entry *hep = mm_hashmap_lookup(&mm_settings_map, key, len);
-	if (hep != NULL) {
-		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
-		sep->type = type;
-	} else {
-		struct mm_settings_entry *sep = mm_global_alloc(sizeof(struct mm_settings_entry));
-		mm_hashmap_setkey(&sep->entry, mm_global_memdup(key, len), len);
-		mm_hashmap_insert(&mm_settings_map, &sep->entry);
-		sep->value = NULL;
-		sep->type = type;
-	}
-}
-
-mm_settings_type_t NONNULL(1)
-mm_settings_gettype(const char *key)
-{
-	size_t len = strlen(key);
-	struct mm_hashmap_entry *hep = mm_hashmap_lookup(&mm_settings_map, key, len);
-	if (hep != NULL) {
-		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
-		return sep->type;
-	}
-	return MM_SETTINGS_UNKNOWN;
 }

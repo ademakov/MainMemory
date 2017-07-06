@@ -204,9 +204,9 @@ mm_args_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *in
 		const struct mm_args_info *p = &info[i];
 		if (p->name != NULL && p->param != MM_ARGS_SPECIAL) {
 			if (p->param == MM_ARGS_TRIVIAL)
-				mm_settings_settype(p->name, MM_SETTINGS_TRIVIAL);
+				mm_settings_set_info(p->name, MM_SETTINGS_BOOLEAN);
 			else
-				mm_settings_settype(p->name, MM_SETTINGS_REGULAR);
+				mm_settings_set_info(p->name, MM_SETTINGS_REGULAR);
 		}
 	}
 

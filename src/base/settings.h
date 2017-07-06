@@ -22,21 +22,53 @@
 
 #include "common.h"
 
+/*
+ * Settings is a central storage for runtime options obtained from command
+ * line arguments and the configuration file.
+ *
+ * For an option to be properly parsed when it is met in the configuration
+ * file it has to be registered in advance with the mm_settings_set_type()
+ * function. The options that are described in the mm_args_info table (see
+ * "args.h" file) are automatically registered. Any other options has to be
+ * registered explicitly.
+ */
+
 typedef enum
 {
+	/* Unknown setting, silently skipped if met in the config. */
 	MM_SETTINGS_UNKNOWN,
-	MM_SETTINGS_TRIVIAL,
+	/* A boolean setting, only boolean values are allowed. */
+	MM_SETTINGS_BOOLEAN,
+	/* A regular setting, any scalar values are allowed. */
 	MM_SETTINGS_REGULAR,
-} mm_settings_type_t;
+} mm_settings_info_t;
+
+/**********************************************************************
+ * Settings subsystem initialization and configuration.
+ **********************************************************************/
 
 void
 mm_settings_init(void);
+
+void NONNULL(1)
+mm_settings_set_info(const char *key, mm_settings_info_t info);
+
+mm_settings_info_t NONNULL(1)
+mm_settings_get_info(const char *key);
+
+/**********************************************************************
+ * Type-oblivious access to settings.
+ **********************************************************************/
 
 void NONNULL(1)
 mm_settings_set(const char *key, const char *value, bool overwrite);
 
 const char * NONNULL(1)
 mm_settings_get(const char *key, const char *def);
+
+/**********************************************************************
+ * Type-conscious read-only access to settings.
+ **********************************************************************/
 
 bool NONNULL(1)
 mm_settings_get_bool(const char *key, bool def);
@@ -46,11 +78,5 @@ mm_settings_get_uint32(const char *key, uint32_t def);
 
 uint64_t NONNULL(1)
 mm_settings_get_uint64(const char *key, uint64_t def);
-
-void NONNULL(1)
-mm_settings_settype(const char *key, mm_settings_type_t type);
-
-mm_settings_type_t NONNULL(1)
-mm_settings_gettype(const char *key);
 
 #endif /* BASE_SETTINGS_H */
