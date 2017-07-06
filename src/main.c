@@ -99,9 +99,9 @@ mm_server_init(void)
 }
 
 static struct mm_args_info mm_args_info_tbl[] = {
-	{ "help", 'h', MM_ARGS_SPECIAL,
+	{ "help", 'h', MM_ARGS_COMMAND,
 	  "\n\t\tdisplay this help text and exit" },
-	{ "version", 'V', MM_ARGS_SPECIAL,
+	{ "version", 'V', MM_ARGS_COMMAND,
 	   "\n\t\tdisplay version information and exit" },
 	{ "verbose", 'v', MM_ARGS_TRIVIAL,
 	  "\n\t\tenable verbose messages" },
@@ -138,7 +138,7 @@ main(int argc, char *argv[])
 	mm_init(argc, argv, mm_args_info_cnt, mm_args_info_tbl);
 
 	// Handle command line arguments.
-	if (mm_args_getargc() > 0) {
+	if (mm_args_argc() > 0) {
 		mm_args_usage(mm_args_info_cnt, mm_args_info_tbl);
 		mm_exit(MM_EXIT_USAGE);
 	}

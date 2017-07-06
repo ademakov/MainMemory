@@ -1,7 +1,7 @@
 /*
  * base/args.c - Command line argument handling.
  *
- * Copyright (C) 2015  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,11 +26,9 @@
 
 #include <stdlib.h>
 
-static uint32_t mm_args_extc;
-static uint32_t mm_args_argc;
-static char **mm_args_argv;
-
-static const char *mm_args_name;
+static uint32_t mm_args_ec;
+static uint32_t mm_args_ac;
+static char **mm_args_av;
 
 /**********************************************************************
  * Argument parsing.
@@ -39,27 +37,27 @@ static const char *mm_args_name;
 static void
 mm_args_shift(uint32_t idx)
 {
-	memmove(&mm_args_argv[idx],
-		&mm_args_argv[idx + 1],
-		(mm_args_argc - idx) * sizeof(mm_args_argv[0]));
+	memmove(&mm_args_av[idx],
+		&mm_args_av[idx + 1],
+		(mm_args_ac - idx) * sizeof(mm_args_av[0]));
 }
 
 static void
 mm_args_extra_shift(uint32_t idx, char *arg)
 {
-	mm_args_extc++;
+	mm_args_ec++;
 	mm_args_shift(idx);
-	mm_args_argv[mm_args_argc - 1] = arg;
+	mm_args_av[mm_args_ac - 1] = arg;
 }
 
 static void
 mm_args_final_shift(uint32_t idx)
 {
-	if (mm_args_extc == 0) {
-		mm_args_extc = mm_args_argc - idx;
+	if (mm_args_ec == 0) {
+		mm_args_ec = mm_args_ac - idx;
 	} else {
-		while ((idx + mm_args_extc) < mm_args_argc) {
-			char *arg = mm_args_argv[idx];
+		while ((idx + mm_args_ec) < mm_args_ac) {
+			char *arg = mm_args_av[idx];
 			mm_args_extra_shift(idx, arg);
 		}
 	}
@@ -75,7 +73,7 @@ mm_args_error(size_t ninfo, const struct mm_args_info *info)
 static uint32_t
 mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 {
-	char *arg = &mm_args_argv[idx][2];
+	char *arg = &mm_args_av[idx][2];
 	size_t len = strlen(arg);
 
 	const char *sep = memchr(arg, '=', len);
@@ -98,7 +96,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 	if (arginfo == NULL)
 		mm_args_error(ninfo, info);
 
-	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_SPECIAL) {
+	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_COMMAND) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
 		mm_settings_set(arginfo->name, "true", true);
@@ -108,8 +106,8 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 	const char *value = NULL;
 	if (sep != NULL)
 		value = sep + 1;
-	else if ((++idx + mm_args_extc) < mm_args_argc && mm_args_argv[idx][0] != '-')
-		value = mm_args_argv[idx];
+	else if ((++idx + mm_args_ec) < mm_args_ac && mm_args_av[idx][0] != '-')
+		value = mm_args_av[idx];
 	if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 		mm_args_error(ninfo, info);
 	mm_settings_set(arginfo->name, value, true);
@@ -119,7 +117,7 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 static uint32_t
 mm_args_parse_flags(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 {
-	const char *arg = &mm_args_argv[idx][1];
+	const char *arg = &mm_args_av[idx][1];
 	for (int flag = *arg++; flag; flag = *arg++) {
 		const struct mm_args_info *arginfo = NULL;
 		for (size_t i = 0; i < ninfo; i++) {
@@ -133,7 +131,7 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 		if (arginfo == NULL)
 			mm_args_error(ninfo, info);
 
-		if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_SPECIAL) {
+		if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_COMMAND) {
 			mm_settings_set(arginfo->name, "", true);
 			continue;
 		}
@@ -141,8 +139,8 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 		const char *value = NULL;
 		if (*arg)
 			value = arg;
-		else if ((++idx + mm_args_extc) < mm_args_argc && mm_args_argv[idx][0] != '-')
-			value = mm_args_argv[idx];
+		else if ((++idx + mm_args_ec) < mm_args_ac && mm_args_av[idx][0] != '-')
+			value = mm_args_av[idx];
 		if (arginfo->param == MM_ARGS_REQUIRED && value == NULL)
 			mm_args_error(ninfo, info);
 		mm_settings_set(arginfo->name, value, true);
@@ -155,8 +153,8 @@ static void
 mm_args_parse(size_t ninfo, const struct mm_args_info *info)
 {
 	uint32_t idx = 1;
-	while ((idx + mm_args_extc) < mm_args_argc) {
-		char *arg = mm_args_argv[idx];
+	while ((idx + mm_args_ec) < mm_args_ac) {
+		char *arg = mm_args_av[idx];
 		if (arg[0] != '-') {
 			// A non-option argument.
 			mm_args_extra_shift(idx, arg);
@@ -185,24 +183,18 @@ mm_args_parse(size_t ninfo, const struct mm_args_info *info)
  **********************************************************************/
 
 void NONNULL(2)
-mm_args_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
+mm_args_init(int ac, char *av[], size_t ninfo, const struct mm_args_info *info)
 {
-	if (unlikely(argc <= 0))
+	if (unlikely(ac <= 0))
 		mm_fatal(0, "Missing command line arguments");
 
-	mm_args_extc = 0;
-	mm_args_argc = argc;
-	mm_args_argv = argv;
-
-	char *slash = strrchr(argv[0], '/');
-	if (slash != NULL)
-		mm_args_name = slash + 1;
-	else
-		mm_args_name = argv[0];
+	mm_args_ec = 0;
+	mm_args_ac = ac;
+	mm_args_av = av;
 
 	for (size_t i = 0; i < ninfo; i++) {
 		const struct mm_args_info *p = &info[i];
-		if (p->name != NULL && p->param != MM_ARGS_SPECIAL) {
+		if (p->name != NULL && p->param != MM_ARGS_COMMAND) {
 			if (p->param == MM_ARGS_TRIVIAL)
 				mm_settings_set_info(p->name, MM_SETTINGS_BOOLEAN);
 			else
@@ -214,25 +206,26 @@ mm_args_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *in
 }
 
 const char *
-mm_args_getname(void)
+mm_args_name(void)
 {
-	return mm_args_name;
+	char *slash = strrchr(mm_args_av[0], '/');
+	if (slash != NULL)
+		return slash + 1;
+	return mm_args_av[0];
 }
 
 int
-mm_args_getargc(void)
+mm_args_argc(void)
 {
-	if (mm_args_argc == 0 || mm_args_argv == NULL)
-		mm_abort();
-	return mm_args_extc;
+	VERIFY(mm_args_ac != 0 && mm_args_av != NULL);
+	return mm_args_ec;
 }
 
 char **
-mm_args_getargv(void)
+mm_args_argv(void)
 {
-	if (mm_args_argc == 0 || mm_args_argv == NULL)
-		mm_abort();
-	return mm_args_argv + mm_args_argc - mm_args_extc;
+	VERIFY(mm_args_ac != 0 && mm_args_av != NULL);
+	return mm_args_av + mm_args_ac - mm_args_ec;
 }
 
 /**********************************************************************
@@ -256,16 +249,16 @@ mm_args_usage(size_t ninfo, const struct mm_args_info *info)
 
 	if (index == ninfo) {
 		if (param == NULL)
-			mm_log_fmt("Usage: %s\n", mm_args_getname());
+			mm_log_fmt("Usage: %s\n", mm_args_name());
 		else
-			mm_log_fmt("Usage: %s %s\n", mm_args_getname(), param);
+			mm_log_fmt("Usage: %s %s\n", mm_args_name(), param);
 		return;
 	}
 
 	if (param == NULL)
-		mm_log_fmt("Usage: %s [options]\n", mm_args_getname());
+		mm_log_fmt("Usage: %s [options]\n", mm_args_name());
 	else
-		mm_log_fmt("Usage: %s [options] %s\n", mm_args_getname(), param);
+		mm_log_fmt("Usage: %s [options] %s\n", mm_args_name(), param);
 
 	mm_log_fmt("Options:\n");
 	for (; index < ninfo; index++) {

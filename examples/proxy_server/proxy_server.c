@@ -61,7 +61,7 @@ static struct mm_net_server *proxy_server;
 // Command line arguments table.
 static const struct mm_args_info args_tbl[] = {
 	{ NULL, 0, 0, "<port>" },
-	{ "help", 'h', MM_ARGS_SPECIAL,
+	{ "help", 'h', MM_ARGS_COMMAND,
 	  "\n\t\tdisplay this help text and exit" },
 	{ "daemon", 'd', MM_ARGS_TRIVIAL,
 	  "\n\t\trun as a daemon (false by default)" },
@@ -75,8 +75,8 @@ main(int ac, char *av[])
 {
 	// Parse command line arguments.
 	mm_init(ac, av, args_cnt, args_tbl);
-	ac = mm_args_getargc();
-	av = mm_args_getargv();
+	ac = mm_args_argc();
+	av = mm_args_argv();
 
 	// Handle the help option.
 	if (mm_settings_get("help", NULL)) {
