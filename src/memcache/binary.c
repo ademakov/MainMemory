@@ -320,7 +320,7 @@ mc_binary_parse(struct mc_state *state)
 			goto leave;
 		}
 		rc = mc_binary_read_entry(state, body_len, key_len);
-		command->action.stamp = mm_load_hll(&header->stamp);
+		command->action.stamp = mm_load_nll(&header->stamp);
 		break;
 
 	case MC_COMMAND_CONCAT:
