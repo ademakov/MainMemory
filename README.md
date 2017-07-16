@@ -34,10 +34,10 @@ ready as well.
 # Target Platforms
 
 MainMemory is intended to run on x86/x86-64 boxes with Linux or any BSD
-flavor OS including Mac OS/X. The key requirement is the availability of
+flavor OS including macOS. The key requirement is the availability of
 either epoll or kqueue API in addition to the standard POSIX API.
 
-However so far it has only been extensively tested on Linux and Mac OS/X.
+However so far it has only been extensively tested on Linux and macOS.
 And on a single FreeBSD instance running on a VM. Therefore any portability
 reports and/or patches are welcome.
 
@@ -107,3 +107,24 @@ was helpful however in the early days of the project):
 ```
 > ./configure --enable-debug --enbale-trace
 ```
+
+## MacPorts Build
+
+The builds on macOS are done using MacPorts. There might be problems with
+the default MacPorts assembler however. If there are error messages like
+`no such instruction` then it is required to switch to the `clang` assembler.
+
+First of all set the following environment variable:
+
+```
+ AS_INTEGRATED_ASSEMBLER=1
+```
+
+Then any available MacPorts `clang` compiler has to be selected, e.g.:
+
+```
+# sudo port select clang mp-clang-3.9
+```
+
+Note that it is very possible to use `gcc` as the C compiler. It is just
+the assembler that needs to be borrowed from `clang`.
