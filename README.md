@@ -110,21 +110,21 @@ was helpful however in the early days of the project):
 
 ## MacPorts Build
 
-The builds on macOS are done using MacPorts. There might be problems with
-the default MacPorts assembler however. If there are error messages like
-`no such instruction` then it is required to switch to the `clang` assembler.
+Builds on macOS are done using MacPorts. But the default MacPorts assembler
+may fail. If there are error messages like `no such instruction` then it is
+required to switch to the `clang` assembler.
 
-First of all set the following environment variable:
+First set the following environment variable:
 
 ```
  AS_INTEGRATED_ASSEMBLER=1
 ```
 
-Then any available MacPorts `clang` compiler has to be selected, e.g.:
+Then select any available MacPorts `clang` compiler, e.g.:
 
 ```
 # sudo port select clang mp-clang-3.9
 ```
 
-Note that it is very possible to use `gcc` as the C compiler. It is just
-the assembler that needs to be borrowed from `clang`.
+Note that it is still very possible to use `gcc` as the C compiler. It is
+just the assembler that needs to be borrowed from `clang`.
