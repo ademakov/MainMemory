@@ -73,7 +73,8 @@ AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h])
 AC_CHECK_HEADERS([xmmintrin.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
-AX_CHECK_COMPILE_FLAG([-msse4.2], AX_APPEND_FLAG([-msse4.2], [CFLAGS]), [], [], [])
+dnl AX_CHECK_COMPILE_FLAG([-msse4.2], AX_APPEND_FLAG([-msse4.2], [CFLAGS]), [], [], [])
+AX_CHECK_COMPILE_FLAG([-march=native], AX_APPEND_FLAG([-march=native], [CFLAGS]), [], [], [])
 
 dnl Checks for library functions.
 AC_CHECK_FUNCS(pthread_setaffinity_np)
