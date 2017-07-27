@@ -96,8 +96,6 @@ mc_command_destroy(struct mc_command *command)
 {
 	ENTER();
 
-	if (command->own_key)
-		mm_private_free((char *) command->action.key);
 	if (command->own_alter_value)
 		mm_private_free((char *) command->action.alter_value);
 

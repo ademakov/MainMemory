@@ -125,9 +125,8 @@ mc_binary_set_key(struct mc_state *state, uint32_t key_len)
 		key = iter->ptr;
 		iter->ptr += key_len;
 	} else {
-		key = mm_private_alloc(key_len);
+		key = mm_buffer_embed(&state->sock.txbuf, key_len);
 		mm_netbuf_read(&state->sock, key, key_len);
-		command->own_key = true;
 	}
 
 	mc_action_set_key(&command->action, key, key_len);

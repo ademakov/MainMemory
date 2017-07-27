@@ -175,8 +175,6 @@ struct mc_command
 		uint32_t nopts;
 	};
 
-	/* Action key memory is owned by the command. */
-	bool own_key;
 	/* Action value memory is owned by the command. */
 	bool own_alter_value;
 };
