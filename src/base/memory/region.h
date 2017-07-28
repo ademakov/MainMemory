@@ -1,7 +1,7 @@
 /*
  * base/memory/region.h - MainMemory region allocator.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -61,26 +61,31 @@ mm_region_empty(struct mm_region *reg)
 	return (reg->block_ptr == NULL);
 }
 
+/* See if the region can allocate a whole new block, that is it is not
+   currently busy with incremental allocation. */
 static inline bool NONNULL(1)
 mm_region_whole(struct mm_region *reg)
 {
 	return (reg->block_ptr == reg->block_end);
 }
 
+/* The current size of yet unallocated region space. */
 static inline size_t NONNULL(1)
-mm_region_getroom(struct mm_region *reg)
+mm_region_free_size(struct mm_region *reg)
 {
 	return (reg->chunk_end - reg->block_end);
 }
 
+/* The current size of an incrementally allocated block. */
 static inline size_t NONNULL(1)
-mm_region_getblocksize(struct mm_region *reg)
+mm_region_last_size(struct mm_region *reg)
 {
 	return (reg->block_end - reg->block_ptr);
 }
 
+/* The current address of an incrementally allocated block. */
 static inline void * NONNULL(1)
-mm_region_getblockbase(struct mm_region *reg)
+mm_region_last_base(struct mm_region *reg)
 {
 	return reg->block_ptr;
 }
@@ -105,7 +110,7 @@ mm_region_extend_fast(struct mm_region *reg, size_t size)
 static inline void * NONNULL(1)
 mm_region_extend(struct mm_region *reg, size_t size)
 {
-	if (mm_region_getroom(reg) < size)
+	if (mm_region_free_size(reg) < size)
 		mm_region_reserve(reg, size);
 	return mm_region_extend_fast(reg, size);
 }
