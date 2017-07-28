@@ -45,7 +45,7 @@ static inline void NONNULL(1)
 mm_netbuf_prepare_read_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
 {
 	if (!mm_buffer_valid(&sock->rxbuf)) {
-		mm_buffer_setminchunksize(&sock->rxbuf, size_hint);
+		mm_buffer_set_chunk_size(&sock->rxbuf, size_hint);
 		mm_buffer_extend(&sock->rxbuf, &sock->rxbuf.tail, size_hint);
 	}
 }
@@ -54,7 +54,7 @@ static inline void NONNULL(1)
 mm_netbuf_prepare_write_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
 {
 	if (!mm_buffer_valid(&sock->txbuf)) {
-		mm_buffer_setminchunksize(&sock->txbuf, size_hint);
+		mm_buffer_set_chunk_size(&sock->txbuf, size_hint);
 		mm_buffer_extend(&sock->txbuf, &sock->txbuf.tail, size_hint);
 	}
 }
@@ -80,7 +80,7 @@ mm_netbuf_empty(struct mm_netbuf_socket *sock)
 static inline size_t NONNULL(1)
 mm_netbuf_getleft(struct mm_netbuf_socket *sock)
 {
-	return mm_buffer_getleft(&sock->rxbuf);
+	return mm_buffer_size(&sock->rxbuf);
 }
 
 static inline void NONNULL(1, 2)
@@ -106,13 +106,13 @@ mm_netbuf_read_next(struct mm_netbuf_socket *sock)
 static inline void NONNULL(1)
 mm_netbuf_read_reset(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_rectify(&sock->rxbuf);
+	mm_buffer_compact(&sock->rxbuf);
 }
 
 static inline void NONNULL(1)
 mm_netbuf_write_reset(struct mm_netbuf_socket *sock)
 {
-	mm_buffer_rectify(&sock->txbuf);
+	mm_buffer_compact(&sock->txbuf);
 }
 
 static inline ssize_t NONNULL(1)

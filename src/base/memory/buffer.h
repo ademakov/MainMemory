@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.h - MainMemory data buffers.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,11 +27,9 @@
 
 #include <stdarg.h>
 
-#define MM_BUFFER_ALIGN		sizeof(struct mm_buffer_segment)
-
-#define MM_BUFFER_SEGMENT_SIZE	sizeof(struct mm_buffer_segment)
-#define MM_BUFFER_SEGMENT_TYPE	(3)
-
+#define MM_BUFFER_ALIGN			sizeof(struct mm_buffer_segment)
+#define MM_BUFFER_SEGMENT_SIZE		sizeof(struct mm_buffer_segment)
+#define MM_BUFFER_SEGMENT_MASK		(MM_BUFFER_SEGMENT_SIZE - 1)
 
 /*
  * MainMemory buffers grow and shrink as necessary. Incoming data is appended
@@ -49,16 +47,18 @@
  * concurrently.
  */
 
+/* External segment release routine. */
 typedef void (*mm_buffer_release_t)(uintptr_t release_data);
 
+/* Segment flags. Must fit into MM_BUFFER_SEGMENT_MASK. */
 typedef enum {
 	/* External data segment. */
-	MM_BUFFER_EXTERNAL = 0,
-	/* Internal data segment. */
-	MM_BUFFER_INTERNAL = 1,
+	MM_BUFFER_EXTERNAL = 1,
 	/* Embedded (allocated) segment. */
 	MM_BUFFER_EMBEDDED = 2,
-} mm_buffer_segment_t;
+	/* Terminal segment (the last one in a chunk). */
+	MM_BUFFER_TERMINAL = 4,
+} mm_buffer_flags_t;
 
 /* Abstract buffer segment. */
 struct mm_buffer_segment
@@ -88,7 +88,7 @@ struct mm_buffer_xsegment
 	/* The occupied space in the segment. */
 	uint32_t used;
 	/* The external data block size. */
-	uint32_t size;
+	uint32_t room;
 	/* The external data block. */
 	char *data;
 
@@ -106,8 +106,6 @@ struct mm_buffer_iterator
 	char *end;
 	/* The current segment. */
 	struct mm_buffer_segment *seg;
-	/* The sentinel pointer. */
-	struct mm_buffer_segment *sen;
 	/* The current chunk. */
 	struct mm_chunk *chunk;
 };
@@ -122,9 +120,7 @@ struct mm_buffer
 	/* Entire buffer memory as a list of chunks. */
 	struct mm_queue chunks;
 	/* The minimum chunk size. */
-	uint32_t min_chunk_size;
-	/* The maximum consumed size. */
-	size_t consumed_max;
+	uint32_t chunk_size;
 };
 
 /* Buffer read position. */
@@ -158,43 +154,55 @@ mm_buffer_round_room(uint32_t size)
  * Buffer segments.
  **********************************************************************/
 
-static inline mm_buffer_segment_t NONNULL(1)
-mm_buffer_segment_gettype(const struct mm_buffer_segment *seg)
+static inline bool NONNULL(1)
+mm_buffer_segment_external(const struct mm_buffer_segment *seg)
 {
-	return (seg->meta & MM_BUFFER_SEGMENT_TYPE);
+	return (seg->meta & MM_BUFFER_EXTERNAL) != 0;
 }
 
 static inline bool NONNULL(1)
-mm_buffer_segment_ignored(const struct mm_buffer_segment *seg)
+mm_buffer_segment_embedded(const struct mm_buffer_segment *seg)
 {
-	return (mm_buffer_segment_gettype(seg) == MM_BUFFER_EMBEDDED);
+	return (seg->meta & MM_BUFFER_EMBEDDED) != 0;
 }
 
-static inline uint32_t NONNULL(1)
-mm_buffer_segment_getarea(const struct mm_buffer_segment *seg)
+static inline bool NONNULL(1)
+mm_buffer_segment_terminal(const struct mm_buffer_segment *seg)
 {
-	return (seg->meta & ~MM_BUFFER_SEGMENT_TYPE);
+	return (seg->meta & MM_BUFFER_TERMINAL) != 0;
 }
 
+/* The size a segment occupies in a buffer chunk. Includes the header size,
+   the data size, and perhaps some padding for alignment. But for external
+   segments the data is stored separately so its size is not included. */
 static inline uint32_t NONNULL(1)
-mm_buffer_segment_getsize(const struct mm_buffer_segment *seg)
+mm_buffer_segment_area(const struct mm_buffer_segment *seg)
 {
-	if (mm_buffer_segment_gettype(seg) == MM_BUFFER_EXTERNAL)
-		return ((struct mm_buffer_xsegment *) seg)->size;
+	return (seg->meta & ~MM_BUFFER_SEGMENT_MASK);
+}
+
+/* The size available for data storage in a segment. */
+static inline uint32_t NONNULL(1)
+mm_buffer_segment_room(const struct mm_buffer_segment *seg)
+{
+	if (mm_buffer_segment_external(seg))
+		return ((struct mm_buffer_xsegment *) seg)->room;
 	else
-		return mm_buffer_segment_getarea(seg) - MM_BUFFER_SEGMENT_SIZE;
+		return mm_buffer_segment_area(seg) - MM_BUFFER_SEGMENT_SIZE;
 }
 
+/* The size occupied by data in a segment. */
 static inline uint32_t NONNULL(1)
-mm_buffer_segment_getused(const struct mm_buffer_segment *seg)
+mm_buffer_segment_size(const struct mm_buffer_segment *seg)
 {
 	return seg->used;
 }
 
+/* The address of data in a segment. */
 static inline char * NONNULL(1)
-mm_buffer_segment_getdata(struct mm_buffer_segment *seg)
+mm_buffer_segment_data(struct mm_buffer_segment *seg)
 {
-	if (mm_buffer_segment_gettype(seg) == MM_BUFFER_EXTERNAL)
+	if (mm_buffer_segment_external(seg))
 		return ((struct mm_buffer_xsegment *) seg)->data;
 	else
 		return ((struct mm_buffer_isegment *) seg)->data;
@@ -203,7 +211,7 @@ mm_buffer_segment_getdata(struct mm_buffer_segment *seg)
 static inline void NONNULL(1)
 mm_buffer_segment_release(struct mm_buffer_segment *seg)
 {
-	if (mm_buffer_segment_gettype(seg) == MM_BUFFER_EXTERNAL) {
+	if (mm_buffer_segment_external(seg)) {
 		struct mm_buffer_xsegment *xseg = (struct mm_buffer_xsegment *) seg;
 		if (xseg->release != NULL)
 			(*xseg->release)(xseg->release_data);
@@ -215,7 +223,7 @@ mm_buffer_segment_release(struct mm_buffer_segment *seg)
  **********************************************************************/
 
 static inline uint32_t NONNULL(1)
-mm_buffer_chunk_getsize(const struct mm_chunk *chunk)
+mm_buffer_chunk_size(const struct mm_chunk *chunk)
 {
 	return mm_buffer_round_room(mm_chunk_getsize(chunk));
 }
@@ -227,16 +235,9 @@ mm_buffer_chunk_begin(struct mm_chunk *chunk)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_chunk_end(struct mm_chunk *chunk)
-{
-	uint32_t size = mm_buffer_chunk_getsize(chunk);
-	return (struct mm_buffer_segment *) (chunk->data + size);
-}
-
-static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_chunk_next(struct mm_buffer_segment *seg)
 {
-	uint32_t area = mm_buffer_segment_getarea(seg);
+	uint32_t area = mm_buffer_segment_area(seg);
 	return (struct mm_buffer_segment *) (((char *) seg) + area);
 }
 
@@ -248,8 +249,9 @@ static inline void NONNULL(1)
 mm_buffer_iterator_prepare(struct mm_buffer_iterator *iter)
 {
 	iter->chunk = NULL;
-	iter->seg = iter->sen = NULL;
-	iter->ptr = iter->end = NULL;
+	iter->ptr = NULL;
+	iter->end = NULL;
+	iter->seg = NULL;
 }
 
 static inline struct mm_buffer_segment * NONNULL(1, 2)
@@ -257,7 +259,6 @@ mm_buffer_iterator_chunk_start(struct mm_buffer_iterator *iter, struct mm_chunk 
 {
 	iter->chunk = chunk;
 	iter->seg = mm_buffer_chunk_begin(chunk);
-	iter->sen = mm_buffer_chunk_end(chunk);
 	return iter->seg;
 }
 
@@ -276,8 +277,8 @@ mm_buffer_iterator_begin(struct mm_buffer_iterator *iter, struct mm_buffer *buf)
 static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_iterator_next(struct mm_buffer_iterator *iter)
 {
-	struct mm_buffer_segment *seg = mm_buffer_chunk_next(iter->seg);
-	if (seg != iter->sen) {
+	if (!mm_buffer_segment_terminal(iter->seg)) {
+		struct mm_buffer_segment *seg = mm_buffer_chunk_next(iter->seg);
 		iter->seg = seg;
 		return seg;
 	}
@@ -291,7 +292,7 @@ mm_buffer_iterator_next_check(struct mm_buffer_iterator *iter)
 {
 	if (iter->seg == NULL)
 		return false;
-	if (mm_buffer_chunk_next(iter->seg) != iter->sen)
+	if (!mm_buffer_segment_terminal(iter->seg))
 		return true;
 	return mm_chunk_queue_next(iter->chunk) != NULL;
 }
@@ -299,26 +300,26 @@ mm_buffer_iterator_next_check(struct mm_buffer_iterator *iter)
 static inline void NONNULL(1)
 mm_buffer_iterator_read_reset(struct mm_buffer_iterator *iter)
 {
-	iter->end = mm_buffer_segment_getdata(iter->seg) + mm_buffer_segment_getused(iter->seg);
+	iter->end = mm_buffer_segment_data(iter->seg) + mm_buffer_segment_size(iter->seg);
 }
 
 static inline void NONNULL(1)
 mm_buffer_iterator_write_reset(struct mm_buffer_iterator *iter)
 {
-	iter->end = mm_buffer_segment_getdata(iter->seg) + mm_buffer_segment_getsize(iter->seg);
+	iter->end = mm_buffer_segment_data(iter->seg) + mm_buffer_segment_room(iter->seg);
 }
 
 static inline void NONNULL(1)
 mm_buffer_iterator_read_start(struct mm_buffer_iterator *iter)
 {
-	iter->ptr = mm_buffer_segment_getdata(iter->seg);
+	iter->ptr = mm_buffer_segment_data(iter->seg);
 	mm_buffer_iterator_read_reset(iter);
 }
 
 static inline void NONNULL(1)
 mm_buffer_iterator_write_start(struct mm_buffer_iterator *iter)
 {
-	iter->ptr = mm_buffer_segment_getdata(iter->seg);
+	iter->ptr = mm_buffer_segment_data(iter->seg);
 	mm_buffer_iterator_write_reset(iter);
 }
 
@@ -330,7 +331,7 @@ mm_buffer_iterator_filter_next(struct mm_buffer_iterator *iter)
 		/* An embedded segment cannot be the last one in
 		   a buffer so if one is found then there should
 		   be another one after it. */
-		while (mm_buffer_segment_ignored(seg)) {
+		while (mm_buffer_segment_embedded(seg)) {
 			seg = mm_buffer_iterator_next(iter);
 			ASSERT(seg != NULL);
 		}
@@ -386,7 +387,7 @@ void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
 
 void NONNULL(1)
-mm_buffer_setminchunksize(struct mm_buffer *buf, size_t size);
+mm_buffer_set_chunk_size(struct mm_buffer *buf, size_t size);
 
 struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_iterator *iter, size_t size_hint);
@@ -395,7 +396,7 @@ size_t NONNULL(1, 2)
 mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_position *pos);
 
 void NONNULL(1)
-mm_buffer_rectify(struct mm_buffer *buf);
+mm_buffer_compact(struct mm_buffer *buf);
 
 static inline bool NONNULL(1)
 mm_buffer_valid(struct mm_buffer *buf)
@@ -429,13 +430,7 @@ mm_buffer_write_next(struct mm_buffer *buf, size_t size_hint)
 }
 
 size_t NONNULL(1)
-mm_buffer_getsize(struct mm_buffer *buf);
-
-size_t NONNULL(1)
-mm_buffer_getarea(struct mm_buffer *buf);
-
-size_t NONNULL(1)
-mm_buffer_getleft(struct mm_buffer *buf);
+mm_buffer_size(struct mm_buffer *buf);
 
 size_t NONNULL(1)
 mm_buffer_fill(struct mm_buffer *buf, size_t cnt);
@@ -479,7 +474,6 @@ mm_buffer_position_restore(struct mm_buffer_position *pos, struct mm_buffer *buf
 {
 	buf->head.chunk = pos->chunk;
 	buf->head.seg = pos->seg;
-	buf->head.sen = mm_buffer_chunk_end(pos->chunk);
 	buf->head.ptr = pos->ptr;
 	mm_buffer_update(buf);
 }
