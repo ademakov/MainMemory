@@ -79,7 +79,7 @@ mc_reader_routine(struct mm_net_socket *sock)
 	// least 1024 bytes of look-ahead space for each command. Make the
 	// initial size more than that to parse a series of pipelined short
 	// commands without buffer reallocation.
-	mm_netbuf_prepare_read_buffer(&state->sock, 2000);
+	mm_netbuf_ensure_read_buffer(&state->sock, 2000);
 
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);

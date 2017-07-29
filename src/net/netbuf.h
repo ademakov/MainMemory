@@ -42,20 +42,20 @@ void NONNULL(1)
 mm_netbuf_cleanup(struct mm_netbuf_socket *sock);
 
 static inline void NONNULL(1)
-mm_netbuf_prepare_read_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
+mm_netbuf_ensure_read_buffer(struct mm_netbuf_socket *sock, size_t size)
 {
 	if (!mm_buffer_valid(&sock->rxbuf)) {
-		mm_buffer_set_chunk_size(&sock->rxbuf, size_hint);
-		mm_buffer_extend(&sock->rxbuf, &sock->rxbuf.tail, size_hint);
+		mm_buffer_set_chunk_size(&sock->rxbuf, size);
+		mm_buffer_extend(&sock->rxbuf, &sock->rxbuf.tail, size);
 	}
 }
 
 static inline void NONNULL(1)
-mm_netbuf_prepare_write_buffer(struct mm_netbuf_socket *sock, size_t size_hint)
+mm_netbuf_ensure_write_buffer(struct mm_netbuf_socket *sock, size_t size)
 {
 	if (!mm_buffer_valid(&sock->txbuf)) {
-		mm_buffer_set_chunk_size(&sock->txbuf, size_hint);
-		mm_buffer_extend(&sock->txbuf, &sock->txbuf.tail, size_hint);
+		mm_buffer_set_chunk_size(&sock->txbuf, size);
+		mm_buffer_extend(&sock->txbuf, &sock->txbuf.tail, size);
 	}
 }
 
