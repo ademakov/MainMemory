@@ -24,10 +24,10 @@
 #define MM_NETBUF_MAXIOV	64
 
 void NONNULL(1)
-mm_netbuf_prepare(struct mm_netbuf_socket *sock)
+mm_netbuf_prepare(struct mm_netbuf_socket *sock, size_t rx_chunk_size, size_t tx_chunk_size)
 {
-	mm_buffer_prepare(&sock->rxbuf);
-	mm_buffer_prepare(&sock->txbuf);
+	mm_buffer_prepare(&sock->rxbuf, rx_chunk_size);
+	mm_buffer_prepare(&sock->txbuf, tx_chunk_size);
 }
 
 void NONNULL(1)
@@ -37,59 +37,69 @@ mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
 	mm_buffer_cleanup(&sock->txbuf);
 }
 
+static __attribute__((noinline)) ssize_t
+mm_netbuf_fill_iov(struct mm_netbuf_socket *sock, size_t size, struct mm_buffer *buf, uint32_t n, char *p)
+{
+	struct iovec iov[MM_NETBUF_MAXIOV];
+	iov[0].iov_len = n;
+	iov[0].iov_base = p;
+
+	int iovcnt = 1;
+	size_t room = n;
+	struct mm_buffer_writer iter = buf->tail;
+	do {
+		n = mm_buffer_write_more(buf, &iter, size - room);
+		p = mm_buffer_write_ptr(buf);
+
+		room += n;
+		iov[iovcnt].iov_len = n;
+		iov[iovcnt].iov_base = p;
+		++iovcnt;
+
+	} while ((room < size) && (iovcnt < MM_NETBUF_MAXIOV));
+
+	return mm_net_readv(&sock->sock, iov, iovcnt, room);
+}
+
 ssize_t NONNULL(1)
-mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t cnt)
+mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t size)
 {
 	ENTER();
 	ssize_t rc;
-
 	struct mm_buffer *buf = &sock->rxbuf;
-	char *ptr = buf->tail.ptr;
-	size_t len = buf->tail.end - ptr;
-	while (len == 0 && mm_buffer_iterator_next_check(&buf->tail)) {
-		mm_buffer_iterator_write_next_unsafe(&buf->tail);
-		ptr = buf->tail.ptr;
-		len = buf->tail.end - ptr;
-	}
 
-	if (len >= cnt) {
-		rc = mm_net_read(&sock->sock, ptr, len);
+	// Ensure that at least one buffer segment is present.
+	uint32_t n = mm_buffer_write_start(buf, size);
+	char *p = mm_buffer_write_ptr(buf);
+
+	if (n >= size) {
+		// Try to read using the current segment.
+		rc = mm_net_read(&sock->sock, p, n);
+
+		// On success bump the occupied data size.
+		if (rc > 0)
+			buf->tail.seg->size += rc;
 	} else {
-		int iovcnt = 0;
-		struct iovec iov[MM_NETBUF_MAXIOV];
-		size_t nbytes = len;
-		if (len) {
-			iovcnt = 1;
-			iov[0].iov_len = len;
-			iov[0].iov_base = ptr;
-		}
+		// Try to read using multiple segments.
+		rc = mm_netbuf_fill_iov(sock, size, buf, n, p);
 
-		struct mm_buffer_iterator iter = buf->tail;
-		do {
-			if (!mm_buffer_iterator_write_next(&iter)) {
-				mm_buffer_extend(buf, &iter, cnt - nbytes);
-				iter = buf->tail;
+		// On success mark the segments occupied by data.
+		if (rc > 0) {
+			size_t u = rc;
+			for (;;) {
+				uint32_t s = mm_buffer_writer_size(&buf->tail);
+				if (u <= s) {
+					buf->tail.seg->size += u;
+					break;
+				}
+
+				buf->tail.seg->size += s;
+				u -= s;
+
+				VERIFY(mm_buffer_writer_next(&buf->tail));
 			}
-
-			ptr = iter.ptr;
-			len = iter.end - ptr;
-
-			nbytes += len;
-			iov[iovcnt].iov_len = len;
-			iov[iovcnt].iov_base = ptr;
-			if (unlikely(++iovcnt == MM_NETBUF_MAXIOV))
-				break;
-
-		} while (unlikely(nbytes < cnt));
-
-		if (nbytes)
-			rc = mm_net_readv(&sock->sock, iov, iovcnt, nbytes);
-		else
-			rc = 0;
+		}
 	}
-
-	if (rc > 0)
-		mm_buffer_fill(buf, rc);
 
 	DEBUG("rc: %ld", (long) rc);
 	LEAVE();
@@ -101,17 +111,22 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 {
 	ENTER();
 	ssize_t rc;
-
 	struct mm_buffer *buf = &sock->txbuf;
-	char *ptr = buf->head.ptr;
-	size_t len = buf->head.end - ptr;
-	while (len == 0 && mm_buffer_iterator_next_check(&buf->head)) {
-		mm_buffer_iterator_read_next_unsafe(&buf->head);
-		ptr = buf->head.ptr;
-		len = buf->head.end - ptr;
+
+	if (!mm_buffer_valid(buf)) {
+		rc = 0;
+		goto leave;
 	}
 
-	if (!mm_buffer_iterator_next_check(&buf->head)) {
+	char *ptr = mm_buffer_reader_ptr(&buf->head);
+	size_t len = mm_buffer_reader_end(&buf->head) - ptr;
+	while (len == 0 && mm_buffer_reader_next_check(&buf->head)) {
+		mm_buffer_reader_try_next_unsafe(&buf->head);
+		ptr = mm_buffer_reader_ptr(&buf->head);
+		len = mm_buffer_reader_end(&buf->head) - ptr;
+	}
+
+	if (!mm_buffer_reader_next_check(&buf->head)) {
 		rc = mm_net_write(&sock->sock, ptr, len);
 	} else {
 		int iovcnt = 0;
@@ -123,11 +138,10 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 			iov[0].iov_base = ptr;
 		}
 
-		struct mm_buffer_iterator iter = buf->head;
-		while (mm_buffer_iterator_read_next(&iter)) {
-
-			ptr = iter.ptr;
-			len = iter.end - ptr;
+		struct mm_buffer_reader iter = buf->head;
+		while (mm_buffer_reader_try_next(&iter)) {
+			ptr = mm_buffer_reader_ptr(&iter);
+			len = mm_buffer_reader_end(&iter) - ptr;
 
 			nbytes += len;
 			iov[iovcnt].iov_len = len;
@@ -145,21 +159,10 @@ mm_netbuf_flush(struct mm_netbuf_socket *sock)
 	if (rc > 0)
 		mm_buffer_flush(buf, rc);
 
+leave:
 	DEBUG("rc: %ld", (long) rc);
 	LEAVE();
 	return rc;
-}
-
-ssize_t NONNULL(1, 2)
-mm_netbuf_read(struct mm_netbuf_socket *sock, void *buffer, size_t nbytes)
-{
-	return mm_buffer_read(&sock->rxbuf, buffer, nbytes);
-}
-
-ssize_t NONNULL(1, 2)
-mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
-{
-	return mm_buffer_write(&sock->txbuf, data, size);
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)

@@ -34,11 +34,11 @@ mc_parser_scan_lf(struct mc_state *state, char *s)
 {
 	bool rc = false;
 	struct mm_buffer *buf = &state->sock.rxbuf;
-	if ((s + 1) < buf->head.end) {
-		rc = (*(s + 1) == '\n');
+	if ((s + 1) < mm_buffer_reader_end(&buf->head)) {
+		rc = *(s + 1) == '\n';
 	} else {
-		struct mm_buffer_iterator iter = buf->head;
-		if (mm_buffer_iterator_read_next_unsafe(&iter) && iter.ptr < iter.end)
+		struct mm_buffer_reader iter = buf->head;
+		if (mm_buffer_reader_try_next_unsafe(&iter) && iter.ptr < mm_buffer_reader_end(&iter))
 			rc = *iter.ptr == '\n';
 	}
 	DEBUG("nl=%d", rc);
@@ -74,10 +74,13 @@ mc_parser_scan_value(struct mc_state *state)
 		char *value = mc_entry_getvalue(entry);
 		mm_netbuf_read(&state->sock, value, action->value_len);
 	} else {
-		struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
-		if (unlikely(iter->ptr == iter->end))
+		struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
+		char *end = mm_buffer_reader_end(iter);
+		if (unlikely(iter->ptr == end)) {
 			mm_netbuf_read_next(&state->sock);
-		if (iter->ptr + action->value_len <= iter->end) {
+			end = mm_buffer_reader_end(iter);
+		}
+		if (iter->ptr + action->value_len <= end) {
 			action->alter_value = iter->ptr;
 			iter->ptr += action->value_len;
 		} else {

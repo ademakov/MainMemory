@@ -34,7 +34,10 @@ mc_state_create(void)
 	state->error = false;
 	state->trash = false;
 
-	mm_netbuf_prepare(&state->sock);
+	// The ascii parser wants 1024 bytes of look-ahead space for each
+	// command. Make the initial size more than that to parse a series
+	// of pipelined short commands without buffer reallocation.
+	mm_netbuf_prepare(&state->sock, 2000, 0);
 
 	LEAVE();
 	return &state->sock.sock;

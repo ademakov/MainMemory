@@ -133,7 +133,7 @@ static struct mm_net_socket *
 proxy_create(void)
 {
 	struct client_conn *client = mm_regular_alloc(sizeof(struct client_conn));
-	mm_netbuf_prepare(&client->sock);
+	mm_netbuf_prepare(&client->sock, 0, 0);
 	mm_list_prepare(&client->commands);
 	return &client->sock.sock;
 }

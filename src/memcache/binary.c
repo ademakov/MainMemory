@@ -116,12 +116,15 @@ mc_binary_set_key(struct mc_state *state, uint32_t key_len)
 {
 	struct mc_command *command = state->command;
 
-	struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
-	if (unlikely(iter->ptr == iter->end))
+	struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
+	char *end = mm_buffer_reader_end(iter);
+	if (unlikely(iter->ptr == end)) {
 		mm_netbuf_read_next(&state->sock);
+		end = mm_buffer_reader_end(iter);
+	}
 
 	char *key;
-	if (iter->ptr + key_len <= iter->end) {
+	if (iter->ptr + key_len <= end) {
 		key = iter->ptr;
 		iter->ptr += key_len;
 	} else {
@@ -194,10 +197,13 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 	command->action.value_len = value_len;
 
 	// Read the value.
-	struct mm_buffer_iterator *iter = &state->sock.rxbuf.head;
-	if (unlikely(iter->ptr == iter->end))
+	struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
+	char *end = mm_buffer_reader_end(iter);
+	if (unlikely(iter->ptr == end)) {
 		mm_netbuf_read_next(&state->sock);
-	if (iter->ptr + value_len <= iter->end) {
+		end = mm_buffer_reader_end(iter);
+	}
+	if (iter->ptr + value_len <= end) {
 		command->action.alter_value = iter->ptr;
 		iter->ptr += value_len;
 	} else {
