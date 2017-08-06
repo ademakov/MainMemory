@@ -40,15 +40,17 @@ mm_netbuf_cleanup(struct mm_netbuf_socket *sock)
 static __attribute__((noinline)) ssize_t
 mm_netbuf_fill_iov(struct mm_netbuf_socket *sock, size_t size, struct mm_buffer *buf, uint32_t n, char *p)
 {
+	// Save the current tail position.
+	struct mm_buffer_writer save_tail = buf->tail;
+
+	// Extend buffer as necessary and build iov.
+	int iovcnt = 1;
+	size_t room = n;
 	struct iovec iov[MM_NETBUF_MAXIOV];
 	iov[0].iov_len = n;
 	iov[0].iov_base = p;
-
-	int iovcnt = 1;
-	size_t room = n;
-	struct mm_buffer_writer iter = buf->tail;
 	do {
-		n = mm_buffer_write_more(buf, &iter, size - room);
+		n = mm_buffer_write_more(buf, size - room);
 		p = mm_buffer_write_ptr(buf);
 
 		room += n;
@@ -58,6 +60,10 @@ mm_netbuf_fill_iov(struct mm_netbuf_socket *sock, size_t size, struct mm_buffer 
 
 	} while ((room < size) && (iovcnt < MM_NETBUF_MAXIOV));
 
+	// Restore the tail position.
+	buf->tail = save_tail;
+
+	// Perform read operation.
 	return mm_net_readv(&sock->sock, iov, iovcnt, room);
 }
 
@@ -85,19 +91,16 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t size)
 
 		// On success mark the segments occupied by data.
 		if (rc > 0) {
-			size_t u = rc;
-			for (;;) {
-				uint32_t s = mm_buffer_writer_size(&buf->tail);
-				if (u <= s) {
-					buf->tail.seg->size += u;
-					break;
-				}
-
-				buf->tail.seg->size += s;
-				u -= s;
+			size = rc;
+			n = mm_buffer_writer_size(&buf->tail);
+			while (n < size) {
+				buf->tail.seg->size += n;
+				size -= n;
 
 				VERIFY(mm_buffer_writer_next(&buf->tail));
+				n = mm_buffer_segment_internal_room(buf->tail.seg);
 			}
+			buf->tail.seg->size += size;
 		}
 	}
 

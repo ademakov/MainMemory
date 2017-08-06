@@ -366,13 +366,6 @@ mm_buffer_reader_end(struct mm_buffer_reader *iter)
  * no point to use embedded-filter logic here.
  */
 
-static inline void NONNULL(1, 2)
-mm_buffer_writer_begin(struct mm_buffer_writer *iter, struct mm_chunk *chunk)
-{
-	iter->chunk = chunk;
-	iter->seg = mm_buffer_segment_first(chunk);
-}
-
 static inline bool NONNULL(1)
 mm_buffer_writer_next(struct mm_buffer_writer *iter)
 {
@@ -380,7 +373,8 @@ mm_buffer_writer_next(struct mm_buffer_writer *iter)
 		struct mm_chunk *chunk = mm_chunk_queue_next(iter->chunk);
 		if (chunk == NULL)
 			return false;
-		mm_buffer_writer_begin(iter, chunk);
+		iter->chunk = chunk;
+		iter->seg = mm_buffer_segment_first(chunk);
 		return true;
 	}
 	iter->seg = mm_buffer_segment_next(iter->seg);
@@ -421,8 +415,8 @@ mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size);
 void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
 
-struct mm_buffer_segment * NONNULL(1, 2)
-mm_buffer_extend(struct mm_buffer *buf, struct mm_buffer_writer *iter, size_t size);
+struct mm_buffer_segment * NONNULL(1)
+mm_buffer_extend(struct mm_buffer *buf, size_t size);
 
 size_t NONNULL(1, 2)
 mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos);
@@ -480,12 +474,12 @@ mm_buffer_embed(struct mm_buffer *buf, uint32_t size);
  **********************************************************************/
 
 /* Advance to a next write segment. */
-static inline uint32_t NONNULL(1, 2)
-mm_buffer_write_more(struct mm_buffer *buf, struct mm_buffer_writer *iter, size_t size_hint)
+static inline uint32_t NONNULL(1)
+mm_buffer_write_more(struct mm_buffer *buf, size_t size_hint)
 {
-	if (!mm_buffer_writer_next(iter))
-		mm_buffer_extend(buf, iter, size_hint);
-	return mm_buffer_segment_internal_room(iter->seg);
+	if (!mm_buffer_writer_next(&buf->tail))
+		mm_buffer_extend(buf, size_hint);
+	return mm_buffer_segment_internal_room(buf->tail.seg);
 }
 
 /* Make sure there is a viable write segment. */
@@ -494,9 +488,9 @@ mm_buffer_write_start(struct mm_buffer *buf, size_t size_hint)
 {
 	if (mm_buffer_valid(buf)) {
 		uint32_t size = mm_buffer_writer_size(&buf->tail);
-		return size ? size : mm_buffer_write_more(buf, &buf->tail, size_hint);
+		return size ? size : mm_buffer_write_more(buf, size_hint);
 	} else {
-		mm_buffer_extend(buf, &buf->tail, size_hint);
+		mm_buffer_extend(buf, size_hint);
 		return mm_buffer_segment_internal_room(buf->tail.seg);
 	}
 }
