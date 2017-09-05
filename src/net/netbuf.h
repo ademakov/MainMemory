@@ -74,19 +74,19 @@ mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
 static inline void NONNULL(1, 2)
 mm_netbuf_save_position(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
 {
-	mm_buffer_position_save(pos, &sock->rxbuf);
+	mm_buffer_reader_save(pos, &sock->rxbuf);
 }
 
 static inline void NONNULL(1, 2)
 mm_netbuf_restore_position(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
 {
-	mm_buffer_position_save(pos, &sock->rxbuf);
+	mm_buffer_reader_restore(pos, &sock->rxbuf);
 }
 
 static inline bool NONNULL(1)
 mm_netbuf_read_next(struct mm_netbuf_socket *sock)
 {
-	return mm_buffer_read_next(&sock->rxbuf);
+	return mm_buffer_reader_next(&sock->rxbuf.head, &sock->rxbuf);
 }
 
 static inline void NONNULL(1)
@@ -104,7 +104,7 @@ mm_netbuf_write_reset(struct mm_netbuf_socket *sock)
 static inline ssize_t NONNULL(1)
 mm_netbuf_reduce(struct mm_netbuf_socket *sock, size_t size)
 {
-	return mm_buffer_flush(&sock->rxbuf, size);
+	return mm_buffer_skip(&sock->rxbuf, size);
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)
@@ -151,7 +151,7 @@ mm_netbuf_find(struct mm_netbuf_socket *sock, int c, size_t *poffset)
 static inline char * NONNULL(1)
 mm_netbuf_rget(struct mm_netbuf_socket *sock)
 {
-	return sock->rxbuf.head.ptr;
+	return mm_buffer_reader_ptr(&sock->rxbuf.head);
 }
 
 /* Get the current contiguous read span end. */

@@ -30,16 +30,16 @@
 
 
 static bool
-mc_parser_scan_lf(struct mc_state *state, char *s)
+mc_parser_scan_lf(struct mc_state *state, const char *s, const char *e)
 {
 	bool rc = false;
-	struct mm_buffer *buf = &state->sock.rxbuf;
-	if ((s + 1) < mm_buffer_reader_end(&buf->head)) {
+	if ((s + 1) < e) {
 		rc = *(s + 1) == '\n';
 	} else {
-		struct mm_buffer_reader iter = buf->head;
-		if (mm_buffer_reader_try_next_unsafe(&iter) && iter.ptr < mm_buffer_reader_end(&iter))
-			rc = *iter.ptr == '\n';
+		struct mm_buffer *buf = &state->sock.rxbuf;
+		struct mm_buffer_reader reader = buf->head;
+		if (mm_buffer_reader_next(&reader, buf) && reader.ptr < mm_buffer_reader_end(&reader))
+			rc = *reader.ptr == '\n';
 	}
 	DEBUG("nl=%d", rc);
 	return rc;
@@ -74,12 +74,13 @@ mc_parser_scan_value(struct mc_state *state)
 		char *value = mc_entry_getvalue(entry);
 		mm_netbuf_read(&state->sock, value, action->value_len);
 	} else {
-		struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
-		char *end = mm_buffer_reader_end(iter);
-		if (unlikely(iter->ptr == end)) {
+		char *end = mm_netbuf_rend(&state->sock);
+		if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
 			mm_netbuf_read_next(&state->sock);
-			end = mm_buffer_reader_end(iter);
+			end = mm_netbuf_rend(&state->sock);
 		}
+
+		struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
 		if (iter->ptr + action->value_len <= end) {
 			action->alter_value = iter->ptr;
 			iter->ptr += action->value_len;
@@ -385,7 +386,7 @@ again:
 
 		case S_KEY:
 			ASSERT(c != ' ');
-			if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s)) || unlikely(c == '\n')) {
+			if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s, e)) || unlikely(c == '\n')) {
 				DEBUG("missing key");
 				state = S_ERROR;
 				goto again;
@@ -406,7 +407,7 @@ again:
 					command->action.key_len = len;
 				}
 				break;
-			} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
+			} else if ((c == '\r' && mc_parser_scan_lf(parser, s, e)) || c == '\n') {
 				size_t len = s - command->action.key;
 				if (len > MC_KEY_LEN_MAX) {
 					DEBUG("too long key");
@@ -426,7 +427,7 @@ again:
 				state = S_SPACE;
 				command->action.key_len = MC_KEY_LEN_MAX;
 				break;
-			} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
+			} else if ((c == '\r' && mc_parser_scan_lf(parser, s, e)) || c == '\n') {
 				state = shift;
 				command->action.key_len = MC_KEY_LEN_MAX;
 				goto again;
@@ -440,7 +441,7 @@ again:
 			if (c == ' ') {
 				state = S_SPACE;
 				break;
-			} else if ((c == '\r' && mc_parser_scan_lf(parser, s)) || c == '\n') {
+			} else if ((c == '\r' && mc_parser_scan_lf(parser, s, e)) || c == '\n') {
 				state = shift;
 				goto again;
 			} else {
