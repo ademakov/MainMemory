@@ -295,7 +295,7 @@ mm_fiber_create_boot(void)
 	// Prepare the bootstrap fiber attributes.
 	struct mm_fiber_attr attr;
 	mm_fiber_attr_init(&attr);
-	mm_fiber_attr_setflags(&attr, MM_FIBER_BOOT | MM_FIBER_CANCEL_DISABLE);
+	mm_fiber_attr_setflags(&attr, MM_FIBER_CANCEL_DISABLE);
 	mm_fiber_attr_setpriority(&attr, MM_PRIO_BOOT);
 	mm_fiber_attr_setname(&attr, "boot");
 

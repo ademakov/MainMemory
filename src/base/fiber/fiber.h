@@ -65,23 +65,23 @@ typedef enum {
  * Fiber flags.
  */
 /* Flags for cancellation handling. */
-#define MM_FIBER_CANCEL_ENABLE		0x0000
-#define MM_FIBER_CANCEL_DISABLE		0x0001
-#define MM_FIBER_CANCEL_DEFERRED	0x0000
-#define MM_FIBER_CANCEL_REQUIRED	0x0002
-#define MM_FIBER_CANCEL_OCCURRED	0x0004
+#define MM_FIBER_CANCEL_ENABLE		0x00
+#define MM_FIBER_CANCEL_DISABLE		0x01
+#define MM_FIBER_CANCEL_DEFERRED		0x00
+#define MM_FIBER_CANCEL_REQUIRED		0x02
+#define MM_FIBER_CANCEL_OCCURRED		0x04
+/* Not currently used flag. */
+#define MM_FIBER_RESERVED_FLAG		0x08
 /* Flags for fibers blocked for various reasons. */
 #if ENABLE_FIBER_IO_FLAGS
-#define MM_FIBER_READING		0x0010
-#define MM_FIBER_WRITING		0x0020
+#define MM_FIBER_READING			0x10
+#define MM_FIBER_WRITING			0x20
 #endif
-#define MM_FIBER_WAITING		0x0040
-#define MM_FIBER_COMBINING		0x0080
-/* The fiber is a bootstrap fiber. */
-#define MM_FIBER_BOOT			0x8000
+#define MM_FIBER_WAITING			0x40
+#define MM_FIBER_COMBINING		0x80
 
 /* Fiber flags type. */
-typedef uint16_t mm_fiber_flags_t;
+typedef uint8_t mm_fiber_flags_t;
 
 /* Fiber creation attributes. */
 struct mm_fiber_attr
