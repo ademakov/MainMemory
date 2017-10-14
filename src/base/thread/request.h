@@ -24,13 +24,8 @@
 #include "base/report.h"
 #include "base/ring.h"
 
-/* Forward declarations. */
-struct mm_request_sender;
-
 /* The maximum number of arguments for post requests. */
 #define MM_POST_MAX		(MM_RING_MPMC_DATA_SIZE - 1)
-/* The maximum number of arguments for send requests. */
-#define MM_SEND_MAX		(MM_RING_MPMC_DATA_SIZE - 2)
 
 /**********************************************************************
  * Request construction.
@@ -40,11 +35,6 @@ struct mm_request_sender;
 #define MM_POST_ARGC(c) 	((c) + 1)
 /* Define ring data for a post request together with its arguments. */
 #define MM_POST_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) __VA_ARGS__ }
-
-/* The size of ring data for a given number of send arguments. */
-#define MM_SEND_ARGC(c)		((c) + 2)
-/* Define ring data for a send request together with its arguments. */
-#define MM_SEND_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) mm_request_handler, (uintptr_t) __VA_ARGS__ }
 
 /* Post a request to a cross-thread request ring. */
 #define MM_POST(n, ring, notify, target, ...)				\
@@ -66,41 +56,8 @@ struct mm_request_sender;
 		return rc;						\
 	} while (0)
 
-/* Send a request (with response) to a cross-thread request ring. */
-#define MM_SEND(n, ring, notify, target, ...)				\
-	do {								\
-		mm_stamp_t s;						\
-		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_SEND_ARGC(n));	\
-		notify(target, s);					\
-	} while (0)
-
-/* Try to send a request (with response) to a cross-thread request ring. */
-#define MM_TRYSEND(n, ring, notify, target, ...)			\
-	do {								\
-		bool rc;						\
-		mm_stamp_t s;						\
-		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_SEND_ARGC(n));	\
-		if (rc)	{ notify(target, s); }				\
-		return rc;						\
-	} while (0)
-
 /* Request routines. */
 typedef void (*mm_post_routine_t)(uintptr_t arguments[MM_POST_MAX]);
-typedef uintptr_t (*mm_request_routine_t)(uintptr_t arguments[MM_SEND_MAX]);
-
-/* Response routine. */
-typedef void (*mm_response_routine_t)(struct mm_request_sender *sender, uintptr_t result);
-
-/* The request maker identity. To be used with containerof() macro. */
-struct mm_request_sender {
-	mm_request_routine_t request;
-	mm_response_routine_t response;
-};
-
-void
-mm_request_handler(uintptr_t *arguments);
 
 /**********************************************************************
  * Request fetching and execution.
