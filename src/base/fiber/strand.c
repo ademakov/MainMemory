@@ -163,7 +163,7 @@ mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work)
 		mm_strand_add_work(strand, work);
 	} else {
 		// Submit the work item to the thread request queue.
-		mm_thread_post_1(strand->thread, mm_strand_add_work_req, (uintptr_t) work);
+		mm_thread_post_1(strand->listener, mm_strand_add_work_req, (uintptr_t) work);
 	}
 #else
 	mm_strand_add_work(strand, work);
@@ -177,12 +177,12 @@ mm_strand_tender_work(struct mm_work *work)
 {
 	ENTER();
 
+	struct mm_strand *strand = mm_strand_selfptr();
 #if ENABLE_SMP
 	// Submit the work item to the domain request queue.
-	struct mm_domain *domain = mm_domain_selfptr();
-	mm_domain_post_1(domain, mm_strand_add_work_req, (uintptr_t) work);
+	mm_domain_post_1(strand->dispatch, mm_strand_add_work_req, (uintptr_t) work);
 #else
-	mm_strand_add_work(mm_strand_selfptr(), work);
+	mm_strand_add_work(strand, work);
 #endif
 
 	LEAVE();
@@ -217,8 +217,8 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 		mm_fiber_run(fiber);
 	} else {
 		// Submit the fiber to the thread request queue.
-		struct mm_thread *thread = fiber->strand->thread;
-		mm_thread_post_1(thread, mm_strand_run_fiber_req, (uintptr_t) fiber);
+		struct mm_event_listener *listener = fiber->strand->listener;
+		mm_thread_post_1(listener, mm_strand_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
 	mm_fiber_run(fiber);
@@ -375,11 +375,11 @@ mm_strand_execute_requests(struct mm_strand *strand)
 {
 	ENTER();
 
-	struct mm_thread *thread = strand->thread;
+	struct mm_event_listener *listener = strand->listener;
 
 	// Execute requests.
 	struct mm_request_data request;
-	if (mm_thread_receive(thread, &request)) {
+	if (mm_thread_receive(listener, &request)) {
 		// Enter the state that forbids a recursive fiber switch.
 		mm_strand_state_t state = strand->state;
 		strand->state = MM_STRAND_CSWITCH;
@@ -387,7 +387,7 @@ mm_strand_execute_requests(struct mm_strand *strand)
 		do {
 			mm_request_execute(&request);
 			strand->thread_request_count++;
-		} while (mm_thread_receive(thread, &request));
+		} while (mm_thread_receive(listener, &request));
 
 		// Restore normal running state.
 		strand->state = state;
@@ -403,10 +403,8 @@ mm_strand_pull_domain_request(struct mm_strand *strand UNUSED)
 	bool rc = false;
 
 #if ENABLE_SMP
-	struct mm_domain *domain = mm_thread_getdomain(strand->thread);
-
 	struct mm_request_data request;
-	if (mm_domain_receive(domain, &request)) {
+	if (mm_domain_receive(strand->dispatch, &request)) {
 		mm_request_execute(&request);
 		strand->domain_request_count++;
 		rc = true;
@@ -456,7 +454,7 @@ mm_strand_halt(struct mm_strand *strand)
 		}
 
 		// Halt the strand waiting for incoming events.
-		mm_event_listen(mm_thread_getlistener(strand->thread), timeout);
+		mm_event_listen(strand->listener, timeout);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&strand->time_manager);
@@ -466,7 +464,7 @@ mm_strand_halt(struct mm_strand *strand)
 
 	} else {
 		// Halt the strand waiting for incoming events.
-		mm_event_listen(mm_thread_getlistener(strand->thread), MM_STRAND_HALT_TIMEOUT);
+		mm_event_listen(strand->listener, MM_STRAND_HALT_TIMEOUT);
 
 		// Indicate that clocks need to be updated.
 		mm_timer_resetclocks(&strand->time_manager);
@@ -539,6 +537,17 @@ mm_strand_stats(struct mm_strand *strand)
 /**********************************************************************
  * Strand initialization and termination.
  **********************************************************************/
+
+static void
+mm_strand_stop_req(uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_strand *strand = (struct mm_strand *) arguments[0];
+	strand->stop = true;
+
+	LEAVE();
+}
 
 void NONNULL(1)
 mm_strand_prepare(struct mm_strand *strand)
@@ -641,6 +650,9 @@ mm_strand_start(struct mm_strand *strand)
 void NONNULL(1)
 mm_strand_stop(struct mm_strand *strand)
 {
-	mm_memory_store(strand->stop, true);
-	mm_thread_wakeup(strand->thread);
+	ENTER();
+
+	mm_thread_post_1(strand->listener, mm_strand_stop_req, (uintptr_t) strand);
+
+	LEAVE();
 }

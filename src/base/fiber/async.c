@@ -177,7 +177,7 @@ mm_async_wait(struct mm_async_node *node)
  **********************************************************************/
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1)
 {
 	ENTER();
@@ -187,7 +187,7 @@ mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_3(domain, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
+	mm_domain_post_3(dispatch, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -197,7 +197,7 @@ mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
 }
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2)
 {
 	ENTER();
@@ -207,7 +207,7 @@ mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_4(domain, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
+	mm_domain_post_4(dispatch, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -217,7 +217,7 @@ mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
 }
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
 	ENTER();
@@ -227,7 +227,7 @@ mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_5(domain, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
+	mm_domain_post_5(dispatch, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -237,7 +237,7 @@ mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
 }
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
 	ENTER();
@@ -247,7 +247,7 @@ mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_6(domain, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
+	mm_domain_post_6(dispatch, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);

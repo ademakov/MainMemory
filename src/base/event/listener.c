@@ -22,12 +22,15 @@
 #include "base/bitops.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
+#include "base/fiber/strand.h"
 #include "base/memory/memory.h"
 
 #if ENABLE_MACH_SEMAPHORE
 # include <mach/mach_init.h>
 # include <mach/task.h>
 #endif
+
+#define MM_LISTINER_QUEUE_MIN_SIZE 16
 
 /**********************************************************************
  * Event sink queue.
@@ -154,7 +157,7 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	if (listener->events.forwarded)
 		mm_event_forward_flush(&listener->forward);
 	if (listener->events.enqueued > MM_EVENT_LISTENER_RETAIN_MIN)
-		mm_event_notify_any(dispatch);
+		mm_event_wakeup_any(dispatch);
 
 	// Make the backend done with handling events.
 	mm_event_backend_poller_finish(&dispatch->backend, &listener->storage);
@@ -253,19 +256,23 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 
 void NONNULL(1, 2, 3)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_strand *strand)
+			  struct mm_strand *strand, uint32_t listener_queue_size)
 {
 	ENTER();
 
 	listener->state = 0;
 
-	// Remember the owners.
+	// Set the pointers among associated entities.
 	listener->strand = strand;
 	listener->dispatch = dispatch;
+	strand->listener = listener;
+	strand->dispatch = dispatch;
 
-	// Thread pointer is set when domain with corresponding dispatch
-	// attribute is created.
-	listener->thread = NULL;
+	// Create the private request queue.
+	uint32_t sz = mm_upper_pow2(listener_queue_size);
+	if (sz < MM_LISTINER_QUEUE_MIN_SIZE)
+		sz = MM_LISTINER_QUEUE_MIN_SIZE;
+	listener->request_queue = mm_ring_mpmc_create(sz);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
@@ -304,9 +311,12 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 }
 
 void NONNULL(1)
-mm_event_listener_cleanup(struct mm_event_listener *listener UNUSED)
+mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
+
+	// Destroy the associated request queue.
+	mm_ring_mpmc_destroy(listener->request_queue);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

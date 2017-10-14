@@ -19,11 +19,7 @@
 
 #include "base/thread/thread.h"
 
-#include "base/bitops.h"
-#include "base/list.h"
 #include "base/logger.h"
-#include "base/event/dispatch.h"
-#include "base/event/listener.h"
 #include "base/memory/global.h"
 #include "base/thread/domain.h"
 #include "base/thread/ident.h"
@@ -39,8 +35,6 @@
 # include <mach/thread_act.h>
 # include <mach/thread_policy.h>
 #endif
-
-#define MM_THREAD_QUEUE_MIN_SIZE	16
 
 static struct mm_thread mm_thread_main = {
 	.domain_index = MM_THREAD_NONE,
@@ -98,12 +92,6 @@ mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable)
 }
 
 void NONNULL(1)
-mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size)
-{
-	attr->request_queue = size;
-}
-
-void NONNULL(1)
 mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
 {
 	attr->reclaim_queue = size;
@@ -145,15 +133,6 @@ mm_thread_attr_setname(struct mm_thread_attr *attr, const char *name)
 		memcpy(attr->name, name, len);
 	}
 	attr->name[len] = 0;
-}
-
-/**********************************************************************
- * Thread auxiliary routines.
- **********************************************************************/
-
-static void
-mm_thread_wakeup_dummy(uintptr_t *arguments UNUSED)
-{
 }
 
 /**********************************************************************
@@ -296,25 +275,6 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 		thread->thread_ident = thread->domain->thread_ident_base + thread->domain_index;
 	}
 
-	// Create a thread request queue if required.
-	if (attr != NULL && attr->request_queue) {
-		uint32_t sz = mm_upper_pow2(attr->request_queue);
-		if (sz < MM_THREAD_QUEUE_MIN_SIZE)
-			sz = MM_THREAD_QUEUE_MIN_SIZE;
-		thread->request_queue = mm_ring_mpmc_create(sz);
-	} else {
-		thread->request_queue = NULL;
-	}
-
-	// Establish thread and event listener association.
-	if (thread->domain != NULL) {
-		struct mm_event_dispatch *dispatch = thread->domain->event_dispatch;
-		if (dispatch != NULL) {
-			thread->event_listener = &dispatch->listeners[thread->domain_index];
-			dispatch->listeners[thread->domain_index].thread = thread;
-		}
-	}
-
 	// Initialize private memory space if required.
 #if ENABLE_SMP
 	if (attr != NULL && attr->private_space)
@@ -389,17 +349,6 @@ mm_thread_cancel(struct mm_thread *thread)
 	int rc = pthread_cancel(thread->system_thread);
 	if (rc)
 		mm_error(rc, "pthread_cancel");
-
-	LEAVE();
-}
-
-/* Wakeup a thread if it sleeps. */
-void NONNULL(1)
-mm_thread_wakeup(struct mm_thread *thread)
-{
-	ENTER();
-
-	mm_thread_post_0(thread, mm_thread_wakeup_dummy);
 
 	LEAVE();
 }

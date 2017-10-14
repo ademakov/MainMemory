@@ -23,7 +23,6 @@
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/memory/memory.h"
-#include "base/thread/thread.h"
 
 /**********************************************************************
  * Event forwarding request handlers.
@@ -103,27 +102,23 @@ mm_event_forward_5(uintptr_t *arguments)
  * Event forwarding request posting.
  **********************************************************************/
 
-static void NONNULL(1, 3)
-mm_event_forward_post(struct mm_event_dispatch *dispatch, mm_thread_t target,
-		      struct mm_event_forward_buffer *buffer)
+static void NONNULL(1, 2)
+mm_event_forward_post(struct mm_event_listener *listener, struct mm_event_forward_buffer *buffer)
 {
 	ENTER();
-
-	struct mm_event_listener *listener = &dispatch->listeners[target];
-	struct mm_thread *thread = listener->thread;
 
 	switch (buffer->nsinks) {
 	case 0:
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_thread_post_2(thread, mm_event_forward_1,
+		mm_thread_post_2(listener, mm_event_forward_1,
 				 (uintptr_t) buffer->sinks[0],
 				 buffer->events[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_thread_post_3(thread, mm_event_forward_2,
+		mm_thread_post_3(listener, mm_event_forward_2,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 buffer->events[0]
@@ -131,7 +126,7 @@ mm_event_forward_post(struct mm_event_dispatch *dispatch, mm_thread_t target,
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_thread_post_4(thread, mm_event_forward_3,
+		mm_thread_post_4(listener, mm_event_forward_3,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
@@ -141,7 +136,7 @@ mm_event_forward_post(struct mm_event_dispatch *dispatch, mm_thread_t target,
 		break;
 	case 4:
 		buffer->nsinks = 0;
-		mm_thread_post_5(thread, mm_event_forward_4,
+		mm_thread_post_5(listener, mm_event_forward_4,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
@@ -153,7 +148,7 @@ mm_event_forward_post(struct mm_event_dispatch *dispatch, mm_thread_t target,
 		break;
 	case 5:
 		buffer->nsinks = 0;
-		mm_thread_post_6(thread, mm_event_forward_5,
+		mm_thread_post_6(listener, mm_event_forward_5,
 				 (uintptr_t) buffer->sinks[0],
 				 (uintptr_t) buffer->sinks[1],
 				 (uintptr_t) buffer->sinks[2],
@@ -215,7 +210,7 @@ mm_event_forward_flush(struct mm_event_forward_cache *cache)
 	mm_thread_t target = mm_bitset_find(&cache->targets, 0);
 	while (target != MM_THREAD_NONE) {
 		struct mm_event_forward_buffer *buffer = &cache->buffers[target];
-		mm_event_forward_post(dispatch, target, buffer);
+		mm_event_forward_post(&dispatch->listeners[target], buffer);
 		buffer->ntotal = 0;
 
 		if (++target < mm_bitset_size(&cache->targets))
@@ -242,7 +237,7 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 
 	// Flush the buffer if it is full.
 	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE)
-		mm_event_forward_post(dispatch, target, buffer);
+		mm_event_forward_post(&dispatch->listeners[target], buffer);
 
 	// Add the event to the buffer.
 	uint8_t n = buffer->nsinks++;

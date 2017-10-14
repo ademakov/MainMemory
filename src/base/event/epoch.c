@@ -101,8 +101,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		mm_event_epoch_snapshot_t listener_epoch = mm_memory_load(listener->epoch.epoch);
 		if (listener_epoch != epoch && listener_epoch != 0) {
 			if (local->count > MM_EVENT_EPOCH_POST_COUNT)
-				mm_thread_post_1(listener->thread, mm_event_epoch_observe_req,
-						 (uintptr_t) listener);
+				mm_thread_post_1(listener, mm_event_epoch_observe_req, (uintptr_t) listener);
 			goto leave;
 		}
 		local->index++;

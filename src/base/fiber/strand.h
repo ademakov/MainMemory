@@ -28,6 +28,8 @@
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
+struct mm_event_dispatch;
+struct mm_event_listener;
 struct mm_fiber;
 struct mm_work;
 
@@ -38,7 +40,7 @@ typedef enum
 	MM_STRAND_CSWITCH,
 } mm_strand_state_t;
 
-/* Strand of fibers. */
+/* A strand of fibers. */
 struct mm_strand
 {
 	/* The counter of fiber context switches. */
@@ -49,6 +51,10 @@ struct mm_strand
 
 	/* The strand status. */
 	mm_strand_state_t state;
+
+	/* Event dispatch support. */
+	struct mm_event_listener *listener;
+	struct mm_event_dispatch *dispatch;
 
 	/* Queue of blocked fibers. */
 	struct mm_list block;

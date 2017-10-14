@@ -42,6 +42,15 @@ mm_thread_ident_to_thread(mm_thread_t ident);
 struct mm_strand *
 mm_thread_ident_to_strand(mm_thread_t ident);
 
+struct mm_event_dispatch *
+mm_domain_ident_to_event_dispatch(mm_thread_t ident);
+
+struct mm_event_dispatch *
+mm_thread_ident_to_event_dispatch(mm_thread_t ident);
+
+struct mm_event_listener *
+mm_thread_ident_to_event_listener(mm_thread_t ident);
+
 /**********************************************************************
  * Runtime start and stop hooks.
  **********************************************************************/

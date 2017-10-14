@@ -22,7 +22,8 @@
 
 #include "common.h"
 #include "base/syscall.h"
-#include "base/thread/domain.h"
+#include "base/event/dispatch.h"
+#include "base/fiber/strand.h"
 
 #include <sys/syscall.h>
 
@@ -34,19 +35,19 @@ struct iovec;
  **********************************************************************/
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_1(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1);
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_2(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2);
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_3(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
 intptr_t NONNULL(1, 2)
-mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
+mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
 /**********************************************************************
@@ -56,40 +57,40 @@ mm_async_syscall_4(struct mm_domain *domain, const char *name, int n,
 static inline ssize_t
 mm_async_read(int fd, void *buffer, size_t nbytes)
 {
-	struct mm_domain *domain = mm_domain_selfptr();
-	return mm_async_syscall_3(domain, "read", MM_SYSCALL_N(SYS_read),
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->dispatch, "read", MM_SYSCALL_N(SYS_read),
 				  fd, (uintptr_t) buffer, nbytes);
 }
 
 static inline ssize_t
 mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
 {
-	struct mm_domain *domain = mm_domain_selfptr();
-	return mm_async_syscall_3(domain, "readv", MM_SYSCALL_N(SYS_readv),
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->dispatch, "readv", MM_SYSCALL_N(SYS_readv),
 				  fd, (uintptr_t) iov, iovcnt);
 }
 
 static inline ssize_t
 mm_async_write(int fd, const void *buffer, size_t nbytes)
 {
-	struct mm_domain *domain = mm_domain_selfptr();
-	return mm_async_syscall_3(domain, "write", MM_SYSCALL_N(SYS_write),
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->dispatch, "write", MM_SYSCALL_N(SYS_write),
 				  fd, (uintptr_t) buffer, nbytes);
 }
 
 static inline ssize_t
 mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
 {
-	struct mm_domain *domain = mm_domain_selfptr();
-	return mm_async_syscall_3(domain, "writev", MM_SYSCALL_N(SYS_writev),
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->dispatch, "writev", MM_SYSCALL_N(SYS_writev),
 				  fd, (uintptr_t) iov, iovcnt);
 }
 
 static inline ssize_t
 mm_async_close(int fd)
 {
-	struct mm_domain *domain = mm_domain_selfptr();
-	return mm_async_syscall_1(domain, "close", MM_SYSCALL_N(SYS_close), fd);
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_1(strand->dispatch, "close", MM_SYSCALL_N(SYS_close), fd);
 }
 
 #endif /* BASE_FIBER_ASYNC_H */

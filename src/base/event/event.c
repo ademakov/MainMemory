@@ -23,8 +23,7 @@
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
-#include "base/thread/domain.h"
-#include "base/thread/thread.h"
+#include "base/fiber/strand.h"
 
 /**********************************************************************
  * Event sink I/O control.
@@ -101,8 +100,8 @@ mm_event_register_fd(struct mm_event_fd *sink)
 		sink->status = MM_EVENT_ENABLED;
 
 		// Bind the sink to this thread's event listener.
-		struct mm_thread *thread = mm_thread_selfptr();
-		struct mm_event_listener *listener = mm_thread_getlistener(thread);
+		struct mm_strand *strand = mm_strand_selfptr();
+		struct mm_event_listener *listener = strand->listener;
 		if (sink->listener == NULL) {
 			sink->listener = listener;
 		} else {
@@ -252,6 +251,11 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
+static void
+mm_event_wakeup_req(uintptr_t *arguments UNUSED)
+{
+}
+
 void NONNULL(1)
 mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
@@ -346,8 +350,20 @@ mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
 	LEAVE();
 }
 
+/* Wakeup a listener if it sleeps. */
 void NONNULL(1)
-mm_event_notify_any(struct mm_event_dispatch *dispatch)
+mm_event_wakeup(struct mm_event_listener *listener)
+{
+	ENTER();
+
+	mm_thread_post_0(listener, mm_event_wakeup_req);
+
+	LEAVE();
+}
+
+
+void NONNULL(1)
+mm_event_wakeup_any(struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
@@ -357,7 +373,7 @@ mm_event_notify_any(struct mm_event_dispatch *dispatch)
 		uintptr_t state = mm_memory_load(listener->state);
 		mm_event_listener_status_t status = state & MM_EVENT_LISTENER_STATUS;
 		if (status == MM_EVENT_LISTENER_WAITING) {
-			mm_thread_wakeup(listener->thread);
+			mm_event_wakeup(listener);
 			break;
 		}
 	}

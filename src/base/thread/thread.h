@@ -26,13 +26,11 @@
 #include "base/event/event.h"
 #include "base/memory/space.h"
 #include "base/thread/barrier.h"
-#include "base/thread/request.h"
 
 #include <pthread.h>
 
 /* Forward declarations. */
 struct mm_domain;
-struct mm_thread;
 struct mm_trace_context;
 
 #define MM_THREAD_CPU_ANY	((uint32_t) -1)
@@ -47,9 +45,6 @@ struct mm_trace_context;
 /* Maximum thread name length (including terminating zero). */
 #define MM_THREAD_NAME_SIZE	40
 
-/* Thread synchronization backoff routine. */
-typedef void (*mm_thread_relax_t)(void);
-
 /* Thread creation attributes. */
 struct mm_thread_attr
 {
@@ -59,9 +54,6 @@ struct mm_thread_attr
 
 	/* Enable private memory space. */
 	bool private_space;
-
-	/* The size of thread request queue. */
-	uint32_t request_queue;
 
 	/* The size of queue for memory chunks released by other threads. */
 	uint32_t reclaim_queue;
@@ -87,12 +79,6 @@ struct mm_thread
 
 	/* The thread identity. Must be unique among threads. */
 	mm_thread_t thread_ident;
-
-	/* Thread request queue. */
-	struct mm_ring_mpmc *request_queue;
-
-	/* Associated event listener. */
-	struct mm_event_listener *event_listener;
 
 #if ENABLE_SMP
 	/* Private memory space. */
@@ -143,9 +129,6 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, 
 
 void NONNULL(1)
 mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable);
-
-void NONNULL(1)
-mm_thread_attr_setrequestqueue(struct mm_thread_attr *attr, uint32_t size);
 
 void NONNULL(1)
 mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size);
@@ -207,12 +190,6 @@ mm_thread_getnumber(const struct mm_thread *thread)
 	return thread->domain_index;
 }
 
-static inline struct mm_event_listener *
-mm_thread_getlistener(struct mm_thread *thread)
-{
-	return thread->event_listener;
-}
-
 static inline mm_thread_t
 mm_thread_self(void)
 {
@@ -249,206 +226,9 @@ void NONNULL(1)
 mm_thread_cancel(struct mm_thread *thread);
 
 void NONNULL(1)
-mm_thread_wakeup(struct mm_thread *thread);
-
-void NONNULL(1)
 mm_thread_join(struct mm_thread *thread);
 
 void
 mm_thread_yield(void);
-
-/**********************************************************************
- * Thread requests.
- **********************************************************************/
-
-static inline void NONNULL(1)
-mm_thread_notify(struct mm_thread *thread, mm_stamp_t stamp)
-{
-	mm_event_notify(mm_thread_getlistener(thread), stamp);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_receive(struct mm_thread *thread, struct mm_request_data *rdata)
-{
-	return mm_request_relaxed_receive(thread->request_queue, rdata);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_0(struct mm_thread *thread, mm_post_routine_t req)
-{
-	MM_POST(0, thread->request_queue, mm_thread_notify, thread, req);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_0(struct mm_thread *thread, mm_post_routine_t req)
-{
-	MM_TRYPOST(0, thread->request_queue, mm_thread_notify, thread, req);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_1(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1)
-{
-	MM_POST(1, thread->request_queue, mm_thread_notify, thread, req, a1);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_1(struct mm_thread *thread, mm_post_routine_t req,
-		    uintptr_t a1)
-{
-	MM_TRYPOST(1, thread->request_queue, mm_thread_notify, thread, req, a1);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_2(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2)
-{
-	MM_POST(2, thread->request_queue, mm_thread_notify, thread, req, a1, a2);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_2(struct mm_thread *thread, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2)
-{
-	MM_TRYPOST(2, thread->request_queue, mm_thread_notify, thread, req, a1, a2);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_3(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_POST(3, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_3(struct mm_thread *thread, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_TRYPOST(3, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_4(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_POST(4, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_4(struct mm_thread *thread, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_TRYPOST(4, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_5(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_POST(5, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4, a5);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_5(struct mm_thread *thread, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_TRYPOST(5, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4, a5);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_6(struct mm_thread *thread, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_POST(6, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4, a5, a6);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_6(struct mm_thread *thread, mm_post_routine_t req,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_TRYPOST(6, thread->request_queue, mm_thread_notify, thread, req, a1, a2, a3, a4, a5, a6);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_0(struct mm_thread *thread, struct mm_request_sender *sender)
-{
-	MM_SEND(0, thread->request_queue, mm_thread_notify, thread, sender);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_0(struct mm_thread *thread, struct mm_request_sender *sender)
-{
-	MM_TRYSEND(0, thread->request_queue, mm_thread_notify, thread, sender);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_1(struct mm_thread *thread, struct mm_request_sender *sender,
-		 uintptr_t a1)
-{
-	MM_SEND(1, thread->request_queue, mm_thread_notify, thread, sender, a1);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_1(struct mm_thread *thread, struct mm_request_sender *sender,
-		    uintptr_t a1)
-{
-	MM_TRYSEND(1, thread->request_queue, mm_thread_notify, thread, sender, a1);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_2(struct mm_thread *thread, struct mm_request_sender *sender,
-		 uintptr_t a1, uintptr_t a2)
-{
-	MM_SEND(2, thread->request_queue, mm_thread_notify, thread, sender, a1, a2);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_2(struct mm_thread *thread, struct mm_request_sender *sender,
-		    uintptr_t a1, uintptr_t a2)
-{
-	MM_TRYSEND(2, thread->request_queue, mm_thread_notify, thread, sender, a1, a2);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_3(struct mm_thread *thread, struct mm_request_sender *sender,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_SEND(3, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_3(struct mm_thread *thread, struct mm_request_sender *sender,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_TRYSEND(3, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_4(struct mm_thread *thread, struct mm_request_sender *sender,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_SEND(4, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3, a4);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_4(struct mm_thread *thread, struct mm_request_sender *sender,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_TRYSEND(4, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3, a4);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_send_5(struct mm_thread *thread, struct mm_request_sender *sender,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_SEND(5, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3, a4, a5);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trysend_5(struct mm_thread *thread, struct mm_request_sender *sender,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_TRYSEND(5, thread->request_queue, mm_thread_notify, thread, sender, a1, a2, a3, a4, a5);
-}
 
 #endif /* BASE_THREAD_THREAD_H */

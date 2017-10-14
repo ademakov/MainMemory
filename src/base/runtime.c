@@ -29,6 +29,7 @@
 #include "base/topology.h"
 #include "base/event/dispatch.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
 #include "base/fiber/strand.h"
@@ -77,25 +78,49 @@ mm_number_of_regular_threads(void)
 struct mm_domain *
 mm_domain_ident_to_domain(mm_thread_t ident)
 {
-	if (ident == 0)
-		return mm_regular_domain;
-	return NULL;
+	if (ident != 0)
+		return NULL;
+	return mm_regular_domain;
 }
 
 struct mm_thread *
 mm_thread_ident_to_thread(mm_thread_t ident)
 {
-	if (ident < mm_regular_nthreads)
-		return mm_domain_getthread(mm_regular_domain, ident);
-	return NULL;
+	if (ident >= mm_regular_nthreads)
+		return NULL;
+	return mm_domain_getthread(mm_regular_domain, ident);
 }
 
 struct mm_strand *
 mm_thread_ident_to_strand(mm_thread_t ident)
 {
-	if (ident < mm_regular_nthreads)
-		return &mm_regular_strands[ident];
-	return NULL;
+	if (ident >= mm_regular_nthreads)
+		return NULL;
+	return &mm_regular_strands[ident];
+}
+
+struct mm_event_dispatch *
+mm_domain_ident_to_event_dispatch(mm_thread_t ident)
+{
+	if (ident != 0)
+		return NULL;
+	return &mm_regular_dispatch;
+}
+
+struct mm_event_dispatch *
+mm_thread_ident_to_event_dispatch(mm_thread_t ident)
+{
+	if (ident >= mm_regular_nthreads)
+		return NULL;
+	return &mm_regular_dispatch;
+}
+
+struct mm_event_listener *
+mm_thread_ident_to_event_listener(mm_thread_t ident)
+{
+	if (ident >= mm_regular_nthreads)
+		return NULL;
+	return &mm_regular_dispatch.listeners[ident];
 }
 
 /**********************************************************************
@@ -334,7 +359,8 @@ mm_common_start(void)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
 	// Allocate event dispatch memory and system resources.
-	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads, mm_regular_strands);
+	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads, mm_regular_strands,
+				  mm_regular_nthreads * 32, mm_regular_nthreads * 32);
 
 	LEAVE();
 }
@@ -459,9 +485,6 @@ mm_start(void)
 	mm_domain_attr_setstacksize(&attr, MM_PAGE_SIZE); // enough for fiber bootstrap
 	mm_domain_attr_setguardsize(&attr, MM_PAGE_SIZE);
 	mm_domain_attr_setspace(&attr, true);
-	mm_domain_attr_setdomainqueue(&attr, mm_regular_nthreads * 32);
-	mm_domain_attr_setthreadqueue(&attr, mm_regular_nthreads * 32);
-	mm_domain_attr_setdispatch(&attr, &mm_regular_dispatch);
 
 	bool thread_affinity = mm_settings_get_bool("thread-affinity", false);
 	if (thread_affinity) {

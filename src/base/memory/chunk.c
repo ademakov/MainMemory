@@ -1,7 +1,7 @@
 /*
  * base/memory/chunk.c - MainMemory chunks.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,10 +21,10 @@
 
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/event/listener.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/backoff.h"
-#include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
 #define MM_CHUNK_FLUSH_THRESHOLD	(64)
@@ -192,9 +192,9 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
-		struct mm_thread *origin = mm_thread_ident_to_thread(tag);
+		struct mm_event_listener *origin = mm_thread_ident_to_event_listener(tag);
 #else
-		struct mm_thread *origin = mm_thread_ident_to_thread(0);
+		struct mm_event_listener *origin = mm_thread_ident_to_event_listener(0);
 #endif
 		uint32_t backoff = 0;
 		while (!mm_thread_trypost_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {

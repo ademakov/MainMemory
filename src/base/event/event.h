@@ -235,6 +235,9 @@ void NONNULL(1)
 mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
 
 void NONNULL(1)
-mm_event_notify_any(struct mm_event_dispatch *dispatch);
+mm_event_wakeup(struct mm_event_listener *listener);
+
+void NONNULL(1)
+mm_event_wakeup_any(struct mm_event_dispatch *dispatch);
 
 #endif /* BASE_EVENT_EVENT_H */

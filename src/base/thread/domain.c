@@ -22,15 +22,11 @@
 #include "base/bitops.h"
 #include "base/cstack.h"
 #include "base/logger.h"
-#include "base/ring.h"
-#include "base/event/dispatch.h"
 #include "base/memory/global.h"
 #include "base/thread/ident.h"
 #include "base/thread/local.h"
 
 #include <stdio.h>
-
-#define MM_DOMAIN_QUEUE_MIN_SIZE	16
 
 __thread struct mm_domain *__mm_domain_self = NULL;
 
@@ -67,24 +63,6 @@ void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 {
 	attr->private_space = enable;
-}
-
-void NONNULL(1)
-mm_domain_attr_setdomainqueue(struct mm_domain_attr *attr, uint32_t size)
-{
-	attr->domain_request_queue = size;
-}
-
-void NONNULL(1)
-mm_domain_attr_setthreadqueue(struct mm_domain_attr *attr, uint32_t size)
-{
-	attr->thread_request_queue = size;
-}
-
-void NONNULL(1)
-mm_domain_attr_setdispatch(struct mm_domain_attr *attr, struct mm_event_dispatch *dispatch)
-{
-	attr->event_dispatch = dispatch;
 }
 
 void NONNULL(1)
@@ -156,27 +134,6 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	domain->domain_ident = id_pair.domain;
 	domain->thread_ident_base = id_pair.thread;
 
-	// Establish domain and event dispatch association.
-	if (attr == NULL) {
-		domain->event_dispatch = NULL;
-	} else {
-		domain->event_dispatch = attr->event_dispatch;
-		if (domain->event_dispatch != NULL) {
-			VERIFY(domain->event_dispatch->domain == NULL);
-			domain->event_dispatch->domain = domain;
-		}
-	}
-
-	// Create domain request queue if required.
-	if (attr != NULL && attr->domain_request_queue) {
-		uint32_t sz = mm_upper_pow2(attr->domain_request_queue);
-		if (sz < MM_DOMAIN_QUEUE_MIN_SIZE)
-			sz = MM_DOMAIN_QUEUE_MIN_SIZE;
-		domain->request_queue = mm_ring_mpmc_create(sz);
-	} else {
-		domain->request_queue = NULL;
-	}
-
 	// Set the domain name.
 	if (attr != NULL && attr->name[0])
 		memcpy(domain->name, attr->name, MM_DOMAIN_NAME_SIZE);
@@ -201,7 +158,6 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	uint32_t guard_size = 0;
 	if (attr != NULL) {
 		mm_thread_attr_setspace(&thread_attr, attr->private_space);
-		mm_thread_attr_setrequestqueue(&thread_attr, attr->thread_request_queue);
 
 		stack_size = mm_round_up(attr->stack_size, MM_PAGE_SIZE);
 		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
@@ -241,10 +197,6 @@ void NONNULL(1)
 mm_domain_destroy(struct mm_domain *domain)
 {
 	ENTER();
-
-	// Destroy domain request queue if present.
-	if (domain->request_queue != NULL)
-		mm_ring_mpmc_destroy(domain->request_queue);
 
 	// Release per-thread data.
 	mm_thread_local_term(domain);

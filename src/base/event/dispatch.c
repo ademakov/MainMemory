@@ -19,6 +19,7 @@
 
 #include "base/event/dispatch.h"
 
+#include "base/bitops.h"
 #include "base/logger.h"
 #include "base/event/listener.h"
 #include "base/fiber/strand.h"
@@ -26,24 +27,29 @@
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 
+#define MM_DISPATCH_QUEUE_MIN_SIZE	16
+
 void NONNULL(1, 3)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads, struct mm_strand *strands)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads, struct mm_strand *strands,
+			  uint32_t dispatch_queue_size, uint32_t listener_queue_size)
 {
 	ENTER();
 	ASSERT(nthreads > 0);
 
-	// Domain pointer is set when domain with corresponding dispatch
-	// attribute is created.
-	dispatch->domain = NULL;
-
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare(&dispatch->global_epoch);
+
+	// Create the associated request queue.
+	uint32_t sz = mm_upper_pow2(dispatch_queue_size);
+	if (sz < MM_DISPATCH_QUEUE_MIN_SIZE)
+		sz = MM_DISPATCH_QUEUE_MIN_SIZE;
+	dispatch->request_queue = mm_ring_mpmc_create(sz);
 
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
 	dispatch->listeners = mm_common_calloc(nthreads, sizeof(struct mm_event_listener));
 	for (mm_thread_t i = 0; i < nthreads; i++)
-		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, &strands[i]);
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, &strands[i], listener_queue_size);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);
@@ -75,6 +81,9 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
+
+	// Destroy the associated request queue.
+	mm_ring_mpmc_destroy(dispatch->request_queue);
 
 	// Release the sink queue.
 	mm_common_free(dispatch->sink_queue);
