@@ -307,7 +307,6 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 
 	// Enter the state that forbids fiber yield to avoid possible
 	// problems with re-entering from another fiber.
-	// TODO: don't call mm_strand_selfptr(), get it through the listener
 	struct mm_strand *strand = listener->strand;
 	mm_strand_state_t strand_state = strand->state;
 	strand->state = MM_STRAND_CSWITCH;
