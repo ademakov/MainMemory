@@ -43,6 +43,7 @@ libmainbase_la_SOURCES = \
 	event/kqueue.c event/kqueue.h \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \
+	event/post.c event/post.h \
 	event/selfpipe.c event/selfpipe.h \
 	fiber/async.c fiber/async.h \
 	fiber/combiner.c fiber/combiner.h \
@@ -69,7 +70,6 @@ libmainbase_la_SOURCES = \
 	thread/ident.c thread/ident.h \
 	thread/local.c thread/local.h \
 	thread/monitor.c thread/monitor.h \
-	thread/request.c thread/request.h \
 	thread/thread.c thread/thread.h \
 	util/hook.c util/hook.h \
 	util/libcall.c util/libcall.h

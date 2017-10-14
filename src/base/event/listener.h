@@ -24,8 +24,7 @@
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
-#include "base/thread/request.h"
-#include "base/thread/thread.h"
+#include "base/event/post.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -47,7 +46,6 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 struct mm_strand;
-struct mm_thread;
 
 #define MM_EVENT_LISTENER_RETAIN_MIN	(3)
 #define MM_EVENT_LISTENER_RETAIN_MAX	(6)

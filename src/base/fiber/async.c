@@ -22,7 +22,6 @@
 #include "base/list.h"
 #include "base/report.h"
 #include "base/fiber/fiber.h"
-#include "base/thread/request.h"
 
 #include <sys/uio.h>
 

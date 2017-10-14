@@ -1,7 +1,7 @@
 /*
- * base/thread/request.h - MainMemory thread requests.
+ * base/event/post.h - MainMemory cross-thread procedure calls.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2017  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,11 +17,10 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_THREAD_REQUEST_H
-#define BASE_THREAD_REQUEST_H
+#ifndef BASE_EVENT_POST_H
+#define BASE_EVENT_POST_H
 
 #include "common.h"
-#include "base/report.h"
 #include "base/ring.h"
 
 /* The maximum number of arguments for post requests. */
@@ -46,9 +45,9 @@
 	} while (0)
 
 /* Try to post a request to a cross-thread request ring. */
-#define MM_TRYPOST(n, ring, notify, target, ...)			\
+#define MM_TRYPOST(n, ring, notify, target, ...)				\
 	do {								\
-		bool rc;						\
+		bool rc;							\
 		mm_stamp_t s;						\
 		MM_POST_ARGV(v, __VA_ARGS__);				\
 		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_POST_ARGC(n));	\
@@ -94,4 +93,4 @@ mm_request_execute(struct mm_request_data *rdata)
 	(*rdata->request)(rdata->arguments);
 }
 
-#endif /* BASE_THREAD_REQUEST_H */
+#endif /* BASE_EVENT_POST_H */

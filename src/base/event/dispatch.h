@@ -25,12 +25,11 @@
 #include "base/report.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
-#include "base/thread/request.h"
+#include "base/event/post.h"
 
 /* Forward declarations. */
 struct mm_domain;
 struct mm_event_listener;
-struct mm_ring_mpmc;
 struct mm_strand;
 
 /* Event dispatcher. */
