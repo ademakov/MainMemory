@@ -163,7 +163,7 @@ mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work)
 		mm_strand_add_work(strand, work);
 	} else {
 		// Submit the work item to the thread request queue.
-		mm_thread_post_1(strand->listener, mm_strand_add_work_req, (uintptr_t) work);
+		mm_event_call_1(strand->listener, mm_strand_add_work_req, (uintptr_t) work);
 	}
 #else
 	mm_strand_add_work(strand, work);
@@ -180,7 +180,7 @@ mm_strand_tender_work(struct mm_work *work)
 	struct mm_strand *strand = mm_strand_selfptr();
 #if ENABLE_SMP
 	// Submit the work item to the domain request queue.
-	mm_domain_post_1(strand->dispatch, mm_strand_add_work_req, (uintptr_t) work);
+	mm_event_post_1(strand->dispatch, mm_strand_add_work_req, (uintptr_t) work);
 #else
 	mm_strand_add_work(strand, work);
 #endif
@@ -218,7 +218,7 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 	} else {
 		// Submit the fiber to the thread request queue.
 		struct mm_event_listener *listener = fiber->strand->listener;
-		mm_thread_post_1(listener, mm_strand_run_fiber_req, (uintptr_t) fiber);
+		mm_event_call_1(listener, mm_strand_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
 	mm_fiber_run(fiber);
@@ -370,51 +370,6 @@ mm_strand_master(mm_value_t arg)
 // Dealer loop sleep time - 10 seconds
 #define MM_STRAND_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
 
-void NONNULL(1)
-mm_strand_execute_requests(struct mm_strand *strand)
-{
-	ENTER();
-
-	struct mm_event_listener *listener = strand->listener;
-
-	// Execute requests.
-	struct mm_request_data request;
-	if (mm_thread_receive(listener, &request)) {
-		// Enter the state that forbids a recursive fiber switch.
-		mm_strand_state_t state = strand->state;
-		strand->state = MM_STRAND_CSWITCH;
-
-		do {
-			mm_request_execute(&request);
-			strand->thread_request_count++;
-		} while (mm_thread_receive(listener, &request));
-
-		// Restore normal running state.
-		strand->state = state;
-	}
-
-	LEAVE();
-}
-
-static bool NONNULL(1)
-mm_strand_pull_domain_request(struct mm_strand *strand UNUSED)
-{
-	ENTER();
-	bool rc = false;
-
-#if ENABLE_SMP
-	struct mm_request_data request;
-	if (mm_domain_receive(strand->dispatch, &request)) {
-		mm_request_execute(&request);
-		strand->domain_request_count++;
-		rc = true;
-	}
-#endif
-
-	LEAVE();
-	return rc;
-}
-
 static void
 mm_strand_trim(struct mm_strand *strand)
 {
@@ -436,9 +391,6 @@ static void
 mm_strand_halt(struct mm_strand *strand)
 {
 	ENTER();
-
-	// Count it.
-	strand->halt_count++;
 
 	// Get the closest expiring timer if any.
 	mm_timeval_t wake_time = mm_timer_next(&strand->time_manager);
@@ -484,7 +436,7 @@ mm_strand_dealer(mm_value_t arg)
 		// Run the queued fibers if any.
 		do {
 			mm_fiber_yield();
-		} while (mm_strand_pull_domain_request(strand));
+		} while (mm_event_handle_posts(strand->listener));
 
 		// Release excessive resources allocated by fibers.
 		mm_strand_trim(strand);
@@ -525,12 +477,9 @@ mm_strand_print_fibers(struct mm_strand *strand)
 void NONNULL(1)
 mm_strand_stats(struct mm_strand *strand)
 {
-	mm_verbose("thread %d: cycles=%llu, cswitches=%llu, requests=%llu/%llu, workers=%lu",
+	mm_verbose("thread %d: cswitches=%llu, workers=%lu",
 		   mm_thread_getnumber(strand->thread),
-		   (unsigned long long) strand->halt_count,
 		   (unsigned long long) strand->cswitch_count,
-		   (unsigned long long) strand->thread_request_count,
-		   (unsigned long long) strand->domain_request_count,
 		   (unsigned long) strand->nworkers);
 }
 
@@ -570,11 +519,7 @@ mm_strand_prepare(struct mm_strand *strand)
 	strand->nworkers = 0;
 	strand->nworkers_min = MM_NWORKERS_MIN;
 	strand->nworkers_max = MM_NWORKERS_MAX;
-
-	strand->halt_count = 0;
 	strand->cswitch_count = 0;
-	strand->thread_request_count = 0;
-	strand->domain_request_count = 0;
 
 	strand->master = NULL;
 	strand->dealer = NULL;
@@ -652,7 +597,7 @@ mm_strand_stop(struct mm_strand *strand)
 {
 	ENTER();
 
-	mm_thread_post_1(strand->listener, mm_strand_stop_req, (uintptr_t) strand);
+	mm_event_call_1(strand->listener, mm_strand_stop_req, (uintptr_t) strand);
 
 	LEAVE();
 }

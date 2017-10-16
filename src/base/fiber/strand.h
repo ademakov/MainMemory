@@ -83,12 +83,6 @@ struct mm_strand
 	mm_fiber_t nworkers_min;
 	mm_fiber_t nworkers_max;
 
-	/* The counter of halting (and listening for events). */
-	uint64_t halt_count;
-	/* The counter of thread requests. */
-	uint64_t thread_request_count;
-	uint64_t domain_request_count;
-
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;
 
@@ -147,9 +141,6 @@ mm_strand_tender_work(struct mm_work *work);
 
 void NONNULL(1)
 mm_strand_run_fiber(struct mm_fiber *fiber);
-
-void NONNULL(1)
-mm_strand_execute_requests(struct mm_strand *strand);
 
 /**********************************************************************
  * Strand information.

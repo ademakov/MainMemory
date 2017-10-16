@@ -22,14 +22,10 @@
 
 #include "common.h"
 #include "base/lock.h"
-#include "base/report.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
-#include "base/event/post.h"
 
 /* Forward declarations. */
-struct mm_domain;
-struct mm_event_listener;
 struct mm_strand;
 
 /* Event dispatcher. */
@@ -39,8 +35,8 @@ struct mm_event_dispatch
 	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
 
-	/* Shared request queue. */
-	struct mm_ring_mpmc *request_queue;
+	/* Asynchronous post queue. */
+	struct mm_ring_mpmc *async_queue;
 
 	/* A system-specific event backend. */
 	struct mm_event_backend backend;
@@ -79,117 +75,5 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_dispatch_stats(struct mm_event_dispatch *dispatch);
-
-/**********************************************************************
- * Shared requests for the dispatcher.
- **********************************************************************/
-
-static inline void NONNULL(1)
-mm_domain_notify(struct mm_event_dispatch *dispatch, mm_stamp_t stamp UNUSED)
-{
-	mm_event_wakeup_any(dispatch);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_receive(struct mm_event_dispatch *dispatch, struct mm_request_data *rdata)
-{
-	return mm_request_receive(dispatch->request_queue, rdata);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_0(struct mm_event_dispatch *dispatch, mm_post_routine_t req)
-{
-	MM_POST(0, dispatch->request_queue, mm_domain_notify, dispatch, req);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_0(struct mm_event_dispatch *dispatch, mm_post_routine_t req)
-{
-	MM_TRYPOST(0, dispatch->request_queue, mm_domain_notify, dispatch, req);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_1(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1)
-{
-	MM_POST(1, dispatch->request_queue, mm_domain_notify, dispatch, req, a1);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_1(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		    uintptr_t a1)
-{
-	MM_TRYPOST(1, dispatch->request_queue, mm_domain_notify, dispatch, req, a1);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_2(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2)
-{
-	MM_POST(2, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_2(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2)
-{
-	MM_TRYPOST(2, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_3(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_POST(3, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_3(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_TRYPOST(3, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_4(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_POST(4, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_4(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_TRYPOST(4, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_5(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_POST(5, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4, a5);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_5(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_TRYPOST(5, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4, a5);
-}
-
-static inline void NONNULL(1, 2)
-mm_domain_post_6(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_POST(6, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4, a5, a6);
-}
-
-static inline bool NONNULL(1, 2)
-mm_domain_trypost_6(struct mm_event_dispatch *dispatch, mm_post_routine_t req,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_TRYPOST(6, dispatch->request_queue, mm_domain_notify, dispatch, req, a1, a2, a3, a4, a5, a6);
-}
 
 #endif /* BASE_EVENT_DISPATCH_H */

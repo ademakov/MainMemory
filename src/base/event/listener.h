@@ -21,10 +21,10 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
+#include "base/ring.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
-#include "base/event/post.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -67,12 +67,19 @@ struct mm_event_listener_stats
 	uint64_t poll_calls;
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
+	uint64_t omit_calls;
 
 	uint64_t stray_events;
 	uint64_t direct_events;
 	uint64_t enqueued_events;
 	uint64_t dequeued_events;
 	uint64_t forwarded_events;
+
+	/* Counters of asynchronous procedure calls. */
+	uint64_t enqueued_async_calls;
+	uint64_t enqueued_async_posts;
+	uint64_t dequeued_async_calls;
+	uint64_t dequeued_async_posts;
 };
 #endif
 
@@ -121,8 +128,8 @@ struct mm_event_listener
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
-	/* Private request queue. */
-	struct mm_ring_mpmc *request_queue;
+	/* Asynchronous call queue. */
+	struct mm_ring_mpmc *async_queue;
 
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;
@@ -166,7 +173,7 @@ mm_event_listener_running(struct mm_event_listener *listener)
 static inline mm_stamp_t NONNULL(1)
 mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_status_t status)
 {
-	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->request_queue);
+	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->async_queue);
 	mm_atomic_uintptr_fetch_and_set(&listener->state, (((uintptr_t) stamp) << 2) | status);
 	return stamp;
 }
@@ -175,7 +182,7 @@ mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_
 static inline bool NONNULL(1)
 mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
-	return stamp == mm_ring_mpmc_enqueue_stamp(listener->request_queue);
+	return stamp == mm_ring_mpmc_enqueue_stamp(listener->async_queue);
 }
 
 /* Prepare the event listener for polling. */
@@ -189,7 +196,7 @@ mm_event_listener_polling(struct mm_event_listener *listener)
 static inline uintptr_t NONNULL(1)
 mm_event_listener_futex(struct mm_event_listener *listener)
 {
-	return (uintptr_t) &listener->thread->request_queue->base.tail;
+	return (uintptr_t) &listener->thread->async_queue->base.tail;
 }
 #endif
 
@@ -323,112 +330,6 @@ static inline void NONNULL(1, 2)
 mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
-}
-
-/**********************************************************************
- * Listener requests.
- **********************************************************************/
-
-static inline bool NONNULL(1, 2)
-mm_thread_receive(struct mm_event_listener *listener, struct mm_request_data *rdata)
-{
-	return mm_request_relaxed_receive(listener->request_queue, rdata);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_0(struct mm_event_listener *listener, mm_post_routine_t req)
-{
-	MM_POST(0, listener->request_queue, mm_event_notify, listener, req);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_0(struct mm_event_listener *listener, mm_post_routine_t req)
-{
-	MM_TRYPOST(0, listener->request_queue, mm_event_notify, listener, req);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_1(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1)
-{
-	MM_POST(1, listener->request_queue, mm_event_notify, listener, req, a1);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_1(struct mm_event_listener *listener, mm_post_routine_t req,
-		    uintptr_t a1)
-{
-	MM_TRYPOST(1, listener->request_queue, mm_event_notify, listener, req, a1);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_2(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2)
-{
-	MM_POST(2, listener->request_queue, mm_event_notify, listener, req, a1, a2);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_2(struct mm_event_listener *listener, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2)
-{
-	MM_TRYPOST(2, listener->request_queue, mm_event_notify, listener, req, a1, a2);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_3(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_POST(3, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_3(struct mm_event_listener *listener, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3)
-{
-	MM_TRYPOST(3, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_4(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_POST(4, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_4(struct mm_event_listener *listener, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
-{
-	MM_TRYPOST(4, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_5(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_POST(5, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4, a5);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_5(struct mm_event_listener *listener, mm_post_routine_t req,
-		    uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
-{
-	MM_TRYPOST(5, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4, a5);
-}
-
-static inline void NONNULL(1, 2)
-mm_thread_post_6(struct mm_event_listener *listener, mm_post_routine_t req,
-		 uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_POST(6, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4, a5, a6);
-}
-
-static inline bool NONNULL(1, 2)
-mm_thread_trypost_6(struct mm_event_listener *listener, mm_post_routine_t req,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
-{
-	MM_TRYPOST(6, listener->request_queue, mm_event_notify, listener, req, a1, a2, a3, a4, a5, a6);
 }
 
 #endif /* BASE_EVENT_LISTENER_H */

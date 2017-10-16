@@ -272,7 +272,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	uint32_t sz = mm_upper_pow2(listener_queue_size);
 	if (sz < MM_LISTINER_QUEUE_MIN_SIZE)
 		sz = MM_LISTINER_QUEUE_MIN_SIZE;
-	listener->request_queue = mm_ring_mpmc_create(sz);
+	listener->async_queue = mm_ring_mpmc_create(sz);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
@@ -297,11 +297,16 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
 	listener->stats.wait_calls = 0;
+	listener->stats.omit_calls = 0;
 	listener->stats.stray_events = 0;
 	listener->stats.direct_events = 0;
 	listener->stats.enqueued_events = 0;
 	listener->stats.dequeued_events = 0;
 	listener->stats.forwarded_events = 0;
+	listener->stats.enqueued_async_calls = 0;
+	listener->stats.enqueued_async_posts = 0;
+	listener->stats.dequeued_async_calls = 0;
+	listener->stats.dequeued_async_posts = 0;
 #endif
 
 	// Initialize private event storage.
@@ -316,7 +321,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 	ENTER();
 
 	// Destroy the associated request queue.
-	mm_ring_mpmc_destroy(listener->request_queue);
+	mm_ring_mpmc_destroy(listener->async_queue);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

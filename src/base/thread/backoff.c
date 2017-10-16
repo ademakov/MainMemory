@@ -18,6 +18,7 @@
  */
 
 #include "base/thread/backoff.h"
+#include "base/event/event.h"
 #include "base/fiber/fiber.h"
 #include "base/thread/thread.h"
 
@@ -26,8 +27,8 @@ mm_thread_backoff_slow(uint32_t count)
 {
 	struct mm_strand *strand = mm_strand_selfptr();
 	if (strand != NULL) {
-		// Execute any pending thread requests.
-		mm_strand_execute_requests(strand);
+		// Handle any pending async calls.
+		mm_event_handle_calls(strand->listener);
 		// If there are any waiting working fibers and this is a
 		// working fiber too then yield to let them make progress.
 		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_IDLE) && strand->fiber->priority < MM_PRIO_IDLE) {

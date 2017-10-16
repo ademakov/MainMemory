@@ -112,53 +112,53 @@ mm_event_forward_post(struct mm_event_listener *listener, struct mm_event_forwar
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_thread_post_2(listener, mm_event_forward_1,
-				 (uintptr_t) buffer->sinks[0],
-				 buffer->events[0]);
+		mm_event_call_2(listener, mm_event_forward_1,
+				(uintptr_t) buffer->sinks[0],
+				buffer->events[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_thread_post_3(listener, mm_event_forward_2,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4));
+		mm_event_call_3(listener, mm_event_forward_2,
+				(uintptr_t) buffer->sinks[0],
+				(uintptr_t) buffer->sinks[1],
+				buffer->events[0]
+				| (buffer->events[1] << 4));
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_thread_post_4(listener, mm_event_forward_3,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4)
-				 | (buffer->events[2] << 8));
+		mm_event_call_4(listener, mm_event_forward_3,
+				(uintptr_t) buffer->sinks[0],
+				(uintptr_t) buffer->sinks[1],
+				(uintptr_t) buffer->sinks[2],
+				buffer->events[0]
+				| (buffer->events[1] << 4)
+				| (buffer->events[2] << 8));
 		break;
 	case 4:
 		buffer->nsinks = 0;
-		mm_thread_post_5(listener, mm_event_forward_4,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2],
-				 (uintptr_t) buffer->sinks[3],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4)
-				 | (buffer->events[2] << 8)
-				 | (buffer->events[3] << 12));
+		mm_event_call_5(listener, mm_event_forward_4,
+				(uintptr_t) buffer->sinks[0],
+				(uintptr_t) buffer->sinks[1],
+				(uintptr_t) buffer->sinks[2],
+				(uintptr_t) buffer->sinks[3],
+				buffer->events[0]
+				| (buffer->events[1] << 4)
+				| (buffer->events[2] << 8)
+				| (buffer->events[3] << 12));
 		break;
 	case 5:
 		buffer->nsinks = 0;
-		mm_thread_post_6(listener, mm_event_forward_5,
-				 (uintptr_t) buffer->sinks[0],
-				 (uintptr_t) buffer->sinks[1],
-				 (uintptr_t) buffer->sinks[2],
-				 (uintptr_t) buffer->sinks[3],
-				 (uintptr_t) buffer->sinks[4],
-				 buffer->events[0]
-				 | (buffer->events[1] << 4)
-				 | (buffer->events[2] << 8)
-				 | (buffer->events[3] << 12)
-				 | (buffer->events[4] << 16));
+		mm_event_call_6(listener, mm_event_forward_5,
+				(uintptr_t) buffer->sinks[0],
+				(uintptr_t) buffer->sinks[1],
+				(uintptr_t) buffer->sinks[2],
+				(uintptr_t) buffer->sinks[3],
+				(uintptr_t) buffer->sinks[4],
+				buffer->events[0]
+				| (buffer->events[1] << 4)
+				| (buffer->events[2] << 8)
+				| (buffer->events[3] << 12)
+				| (buffer->events[4] << 16));
 		break;
 	default:
 		ABORT();

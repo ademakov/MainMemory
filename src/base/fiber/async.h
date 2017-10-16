@@ -22,7 +22,6 @@
 
 #include "common.h"
 #include "base/syscall.h"
-#include "base/event/dispatch.h"
 #include "base/fiber/strand.h"
 
 #include <sys/syscall.h>

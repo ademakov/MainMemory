@@ -26,6 +26,67 @@
 #include "base/fiber/strand.h"
 
 /**********************************************************************
+ * Asynchronous procedure call construction.
+ **********************************************************************/
+
+/* The size of ring data for a given number of post arguments. */
+#define MM_POST_ARGC(c)		((c) + 1)
+/* Define ring data for a post request together with its arguments. */
+#define MM_POST_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) __VA_ARGS__ }
+
+/* Post a request to a cross-thread request ring. */
+#define MM_POST(n, ring, stat, notify, target, ...)			\
+	do {								\
+		mm_stamp_t s;						\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_POST_ARGC(n));	\
+		notify(target, s);					\
+		stat();							\
+	} while (0)
+
+/* Try to post a request to a cross-thread request ring. */
+#define MM_TRYPOST(n, ring, stat, notify, target, ...)			\
+	do {								\
+		bool rc;						\
+		mm_stamp_t s;						\
+		MM_POST_ARGV(v, __VA_ARGS__);				\
+		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_POST_ARGC(n));	\
+		if (rc) {						\
+			notify(target, s);				\
+			stat();						\
+		}							\
+		return rc;						\
+	} while (0)
+
+static inline void
+mm_event_call_stat(void)
+{
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (likely(strand != NULL))
+		strand->listener->stats.enqueued_async_calls++;
+#endif
+}
+
+static inline void
+mm_event_post_stat(void)
+{
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	struct mm_strand *strand = mm_strand_selfptr();
+	if (likely(strand != NULL))
+		strand->listener->stats.enqueued_async_posts++;
+#endif
+}
+
+static inline void
+mm_event_post_notify(struct mm_event_dispatch *dispatch, mm_stamp_t stamp UNUSED)
+{
+	mm_event_wakeup_any(dispatch);
+}
+
+/**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
 
@@ -284,8 +345,13 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 			// Try to pull a few queued events. This may fail
 			// because of concurrent listeners doing the same.
 			mm_event_listener_handle_queued(listener);
-			if (listener->events.dequeued)
+			if (listener->events.dequeued) {
+#if ENABLE_EVENT_STATS
+				// Update statistics.
+				listener->stats.omit_calls++;
+#endif
 				goto leave;
+			}
 		}
 	}
 
@@ -356,7 +422,7 @@ mm_event_wakeup(struct mm_event_listener *listener)
 {
 	ENTER();
 
-	mm_thread_post_0(listener, mm_event_wakeup_req);
+	mm_event_call_0(listener, mm_event_wakeup_req);
 
 	LEAVE();
 }
@@ -379,4 +445,316 @@ mm_event_wakeup_any(struct mm_event_dispatch *dispatch)
 	}
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Asynchronous procedure call execution.
+ **********************************************************************/
+
+struct mm_event_async
+{
+	union
+	{
+		uintptr_t data[MM_EVENT_ASYNC_MAX + 1];
+		struct
+		{
+			mm_event_async_routine_t routine;
+			uintptr_t arguments[MM_EVENT_ASYNC_MAX];
+		};
+	};
+};
+
+static inline void
+mm_event_async_execute(struct mm_event_async *post)
+{
+	(*post->routine)(post->arguments);
+}
+
+static inline bool NONNULL(1, 2)
+mm_event_receive_call(struct mm_event_listener *listener, struct mm_event_async *post)
+{
+	return mm_ring_mpsc_get_n(listener->async_queue, post->data, (MM_EVENT_ASYNC_MAX + 1));
+}
+
+static inline bool NONNULL(1, 2)
+mm_event_receive_post(struct mm_event_dispatch *dispatch, struct mm_event_async *post)
+{
+	return mm_ring_mpmc_get_n(dispatch->async_queue, post->data, (MM_EVENT_ASYNC_MAX + 1));
+}
+
+void NONNULL(1)
+mm_event_handle_calls(struct mm_event_listener *listener)
+{
+	ENTER();
+
+	// Execute requests.
+	struct mm_event_async async;
+	if (mm_event_receive_call(listener, &async)) {
+		// Enter the state that forbids a recursive fiber switch.
+		struct mm_strand *strand = listener->strand;
+		mm_strand_state_t state = strand->state;
+		strand->state = MM_STRAND_CSWITCH;
+
+		do {
+			mm_event_async_execute(&async);
+#if ENABLE_EVENT_STATS
+			listener->stats.dequeued_async_calls++;
+#endif
+		} while (mm_event_receive_call(listener, &async));
+
+		// Restore normal running state.
+		strand->state = state;
+	}
+
+	LEAVE();
+}
+
+bool NONNULL(1)
+mm_event_handle_posts(struct mm_event_listener *listener UNUSED)
+{
+	ENTER();
+	bool rc = false;
+
+#if ENABLE_SMP
+	struct mm_event_async async;
+	if (mm_event_receive_post(listener->dispatch, &async)) {
+		mm_event_async_execute(&async);
+#if ENABLE_EVENT_STATS
+		listener->stats.dequeued_async_posts++;
+#endif
+		rc = true;
+	}
+#endif
+
+	LEAVE();
+	return rc;
+}
+
+
+/**********************************************************************
+ * Asynchronous procedure calls targeting a single listener.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_call_0(struct mm_event_listener *listener, mm_event_async_routine_t r)
+{
+	MM_POST(0, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_0(struct mm_event_listener *listener, mm_event_async_routine_t r)
+{
+	MM_TRYPOST(0, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r);
+}
+
+void NONNULL(1, 2)
+mm_event_call_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1)
+{
+	MM_POST(1, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1)
+{
+	MM_TRYPOST(1, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1);
+}
+
+void NONNULL(1, 2)
+mm_event_call_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2)
+{
+	MM_POST(2, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1, a2);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2)
+{
+	MM_TRYPOST(2, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1, a2);
+}
+
+void NONNULL(1, 2)
+mm_event_call_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_POST(3, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1, a2, a3);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_TRYPOST(3, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1, a2, a3);
+}
+
+void NONNULL(1, 2)
+mm_event_call_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_POST(4, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1, a2, a3, a4);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_TRYPOST(4, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1, a2, a3, a4);
+}
+
+void NONNULL(1, 2)
+mm_event_call_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_POST(5, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1, a2, a3, a4, a5);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_TRYPOST(5, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1, a2, a3, a4, a5);
+}
+
+void NONNULL(1, 2)
+mm_event_call_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_POST(6, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		r, a1, a2, a3, a4, a5, a6);
+}
+
+bool NONNULL(1, 2)
+mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_TRYPOST(6, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
+		   r, a1, a2, a3, a4, a5, a6);
+}
+
+/**********************************************************************
+ * Asynchronous procedure calls targeting any listener of a dispatcher.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_post_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r)
+{
+	MM_POST(0, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r)
+{
+	MM_TRYPOST(0, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r);
+}
+
+void NONNULL(1, 2)
+mm_event_post_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1)
+{
+	MM_POST(1, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1)
+{
+	MM_TRYPOST(1, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r, a1);
+}
+
+void NONNULL(1, 2)
+mm_event_post_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2)
+{
+	MM_POST(2, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1, a2);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2)
+{
+	MM_TRYPOST(2, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r, a1, a2);
+}
+
+void NONNULL(1, 2)
+mm_event_post_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_POST(3, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1, a2, a3);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_TRYPOST(3, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r, a1, a2, a3);
+}
+
+void NONNULL(1, 2)
+mm_event_post_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_POST(4, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1, a2, a3, a4);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_TRYPOST(4, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify,
+		   dispatch, r, a1, a2, a3, a4);
+}
+
+void NONNULL(1, 2)
+mm_event_post_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_POST(5, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1, a2, a3, a4, a5);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_TRYPOST(5, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r, a1, a2, a3, a4, a5);
+}
+
+void NONNULL(1, 2)
+mm_event_post_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_POST(6, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		r, a1, a2, a3, a4, a5, a6);
+}
+
+bool NONNULL(1, 2)
+mm_event_trypost_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_TRYPOST(6, dispatch->async_queue, mm_event_post_stat, mm_event_post_notify, dispatch,
+		   r, a1, a2, a3, a4, a5, a6);
 }

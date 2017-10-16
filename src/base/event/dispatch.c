@@ -24,8 +24,6 @@
 #include "base/event/listener.h"
 #include "base/fiber/strand.h"
 #include "base/memory/memory.h"
-#include "base/thread/domain.h"
-#include "base/thread/thread.h"
 
 #define MM_DISPATCH_QUEUE_MIN_SIZE	16
 
@@ -43,7 +41,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 	uint32_t sz = mm_upper_pow2(dispatch_queue_size);
 	if (sz < MM_DISPATCH_QUEUE_MIN_SIZE)
 		sz = MM_DISPATCH_QUEUE_MIN_SIZE;
-	dispatch->request_queue = mm_ring_mpmc_create(sz);
+	dispatch->async_queue = mm_ring_mpmc_create(sz);
 
 	// Prepare listener info.
 	dispatch->nlisteners = nthreads;
@@ -83,7 +81,7 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 	mm_common_free(dispatch->listeners);
 
 	// Destroy the associated request queue.
-	mm_ring_mpmc_destroy(dispatch->request_queue);
+	mm_ring_mpmc_destroy(dispatch->async_queue);
 
 	// Release the sink queue.
 	mm_common_free(dispatch->sink_queue);
@@ -107,17 +105,24 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 		struct mm_event_listener *listener = &listeners[i];
 		struct mm_event_listener_stats *stats = &listener->stats;
 
-		mm_log_fmt("listener %d: "
-			   "wait=%llu poll=%llu/%llu "
-			   "stray=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n", i,
+		mm_log_fmt("listener %d:\n"
+			   " listen=%llu (wait=%llu poll=%llu/%llu omit=%llu)\n"
+			   " stray=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n"
+			   " async-calls=%llu/%llu async-posts=%llu/%llu\n", i,
+			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->omit_calls),
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
 			   (unsigned long long) stats->zero_poll_calls,
+			   (unsigned long long) stats->omit_calls,
 			   (unsigned long long) stats->stray_events,
 			   (unsigned long long) stats->direct_events,
 			   (unsigned long long) stats->enqueued_events,
 			   (unsigned long long) stats->dequeued_events,
-			   (unsigned long long) stats->forwarded_events);
+			   (unsigned long long) stats->forwarded_events,
+			   (unsigned long long) stats->enqueued_async_calls,
+			   (unsigned long long) stats->dequeued_async_calls,
+			   (unsigned long long) stats->enqueued_async_posts,
+			   (unsigned long long) stats->dequeued_async_posts);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->storage.nevents_stats[j];

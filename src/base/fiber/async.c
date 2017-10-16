@@ -21,6 +21,7 @@
 
 #include "base/list.h"
 #include "base/report.h"
+#include "base/event/event.h"
 #include "base/fiber/fiber.h"
 
 #include <sys/uio.h>
@@ -186,7 +187,7 @@ mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_3(dispatch, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
+	mm_event_post_3(dispatch, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -206,7 +207,7 @@ mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_4(dispatch, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
+	mm_event_post_4(dispatch, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -226,7 +227,7 @@ mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_5(dispatch, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
+	mm_event_post_5(dispatch, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -246,7 +247,7 @@ mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_domain_post_6(dispatch, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
+	mm_event_post_6(dispatch, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
