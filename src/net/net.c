@@ -461,10 +461,8 @@ mm_net_event_complete(struct mm_net_socket *sock)
 		/* Do nothing. @suppress("Suspicious semicolon") */;
 	else if ((sock->flags & (MM_NET_READ_ERROR | MM_NET_WRITE_ERROR)) != 0)
 		mm_net_close(sock);
-#if ENABLE_SMP
-	else if (sock->proto->detach == NULL || (sock->proto->detach)(sock))
+	else
 		mm_event_handle_complete(&sock->event);
-#endif
 
 	LEAVE();
 }

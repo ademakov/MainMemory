@@ -157,8 +157,6 @@ struct mm_net_proto
 	struct mm_net_socket * (*create)(void);
 	void (*destroy)(struct mm_net_socket *);
 
-	bool (*detach)(struct mm_net_socket *);
-
 	void (*reader)(struct mm_net_socket *);
 	void (*writer)(struct mm_net_socket *);
 };
