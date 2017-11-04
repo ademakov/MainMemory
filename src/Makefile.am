@@ -11,6 +11,7 @@ core_sources = \
 	common.h
 
 net_sources = \
+	net/address.h net/address.c \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h
 

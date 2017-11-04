@@ -21,17 +21,18 @@
 #define NET_NET_H
 
 #include "common.h"
+
+#include "net/address.h"
+
 #include "base/bitset.h"
 #include "base/list.h"
 #include "base/event/event.h"
 #include "base/event/listener.h"
 #include "base/fiber/work.h"
 
-#include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/uio.h>
-#include <sys/un.h>
 
 /* Forward declaration. */
 struct mm_fiber;
@@ -65,29 +66,6 @@ struct mm_fiber;
 /* Connection options. */
 #define MM_NET_KEEPALIVE	0x010000
 #define MM_NET_NODELAY		0x020000
-
-/* Socket address. */
-struct mm_net_addr
-{
-	union
-	{
-		struct sockaddr addr;
-		struct sockaddr_un un_addr;	/* Unix-domain socket address. */
-		struct sockaddr_in in_addr;	/* IPv4 socket address. */
-		struct sockaddr_in6 in6_addr;	/* IPv6 socket address. */
-	};
-};
-
-/* Socket peer address. */
-struct mm_net_peer_addr
-{
-	union
-	{
-		struct sockaddr addr;
-		struct sockaddr_in in_addr;
-		struct sockaddr_in6 in6_addr;
-	};
-};
 
 /* Network server data. */
 struct mm_net_server
@@ -160,19 +138,6 @@ struct mm_net_proto
 	void (*reader)(struct mm_net_socket *);
 	void (*writer)(struct mm_net_socket *);
 };
-
-/**********************************************************************
- * Network address manipulation routines.
- **********************************************************************/
-
-bool NONNULL(1, 2)
-mm_net_set_unix_addr(struct mm_net_addr *addr, const char *path);
-
-bool NONNULL(1)
-mm_net_set_inet_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port);
-
-bool NONNULL(1)
-mm_net_set_inet6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t port);
 
 /**********************************************************************
  * Network servers.
