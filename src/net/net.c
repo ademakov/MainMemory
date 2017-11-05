@@ -164,13 +164,13 @@ mm_net_reclaim_routine(struct mm_work *work)
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed socks
-	while (sock->reader != NULL || sock->writer != NULL) {
+	while (sock->event.reader != NULL || sock->event.writer != NULL) {
 		struct mm_fiber *fiber = mm_fiber_selfptr();
 		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
-		if (sock->reader != NULL)
-			mm_fiber_hoist(sock->reader, priority);
- 		if (sock->writer != NULL)
-			mm_fiber_hoist(sock->writer, priority);
+		if (sock->event.reader != NULL)
+			mm_fiber_hoist(sock->event.reader, priority);
+		if (sock->event.writer != NULL)
+			mm_fiber_hoist(sock->event.writer, priority);
 		mm_fiber_yield();
 	}
 
@@ -220,8 +220,6 @@ mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *pro
 	sock->flags = flags;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
-	sock->reader = NULL;
-	sock->writer = NULL;
 }
 
 static void
@@ -394,9 +392,9 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 	// Update the read readiness flags.
 	sock->flags |= flags;
 
-	if (sock->reader != NULL) {
+	if (sock->event.reader != NULL) {
 		// Run the reader fiber presumably blocked on the socket.
-		mm_fiber_run(sock->reader);
+		mm_fiber_run(sock->event.reader);
 	} else {
 		// Check to see if a new reader should be spawned.
 		flags = sock->flags & (MM_NET_READER_SPAWNED | MM_NET_READER_PENDING);
@@ -424,9 +422,9 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 	// Update the write readiness flags.
 	sock->flags |= flags;
 
-	if (sock->writer != NULL) {
+	if (sock->event.writer != NULL) {
 		// Run the writer fiber presumably blocked on the socket.
-		mm_fiber_run(sock->writer);
+		mm_fiber_run(sock->event.writer);
 	} else {
 		// Check to see if a new writer should be spawned.
 		flags = sock->flags & (MM_NET_WRITER_SPAWNED | MM_NET_WRITER_PENDING);
@@ -1028,12 +1026,12 @@ retry:
 	mm_event_register_fd(&sock->event);
 
 	// Block the fiber waiting for connection completion.
-	sock->writer = mm_fiber_selfptr();
+	sock->event.writer = sock->event.listener->strand->fiber;
 	while ((sock->flags & (MM_NET_WRITE_READY | MM_NET_WRITE_ERROR)) == 0) {
 		mm_fiber_block();
 		// TODO: mm_fiber_testcancel();
 	}
-	sock->writer = NULL;
+	sock->event.writer = NULL;
 
 	// Check for EINPROGRESS connection outcome.
 	if (rc == -1) {
@@ -1121,15 +1119,17 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	// Block the fiber waiting for the socket to become read ready.
 	struct mm_strand *strand = mm_strand_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->reader = mm_fiber_selfptr();
+		sock->event.reader = sock->event.listener->strand->fiber;
+		ASSERT(sock->event.reader == mm_fiber_selfptr());
 		mm_fiber_block();
-		sock->reader = NULL;
+		sock->event.reader = NULL;
 		rc = 0;
 	} else if (mm_strand_gettime(strand) < deadline) {
 		mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-		sock->reader = mm_fiber_selfptr();
+		sock->event.reader = sock->event.listener->strand->fiber;
+		ASSERT(sock->event.reader == mm_fiber_selfptr());
 		mm_timer_block(timeout);
-		sock->reader = NULL;
+		sock->event.reader = NULL;
 		rc = 0;
 	} else {
 		if (sock->read_timeout != 0)
@@ -1170,15 +1170,17 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	// Block the fiber waiting for the socket to become write ready.
 	struct mm_strand *strand = mm_strand_selfptr();
 	if (deadline == MM_TIMEVAL_MAX) {
-		sock->writer = mm_fiber_selfptr();
+		sock->event.writer = sock->event.listener->strand->fiber;
+		ASSERT(sock->event.writer == mm_fiber_selfptr());
 		mm_fiber_block();
-		sock->writer = NULL;
+		sock->event.writer = NULL;
 		rc = 0;
 	} else if (mm_strand_gettime(strand) < deadline) {
 		mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-		sock->writer = mm_fiber_selfptr();
+		sock->event.writer = sock->event.listener->strand->fiber;
+		ASSERT(sock->event.writer == mm_fiber_selfptr());
 		mm_timer_block(timeout);
-		sock->writer = NULL;
+		sock->event.writer = NULL;
 		rc = 0;
 	} else {
 		if (sock->write_timeout != 0)

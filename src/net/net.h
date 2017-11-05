@@ -101,10 +101,6 @@ struct mm_net_socket
 	/* Event handling data. */
 	struct mm_event_fd event;
 
-	/* Fibers bound to perform socket I/O. */
-	struct mm_fiber *reader;
-	struct mm_fiber *writer;
-
 	/* I/O timeouts. */
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;

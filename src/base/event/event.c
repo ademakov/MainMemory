@@ -106,6 +106,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	sink->status = MM_EVENT_INITIAL;
 	sink->handler = handler;
 	sink->listener = NULL;
+	sink->reader = NULL;
+	sink->writer = NULL;
 
 #if ENABLE_SMP
 	sink->receive_stamp = 0;

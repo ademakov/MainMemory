@@ -143,6 +143,10 @@ struct mm_event_fd
 	/* Pending events for sinks in the dispatch queue. */
 	uint8_t queued_events;
 
+	/* Fibers bound to perform socket I/O. */
+	struct mm_fiber *reader;
+	struct mm_fiber *writer;
+
 	/* Reclaim queue link. */
 	union {
 		struct mm_qlink retire_link;
