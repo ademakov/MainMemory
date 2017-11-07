@@ -92,7 +92,7 @@ mm_event_post_notify(struct mm_event_dispatch *dispatch, mm_stamp_t stamp UNUSED
 
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
-		    mm_event_sequence_t input, mm_event_sequence_t output,
+		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    mm_event_affinity_t target)
 {
 	ENTER();

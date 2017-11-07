@@ -226,8 +226,8 @@ static void
 mm_net_socket_prepare_event(struct mm_net_socket *sock, int fd)
 {
 	uint32_t flags = sock->flags;
-	mm_event_sequence_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
-	mm_event_sequence_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+	mm_event_capacity_t input = (flags & MM_NET_INBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
+	mm_event_capacity_t output = (flags & MM_NET_OUTBOUND) != 0 ? MM_EVENT_REGULAR : MM_EVENT_ONESHOT;
 	mm_event_affinity_t affinity = (flags & MM_NET_BOUND_EVENTS) != 0 ? MM_EVENT_BOUND : MM_EVENT_LOOSE;
 	mm_event_prepare_fd(&sock->event, fd, mm_net_socket_handler, input, output, affinity);
 }

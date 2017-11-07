@@ -46,7 +46,7 @@ typedef enum {
 	/* Single event is expected. To get another one it required
 	   to call a corresponding trigger function. */
 	MM_EVENT_ONESHOT,
-} mm_event_sequence_t;
+} mm_event_capacity_t;
 
 /* Event sink thread affinity. */
 typedef enum {
@@ -210,7 +210,7 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 
 void NONNULL(1, 3)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
-		    mm_event_sequence_t input, mm_event_sequence_t output,
+		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    mm_event_affinity_t target);
 
 void NONNULL(1)
