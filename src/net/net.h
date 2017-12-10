@@ -28,7 +28,6 @@
 #include "base/list.h"
 #include "base/event/event.h"
 #include "base/event/listener.h"
-#include "base/fiber/work.h"
 
 #include <sys/socket.h>
 #include <sys/types.h>
@@ -80,7 +79,6 @@ struct mm_net_server
 	bool acceptor_active;
 
 	/* Work items for server tasks. */
-	struct mm_work acceptor_work;
 	struct mm_work register_work;
 
 	/* Global server list link. */
@@ -109,8 +107,6 @@ struct mm_net_socket
 	uint32_t flags;
 
 	/* Work items for I/O tasks. */
-	struct mm_work read_work;
-	struct mm_work write_work;
 	struct mm_work reclaim_work;
 
 	/* Socket protocol handlers. */

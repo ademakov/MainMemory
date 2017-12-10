@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
+#include "base/fiber/work.h"
 
 /* Forward declarations. */
 struct mm_event_dispatch;
@@ -146,6 +147,9 @@ struct mm_event_fd
 	/* Fibers bound to perform socket I/O. */
 	struct mm_fiber *reader;
 	struct mm_fiber *writer;
+	/* Work entries to perform socket I/O. */
+	struct mm_work reader_work;
+	struct mm_work writer_work;
 
 	/* Reclaim queue link. */
 	union {

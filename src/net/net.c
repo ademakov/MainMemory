@@ -197,13 +197,13 @@ static mm_value_t mm_net_writer_routine(struct mm_work *work);
 static void
 mm_net_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
 {
-	mm_net_yield_reader(containerof(work, struct mm_net_socket, read_work));
+	mm_net_yield_reader(containerof(work, struct mm_net_socket, event.reader_work));
 }
 
 static void
 mm_net_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
 {
-	mm_net_yield_writer(containerof(work, struct mm_net_socket, write_work));
+	mm_net_yield_writer(containerof(work, struct mm_net_socket, event.writer_work));
 }
 
 MM_WORK_VTABLE_2(mm_net_read_vtable, mm_net_reader_routine, mm_net_reader_complete);
@@ -259,8 +259,8 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_net_socket_prepare_event(sock, fd);
 
 	// Initialize the required work items.
-	mm_work_prepare(&sock->read_work, &mm_net_read_vtable);
-	mm_work_prepare(&sock->write_work, &mm_net_write_vtable);
+	mm_work_prepare(&sock->event.reader_work, &mm_net_read_vtable);
+	mm_work_prepare(&sock->event.writer_work, &mm_net_write_vtable);
 	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
 }
 
@@ -327,7 +327,7 @@ mm_net_acceptor(struct mm_work *work)
 	ENTER();
 
 	// Find the pertinent server.
-	struct mm_net_server *srv = containerof(work, struct mm_net_server, acceptor_work);
+	struct mm_net_server *srv = containerof(work, struct mm_net_server, event.reader_work);
 
 	// Accept incoming connections.
 	while (mm_net_accept(srv))
@@ -341,7 +341,7 @@ static void
 mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
 {
 	// Find the pertinent server.
-	struct mm_net_server *srv = containerof(work, struct mm_net_server, acceptor_work);
+	struct mm_net_server *srv = containerof(work, struct mm_net_server, event.reader_work);
 
 	// Indicate that the acceptor work is done.
 	srv->acceptor_active = false;
@@ -358,7 +358,7 @@ mm_net_accept_handler(mm_event_t event, void *data)
 		// Indicate that the acceptor work is in progress.
 		srv->acceptor_active = true;
 		// Really queue the acceptor work for running.
-		mm_strand_add_work(mm_net_get_server_strand(srv), &srv->acceptor_work);
+		mm_strand_add_work(mm_net_get_server_strand(srv), &srv->event.reader_work);
 	}
 
 	LEAVE();
@@ -404,7 +404,7 @@ mm_net_set_read_ready(struct mm_net_socket *sock, uint32_t flags)
 			// Remember a reader has been started.
 			sock->flags |= MM_NET_READER_SPAWNED;
 			// Submit a reader work.
-			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
+			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.reader_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -434,7 +434,7 @@ mm_net_set_write_ready(struct mm_net_socket *sock, uint32_t flags)
 			// Remember a writer has been started.
 			sock->flags |= MM_NET_WRITER_SPAWNED;
 			// Submit a writer work.
-			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
+			mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.writer_work);
 		} else if (flags == 0) {
 			mm_net_event_complete(sock);
 		}
@@ -549,7 +549,7 @@ mm_net_spawn_reader(struct mm_net_socket *sock)
 		// Remember a reader has been started.
 		sock->flags |= MM_NET_READER_SPAWNED;
 		// Submit a reader work.
-		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.reader_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -577,7 +577,7 @@ mm_net_spawn_writer(struct mm_net_socket *sock)
 		// Remember a writer has been started.
 		sock->flags |= MM_NET_WRITER_SPAWNED;
 		// Submit a writer work.
-		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.writer_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -615,7 +615,7 @@ mm_net_yield_reader(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_INBOUND) == 0)
 			sock->flags &= ~MM_NET_READER_PENDING;
 		// Submit a reader work.
-		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->read_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.reader_work);
 	} else {
 		sock->flags &= ~MM_NET_READER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -654,7 +654,7 @@ mm_net_yield_writer(struct mm_net_socket *sock)
 		if ((sock->flags & MM_NET_OUTBOUND) == 0)
 			sock->flags &= ~MM_NET_WRITER_PENDING;
 		// Submit a writer work.
-		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->write_work);
+		mm_strand_add_work(mm_net_get_socket_strand(sock), &sock->event.writer_work);
 	} else {
 		sock->flags &= ~MM_NET_WRITER_SPAWNED;
 		mm_net_event_complete(sock);
@@ -669,7 +669,7 @@ mm_net_reader_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, read_work);
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.reader_work);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	if (unlikely(mm_net_is_reader_shutdown(sock)))
 		goto leave;
@@ -693,7 +693,7 @@ mm_net_writer_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, write_work);
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.writer_work);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 	if (unlikely(mm_net_is_writer_shutdown(sock)))
 		goto leave;
@@ -785,7 +785,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	srv->acceptor_active = false;
 	srv->name = NULL;
 	MM_WORK_VTABLE_2(acceptor_vtable, mm_net_acceptor, mm_net_acceptor_complete);
-	mm_work_prepare(&srv->acceptor_work, &acceptor_vtable);
+	mm_work_prepare(&srv->event.reader_work, &acceptor_vtable);
 	MM_WORK_VTABLE_1(register_vtable, mm_net_register_server);
 	mm_work_prepare(&srv->register_work, &register_vtable);
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
@@ -827,6 +827,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	// Register the server socket with the event loop.
 	mm_event_prepare_fd(&srv->event, fd, mm_net_accept_handler,
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
+
 	struct mm_strand *strand = mm_thread_ident_to_strand(target);
 	mm_strand_submit_work(strand, &srv->register_work);
 
