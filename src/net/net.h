@@ -75,9 +75,6 @@ struct mm_net_server
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* Acceptor fiber is active. */
-	bool acceptor_active;
-
 	/* Work items for server tasks. */
 	struct mm_work register_work;
 
@@ -102,9 +99,6 @@ struct mm_net_socket
 	/* I/O timeouts. */
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;
-
-	/* Socket flags. */
-	uint32_t flags;
 
 	/* Work items for I/O tasks. */
 	struct mm_work reclaim_work;
@@ -236,19 +230,19 @@ mm_net_get_socket_strand(struct mm_net_socket *sock)
 static inline bool NONNULL(1)
 mm_net_is_closed(struct mm_net_socket *sock)
 {
-	return (sock->flags & MM_NET_CLOSED) != 0;
+	return (sock->event.flags & MM_NET_CLOSED) != 0;
 }
 
 static inline bool NONNULL(1)
 mm_net_is_reader_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
+	return (sock->event.flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
 }
 
 static inline bool NONNULL(1)
 mm_net_is_writer_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
+	return (sock->event.flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
 }
 
 static inline void NONNULL(1)

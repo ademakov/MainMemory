@@ -111,6 +111,9 @@ struct mm_event_fd
 	/* File descriptor to watch. */
 	int fd;
 
+	/* State flags. */
+	uint32_t flags;
+
 	/* Current event sink status. */
 	int16_t status;
 
