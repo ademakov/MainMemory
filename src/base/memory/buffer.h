@@ -183,7 +183,7 @@ mm_buffer_segment_area(const struct mm_buffer_segment *seg)
 static inline uint32_t NONNULL(1)
 mm_buffer_segment_internal_room(const struct mm_buffer_segment *seg)
 {
-	ASSERT(mm_buffer_segment_internal(seg));
+	ASSERT(!mm_buffer_segment_external(seg));
 	return mm_buffer_segment_area(seg) - MM_BUFFER_SEGMENT_SIZE;
 }
 
@@ -197,7 +197,7 @@ mm_buffer_segment_external_room(const struct mm_buffer_segment *seg)
 static inline char * NONNULL(1)
 mm_buffer_segment_internal_data(struct mm_buffer_segment *seg)
 {
-	ASSERT(mm_buffer_segment_internal(seg));
+	ASSERT(!mm_buffer_segment_external(seg));
 	return ((struct mm_buffer_isegment *) seg)->data;
 }
 
@@ -299,7 +299,7 @@ mm_buffer_reader_ptr(struct mm_buffer_reader *pos)
 	return pos->ptr;
 }
 
-/* Get the end pointer for the current write segment. */
+/* Get the end pointer for the current read segment. */
 static inline char * NONNULL(1)
 mm_buffer_reader_end(struct mm_buffer_reader *pos)
 {

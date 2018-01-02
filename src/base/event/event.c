@@ -103,6 +103,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	VERIFY(input != MM_EVENT_IGNORED || output != MM_EVENT_IGNORED);
 
 	sink->fd = fd;
+	//sink->flags = 0;
 	sink->status = MM_EVENT_INITIAL;
 	sink->handler = handler;
 	sink->listener = NULL;
@@ -188,7 +189,7 @@ mm_event_unregister_fd(struct mm_event_fd *sink)
 		sink->status = MM_EVENT_DROPPED;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->thread == mm_thread_selfptr());
+		ASSERT(listener->strand == mm_strand_selfptr());
 
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -206,7 +207,7 @@ mm_event_unregister_invalid_fd(struct mm_event_fd *sink)
 		sink->status = MM_EVENT_INVALID;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->thread == mm_thread_selfptr());
+		ASSERT(listener->strand == mm_strand_selfptr());
 
 		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 		mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
@@ -226,7 +227,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 		sink->oneshot_input_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->thread == mm_thread_selfptr());
+		ASSERT(listener->strand == mm_strand_selfptr());
 
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -245,7 +246,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 		sink->oneshot_output_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->thread == mm_thread_selfptr());
+		ASSERT(listener->strand == mm_strand_selfptr());
 
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}

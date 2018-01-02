@@ -63,7 +63,7 @@ mm_buffer_create_chunk(struct mm_buffer *buf, size_t size)
 	size = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
 
 	// Allocate a memory chunk.
-	DEBUG("create a buffer chunk of %zu (%zu) bytes", size, buf->consumed_max);
+	DEBUG("create a buffer chunk of %zu (%u) bytes", size, buf->chunk_size);
 	return mm_chunk_create_private(size);
 }
 

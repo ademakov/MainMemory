@@ -28,8 +28,6 @@ struct mm_selfpipe
 	struct mm_event_fd event_fd;
 
 	int write_fd;
-
-	bool read_ready;
 };
 
 void NONNULL(1)

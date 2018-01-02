@@ -94,7 +94,8 @@ enum {
 typedef uint16_t mm_event_stamp_t;
 
 /* Event handler routine. */
-typedef void (*mm_event_handler_t)(mm_event_t event, void *data);
+struct mm_event_fd;
+typedef void (*mm_event_handler_t)(mm_event_t event, struct mm_event_fd *sink);
 
 /**********************************************************************
  * I/O event sink.

@@ -165,8 +165,8 @@ mm_netbuf_rend(struct mm_netbuf_socket *sock)
 static inline void NONNULL(1, 2)
 mm_netbuf_rset(struct mm_netbuf_socket *sock, char *ptr)
 {
-	ASSERT(ptr >= sock->rxbuf.head.ptr);
-	ASSERT(ptr <= sock->rxbuf.head.end);
+	ASSERT(ptr >= mm_buffer_reader_ptr(&sock->rxbuf.head));
+	ASSERT(ptr <= mm_buffer_reader_end(&sock->rxbuf.head));
 	sock->rxbuf.head.ptr = ptr;
 }
 
