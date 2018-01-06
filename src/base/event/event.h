@@ -160,6 +160,9 @@ struct mm_event_fd
 		struct mm_qlink retire_link;
 		struct mm_slink reclaim_link;
 	};
+
+	/* Sink destruction routine. */
+	void (*destroy)(struct mm_event_fd *);
 };
 
 /**********************************************************************

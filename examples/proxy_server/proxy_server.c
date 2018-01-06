@@ -29,7 +29,7 @@
 #include <stdio.h>
 
 static struct mm_net_socket * proxy_create(void);
-static void proxy_destroy(struct mm_net_socket *sock);
+static void proxy_destroy(struct mm_event_fd *sink);
 static void proxy_reader(struct mm_net_socket *sock);
 
 struct proxy_command
@@ -140,9 +140,9 @@ proxy_create(void)
 
 // Destroy a socket that served an incoming connection.
 static void
-proxy_destroy(struct mm_net_socket *sock)
+proxy_destroy(struct mm_event_fd *sink)
 {
-	struct client_conn *client = containerof(sock, struct client_conn, sock.sock);
+	struct client_conn *client = containerof(sink, struct client_conn, sock.sock.event);
 	while (!mm_list_empty(&client->commands)) {
 		struct mm_link *link = mm_list_remove_head(&client->commands);
 		struct proxy_command *command = containerof(link, struct proxy_command, link);

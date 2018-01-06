@@ -56,7 +56,7 @@ struct mm_net_socket *
 mc_state_create(void);
 
 void NONNULL(1)
-mc_state_destroy(struct mm_net_socket *sock);
+mc_state_destroy(struct mm_event_fd *sink);
 
 /**********************************************************************
  * Command support.

@@ -33,9 +33,6 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
-/* Forward declaration. */
-struct mm_fiber;
-
 /* Protocol flags. */
 #define MM_NET_INBOUND		0x000001
 #define MM_NET_OUTBOUND		0x000002
@@ -106,9 +103,6 @@ struct mm_net_socket
 	/* Socket protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* A client socket destruction routine. */
-	void (*destroy)(struct mm_net_socket *);
-
 	/* Client address. */
 	struct mm_net_peer_addr peer;
 };
@@ -119,7 +113,7 @@ struct mm_net_proto
 	uint32_t flags;
 
 	struct mm_net_socket * (*create)(void);
-	void (*destroy)(struct mm_net_socket *);
+	void (*destroy)(struct mm_event_fd *);
 
 	void (*reader)(struct mm_net_socket *);
 	void (*writer)(struct mm_net_socket *);
@@ -169,7 +163,7 @@ mm_net_yield_writer(struct mm_net_socket *sock);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket *));
+mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *));
 
 struct mm_net_socket *
 mm_net_create(void);

@@ -44,11 +44,11 @@ mc_state_create(void)
 }
 
 void NONNULL(1)
-mc_state_destroy(struct mm_net_socket *sock)
+mc_state_destroy(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
+	struct mc_state *state = containerof(sink, struct mc_state, sock.sock.event);
 
 	mm_netbuf_cleanup(&state->sock);
 	mm_regular_free(state);

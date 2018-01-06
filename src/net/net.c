@@ -120,9 +120,9 @@ mm_net_socket_alloc(void)
 }
 
 static void
-mm_net_socket_free(struct mm_net_socket *sock)
+mm_net_socket_free(struct mm_event_fd *sink)
 {
-	mm_regular_free(sock);
+	mm_regular_free(containerof(sink, struct mm_net_socket, event));
 }
 
 static struct mm_net_socket *
@@ -138,20 +138,6 @@ mm_net_socket_create(struct mm_net_proto *proto)
 
 	LEAVE();
 	return sock;
-}
-
-static void
-mm_net_socket_destroy(struct mm_net_socket *sock)
-{
-	ENTER();
-	ASSERT((sock->event.flags & MM_NET_CLIENT) == 0);
-
-	if (sock->proto->destroy != NULL)
-		(sock->proto->destroy)(sock);
-	else
-		mm_net_socket_free(sock);
-
-	LEAVE();
 }
 
 static mm_value_t
@@ -176,11 +162,7 @@ mm_net_reclaim_routine(struct mm_work *work)
 
 	// Destroy the socket.
 	ASSERT(mm_net_is_closed(sock));
-	if ((sock->event.flags & MM_NET_CLIENT) != 0) {
-		(sock->destroy)(sock);
-	} else {
-		mm_net_socket_destroy(sock);
-	}
+	(sock->event.destroy)(&sock->event);
 
 	LEAVE();
 	return 0;
@@ -206,6 +188,10 @@ mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *pro
 	// Initialize common socket fields.
 	sock->event.fd = -1;
 	sock->proto = proto;
+	if (proto->destroy != NULL)
+		sock->event.destroy = proto->destroy;
+	else
+		sock->event.destroy = mm_net_socket_free;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 }
@@ -925,7 +911,7 @@ mm_net_setup_server(struct mm_net_server *srv)
 static struct mm_net_proto mm_net_dummy_proto;
 
 void NONNULL(1, 2)
-mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket *))
+mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *))
 {
 	ENTER();
 
@@ -933,7 +919,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_net_socket 
 	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto);
 	sock->event.flags = MM_NET_CLIENT;
 	// Initialize the destruction routine.
-	sock->destroy = destroy;
+	sock->event.destroy = destroy;
 
 	// Initialize the required work items.
 	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
@@ -965,7 +951,7 @@ mm_net_destroy(struct mm_net_socket *sock)
 	if (unlikely(sock->event.fd >= 0))
 		ABORT();
 
-	(sock->destroy)(sock);
+	(sock->event.destroy)(&sock->event);
 
 	LEAVE();
 }
