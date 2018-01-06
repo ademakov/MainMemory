@@ -148,12 +148,14 @@ struct mm_event_fd
 	/* Pending events for sinks in the dispatch queue. */
 	uint8_t queued_events;
 
-	/* Fibers bound to perform socket I/O. */
+	/* Fibers bound to perform I/O. */
 	struct mm_fiber *reader;
 	struct mm_fiber *writer;
-	/* Work entries to perform socket I/O. */
+	/* Work entries to perform I/O. */
 	struct mm_work reader_work;
 	struct mm_work writer_work;
+	/* Work entry for sink memory reclamation. */
+	struct mm_work reclaim_work;
 
 	/* Reclaim queue link. */
 	union {

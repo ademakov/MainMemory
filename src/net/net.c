@@ -145,7 +145,7 @@ mm_net_reclaim_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, reclaim_work);
+	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.reclaim_work);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Notify a reader/writer about closing.
@@ -236,7 +236,7 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	// Initialize the required work items.
 	mm_work_prepare(&sock->event.reader_work, &mm_net_read_vtable);
 	mm_work_prepare(&sock->event.writer_work, &mm_net_write_vtable);
-	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
+	mm_work_prepare(&sock->event.reclaim_work, &mm_net_reclaim_vtable);
 }
 
 /**********************************************************************
@@ -472,10 +472,7 @@ mm_net_socket_handler(mm_event_t event, struct mm_event_fd *sink)
 		// work items for this socket. So relying on the FIFO order of
 		// the work queue submit a work item that might safely cleanup
 		// the socket being the last one that refers to it.
-		{
-			struct mm_net_socket *sock = containerof(sink, struct mm_net_socket, event);
-			mm_strand_add_work(sink->listener->strand, &sock->reclaim_work);
-		}
+		mm_strand_add_work(sink->listener->strand, &sink->reclaim_work);
 		break;
 
 	default:
@@ -922,7 +919,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *)
 	sock->event.destroy = destroy;
 
 	// Initialize the required work items.
-	mm_work_prepare(&sock->reclaim_work, &mm_net_reclaim_vtable);
+	mm_work_prepare(&sock->event.reclaim_work, &mm_net_reclaim_vtable);
 
 	LEAVE();
 }

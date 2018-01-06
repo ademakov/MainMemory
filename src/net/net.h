@@ -97,9 +97,6 @@ struct mm_net_socket
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;
 
-	/* Work items for I/O tasks. */
-	struct mm_work reclaim_work;
-
 	/* Socket protocol handlers. */
 	struct mm_net_proto *proto;
 
