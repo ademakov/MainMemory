@@ -21,6 +21,7 @@
 
 #include "base/bitops.h"
 #include "base/report.h"
+#include "base/stdcall.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/strand.h"
 #include "base/memory/memory.h"
@@ -243,8 +244,11 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 	if (likely(sink->status != MM_EVENT_INVALID)) {
 		// Queue it for reclamation.
 		mm_event_epoch_retire(&listener->epoch, sink);
-		// Let close the file descriptor.
-		mm_event_handle(sink, MM_EVENT_RETIRE);
+
+		// Close the file descriptor.
+		ASSERT(sink->fd >= 0);
+		mm_close(sink->fd);
+		sink->fd = -1;
 	}
 
 	LEAVE();

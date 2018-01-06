@@ -458,13 +458,6 @@ mm_net_socket_handler(mm_event_t event, struct mm_event_fd *sink)
 		mm_net_set_write_ready(sink, MM_NET_WRITE_ERROR);
 		break;
 
-	case MM_EVENT_RETIRE:
-		// Close the socket.
-		ASSERT(sink->fd >= 0);
-		mm_close(sink->fd);
-		sink->fd = -1;
-		break;
-
 	default:
 		break;
 	}
