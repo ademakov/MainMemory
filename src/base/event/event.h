@@ -35,7 +35,6 @@ typedef enum {
 	MM_EVENT_OUTPUT,
 	MM_EVENT_OUTPUT_ERROR,
 	MM_EVENT_RETIRE,
-	MM_EVENT_RECLAIM,
 } mm_event_t;
 
 /* I/O event repeat modes. */

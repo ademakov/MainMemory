@@ -465,16 +465,6 @@ mm_net_socket_handler(mm_event_t event, struct mm_event_fd *sink)
 		sink->fd = -1;
 		break;
 
-	case MM_EVENT_RECLAIM:
-		// At this time there are no and will not be any I/O messages
-		// related to this socket in the event processing pipeline.
-		// But there still may be active reader/writer fibers or pending
-		// work items for this socket. So relying on the FIFO order of
-		// the work queue submit a work item that might safely cleanup
-		// the socket being the last one that refers to it.
-		mm_strand_add_work(sink->listener->strand, &sink->reclaim_work);
-		break;
-
 	default:
 		break;
 	}

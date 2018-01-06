@@ -21,7 +21,7 @@
 
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
-#include "base/thread/thread.h"
+#include "base/fiber/strand.h"
 
 #define MM_EVENT_EPOCH_POST_COUNT	(8)
 
@@ -33,6 +33,21 @@ mm_event_epoch_observe_req(uintptr_t *arguments)
 	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
 	if (mm_event_epoch_active(&listener->epoch))
 		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
+
+	LEAVE();
+}
+
+static void
+mm_event_epoch_reclaim(struct mm_event_fd *sink)
+{
+	ENTER();
+
+	// Upon this point there will be no any new I/O events related to
+	// this sink. But there still may be active reader/writer fibers
+	// or queued past work items for it. So relying on the FIFO order
+	// of the work queue submit a work item that might safely cleanup
+	// the socket being the last one that refers to it.
+	mm_strand_add_work(sink->listener->strand, &sink->reclaim_work);
 
 	LEAVE();
 }
@@ -70,7 +85,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		while (!mm_stack_empty(limbo)) {
 			struct mm_slink *link = mm_stack_remove(limbo);
 			struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
-			mm_event_handle(sink, MM_EVENT_RECLAIM);
+			mm_event_epoch_reclaim(sink);
 			local->count--;
 		}
 
