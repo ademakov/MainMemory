@@ -180,7 +180,7 @@ mm_memcache_init(const struct mm_memcache_config *config)
 	ENTER();
 
 	static struct mm_net_proto proto = {
-		.flags = MM_NET_INBOUND | MM_NET_NODELAY | MM_NET_KEEPALIVE,
+		.options = MM_NET_NODELAY | MM_NET_KEEPALIVE,
 		.create = mc_state_create,
 		.destroy = mc_state_destroy,
 		.reader = mc_reader_routine,

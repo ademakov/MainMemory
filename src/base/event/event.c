@@ -23,6 +23,7 @@
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 
 /**********************************************************************
@@ -87,11 +88,125 @@ mm_event_post_notify(struct mm_event_dispatch *dispatch, mm_stamp_t stamp UNUSED
 }
 
 /**********************************************************************
+ * Event sink activity.
+ **********************************************************************/
+
+static void
+mm_event_complete(struct mm_event_fd *sink)
+{
+	ENTER();
+
+	const uint32_t flags = sink->flags;
+	if ((flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_WRITER_SPAWNED)) != 0)
+		/* Do nothing. @suppress("Suspicious semicolon") */;
+	else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0)
+		mm_event_unregister_fd(sink);
+	else
+		mm_event_handle_complete(sink);
+
+	LEAVE();
+}
+
+static void
+mm_event_set_read_ready(struct mm_event_fd *sink, uint32_t flags)
+{
+	ENTER();
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	// Update the read readiness flags.
+	sink->flags |= flags;
+
+	if (sink->reader != NULL) {
+		// Run the reader fiber presumably blocked on the socket.
+		mm_fiber_run(sink->reader);
+	} else {
+		// Check to see if a new reader should be spawned.
+		flags = sink->flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_READER_PENDING);
+		if (flags == MM_EVENT_READER_PENDING) {
+			if (sink->oneshot_input)
+				sink->flags &= ~MM_EVENT_READER_PENDING;
+			// Remember a reader has been started.
+			sink->flags |= MM_EVENT_READER_SPAWNED;
+			// Submit a reader work.
+			mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+		} else if (flags == 0) {
+			mm_event_complete(sink);
+		}
+	}
+
+	LEAVE();
+}
+
+static void
+mm_event_set_write_ready(struct mm_event_fd *sink, uint32_t flags)
+{
+	ENTER();
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	// Update the write readiness flags.
+	sink->flags |= flags;
+
+	if (sink->writer != NULL) {
+		// Run the writer fiber presumably blocked on the socket.
+		mm_fiber_run(sink->writer);
+	} else {
+		// Check to see if a new writer should be spawned.
+		flags = sink->flags & (MM_EVENT_WRITER_SPAWNED | MM_EVENT_WRITER_PENDING);
+		if (flags == MM_EVENT_WRITER_PENDING) {
+			if (sink->oneshot_output)
+				sink->flags &= ~MM_EVENT_WRITER_PENDING;
+			// Remember a writer has been started.
+			sink->flags |= MM_EVENT_WRITER_SPAWNED;
+			// Submit a writer work.
+			mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+		} else if (flags == 0) {
+			mm_event_complete(sink);
+		}
+	}
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
+{
+#if ENABLE_SMP
+	/* Count the delivered event. */
+	sink->dispatch_stamp++;
+#endif
+
+	switch (event) {
+	case MM_EVENT_INPUT:
+		// Mark the socket as read ready.
+		mm_event_set_read_ready(sink, MM_EVENT_READ_READY);
+		break;
+
+	case MM_EVENT_OUTPUT:
+		// Mark the socket as write ready.
+		mm_event_set_write_ready(sink, MM_EVENT_WRITE_READY);
+		break;
+
+	case MM_EVENT_INPUT_ERROR:
+		// Mark the socket as having a read error.
+		mm_event_set_read_ready(sink, MM_EVENT_READ_ERROR);
+		break;
+
+	case MM_EVENT_OUTPUT_ERROR:
+		// Mark the socket as having a write error.
+		mm_event_set_write_ready(sink, MM_EVENT_WRITE_ERROR);
+		break;
+
+	default:
+		break;
+	}
+}
+
+/**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    mm_event_affinity_t target)
 {
@@ -105,7 +220,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler
 	sink->fd = fd;
 	//sink->flags = 0;
 	sink->status = MM_EVENT_INITIAL;
-	sink->handler = handler;
 	sink->listener = NULL;
 	sink->reader = NULL;
 	sink->writer = NULL;
@@ -222,8 +336,10 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	ENTER();
 	DEBUG("fd %d, status %d", sink->fd, sink->status);
 
-	if (likely(sink->status > MM_EVENT_INITIAL) && sink->oneshot_input
-	    && !sink->oneshot_input_trigger) {
+	sink->flags &= ~MM_EVENT_READ_READY;
+
+	if (sink->oneshot_input && !sink->oneshot_input_trigger
+	    && likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->oneshot_input_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
@@ -241,8 +357,10 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	ENTER();
 	DEBUG("fd %d, status %d", sink->fd, sink->status);
 
-	if (likely(likely(sink->status > MM_EVENT_INITIAL)) && sink->oneshot_output
-	    && !sink->oneshot_output_trigger) {
+	sink->flags &= ~MM_EVENT_WRITE_READY;
+
+	if (sink->oneshot_output && !sink->oneshot_output_trigger
+	    && likely(sink->status > MM_EVENT_INITIAL)) {
 		sink->oneshot_output_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
@@ -251,6 +369,84 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}
 
+	LEAVE();
+}
+
+void
+mm_event_yield_reader(struct mm_event_fd *sink)
+{
+	ENTER();
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+
+#if ENABLE_FIBER_IO_FLAGS
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	if (unlikely((fiber->flags & MM_FIBER_READING) == 0))
+		goto leave;
+
+	// Unbind the current fiber from the socket.
+	fiber->flags &= ~MM_FIBER_READING;
+#endif
+
+	// Bail out if the socket is shutdown.
+	ASSERT((sink->flags & MM_NET_READER_SPAWNED) != 0);
+	if (mm_event_input_closed(sink)) {
+		sink->flags &= ~MM_EVENT_READER_SPAWNED;
+		mm_event_complete(sink);
+		goto leave;
+	}
+
+	// Check to see if a new reader should be spawned.
+	uint32_t fd_flags = sink->flags & (MM_EVENT_READ_READY | MM_EVENT_READ_ERROR);
+	if ((sink->flags & MM_EVENT_READER_PENDING) != 0 && fd_flags != 0) {
+		if (sink->oneshot_input)
+			sink->flags &= ~MM_EVENT_READER_PENDING;
+		// Submit a reader work.
+		mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+	} else {
+		sink->flags &= ~MM_EVENT_READER_SPAWNED;
+		mm_event_complete(sink);
+	}
+
+leave:
+	LEAVE();
+}
+
+void
+mm_event_yield_writer(struct mm_event_fd *sink)
+{
+	ENTER();
+	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+
+#if ENABLE_FIBER_IO_FLAGS
+	struct mm_fiber *fiber = mm_fiber_selfptr();
+	if (unlikely((fiber->flags & MM_FIBER_WRITING) == 0))
+		goto leave;
+
+	// Unbind the current fiber from the socket.
+	fiber->flags &= ~MM_FIBER_WRITING;
+#endif
+
+	// Bail out if the socket is shutdown.
+	ASSERT((sock->event.flags & MM_NET_WRITER_SPAWNED) != 0);
+	if (mm_event_output_closed(sink)) {
+		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
+		mm_event_complete(sink);
+		goto leave;
+	}
+
+	// Check to see if a new writer should be spawned.
+	uint32_t fd_flags = sink->flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR);
+	if ((sink->flags & MM_EVENT_WRITER_PENDING) != 0 && fd_flags != 0) {
+		if (sink->oneshot_output)
+			sink->flags &= ~MM_EVENT_WRITER_PENDING;
+		// Submit a writer work.
+		mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+	} else {
+		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
+		mm_event_complete(sink);
+	}
+
+leave:
 	LEAVE();
 }
 

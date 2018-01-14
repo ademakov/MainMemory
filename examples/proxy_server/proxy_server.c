@@ -49,7 +49,6 @@ struct client_conn
 
 // Server descriptor.
 static struct mm_net_proto proxy_proto = {
-	.flags = MM_NET_INBOUND,
 	.create = proxy_create,
 	.destroy = proxy_destroy,
 	.reader = proxy_reader,

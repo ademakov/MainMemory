@@ -30,10 +30,10 @@ struct mm_event_listener;
 
 /* Event types. */
 typedef enum {
-	MM_EVENT_INPUT,
-	MM_EVENT_INPUT_ERROR,
-	MM_EVENT_OUTPUT,
-	MM_EVENT_OUTPUT_ERROR,
+	MM_EVENT_INPUT = 0,
+	MM_EVENT_OUTPUT = 1,
+	MM_EVENT_INPUT_ERROR = 2,
+	MM_EVENT_OUTPUT_ERROR = 3,
 } mm_event_t;
 
 /* I/O event repeat modes. */
@@ -79,6 +79,23 @@ typedef enum {
  * processing takes place after return from the listen routine.
  */
 
+/* I/O status flags. */
+#define MM_EVENT_READ_READY	(1u << MM_EVENT_INPUT)
+#define MM_EVENT_WRITE_READY	(1u << MM_EVENT_OUTPUT)
+#define MM_EVENT_READ_ERROR	(1u << MM_EVENT_INPUT_ERROR)
+#define MM_EVENT_WRITE_ERROR	(1u << MM_EVENT_OUTPUT_ERROR)
+
+/* Fiber activity flags. */
+#define MM_EVENT_READER_SPAWNED	0x00000010
+#define MM_EVENT_WRITER_SPAWNED	0x00000020
+#define MM_EVENT_READER_PENDING	0x00000040
+#define MM_EVENT_WRITER_PENDING	0x00000080
+
+/* I/O event sink close flags. */
+#define MM_EVENT_CLOSED		0x00000100
+#define MM_EVENT_INPUT_CLOSED	0x00000200
+#define MM_EVENT_OUTPUT_CLOSED	0x00000400
+
 /* Event sink status. */
 enum {
 	MM_EVENT_INVALID = -2,
@@ -91,19 +108,12 @@ enum {
 /* Per-sink event counter. */
 typedef uint16_t mm_event_stamp_t;
 
-/* Event handler routine. */
-struct mm_event_fd;
-typedef void (*mm_event_handler_t)(mm_event_t event, struct mm_event_fd *sink);
-
 /**********************************************************************
  * I/O event sink.
  **********************************************************************/
 
 struct mm_event_fd
 {
-	/* Event handler routine. */
-	mm_event_handler_t handler;
-
 	/* Listener (along with associated thread) that owns the sink. */
 	struct mm_event_listener *listener;
 
@@ -166,6 +176,58 @@ struct mm_event_fd
 };
 
 /**********************************************************************
+ * Event sink status.
+ **********************************************************************/
+
+static inline bool NONNULL(1)
+mm_event_closed(struct mm_event_fd *sink)
+{
+	return (sink->flags & MM_EVENT_CLOSED) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_input_closed(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_CLOSED | MM_EVENT_INPUT_CLOSED)) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_output_closed(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_CLOSED | MM_EVENT_OUTPUT_CLOSED)) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_input_ready(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_READ_READY | MM_EVENT_READ_ERROR)) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_output_ready(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR)) != 0;
+}
+
+static inline void NONNULL(1)
+mm_event_set_closed(struct mm_event_fd *sink)
+{
+	sink->flags |= MM_EVENT_CLOSED;
+}
+
+static inline void NONNULL(1)
+mm_event_set_input_closed(struct mm_event_fd *sink)
+{
+	sink->flags |= MM_EVENT_INPUT_CLOSED;
+}
+
+static inline void NONNULL(1)
+mm_event_set_output_closed(struct mm_event_fd *sink)
+{
+	sink->flags |= MM_EVENT_OUTPUT_CLOSED;
+}
+
+/**********************************************************************
  * Event sink activity.
  **********************************************************************/
 
@@ -191,16 +253,8 @@ mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 
 /* Start asynchronous processing of an event as it is delivered to
    the target thread. */
-static inline void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-#if ENABLE_SMP
-	/* Count the delivered event. */
-	sink->dispatch_stamp++;
-#endif
-	/* Initiate its processing. */
-	(sink->handler)(event, sink);
-}
+void NONNULL(1)
+mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
 
 /* Check if a sink has some not yet fully processed events. */
 static inline bool NONNULL(1)
@@ -219,8 +273,8 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
  * Event sink I/O control.
  **********************************************************************/
 
-void NONNULL(1, 3)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, mm_event_handler_t handler,
+void NONNULL(1)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    mm_event_affinity_t target);
 
@@ -238,6 +292,12 @@ mm_event_trigger_input(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_yield_reader(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_yield_writer(struct mm_event_fd *sink);
 
 /**********************************************************************
  * Event listening and notification.

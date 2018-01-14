@@ -33,35 +33,14 @@
 #include <sys/types.h>
 #include <sys/uio.h>
 
-/* Protocol flags. */
-#define MM_NET_INBOUND		0x000001
-#define MM_NET_OUTBOUND		0x000002
-
-/* Client flags. */
-#define MM_NET_CLIENT		0x000004
-#define MM_NET_CONNECTING	0x000008
-
-/* Socket close flags. */
-#define MM_NET_CLOSED		0x000010
-#define MM_NET_READER_SHUTDOWN	0x000020
-#define MM_NET_WRITER_SHUTDOWN	0x000040
-
-/* Socket event dispatch is bound to a certain thread. */
-#define MM_NET_BOUND_EVENTS	0x000080
-
-/* Socket I/O status flags. */
-#define MM_NET_READ_READY	0x000100
-#define MM_NET_WRITE_READY	0x000200
-#define MM_NET_READ_ERROR	0x000400
-#define MM_NET_WRITE_ERROR	0x000800
-#define MM_NET_READER_SPAWNED	0x001000
-#define MM_NET_WRITER_SPAWNED	0x002000
-#define MM_NET_READER_PENDING	0x004000
-#define MM_NET_WRITER_PENDING	0x008000
-
-/* Connection options. */
-#define MM_NET_KEEPALIVE	0x010000
-#define MM_NET_NODELAY		0x020000
+/* Server options. */
+/* - Event handling bound to a certain thread. */
+#define MM_NET_BOUND		0x000001
+/* - Event handling has to be setup for pushing outgoing data. */
+#define MM_NET_EGRESS		0x000002
+/* - Socket connection options. */
+#define MM_NET_NODELAY		0x000010
+#define MM_NET_KEEPALIVE	0x000020
 
 /* Network server data. */
 struct mm_net_server
@@ -107,7 +86,7 @@ struct mm_net_socket
 /* Protocol handler. */
 struct mm_net_proto
 {
-	uint32_t flags;
+	uint32_t options;
 
 	struct mm_net_socket * (*create)(void);
 	void (*destroy)(struct mm_event_fd *);
@@ -149,11 +128,6 @@ void NONNULL(1)
 mm_net_spawn_reader(struct mm_net_socket *sock);
 void NONNULL(1)
 mm_net_spawn_writer(struct mm_net_socket *sock);
-
-void NONNULL(1)
-mm_net_yield_reader(struct mm_net_socket *sock);
-void NONNULL(1)
-mm_net_yield_writer(struct mm_net_socket *sock);
 
 /**********************************************************************
  * Network client connection sockets.
@@ -221,19 +195,19 @@ mm_net_get_socket_strand(struct mm_net_socket *sock)
 static inline bool NONNULL(1)
 mm_net_is_closed(struct mm_net_socket *sock)
 {
-	return (sock->event.flags & MM_NET_CLOSED) != 0;
+	return mm_event_closed(&sock->event);
 }
 
 static inline bool NONNULL(1)
 mm_net_is_reader_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->event.flags & (MM_NET_CLOSED | MM_NET_READER_SHUTDOWN)) != 0;
+	return mm_event_input_closed(&sock->event);
 }
 
 static inline bool NONNULL(1)
 mm_net_is_writer_shutdown(struct mm_net_socket *sock)
 {
-	return (sock->event.flags & (MM_NET_CLOSED | MM_NET_WRITER_SHUTDOWN)) != 0;
+	return mm_event_output_closed(&sock->event);
 }
 
 static inline void NONNULL(1)

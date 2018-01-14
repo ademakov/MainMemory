@@ -25,18 +25,6 @@
 
 #include <unistd.h>
 
-static void
-mm_selfpipe_handler(mm_event_t event UNUSED, struct mm_event_fd *sink)
-{
-	ENTER();
-
-	struct mm_selfpipe *selfpipe = containerof(sink, struct mm_selfpipe, event_fd);
-
-	selfpipe->event_fd.flags = true;
-
-	LEAVE();
-}
-
 void NONNULL(1)
 mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 {
@@ -50,8 +38,7 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	mm_event_prepare_fd(&selfpipe->event_fd, fds[0], mm_selfpipe_handler,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_STRAY);
+	mm_event_prepare_fd(&selfpipe->event_fd, fds[0], MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_STRAY);
 	selfpipe->write_fd = fds[1];
 	selfpipe->event_fd.flags = false;
 
@@ -85,7 +72,7 @@ mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 	ENTER();
 
 	if (selfpipe->event_fd.flags) {
-		selfpipe->event_fd.flags = false;
+		selfpipe->event_fd.flags = 0;
 
 		char dummy[64];
 		while (mm_read(selfpipe->event_fd.fd, dummy, sizeof dummy) == sizeof dummy) {
