@@ -258,11 +258,7 @@ mm_fiber_destroy(struct mm_fiber *fiber)
 {
 	ENTER();
 	ASSERT(fiber->state == MM_FIBER_INVALID || fiber->state == MM_FIBER_BLOCKED);
-#if ENABLE_FIBER_IO_FLAGS
-	ASSERT((fiber->flags & (MM_FIBER_WAITING | MM_FIBER_READING | MM_FIBER_WRITING)) == 0  || fiber->strand->stop);
-#else
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0 || fiber->strand->stop);
-#endif
 
 	// Free the stack.
 	if (fiber->stack_base != NULL)
@@ -502,11 +498,7 @@ mm_fiber_exit(mm_value_t result)
 	mm_fiber_cleanup(fiber);
 
 	// At this point the fiber must not be in any queue.
-#if ENABLE_FIBER_IO_FLAGS
-	ASSERT((fiber->flags & (MM_FIBER_WAITING | MM_FIBER_READING | MM_FIBER_WRITING)) == 0);
-#else
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
-#endif
 
 	// Give the control to still running fibers.
 	mm_fiber_switch(MM_FIBER_INVALID);

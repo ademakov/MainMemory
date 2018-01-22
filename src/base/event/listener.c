@@ -241,7 +241,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 
 	// Initiate event sink reclamation unless the client code asked
 	// otherwise.
-	if (likely(sink->status != MM_EVENT_INVALID)) {
+	if (likely((sink->flags & MM_EVENT_BROKEN) == 0)) {
 		// Queue it for reclamation.
 		mm_event_epoch_retire(&listener->epoch, sink);
 

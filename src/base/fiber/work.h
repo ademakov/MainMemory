@@ -26,35 +26,17 @@
 /* Forward declaration. */
 struct mm_work;
 
-#define MM_WORK_VTABLE_1(name, r)			\
-	static const struct mm_work_vtable name = {	\
-		.routine = r, 				\
-		.complete = mm_work_complete_noop,	\
-	}
-
-#define MM_WORK_VTABLE_2(name, r, c)			\
-	static const struct mm_work_vtable name = {	\
-		.routine = r, 				\
-		.complete = c,				\
-	}
-
 /* A work routine. */
 typedef mm_value_t (*mm_work_routine_t)(struct mm_work *work);
 
 /* A work completion notification routine. */
 typedef void (*mm_work_complete_t)(struct mm_work *work, mm_value_t result);
 
-struct mm_work_vtable
-{
-	mm_work_routine_t routine;
-	mm_work_complete_t complete;
-};
-
 /* A work item. */
 struct mm_work
 {
-	/* Work item function table. */
-	const struct mm_work_vtable *vtable;
+	mm_work_routine_t routine;
+	mm_work_complete_t complete;
 	/* A link in the work queue. */
 	struct mm_qlink link;
 };
@@ -66,9 +48,17 @@ struct mm_work
 void mm_work_complete_noop(struct mm_work *work, mm_value_t result);
 
 static inline void NONNULL(1, 2)
-mm_work_prepare(struct mm_work *work, const struct mm_work_vtable *vtable)
+mm_work_prepare_easy(struct mm_work *work, mm_work_routine_t routine)
 {
-	work->vtable = vtable;
+	work->routine = routine;
+	work->complete = mm_work_complete_noop;
+}
+
+static inline void NONNULL(1, 2)
+mm_work_prepare_hard(struct mm_work *work, mm_work_routine_t routine, mm_work_complete_t complete)
+{
+	work->routine = routine;
+	work->complete = complete;
 }
 
 #endif /* BASE_FIBER_WORK_H */

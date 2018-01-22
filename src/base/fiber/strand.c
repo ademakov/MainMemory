@@ -239,7 +239,7 @@ mm_strand_worker_cleanup(uintptr_t arg)
 
 	// Notify that the current work has been canceled.
 	if (work != NULL)
-		(work->vtable->complete)(work, MM_RESULT_CANCELED);
+		(work->complete)(work, MM_RESULT_CANCELED);
 
 	// Wake up the master possibly waiting for worker availability.
 	if (strand->nworkers == strand->nworkers_max)
@@ -263,13 +263,12 @@ mm_strand_worker(mm_value_t arg)
 	// Handle the work item supplied by the master.
 	if (arg) {
 		struct mm_work *work = (struct mm_work *) arg;
-		const struct mm_work_vtable *vtable = work->vtable;
 		// Execute the work routine.
 		mm_memory_store(cancel, work);
-		mm_value_t result = (vtable->routine)(work);
+		mm_value_t result = (work->routine)(work);
 		mm_memory_store(cancel, NULL);
 		// Perform completion notification on return.
-		(vtable->complete)(work, result);
+		(work->complete)(work, result);
 	}
 
 	struct mm_strand *const strand = mm_strand_selfptr();
@@ -280,13 +279,12 @@ mm_strand_worker(mm_value_t arg)
 
 		// Handle the first available work item.
 		struct mm_work *work = mm_strand_get_work(strand);
-		const struct mm_work_vtable *vtable = work->vtable;
 		// Execute the work routine.
 		mm_memory_store(cancel, work);
-		mm_value_t result = (vtable->routine)(work);
+		mm_value_t result = (work->routine)(work);
 		mm_memory_store(cancel, NULL);
 		// Perform completion notification on return.
-		(vtable->complete)(work, result);
+		(work->complete)(work, result);
 	}
 
 	// Cleanup on return.

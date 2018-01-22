@@ -123,7 +123,7 @@ mm_event_kqueue_finish_changes(struct mm_event_listener *listener)
 	if (nchanges) {
 		listener->storage.nchanges = 0;
 		for (uint32_t i = 0; i < nchanges; i++) {
-			listener->storage.changes[i]->status = MM_EVENT_ENABLED;
+			listener->storage.changes[i]->flags |= ~MM_EVENT_CHANGE;
 		}
 	}
 

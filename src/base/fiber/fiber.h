@@ -26,7 +26,6 @@
 #include "base/fiber/strand.h"
 
 #define ENABLE_FIBER_LOCATION	0
-#define ENABLE_FIBER_IO_FLAGS	0
 
 /* Maximal fiber name length (including terminating zero). */
 #define MM_FIBER_NAME_SIZE	40
@@ -70,15 +69,9 @@ typedef enum {
 #define MM_FIBER_CANCEL_DEFERRED		0x00
 #define MM_FIBER_CANCEL_REQUIRED		0x02
 #define MM_FIBER_CANCEL_OCCURRED		0x04
-/* Not currently used flag. */
-#define MM_FIBER_RESERVED_FLAG		0x08
 /* Flags for fibers blocked for various reasons. */
-#if ENABLE_FIBER_IO_FLAGS
-#define MM_FIBER_READING			0x10
-#define MM_FIBER_WRITING			0x20
-#endif
-#define MM_FIBER_WAITING			0x40
-#define MM_FIBER_COMBINING		0x80
+#define MM_FIBER_WAITING			0x08
+#define MM_FIBER_COMBINING		0x10
 
 /* Fiber flags type. */
 typedef uint8_t mm_fiber_flags_t;

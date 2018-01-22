@@ -100,7 +100,7 @@ mm_event_complete(struct mm_event_fd *sink)
 	if ((flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_WRITER_SPAWNED)) != 0)
 		/* Do nothing. @suppress("Suspicious semicolon") */;
 	else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0)
-		mm_event_unregister_fd(sink);
+		mm_event_close_fd(sink);
 	else
 		mm_event_handle_complete(sink);
 
@@ -219,7 +219,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 
 	sink->fd = fd;
 	//sink->flags = 0;
-	sink->status = MM_EVENT_INITIAL;
 	sink->listener = NULL;
 	sink->reader = NULL;
 	sink->writer = NULL;
@@ -274,58 +273,54 @@ mm_event_register_fd(struct mm_event_fd *sink)
 	ENTER();
 	DEBUG("fd %d, status %d", sink->fd, sink->status);
 
-	if (likely(sink->status == MM_EVENT_INITIAL)) {
-		sink->status = MM_EVENT_ENABLED;
-
-		// Bind the sink to this thread's event listener.
-		struct mm_strand *strand = mm_strand_selfptr();
-		struct mm_event_listener *listener = strand->listener;
-		if (sink->listener == NULL) {
-			sink->listener = listener;
-		} else {
-			VERIFY(sink->listener == listener);
-		}
-
-		// Register with the event backend.
-		mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
+	// Bind the sink to this thread's event listener.
+	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_event_listener *listener = strand->listener;
+	if (sink->listener == NULL) {
+		sink->listener = listener;
+	} else {
+		VERIFY(sink->listener == listener);
 	}
+
+	// Register with the event backend.
+	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_unregister_fd(struct mm_event_fd *sink)
+mm_event_close_fd(struct mm_event_fd *sink)
 {
 	ENTER();
-	DEBUG("fd %d, status %d", sink->fd, sink->status);
+	DEBUG("fd %d, status %d", sink->fd, sink->flags);
+	ASSERT((sink->flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0);
 
-	if (likely(sink->status > MM_EVENT_INITIAL)) {
-		sink->status = MM_EVENT_DROPPED;
+	// Mark the sink as closed.
+	mm_event_set_closed(sink);
 
-		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->strand == mm_strand_selfptr());
-
-		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
-	}
+	// Unregister it.
+	struct mm_event_listener *listener = sink->listener;
+	ASSERT(listener->strand == mm_strand_selfptr());
+	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_unregister_invalid_fd(struct mm_event_fd *sink)
+mm_event_close_broken_fd(struct mm_event_fd *sink)
 {
 	ENTER();
-	DEBUG("fd %d, status %d", sink->fd, sink->status);
+	DEBUG("fd %d, status %d", sink->fd, sink->flags);
+	ASSERT((sink->flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0);
 
-	if (likely(sink->status > MM_EVENT_INITIAL)) {
-		sink->status = MM_EVENT_INVALID;
+	// Mark the sink as closed.
+	mm_event_set_broken(sink);
 
-		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->strand == mm_strand_selfptr());
-
-		mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
-		mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
-	}
+	// Unregister it immediately.
+	struct mm_event_listener *listener = sink->listener;
+	ASSERT(listener->strand == mm_strand_selfptr());
+	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
+	mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
 
 	LEAVE();
 }
@@ -339,7 +334,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	sink->flags &= ~MM_EVENT_READ_READY;
 
 	if (sink->oneshot_input && !sink->oneshot_input_trigger
-	    && likely(sink->status > MM_EVENT_INITIAL)) {
+	    && likely((sink->flags & MM_EVENT_CLOSED) == 0)) {
 		sink->oneshot_input_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
@@ -360,7 +355,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	sink->flags &= ~MM_EVENT_WRITE_READY;
 
 	if (sink->oneshot_output && !sink->oneshot_output_trigger
-	    && likely(sink->status > MM_EVENT_INITIAL)) {
+	    && likely((sink->flags & MM_EVENT_CLOSED) == 0)) {
 		sink->oneshot_output_trigger = true;
 
 		struct mm_event_listener *listener = sink->listener;
@@ -372,20 +367,71 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	LEAVE();
 }
 
+/**********************************************************************
+ * Event sink fiber control.
+ **********************************************************************/
+
+void
+mm_event_spawn_reader(struct mm_event_fd *sink)
+{
+	ENTER();
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	if (mm_event_input_closed(sink))
+		goto leave;
+	if (sink->reader_work.routine == NULL)
+		goto leave;
+
+	if ((sink->flags & MM_EVENT_READER_SPAWNED) != 0) {
+		// If a reader is already active then remember to start another
+		// one when it ends.
+		sink->flags |= MM_EVENT_READER_PENDING;
+	} else {
+		// Remember a reader has been started.
+		sink->flags |= MM_EVENT_READER_SPAWNED;
+		// Submit a reader work.
+		mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+		// Let it start immediately.
+		mm_fiber_yield();
+	}
+
+leave:
+	LEAVE();
+}
+
+void
+mm_event_spawn_writer(struct mm_event_fd *sink)
+{
+	ENTER();
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	if (mm_event_output_closed(sink))
+		goto leave;
+	if (sink->writer_work.routine == NULL)
+		goto leave;
+
+	if ((sink->flags & MM_EVENT_WRITER_SPAWNED) != 0) {
+		// If a writer is already active then remember to start another
+		// one when it ends.
+		sink->flags |= MM_EVENT_WRITER_PENDING;
+	} else {
+		// Remember a writer has been started.
+		sink->flags |= MM_EVENT_WRITER_SPAWNED;
+		// Submit a writer work.
+		mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+		// Let it start immediately.
+		mm_fiber_yield();
+	}
+
+leave:
+	LEAVE();
+}
+
 void
 mm_event_yield_reader(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
-
-#if ENABLE_FIBER_IO_FLAGS
-	struct mm_fiber *fiber = mm_fiber_selfptr();
-	if (unlikely((fiber->flags & MM_FIBER_READING) == 0))
-		goto leave;
-
-	// Unbind the current fiber from the socket.
-	fiber->flags &= ~MM_FIBER_READING;
-#endif
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sink->flags & MM_NET_READER_SPAWNED) != 0);
@@ -415,16 +461,7 @@ void
 mm_event_yield_writer(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
-
-#if ENABLE_FIBER_IO_FLAGS
-	struct mm_fiber *fiber = mm_fiber_selfptr();
-	if (unlikely((fiber->flags & MM_FIBER_WRITING) == 0))
-		goto leave;
-
-	// Unbind the current fiber from the socket.
-	fiber->flags &= ~MM_FIBER_WRITING;
-#endif
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Bail out if the socket is shutdown.
 	ASSERT((sock->event.flags & MM_NET_WRITER_SPAWNED) != 0);
@@ -448,6 +485,18 @@ mm_event_yield_writer(struct mm_event_fd *sink)
 
 leave:
 	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
+{
+	mm_event_yield_reader(containerof(work, struct mm_event_fd, reader_work));
+}
+
+void NONNULL(1)
+mm_event_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
+{
+	mm_event_yield_writer(containerof(work, struct mm_event_fd, writer_work));
 }
 
 /**********************************************************************

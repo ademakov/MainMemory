@@ -205,10 +205,8 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 		goto leave;
 	}
 
-	MM_WORK_VTABLE_2(vtable, mm_timer_routine, mm_timer_complete);
-
 	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
-	mm_work_prepare(&timer->work, &vtable);
+	mm_work_prepare_hard(&timer->work, mm_timer_routine, mm_timer_complete);
 	timer->clock = clock;
 	timer->active = false;
 	timer->start = start;

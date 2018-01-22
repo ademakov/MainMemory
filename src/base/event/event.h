@@ -86,24 +86,19 @@ typedef enum {
 #define MM_EVENT_WRITE_ERROR	(1u << MM_EVENT_OUTPUT_ERROR)
 
 /* Fiber activity flags. */
-#define MM_EVENT_READER_SPAWNED	0x00000010
-#define MM_EVENT_WRITER_SPAWNED	0x00000020
-#define MM_EVENT_READER_PENDING	0x00000040
-#define MM_EVENT_WRITER_PENDING	0x00000080
+#define MM_EVENT_READER_SPAWNED	0x000010
+#define MM_EVENT_WRITER_SPAWNED	0x000020
+#define MM_EVENT_READER_PENDING	0x000040
+#define MM_EVENT_WRITER_PENDING	0x000080
 
 /* I/O event sink close flags. */
-#define MM_EVENT_CLOSED		0x00000100
-#define MM_EVENT_INPUT_CLOSED	0x00000200
-#define MM_EVENT_OUTPUT_CLOSED	0x00000400
+#define MM_EVENT_CLOSED		0x000100
+#define MM_EVENT_INPUT_CLOSED	0x000200
+#define MM_EVENT_OUTPUT_CLOSED	0x000400
+#define MM_EVENT_BROKEN		0x000800
 
-/* Event sink status. */
-enum {
-	MM_EVENT_INVALID = -2,
-	MM_EVENT_DROPPED = -1,
-	MM_EVENT_INITIAL = 0,
-	MM_EVENT_ENABLED = 1,
-	MM_EVENT_CHANGED = 2,
-};
+/* A sink has a pending I/O event change. */
+#define MM_EVENT_CHANGE		0x001000
 
 /* Per-sink event counter. */
 typedef uint16_t mm_event_stamp_t;
@@ -122,9 +117,6 @@ struct mm_event_fd
 
 	/* State flags. */
 	uint32_t flags;
-
-	/* Current event sink status. */
-	int16_t status;
 
 #if ENABLE_SMP
 	/* The stamp updated by poller threads on every next event received
@@ -182,7 +174,7 @@ struct mm_event_fd
 static inline bool NONNULL(1)
 mm_event_closed(struct mm_event_fd *sink)
 {
-	return (sink->flags & MM_EVENT_CLOSED) != 0;
+	return (sink->flags & (MM_EVENT_CLOSED)) != 0;
 }
 
 static inline bool NONNULL(1)
@@ -213,6 +205,12 @@ static inline void NONNULL(1)
 mm_event_set_closed(struct mm_event_fd *sink)
 {
 	sink->flags |= MM_EVENT_CLOSED;
+}
+
+static inline void NONNULL(1)
+mm_event_set_broken(struct mm_event_fd *sink)
+{
+	sink->flags |= MM_EVENT_CLOSED | MM_EVENT_BROKEN;
 }
 
 static inline void NONNULL(1)
@@ -282,10 +280,10 @@ void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_unregister_fd(struct mm_event_fd *sink);
+mm_event_close_fd(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_unregister_invalid_fd(struct mm_event_fd *sink);
+mm_event_close_broken_fd(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_trigger_input(struct mm_event_fd *sink);
@@ -293,11 +291,27 @@ mm_event_trigger_input(struct mm_event_fd *sink);
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink);
 
+/**********************************************************************
+ * Event sink fiber control.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_spawn_reader(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_spawn_writer(struct mm_event_fd *sink);
+
 void NONNULL(1)
 mm_event_yield_reader(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_yield_writer(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_reader_complete(struct mm_work *work, mm_value_t value UNUSED);
+
+void NONNULL(1)
+mm_event_writer_complete(struct mm_work *work, mm_value_t value UNUSED);
 
 /**********************************************************************
  * Event listening and notification.

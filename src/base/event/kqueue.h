@@ -139,7 +139,7 @@ mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_k
 	bool output = sink->regular_output || sink->oneshot_output_trigger;
 	uint32_t n = (input != false) + (output != false);
 	if (likely(n)) {
-		if (unlikely(sink->status == MM_EVENT_CHANGED)
+		if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
 		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
 			mm_event_kqueue_flush(backend, storage);
 
@@ -159,11 +159,11 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_trigger_input(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			      struct mm_event_fd *sink)
 {
-	if (unlikely(sink->status == MM_EVENT_CHANGED)
+	if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
 	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
 		mm_event_kqueue_flush(backend, storage);
 
-	sink->status = MM_EVENT_CHANGED;
+	sink->flags |= MM_EVENT_CHANGE;
 	storage->changes[storage->nchanges++] = sink;
 	struct kevent *kp = &storage->events[storage->nevents++];
 	EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
@@ -173,11 +173,11 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			       struct mm_event_fd *sink)
 {
-	if (unlikely(sink->status == MM_EVENT_CHANGED)
+	if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
 	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
 		mm_event_kqueue_flush(backend, storage);
 
-	sink->status = MM_EVENT_CHANGED;
+	sink->flags |= MM_EVENT_CHANGE;
 	storage->changes[storage->nchanges++] = sink;
 	struct kevent *kp = &storage->events[storage->nevents++];
 	EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);

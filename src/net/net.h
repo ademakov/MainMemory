@@ -121,15 +121,6 @@ mm_net_get_server_strand(struct mm_net_server *srv)
 }
 
 /**********************************************************************
- * Network I/O tasks for server sockets.
- **********************************************************************/
-
-void NONNULL(1)
-mm_net_spawn_reader(struct mm_net_socket *sock);
-void NONNULL(1)
-mm_net_spawn_writer(struct mm_net_socket *sock);
-
-/**********************************************************************
  * Network client connection sockets.
  **********************************************************************/
 
