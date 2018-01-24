@@ -31,8 +31,8 @@ struct mm_event_listener;
 /* Event types. */
 typedef enum {
 	MM_EVENT_INPUT = 0,
-	MM_EVENT_OUTPUT = 1,
-	MM_EVENT_INPUT_ERROR = 2,
+	MM_EVENT_INPUT_ERROR = 1,
+	MM_EVENT_OUTPUT = 2,
 	MM_EVENT_OUTPUT_ERROR = 3,
 } mm_event_t;
 
@@ -252,7 +252,9 @@ mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
 /* Start asynchronous processing of an event as it is delivered to
    the target thread. */
 void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event);
+mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags);
+void NONNULL(1)
+mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
 
 /* Check if a sink has some not yet fully processed events. */
 static inline bool NONNULL(1)

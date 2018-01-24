@@ -107,14 +107,19 @@ mm_event_complete(struct mm_event_fd *sink)
 	LEAVE();
 }
 
-static void
-mm_event_set_read_ready(struct mm_event_fd *sink, uint32_t flags)
+void NONNULL(1)
+mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Update the read readiness flags.
 	sink->flags |= flags;
+	sink->oneshot_input_trigger = false;
+#if ENABLE_SMP
+	// Count the delivered event.
+	sink->dispatch_stamp++;
+#endif
 
 	if (sink->reader != NULL) {
 		// Run the reader fiber presumably blocked on the socket.
@@ -137,14 +142,19 @@ mm_event_set_read_ready(struct mm_event_fd *sink, uint32_t flags)
 	LEAVE();
 }
 
-static void
-mm_event_set_write_ready(struct mm_event_fd *sink, uint32_t flags)
+void NONNULL(1)
+mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Update the write readiness flags.
 	sink->flags |= flags;
+	sink->oneshot_output_trigger = false;
+#if ENABLE_SMP
+	// Count the delivered event.
+	sink->dispatch_stamp++;
+#endif
 
 	if (sink->writer != NULL) {
 		// Run the writer fiber presumably blocked on the socket.
@@ -165,40 +175,6 @@ mm_event_set_write_ready(struct mm_event_fd *sink, uint32_t flags)
 	}
 
 	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_handle(struct mm_event_fd *sink, mm_event_t event)
-{
-#if ENABLE_SMP
-	/* Count the delivered event. */
-	sink->dispatch_stamp++;
-#endif
-
-	switch (event) {
-	case MM_EVENT_INPUT:
-		// Mark the socket as read ready.
-		mm_event_set_read_ready(sink, MM_EVENT_READ_READY);
-		break;
-
-	case MM_EVENT_OUTPUT:
-		// Mark the socket as write ready.
-		mm_event_set_write_ready(sink, MM_EVENT_WRITE_READY);
-		break;
-
-	case MM_EVENT_INPUT_ERROR:
-		// Mark the socket as having a read error.
-		mm_event_set_read_ready(sink, MM_EVENT_READ_ERROR);
-		break;
-
-	case MM_EVENT_OUTPUT_ERROR:
-		// Mark the socket as having a write error.
-		mm_event_set_write_ready(sink, MM_EVENT_WRITE_ERROR);
-		break;
-
-	default:
-		break;
-	}
 }
 
 /**********************************************************************

@@ -303,33 +303,18 @@ void NONNULL(1)
 mm_event_listener_handle_finish(struct mm_event_listener *listener);
 
 void NONNULL(1, 2)
-mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event);
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink);
+
+void NONNULL(1, 2)
+mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink);
+
+void NONNULL(1, 2)
+mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink);
+
+void NONNULL(1, 2)
+mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink);
 
 void NONNULL(1, 2)
 mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink);
-
-static inline void NONNULL(1, 2)
-mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT_ERROR);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT);
-}
-
-static inline void NONNULL(1, 2)
-mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
-}
 
 #endif /* BASE_EVENT_LISTENER_H */

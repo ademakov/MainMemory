@@ -69,7 +69,10 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
 		sink->queued_events &= ~(1u << event);
-		mm_event_backend_poller_handle(&listener->storage, sink, event);
+		if (event < MM_EVENT_OUTPUT)
+			mm_event_backend_poller_input(&listener->storage, sink, event);
+		else
+			mm_event_backend_poller_output(&listener->storage, sink, event);
 		listener->events.dequeued++;
 	}
 }
@@ -175,14 +178,17 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	LEAVE();
 }
 
-void NONNULL(1, 2)
+static void NONNULL(1, 2)
 mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
 {
 	ENTER();
 
 	if (unlikely(sink->stray_target)) {
 		// Handle the event immediately.
-		mm_event_handle(sink, event);
+		if (event < MM_EVENT_OUTPUT)
+			mm_event_handle_input(sink, 1 << event);
+		else
+			mm_event_handle_output(sink, 1 << event);
 
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
@@ -217,7 +223,10 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 		// the target thread.
 		if (sink->listener == listener) {
 			mm_event_update(sink);
-			mm_event_backend_poller_handle(&listener->storage, sink, event);
+			if (event < MM_EVENT_OUTPUT)
+				mm_event_backend_poller_input(&listener->storage, sink, event);
+			else
+				mm_event_backend_poller_output(&listener->storage, sink, event);
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
@@ -229,6 +238,30 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 	}
 
 	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT);
+}
+
+void NONNULL(1, 2)
+mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT_ERROR);
+}
+
+void NONNULL(1, 2)
+mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT);
+}
+
+void NONNULL(1, 2)
+mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
 }
 
 void NONNULL(1, 2)
