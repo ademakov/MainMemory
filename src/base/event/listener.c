@@ -81,6 +81,33 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
  * Interface for handling incoming events.
  **********************************************************************/
 
+static void
+mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	// If the event sink can be detached from its target thread
+	// then do it now. But make sure the target thread has some
+	// minimal amount if work.
+	if (!sink->bound_target && !mm_event_active(sink)) {
+		ASSERT(sink->listener != NULL);
+		uint16_t nr = listener->events.dequeued;
+		if (sink->listener == listener) {
+			nr += listener->events.direct;
+			if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
+				sink->listener = NULL;
+		} else {
+			nr += max(listener->events.direct, listener->direct_events_estimate);
+			if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
+				sink->listener = listener;
+			} else {
+				mm_thread_t target = sink->listener - listener->dispatch->listeners;
+				uint32_t ntotal = listener->forward.buffers[target].ntotal;
+				if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
+					sink->listener = NULL;
+			}
+		}
+	}
+}
+
 void NONNULL(1)
 mm_event_listener_handle_queued(struct mm_event_listener *listener)
 {
@@ -178,62 +205,34 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	LEAVE();
 }
 
-static void NONNULL(1, 2)
-mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
+void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	ENTER();
 
 	if (unlikely(sink->stray_target)) {
 		// Handle the event immediately.
-		if (event < MM_EVENT_OUTPUT)
-			mm_event_handle_input(sink, 1 << event);
-		else
-			mm_event_handle_output(sink, 1 << event);
-
+		mm_event_handle_input(sink, MM_EVENT_READ_READY);
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
 #endif
-
 	} else {
-		// If the event sink can be detached from its target thread
-		// then do it now. But make sure the target thread has some
-		// minimal amount if work.
-		if (!sink->bound_target && !mm_event_active(sink)) {
-			ASSERT(sink->listener != NULL);
-			uint16_t nr = listener->events.dequeued;
-			if (sink->listener == listener) {
-				nr += listener->events.direct;
-				if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
-					sink->listener = NULL;
-			} else {
-				nr += max(listener->events.direct, listener->direct_events_estimate);
-				if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
-					sink->listener = listener;
-				} else {
-					mm_thread_t target = sink->listener - listener->dispatch->listeners;
-					uint32_t ntotal = listener->forward.buffers[target].ntotal;
-					if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
-						sink->listener = NULL;
-				}
-			}
-		}
+		// Unbind or rebind the sink if appropriate.
+		mm_event_listener_test_binding(listener, sink);
 
 		// If the event sink belongs to the control thread then handle
 		// it immediately, otherwise store it for later delivery to
 		// the target thread.
 		if (sink->listener == listener) {
 			mm_event_update(sink);
-			if (event < MM_EVENT_OUTPUT)
-				mm_event_backend_poller_input(&listener->storage, sink, event);
-			else
-				mm_event_backend_poller_output(&listener->storage, sink, event);
+			mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT);
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
-			mm_event_forward(&listener->forward, sink, event);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_INPUT);
 			listener->events.forwarded++;
 		} else {
-			mm_event_listener_enqueue_sink(listener, sink, event);
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT);
 		}
 	}
 
@@ -241,27 +240,105 @@ mm_event_listener_handle(struct mm_event_listener *listener, struct mm_event_fd 
 }
 
 void NONNULL(1, 2)
-mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT);
-}
-
-void NONNULL(1, 2)
 mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_handle(listener, sink, MM_EVENT_INPUT_ERROR);
+	ENTER();
+
+	if (unlikely(sink->stray_target)) {
+		// Handle the event immediately.
+		mm_event_handle_input(sink, MM_EVENT_READ_ERROR);
+#if ENABLE_EVENT_STATS
+		listener->stats.stray_events++;
+#endif
+	} else {
+		// Unbind or rebind the sink if appropriate.
+		mm_event_listener_test_binding(listener, sink);
+
+		// If the event sink belongs to the control thread then handle
+		// it immediately, otherwise store it for later delivery to
+		// the target thread.
+		if (sink->listener == listener) {
+			mm_event_update(sink);
+			mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_ERROR);
+			listener->events.direct++;
+		} else if (sink->listener != NULL) {
+			mm_event_update(sink);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_INPUT_ERROR);
+			listener->events.forwarded++;
+		} else {
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_ERROR);
+		}
+	}
+
+	LEAVE();
 }
 
 void NONNULL(1, 2)
 mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT);
+	ENTER();
+
+	if (unlikely(sink->stray_target)) {
+		// Handle the event immediately.
+		mm_event_handle_output(sink, MM_EVENT_WRITE_READY);
+#if ENABLE_EVENT_STATS
+		listener->stats.stray_events++;
+#endif
+	} else {
+		// Unbind or rebind the sink if appropriate.
+		mm_event_listener_test_binding(listener, sink);
+
+		// If the event sink belongs to the control thread then handle
+		// it immediately, otherwise store it for later delivery to
+		// the target thread.
+		if (sink->listener == listener) {
+			mm_event_update(sink);
+			mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT);
+			listener->events.direct++;
+		} else if (sink->listener != NULL) {
+			mm_event_update(sink);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_OUTPUT);
+			listener->events.forwarded++;
+		} else {
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT);
+		}
+	}
+
+	LEAVE();
 }
 
 void NONNULL(1, 2)
 mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	mm_event_listener_handle(listener, sink, MM_EVENT_OUTPUT_ERROR);
+	ENTER();
+
+	if (unlikely(sink->stray_target)) {
+		// Handle the event immediately.
+		mm_event_handle_output(sink, MM_EVENT_WRITE_ERROR);
+#if ENABLE_EVENT_STATS
+		listener->stats.stray_events++;
+#endif
+	} else {
+		// Unbind or rebind the sink if appropriate.
+		mm_event_listener_test_binding(listener, sink);
+
+		// If the event sink belongs to the control thread then handle
+		// it immediately, otherwise store it for later delivery to
+		// the target thread.
+		if (sink->listener == listener) {
+			mm_event_update(sink);
+			mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_ERROR);
+			listener->events.direct++;
+		} else if (sink->listener != NULL) {
+			mm_event_update(sink);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_OUTPUT_ERROR);
+			listener->events.forwarded++;
+		} else {
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT_ERROR);
+		}
+	}
+
+	LEAVE();
 }
 
 void NONNULL(1, 2)
