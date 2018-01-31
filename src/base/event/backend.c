@@ -47,7 +47,7 @@ mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backe
 		// Open the event self-pipe.
 		mm_selfpipe_prepare(&backend->selfpipe);
 		// Register the self-pipe.
-		mm_event_backend_register_fd(backend, some_storage, &backend->selfpipe.event_fd);
+		mm_event_backend_register_fd(backend, some_storage, &backend->selfpipe.sink);
 		mm_event_backend_flush(backend, some_storage);
 	}
 

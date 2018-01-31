@@ -38,9 +38,9 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	mm_event_prepare_fd(&selfpipe->event_fd, fds[0], MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_STRAY);
+	mm_event_prepare_fd(&selfpipe->sink, fds[0], MM_EVENT_REGULAR, MM_EVENT_IGNORED, false);
+	selfpipe->sink.flags |= MM_EVENT_NOTIFY_FD;
 	selfpipe->write_fd = fds[1];
-	selfpipe->event_fd.flags = false;
 
 	LEAVE();
 }
@@ -50,7 +50,7 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	mm_close(selfpipe->event_fd.fd);
+	mm_close(selfpipe->sink.fd);
 	mm_close(selfpipe->write_fd);
 
 	LEAVE();
@@ -71,11 +71,11 @@ mm_selfpipe_drain(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	if (selfpipe->event_fd.flags) {
-		selfpipe->event_fd.flags = 0;
+	if ((selfpipe->sink.flags & MM_EVENT_READ_READY) != 0) {
+		selfpipe->sink.flags &= ~MM_EVENT_READ_READY;
 
 		char dummy[64];
-		while (mm_read(selfpipe->event_fd.fd, dummy, sizeof dummy) == sizeof dummy) {
+		while (mm_read(selfpipe->sink.fd, dummy, sizeof dummy) == sizeof dummy) {
 			/* do nothing */
 		}
 	}

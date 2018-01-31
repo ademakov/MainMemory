@@ -47,16 +47,6 @@ typedef enum {
 	MM_EVENT_ONESHOT,
 } mm_event_capacity_t;
 
-/* Event sink thread affinity. */
-typedef enum {
-	/* Bound to a single thread forever. */
-	MM_EVENT_BOUND,
-	/* Bound to a single thread while active. */
-	MM_EVENT_LOOSE,
-	/* Might handle events concurrently on random threads. */
-	MM_EVENT_STRAY,
-} mm_event_affinity_t;
-
 /*
  * NB: Oneshot event sinks have some restrictions.
  *
@@ -97,8 +87,21 @@ typedef enum {
 #define MM_EVENT_OUTPUT_CLOSED	0x000400
 #define MM_EVENT_BROKEN		0x000800
 
+/* Polling mode for I/O events. */
+#define MM_EVENT_REGULAR_INPUT	0x001000
+#define MM_EVENT_REGULAR_OUTPUT	0x002000
+#define MM_EVENT_ONESHOT_INPUT	0x004000
+#define MM_EVENT_ONESHOT_OUTPUT	0x008000
+#define MM_EVENT_INPUT_TRIGGER	0x010000
+#define MM_EVENT_OUTPUT_TRIGGER	0x020000
+
+/* Internal notification fd (selfpipe or eventfd). */
+#define MM_EVENT_NOTIFY_FD	0x040000
+/* Event dispatch is bound to a single listener. */
+#define MM_EVENT_FIXED_LISTENER	0x080000
+
 /* A sink has a pending I/O event change. */
-#define MM_EVENT_CHANGE		0x001000
+#define MM_EVENT_CHANGE		0x100000
 
 /* Per-sink event counter. */
 typedef uint16_t mm_event_stamp_t;
@@ -132,18 +135,6 @@ struct mm_event_fd
 	   such a condition it is safe to switch the sink's target thread. */
 	mm_event_stamp_t complete_stamp;
 #endif
-
-	/* Flags used by poller threads. */
-	bool oneshot_input_trigger;
-	bool oneshot_output_trigger;
-
-	/* Immutable flags. */
-	unsigned stray_target : 1;
-	unsigned bound_target : 1;
-	unsigned regular_input : 1;
-	unsigned oneshot_input : 1;
-	unsigned regular_output : 1;
-	unsigned oneshot_output : 1;
 
 	/* Pending events for sinks in the dispatch queue. */
 	uint8_t queued_events;
@@ -276,7 +267,7 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
-		    mm_event_affinity_t target);
+		    bool fixed_listener);
 
 void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink);

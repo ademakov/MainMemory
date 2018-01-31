@@ -111,20 +111,20 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_register_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			    struct mm_event_fd *sink)
 {
-	bool input = sink->regular_input || sink->oneshot_input;
-	bool output = sink->regular_output || sink->oneshot_output;
-	uint32_t n = (input != false) + (output != false);
+	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
+	uint32_t n = (input != 0) + (output != 0);
 	if (likely(n)) {
 		if (unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
 			mm_event_kqueue_flush(backend, storage);
 
 		if (input) {
-			int flags = sink->oneshot_input ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
+			int flags = (sink->flags & MM_EVENT_ONESHOT_INPUT) ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
 			struct kevent *kp = &storage->events[storage->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
 		}
 		if (output) {
-			int flags = sink->oneshot_output ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
+			int flags = (sink->flags & MM_EVENT_ONESHOT_OUTPUT) ? EV_ADD | EV_ONESHOT : EV_ADD | EV_CLEAR;
 			struct kevent *kp = &storage->events[storage->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
 		}
@@ -135,9 +135,9 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			      struct mm_event_fd *sink)
 {
-	bool input = sink->regular_input || sink->oneshot_input_trigger;
-	bool output = sink->regular_output || sink->oneshot_output_trigger;
-	uint32_t n = (input != false) + (output != false);
+	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
+	uint32_t n = (input != 0) + (output != 0);
 	if (likely(n)) {
 		if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
 		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))

@@ -87,7 +87,7 @@ mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_eve
 	// If the event sink can be detached from its target thread
 	// then do it now. But make sure the target thread has some
 	// minimal amount if work.
-	if (!sink->bound_target && !mm_event_active(sink)) {
+	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0 && !mm_event_active(sink)) {
 		ASSERT(sink->listener != NULL);
 		uint16_t nr = listener->events.dequeued;
 		if (sink->listener == listener) {
@@ -210,7 +210,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 {
 	ENTER();
 
-	if (unlikely(sink->stray_target)) {
+	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
 		mm_event_handle_input(sink, MM_EVENT_READ_READY);
 #if ENABLE_EVENT_STATS
@@ -244,7 +244,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 {
 	ENTER();
 
-	if (unlikely(sink->stray_target)) {
+	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
 		mm_event_handle_input(sink, MM_EVENT_READ_ERROR);
 #if ENABLE_EVENT_STATS
@@ -278,7 +278,7 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 {
 	ENTER();
 
-	if (unlikely(sink->stray_target)) {
+	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
 		mm_event_handle_output(sink, MM_EVENT_WRITE_READY);
 #if ENABLE_EVENT_STATS
@@ -312,7 +312,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 {
 	ENTER();
 
-	if (unlikely(sink->stray_target)) {
+	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
 		mm_event_handle_output(sink, MM_EVENT_WRITE_ERROR);
 #if ENABLE_EVENT_STATS

@@ -176,12 +176,12 @@ static mm_value_t mm_net_reader_routine(struct mm_work *work);
 static mm_value_t mm_net_writer_routine(struct mm_work *work);
 
 static void
-mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto, uint32_t flags)
+mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto)
 {
 	// Initialize common socket fields.
 	sock->proto = proto;
 	sock->event.fd = -1;
-	sock->event.flags = flags;
+	sock->event.flags = 0;
 	if (proto->destroy != NULL)
 		sock->event.destroy = proto->destroy;
 	else
@@ -197,24 +197,21 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	if (proto->reader == NULL && proto->writer != NULL)
 		options |= MM_NET_EGRESS;
 
-	uint32_t flags;
 	mm_event_capacity_t input, output;
 	if ((options & MM_NET_EGRESS) == 0) {
 		VERIFY(proto->reader != NULL);
 		input = MM_EVENT_REGULAR;
 		output = MM_EVENT_ONESHOT;
-		flags = MM_EVENT_READER_PENDING;
 	} else {
 		VERIFY(proto->writer != NULL);
 		input = MM_EVENT_ONESHOT;
 		output = MM_EVENT_REGULAR;
-		flags = MM_EVENT_WRITER_PENDING;
 	}
 
-	mm_event_affinity_t affinity = (options & MM_NET_BOUND) != 0 ? MM_EVENT_BOUND : MM_EVENT_LOOSE;
+	bool affinity = (options & MM_NET_BOUND) != 0;
 
 	// Initialize basic fields.
-	mm_net_socket_prepare_basic(sock, proto, flags);
+	mm_net_socket_prepare_basic(sock, proto);
 	// Initialize the event sink.
 	mm_event_prepare_fd(&sock->event, fd, input, output, affinity);
 
@@ -304,7 +301,7 @@ mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
 	struct mm_net_server *srv = containerof(work, struct mm_net_server, event.reader_work);
 
 	// Indicate that the acceptor work is done.
-	srv->event.flags = MM_EVENT_READER_PENDING;
+	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
 }
 
 /**********************************************************************
@@ -417,7 +414,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	// Initialize its data.
 	srv->proto = proto;
 	srv->event.fd = -1;
-	srv->event.flags = MM_EVENT_READER_PENDING;
+	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
 	srv->name = NULL;
 	mm_work_prepare_hard(&srv->event.reader_work, mm_net_acceptor, mm_net_acceptor_complete);
 	mm_work_prepare_easy(&srv->register_work, mm_net_register_server);
@@ -458,7 +455,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_BOUND);
+	mm_event_prepare_fd(&srv->event, fd, MM_EVENT_REGULAR, MM_EVENT_IGNORED, true);
 
 	struct mm_strand *strand = mm_thread_ident_to_strand(target);
 	mm_strand_submit_work(strand, &srv->register_work);
@@ -577,7 +574,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *)
 	ENTER();
 
 	// Initialize common fields.
-	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto, 0);
+	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto);
 	// Initialize the destruction routine.
 	sock->event.destroy = destroy;
 
@@ -647,7 +644,7 @@ retry:
 	}
 
 	// Register the socket in the event loop.
-	mm_event_prepare_fd(&sock->event, fd, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_BOUND);
+	mm_event_prepare_fd(&sock->event, fd, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, true);
 	mm_event_register_fd(&sock->event);
 
 	// Block the fiber waiting for connection completion.

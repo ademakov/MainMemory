@@ -25,7 +25,7 @@
 
 struct mm_selfpipe
 {
-	struct mm_event_fd event_fd;
+	struct mm_event_fd sink;
 
 	int write_fd;
 };
