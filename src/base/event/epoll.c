@@ -63,8 +63,8 @@ mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
 			mm_event_listener_output(listener, sink);
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			bool enable_input = sink->regular_input || sink->oneshot_input;
-			bool enable_output = sink->regular_output || sink->oneshot_output;
+			bool enable_input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+			bool enable_output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
 			if (enable_input)
 				mm_event_listener_input_error(listener, sink);
 			if (enable_output && (event->events & (EPOLLERR | EPOLLHUP)) != 0)
@@ -208,8 +208,8 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 	mm_set_nonblocking(fd);
 
 	// Initialize the corresponding event sink.
-	mm_event_prepare_fd(&backend->notify_fd, fd, mm_event_epoll_notify_handler,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_STRAY);
+	mm_event_prepare_fd(&backend->notify_fd, fd, MM_EVENT_REGULAR, MM_EVENT_IGNORED, false);
+	backend->notify_fd.flags |= MM_EVENT_NOTIFY_FD;
 
 	// Register the event sink.
 	struct epoll_event ee;

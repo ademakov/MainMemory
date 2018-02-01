@@ -223,7 +223,7 @@ mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, s
 	mm_event_handle_input(sink, 1 << event);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if (sink->oneshot_input)
+	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
 		mm_event_epoll_reset_poller_input(storage, sink);
 #endif
 }
@@ -234,7 +234,7 @@ mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, 
 	mm_event_handle_output(sink, 1 << event);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if (sink->oneshot_output)
+	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
 		mm_event_epoll_reset_poller_output(storage, sink);
 #endif
 }
@@ -248,7 +248,7 @@ mm_event_backend_target_input(struct mm_event_fd *sink, mm_event_t event)
 	mm_event_handle_input(sink, 1 << event);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if (sink->oneshot_input)
+	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
 		mm_event_epoll_reset_input(sink);
 #endif
 }
@@ -259,7 +259,7 @@ mm_event_backend_target_output(struct mm_event_fd *sink, mm_event_t event)
 	mm_event_handle_output(sink, 1 << event);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if (sink->oneshot_output)
+	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
 		mm_event_epoll_reset_output(sink);
 #endif
 }

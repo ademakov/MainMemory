@@ -196,7 +196,7 @@ mm_event_listener_polling(struct mm_event_listener *listener)
 static inline uintptr_t NONNULL(1)
 mm_event_listener_futex(struct mm_event_listener *listener)
 {
-	return (uintptr_t) &listener->thread->async_queue->base.tail;
+	return (uintptr_t) &listener->async_queue->base.tail;
 }
 #endif
 

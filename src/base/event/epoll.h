@@ -147,9 +147,9 @@ mm_event_epoll_register_fd(struct mm_event_epoll *backend, struct mm_event_fd *s
 {
 	struct epoll_event ee;
 	ee.events = EPOLLET;
-	if (sink->regular_input || sink->oneshot_input)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
 		ee.events |= EPOLLIN | EPOLLRDHUP;
-	if (sink->regular_output || sink->oneshot_output)
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
 		ee.events |= EPOLLOUT;
 	ee.data.ptr = sink;
 
@@ -167,12 +167,12 @@ mm_event_epoll_trigger_input(struct mm_event_epoll *backend, struct mm_event_fd 
 {
 	struct epoll_event ee;
 	ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-	if (sink->regular_output || sink->oneshot_output_trigger)
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0)
 		ee.events |= EPOLLOUT;
 	ee.data.ptr = sink;
 
 	int rc;
-	if (sink->regular_output || sink->oneshot_output)
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
 	else
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
@@ -185,12 +185,12 @@ mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd
 {
 	struct epoll_event ee;
 	ee.events = EPOLLET | EPOLLOUT;
-	if (sink->regular_input || sink->oneshot_input_trigger)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER)) != 0)
 		ee.events |= EPOLLIN | EPOLLRDHUP;
 	ee.data.ptr = sink;
 
 	int rc;
-	if (sink->regular_input || sink->oneshot_input)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
 	else
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
@@ -203,7 +203,7 @@ mm_event_epoll_disable_input(struct mm_event_epoll *backend, struct mm_event_fd 
 {
 	struct epoll_event ev;
 	int rc;
-	if (sink->regular_output || sink->oneshot_output_trigger) {
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0) {
 		ev.data.ptr = sink;
 		ev.events = EPOLLET | EPOLLOUT;
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ev);
@@ -219,7 +219,7 @@ mm_event_epoll_disable_output(struct mm_event_epoll *backend, struct mm_event_fd
 {
 	struct epoll_event ev;
 	int rc;
-	if (sink->regular_input || sink->oneshot_input_trigger) {
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER)) != 0) {
 		ev.data.ptr = sink;
 		ev.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ev);
