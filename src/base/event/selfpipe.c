@@ -38,8 +38,8 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	mm_event_prepare_fd(&selfpipe->sink, fds[0], MM_EVENT_REGULAR, MM_EVENT_IGNORED, false);
-	selfpipe->sink.flags |= MM_EVENT_NOTIFY_FD;
+	mm_event_prepare_fd(&selfpipe->sink, fds[0], MM_EVENT_IGNORED, MM_EVENT_IGNORED, false);
+	selfpipe->sink.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD;
 	selfpipe->write_fd = fds[1];
 
 	LEAVE();

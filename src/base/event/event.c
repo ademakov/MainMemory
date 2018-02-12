@@ -188,10 +188,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 {
 	ENTER();
 	DEBUG("fd %d", fd);
-
 	ASSERT(fd >= 0);
-	// It is forbidden to have both input and output ignored.
-	VERIFY(input != MM_EVENT_IGNORED || output != MM_EVENT_IGNORED);
 
 	sink->fd = fd;
 	sink->flags = 0;
@@ -243,7 +240,6 @@ mm_event_register_fd(struct mm_event_fd *sink)
 
 	// Register with the event backend.
 	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
-
 	LEAVE();
 }
 

@@ -212,7 +212,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
-		mm_event_handle_input(sink, MM_EVENT_READ_READY);
+		sink->flags |= MM_EVENT_READ_READY;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
 #endif
@@ -246,7 +246,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
-		mm_event_handle_input(sink, MM_EVENT_READ_ERROR);
+		sink->flags |= MM_EVENT_READ_ERROR;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
 #endif
@@ -279,11 +279,8 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 	ENTER();
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
-		// Handle the event immediately.
-		mm_event_handle_output(sink, MM_EVENT_WRITE_READY);
-#if ENABLE_EVENT_STATS
-		listener->stats.stray_events++;
-#endif
+		// Never register notify FD for output events.
+		ABORT();
 	} else {
 		// Unbind or rebind the sink if appropriate.
 		mm_event_listener_test_binding(listener, sink);
@@ -313,11 +310,8 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 	ENTER();
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
-		// Handle the event immediately.
-		mm_event_handle_output(sink, MM_EVENT_WRITE_ERROR);
-#if ENABLE_EVENT_STATS
-		listener->stats.stray_events++;
-#endif
+		// Never register notify FD for output events.
+		ABORT();
 	} else {
 		// Unbind or rebind the sink if appropriate.
 		mm_event_listener_test_binding(listener, sink);
