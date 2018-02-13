@@ -431,6 +431,9 @@ mm_strand_dealer(mm_value_t arg)
 	struct mm_strand *strand = (struct mm_strand *) arg;
 
 	while (!mm_memory_load(strand->stop)) {
+		// Halt waiting for incoming requests.
+		mm_strand_halt(strand);
+
 		// Run the queued fibers if any.
 		do {
 			mm_fiber_yield();
@@ -438,9 +441,6 @@ mm_strand_dealer(mm_value_t arg)
 
 		// Release excessive resources allocated by fibers.
 		mm_strand_trim(strand);
-
-		// Halt waiting for incoming requests.
-		mm_strand_halt(strand);
 	}
 
 	LEAVE();
