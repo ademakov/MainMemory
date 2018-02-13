@@ -136,6 +136,9 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend);
 void NONNULL(1)
 mm_event_epoll_notify(struct mm_event_epoll *backend);
 
+void NONNULL(1)
+mm_event_epoll_notify_clean(struct mm_event_epoll *backend);
+
 #endif
 
 /**********************************************************************

@@ -497,7 +497,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 
 	if (timeout) {
 		// Cleanup stale event notifications.
-		mm_event_backend_dampen(&dispatch->backend);
+		mm_event_backend_notify_clean(&dispatch->backend);
 
 		// Publish the log before a possible sleep.
 		mm_log_relay();

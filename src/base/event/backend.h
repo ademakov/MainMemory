@@ -105,13 +105,17 @@ mm_event_backend_notify(struct mm_event_backend *backend)
 }
 
 static inline void NONNULL(1)
-mm_event_backend_dampen(struct mm_event_backend *backend)
+mm_event_backend_notify_clean(struct mm_event_backend *backend)
 {
 #if MM_EVENT_NATIVE_NOTIFY
-	if (backend->native_notify)
+	if (backend->native_notify) {
+# if HAVE_SYS_EPOLL_H
+		mm_event_epoll_notify_clean(&backend->backend);
+# endif
 		return;
+	}
 #endif
-	mm_selfpipe_drain(&backend->selfpipe);
+	mm_selfpipe_clean(&backend->selfpipe);
 }
 
 /**********************************************************************

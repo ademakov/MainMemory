@@ -40,6 +40,6 @@ void NONNULL(1)
 mm_selfpipe_write(struct mm_selfpipe *selfpipe);
 
 void NONNULL(1)
-mm_selfpipe_drain(struct mm_selfpipe *selfpipe);
+mm_selfpipe_clean(struct mm_selfpipe *selfpipe);
 
 #endif /* BASE_EVENT_SELFPIPE_H */
