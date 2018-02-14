@@ -220,45 +220,12 @@ mm_event_set_output_closed(struct mm_event_fd *sink)
  * Event sink activity.
  **********************************************************************/
 
-/* Mark a sink as having an incoming event received from the system. */
-static inline void
-mm_event_update(struct mm_event_fd *sink UNUSED)
-{
-#if ENABLE_SMP
-	sink->receive_stamp++;
-#endif
-}
-
-/* Mark a sink as having completed the processing of all the events
-   delivered to the target thread so far. */
-static inline void NONNULL(1)
-mm_event_handle_complete(struct mm_event_fd *sink UNUSED)
-{
-#if ENABLE_SMP
-	/* TODO: release memory fence */
-	mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
-#endif
-}
-
 /* Start asynchronous processing of an event as it is delivered to
    the target thread. */
 void NONNULL(1)
 mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags);
 void NONNULL(1)
 mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
-
-/* Check if a sink has some not yet fully processed events. */
-static inline bool NONNULL(1)
-mm_event_active(const struct mm_event_fd *sink UNUSED)
-{
-#if ENABLE_SMP
-	// TODO: acquire memory fence
-	mm_event_stamp_t stamp = mm_memory_load(sink->complete_stamp);
-	return sink->receive_stamp != stamp;
-#else
-	return true;
-#endif
-}
 
 /**********************************************************************
  * Event sink I/O control.

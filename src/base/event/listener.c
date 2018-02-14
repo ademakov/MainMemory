@@ -33,6 +33,28 @@
 
 #define MM_LISTINER_QUEUE_MIN_SIZE 16
 
+/* Mark a sink as having an incoming event received from the system. */
+static inline void
+mm_event_update(struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	sink->receive_stamp++;
+#endif
+}
+
+/* Check if a sink has some not yet fully processed events. */
+static inline bool NONNULL(1)
+mm_event_active(const struct mm_event_fd *sink UNUSED)
+{
+#if ENABLE_SMP
+	// TODO: acquire memory fence
+	mm_event_stamp_t stamp = mm_memory_load(sink->complete_stamp);
+	return sink->receive_stamp != stamp;
+#else
+	return true;
+#endif
+}
+
 /**********************************************************************
  * Event sink queue.
  **********************************************************************/

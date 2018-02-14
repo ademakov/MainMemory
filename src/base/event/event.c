@@ -97,12 +97,18 @@ mm_event_complete(struct mm_event_fd *sink)
 	ENTER();
 
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_WRITER_SPAWNED)) != 0)
-		/* Do nothing. @suppress("Suspicious semicolon") */;
-	else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0)
+	if ((flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_WRITER_SPAWNED)) != 0) {
+		/* Do nothing. */
+	} else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0) {
 		mm_event_close_fd(sink);
-	else
-		mm_event_handle_complete(sink);
+	} else {
+		/* Mark a sink as having completed the processing of all the events
+		   delivered to the target thread so far. */
+#if ENABLE_SMP
+		/* TODO: release memory fence */
+		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
+#endif
+	}
 
 	LEAVE();
 }
@@ -388,7 +394,7 @@ mm_event_yield_reader(struct mm_event_fd *sink)
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	// Bail out if the socket is shutdown.
+	// Bail out if the event sink is shutdown.
 	ASSERT((sink->flags & MM_EVENT_READER_SPAWNED) != 0);
 	if (mm_event_input_closed(sink)) {
 		sink->flags &= ~MM_EVENT_READER_SPAWNED;
@@ -418,7 +424,7 @@ mm_event_yield_writer(struct mm_event_fd *sink)
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	// Bail out if the socket is shutdown.
+	// Bail out if the event sink is shutdown.
 	ASSERT((sink->flags & MM_EVENT_WRITER_SPAWNED) != 0);
 	if (mm_event_output_closed(sink)) {
 		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
