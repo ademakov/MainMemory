@@ -72,6 +72,9 @@ mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &listener->storage.revents[i];
 		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
+			if (unlikely((event->flags & EV_ERROR) != 0))
+				continue;
+
 			struct mm_event_fd *sink = event->udata;
 			if (!mm_event_listener_adjust(listener, sink))
 				return;
@@ -87,22 +90,26 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event: fd %d", (int) event->ident);
+			if (unlikely((event->flags & EV_ERROR) != 0)) {
+				mm_warning(event->data, "kevent change failed");
+				continue;
+			}
 
 			struct mm_event_fd *sink = event->udata;
-			if (unlikely((event->flags & EV_ERROR) != 0))
-				mm_warning(event->data, "kevent change failed");
-			else if ((event->flags & EV_EOF) != 0)
+			if ((event->flags & EV_EOF) != 0)
 				mm_event_listener_input_error(listener, sink);
 			else
 				mm_event_listener_input(listener, sink);
 
 		} else if (event->filter == EVFILT_WRITE) {
 			DEBUG("write event: fd %d", (int) event->ident);
+			if (unlikely((event->flags & EV_ERROR) != 0)) {
+				mm_warning(event->data, "kevent change failed");
+				continue;
+			}
 
 			struct mm_event_fd *sink = event->udata;
-			if (unlikely((event->flags & EV_ERROR) != 0))
-				mm_warning(event->data, "kevent change failed");
-			else if ((event->flags & EV_EOF) != 0)
+			if ((event->flags & EV_EOF) != 0)
 				mm_event_listener_output_error(listener, sink);
 			else
 				mm_event_listener_output(listener, sink);
