@@ -30,7 +30,7 @@
 
 static struct mm_net_socket * proxy_create(void);
 static void proxy_destroy(struct mm_event_fd *sink);
-static void proxy_reader(struct mm_net_socket *sock);
+static mm_value_t proxy_reader(struct mm_work *work);
 
 struct proxy_command
 {
@@ -255,9 +255,13 @@ proxy_handle(struct client_conn *client, struct proxy_command *command)
 }
 
 // Read and execute incoming commands from a client.
-static void
-proxy_reader(struct mm_net_socket *sock)
+static mm_value_t
+proxy_reader(struct mm_work *work)
 {
+	struct mm_net_socket *sock = mm_net_reader_socket(work);
+	if (sock == NULL)
+		return 0;
+
 	struct client_conn *client = containerof(sock, struct client_conn, sock.sock);
 	for (mm_timeout_t timeout = 0; ; timeout = 10000) {
 		mm_net_set_read_timeout(&client->sock.sock, timeout);
@@ -297,4 +301,6 @@ proxy_reader(struct mm_net_socket *sock)
 		// Consume already parsed read buffer data.
 		mm_netbuf_read_reset(&client->sock);
 	}
+
+	return 0;
 }

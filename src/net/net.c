@@ -172,14 +172,10 @@ mm_net_reclaim_routine(struct mm_work *work)
  * Socket initialization and cleanup.
  **********************************************************************/
 
-static mm_value_t mm_net_reader_routine(struct mm_work *work);
-static mm_value_t mm_net_writer_routine(struct mm_work *work);
-
 static void
 mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto)
 {
 	// Initialize common socket fields.
-	sock->proto = proto;
 	sock->event.fd = -1;
 	sock->event.flags = 0;
 	if (proto->destroy != NULL)
@@ -216,8 +212,8 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_event_prepare_fd(&sock->event, fd, input, output, affinity);
 
 	// Initialize the required work items.
-	mm_work_prepare_hard(&sock->event.reader_work, mm_net_reader_routine, mm_event_reader_complete);
-	mm_work_prepare_hard(&sock->event.writer_work, mm_net_writer_routine, mm_event_writer_complete);
+	mm_work_prepare_hard(&sock->event.reader_work, proto->reader, mm_event_reader_complete);
+	mm_work_prepare_hard(&sock->event.writer_work, proto->writer, mm_event_writer_complete);
 	mm_work_prepare_easy(&sock->event.reclaim_work, mm_net_reclaim_routine);
 }
 
@@ -302,46 +298,6 @@ mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
 
 	// Indicate that the acceptor work is done.
 	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
-}
-
-/**********************************************************************
- * Network I/O tasks for server sockets.
- **********************************************************************/
-
-static mm_value_t
-mm_net_reader_routine(struct mm_work *work)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.reader_work);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
-	if (unlikely(mm_net_is_reader_shutdown(sock)))
-		goto leave;
-
-	// Run the protocol handler routine.
-	(sock->proto->reader)(sock);
-
-leave:
-	LEAVE();
-	return 0;
-}
-
-static mm_value_t
-mm_net_writer_routine(struct mm_work *work)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.writer_work);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
-	if (unlikely(mm_net_is_writer_shutdown(sock)))
-		goto leave;
-
-	// Run the protocol handler routine.
-	(sock->proto->writer)(sock);
-
-leave:
-	LEAVE();
-	return 0;
 }
 
 /**********************************************************************

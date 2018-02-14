@@ -67,12 +67,16 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	LEAVE();
 }
 
-static void
-mc_reader_routine(struct mm_net_socket *sock)
+static mm_value_t
+mc_reader_routine(struct mm_work *work)
 {
 	ENTER();
 
-	struct mc_state *state = containerof(sock, struct mc_state, sock);
+	struct mm_net_socket *sock = mm_net_reader_socket(work);
+	if (sock == NULL)
+		goto leave;
+
+	struct mc_state *state = containerof(sock, struct mc_state, sock.sock);
 
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
@@ -143,6 +147,7 @@ parse:
 
 leave:
 	LEAVE();
+	return 0;
 }
 
 /**********************************************************************

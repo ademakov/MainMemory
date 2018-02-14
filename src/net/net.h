@@ -76,9 +76,6 @@ struct mm_net_socket
 	mm_timeout_t read_timeout;
 	mm_timeout_t write_timeout;
 
-	/* Socket protocol handlers. */
-	struct mm_net_proto *proto;
-
 	/* Client address. */
 	struct mm_net_peer_addr peer;
 };
@@ -91,8 +88,8 @@ struct mm_net_proto
 	struct mm_net_socket * (*create)(void);
 	void (*destroy)(struct mm_event_fd *);
 
-	void (*reader)(struct mm_net_socket *);
-	void (*writer)(struct mm_net_socket *);
+	mm_work_routine_t reader;
+	mm_work_routine_t writer;
 };
 
 /**********************************************************************
@@ -211,6 +208,28 @@ static inline void NONNULL(1)
 mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
 	sock->write_timeout = timeout;
+}
+
+/**********************************************************************
+ * Socket I/O work helpers.
+ **********************************************************************/
+
+static inline struct mm_net_socket *
+mm_net_reader_socket(struct mm_work *reader_work)
+{
+	struct mm_net_socket *sock = containerof(reader_work, struct mm_net_socket, event.reader_work);
+	if (unlikely(mm_event_input_closed(&sock->event)))
+		sock = NULL;
+	return sock;
+}
+
+static inline struct mm_net_socket *
+mm_net_writer_socket(struct mm_work *writer_work)
+{
+	struct mm_net_socket *sock = containerof(writer_work, struct mm_net_socket, event.writer_work);
+	if (unlikely(mm_event_output_closed(&sock->event)))
+		sock = NULL;
+	return sock;
 }
 
 #endif /* NET_NET_H */
