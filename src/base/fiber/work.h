@@ -47,18 +47,17 @@ struct mm_work
 
 void mm_work_complete_noop(struct mm_work *work, mm_value_t result);
 
-static inline void NONNULL(1, 2)
-mm_work_prepare_easy(struct mm_work *work, mm_work_routine_t routine)
-{
-	work->routine = routine;
-	work->complete = mm_work_complete_noop;
-}
-
-static inline void NONNULL(1, 2)
-mm_work_prepare_hard(struct mm_work *work, mm_work_routine_t routine, mm_work_complete_t complete)
+static inline void NONNULL(1, 2, 3)
+mm_work_prepare(struct mm_work *work, mm_work_routine_t routine, mm_work_complete_t complete)
 {
 	work->routine = routine;
 	work->complete = complete;
+}
+
+static inline void NONNULL(1, 2)
+mm_work_prepare_simple(struct mm_work *work, mm_work_routine_t routine)
+{
+	mm_work_prepare(work, routine, mm_work_complete_noop);
 }
 
 #endif /* BASE_FIBER_WORK_H */

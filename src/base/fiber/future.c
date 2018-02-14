@@ -150,7 +150,7 @@ mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start
 	ENTER();
 
 	mm_future_prepare_low(future, start, start_arg);
-	mm_work_prepare_hard(&future->work, mm_future_routine, mm_future_finish);
+	mm_work_prepare(&future->work, mm_future_routine, mm_future_finish);
 
 	future->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	mm_waitset_prepare(&future->waitset);
@@ -329,7 +329,7 @@ mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_
 
 	mm_future_prepare_low(future, start, start_arg);
 
-	mm_work_prepare_hard(&future->work, mm_future_routine, mm_future_unique_finish);
+	mm_work_prepare(&future->work, mm_future_routine, mm_future_unique_finish);
 
 	mm_waitset_unique_prepare(&future->waitset);
 

@@ -352,8 +352,8 @@ mc_table_init_part(mm_thread_t index, struct mm_strand *target UNUSED)
 	part->striding = false;
 #endif
 
-	mm_work_prepare_hard(&part->evict_work, mc_table_evict_routine, mm_table_evict_complete);
-	mm_work_prepare_hard(&part->stride_work, mc_table_stride_routine, mc_table_stride_complete);
+	mm_work_prepare(&part->evict_work, mc_table_evict_routine, mm_table_evict_complete);
+	mm_work_prepare(&part->stride_work, mc_table_stride_routine, mc_table_stride_complete);
 
 	part->stamp = index + 1;
 

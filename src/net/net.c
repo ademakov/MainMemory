@@ -212,9 +212,9 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_event_prepare_fd(&sock->event, fd, input, output, affinity);
 
 	// Initialize the required work items.
-	mm_work_prepare_hard(&sock->event.reader_work, proto->reader, mm_event_reader_complete);
-	mm_work_prepare_hard(&sock->event.writer_work, proto->writer, mm_event_writer_complete);
-	mm_work_prepare_easy(&sock->event.reclaim_work, mm_net_reclaim_routine);
+	mm_work_prepare(&sock->event.reader_work, proto->reader, mm_event_reader_complete);
+	mm_work_prepare(&sock->event.writer_work, proto->writer, mm_event_writer_complete);
+	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
 }
 
 /**********************************************************************
@@ -372,8 +372,8 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	srv->event.fd = -1;
 	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
 	srv->name = NULL;
-	mm_work_prepare_hard(&srv->event.reader_work, mm_net_acceptor, mm_net_acceptor_complete);
-	mm_work_prepare_easy(&srv->register_work, mm_net_register_server);
+	mm_work_prepare(&srv->event.reader_work, mm_net_acceptor, mm_net_acceptor_complete);
+	mm_work_prepare_simple(&srv->register_work, mm_net_register_server);
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
 
 	// On the very first server register the server cleanup routine.
@@ -535,7 +535,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *)
 	sock->event.destroy = destroy;
 
 	// Initialize the required work items.
-	mm_work_prepare_easy(&sock->event.reclaim_work, mm_net_reclaim_routine);
+	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
 
 	LEAVE();
 }
