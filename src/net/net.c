@@ -239,10 +239,12 @@ retry:
 	if (unlikely(fd < 0)) {
 		if (errno == EINTR)
 			goto retry;
-		if (errno != EAGAIN && errno != EWOULDBLOCK)
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			mm_error(errno, "%s: accept()", srv->name);
-		else
+		} else {
+			srv->event.flags &= ~MM_EVENT_READ_READY;
 			rc = false;
+		}
 		goto leave;
 	}
 
@@ -288,16 +290,6 @@ mm_net_acceptor(struct mm_work *work)
 
 	LEAVE();
 	return 0;
-}
-
-static void
-mm_net_acceptor_complete(struct mm_work *work, mm_value_t result UNUSED)
-{
-	// Find the pertinent server.
-	struct mm_net_server *srv = containerof(work, struct mm_net_server, event.reader_work);
-
-	// Indicate that the acceptor work is done.
-	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
 }
 
 /**********************************************************************
@@ -372,7 +364,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	srv->event.fd = -1;
 	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
 	srv->name = NULL;
-	mm_work_prepare(&srv->event.reader_work, mm_net_acceptor, mm_net_acceptor_complete);
+	mm_work_prepare(&srv->event.reader_work, mm_net_acceptor, mm_event_reader_complete);
 	mm_work_prepare_simple(&srv->register_work, mm_net_register_server);
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
 
