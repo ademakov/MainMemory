@@ -666,7 +666,7 @@ mm_net_wait_readable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	int rc;
 
 	// Check to see if the socket is closed.
-	if (mm_net_is_reader_shutdown(sock)) {
+	if (mm_event_input_closed(&sock->event)) {
 		errno = EBADF;
 		rc = -1;
 		goto leave;
@@ -717,7 +717,7 @@ mm_net_wait_writable(struct mm_net_socket *sock, mm_timeval_t deadline)
 	int rc;
 
 	// Check to see if the socket is closed.
-	if (mm_net_is_writer_shutdown(sock)) {
+	if (mm_event_output_closed(&sock->event)) {
 		errno = EBADF;
 		rc = -1;
 		goto leave;
