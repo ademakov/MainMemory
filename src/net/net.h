@@ -217,7 +217,7 @@ mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 static inline struct mm_net_socket *
 mm_net_reader_socket(struct mm_work *reader_work)
 {
-	struct mm_net_socket *sock = containerof(reader_work, struct mm_net_socket, event.reader_work);
+	struct mm_net_socket *sock = containerof(reader_work, struct mm_net_socket, event.input_work);
 	if (unlikely(mm_event_input_closed(&sock->event)))
 		sock = NULL;
 	return sock;
@@ -226,7 +226,7 @@ mm_net_reader_socket(struct mm_work *reader_work)
 static inline struct mm_net_socket *
 mm_net_writer_socket(struct mm_work *writer_work)
 {
-	struct mm_net_socket *sock = containerof(writer_work, struct mm_net_socket, event.writer_work);
+	struct mm_net_socket *sock = containerof(writer_work, struct mm_net_socket, event.output_work);
 	if (unlikely(mm_event_output_closed(&sock->event)))
 		sock = NULL;
 	return sock;

@@ -127,9 +127,9 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 	sink->dispatch_stamp++;
 #endif
 
-	if (sink->reader != NULL) {
+	if (sink->input_fiber != NULL) {
 		// Run the reader fiber presumably blocked on the socket.
-		mm_fiber_run(sink->reader);
+		mm_fiber_run(sink->input_fiber);
 	} else {
 		// Check to see if a new reader should be spawned.
 		flags = sink->flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_READER_PENDING);
@@ -139,7 +139,7 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 			// Remember a reader has been started.
 			sink->flags |= MM_EVENT_READER_SPAWNED;
 			// Submit a reader work.
-			mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+			mm_strand_add_work(sink->listener->strand, &sink->input_work);
 		} else if (flags == 0) {
 			mm_event_complete(sink);
 		}
@@ -162,9 +162,9 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 	sink->dispatch_stamp++;
 #endif
 
-	if (sink->writer != NULL) {
+	if (sink->output_fiber != NULL) {
 		// Run the writer fiber presumably blocked on the socket.
-		mm_fiber_run(sink->writer);
+		mm_fiber_run(sink->output_fiber);
 	} else {
 		// Check to see if a new writer should be spawned.
 		flags = sink->flags & (MM_EVENT_WRITER_SPAWNED | MM_EVENT_WRITER_PENDING);
@@ -174,7 +174,7 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 			// Remember a writer has been started.
 			sink->flags |= MM_EVENT_WRITER_SPAWNED;
 			// Submit a writer work.
-			mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+			mm_strand_add_work(sink->listener->strand, &sink->output_work);
 		} else if (flags == 0) {
 			mm_event_complete(sink);
 		}
@@ -187,8 +187,29 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
  * Event sink I/O control.
  **********************************************************************/
 
+static void NONNULL(1)
+mm_event_input_complete(struct mm_work *work, mm_value_t value UNUSED)
+{
+	mm_event_yield_reader(containerof(work, struct mm_event_fd, input_work));
+}
+
+static void NONNULL(1)
+mm_event_output_complete(struct mm_work *work, mm_value_t value UNUSED)
+{
+	mm_event_yield_writer(containerof(work, struct mm_event_fd, output_work));
+}
+
+static mm_value_t
+mm_event_unexpected(struct mm_work *work UNUSED)
+{
+	mm_error(0, "unexpected event");
+	return 0;
+}
+
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
+		    mm_work_routine_t input_routine,
+		    mm_work_routine_t output_routine,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    bool fixed_listener)
 {
@@ -199,8 +220,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	sink->fd = fd;
 	sink->flags = 0;
 	sink->listener = NULL;
-	sink->reader = NULL;
-	sink->writer = NULL;
+	sink->input_fiber = NULL;
+	sink->output_fiber = NULL;
 
 #if ENABLE_SMP
 	sink->receive_stamp = 0;
@@ -208,6 +229,17 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	sink->complete_stamp = 0;
 #endif
 	sink->queued_events = 0;
+
+	if (input_routine != NULL) {
+		mm_work_prepare(&sink->input_work, input_routine, mm_event_input_complete);
+	} else {
+		mm_work_prepare_simple(&sink->input_work, mm_event_unexpected);
+	}
+	if (output_routine != NULL) {
+		mm_work_prepare(&sink->output_work, output_routine, mm_event_output_complete);
+	} else {
+		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected);
+	}
 
 	if (fixed_listener)
 		sink->flags |= MM_EVENT_FIXED_LISTENER;
@@ -340,8 +372,6 @@ mm_event_spawn_reader(struct mm_event_fd *sink)
 
 	if (mm_event_input_closed(sink))
 		goto leave;
-	if (sink->reader_work.routine == NULL)
-		goto leave;
 
 	if ((sink->flags & MM_EVENT_READER_SPAWNED) != 0) {
 		// If a reader is already active then remember to start another
@@ -351,7 +381,7 @@ mm_event_spawn_reader(struct mm_event_fd *sink)
 		// Remember a reader has been started.
 		sink->flags |= MM_EVENT_READER_SPAWNED;
 		// Submit a reader work.
-		mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -368,8 +398,6 @@ mm_event_spawn_writer(struct mm_event_fd *sink)
 
 	if (mm_event_output_closed(sink))
 		goto leave;
-	if (sink->writer_work.routine == NULL)
-		goto leave;
 
 	if ((sink->flags & MM_EVENT_WRITER_SPAWNED) != 0) {
 		// If a writer is already active then remember to start another
@@ -379,7 +407,7 @@ mm_event_spawn_writer(struct mm_event_fd *sink)
 		// Remember a writer has been started.
 		sink->flags |= MM_EVENT_WRITER_SPAWNED;
 		// Submit a writer work.
-		mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 		// Let it start immediately.
 		mm_fiber_yield();
 	}
@@ -408,7 +436,7 @@ mm_event_yield_reader(struct mm_event_fd *sink)
 		if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
 			sink->flags &= ~MM_EVENT_READER_PENDING;
 		// Submit a reader work.
-		mm_strand_add_work(sink->listener->strand, &sink->reader_work);
+		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 	} else {
 		sink->flags &= ~MM_EVENT_READER_SPAWNED;
 		mm_event_complete(sink);
@@ -438,7 +466,7 @@ mm_event_yield_writer(struct mm_event_fd *sink)
 		if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
 			sink->flags &= ~MM_EVENT_WRITER_PENDING;
 		// Submit a writer work.
-		mm_strand_add_work(sink->listener->strand, &sink->writer_work);
+		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 	} else {
 		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
 		mm_event_complete(sink);
@@ -446,18 +474,6 @@ mm_event_yield_writer(struct mm_event_fd *sink)
 
 leave:
 	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_reader_complete(struct mm_work *work, mm_value_t value UNUSED)
-{
-	mm_event_yield_reader(containerof(work, struct mm_event_fd, reader_work));
-}
-
-void NONNULL(1)
-mm_event_writer_complete(struct mm_work *work, mm_value_t value UNUSED)
-{
-	mm_event_yield_writer(containerof(work, struct mm_event_fd, writer_work));
 }
 
 /**********************************************************************

@@ -140,11 +140,11 @@ struct mm_event_fd
 	uint8_t queued_events;
 
 	/* Fibers bound to perform I/O. */
-	struct mm_fiber *reader;
-	struct mm_fiber *writer;
+	struct mm_fiber *input_fiber;
+	struct mm_fiber *output_fiber;
 	/* Work entries to perform I/O. */
-	struct mm_work reader_work;
-	struct mm_work writer_work;
+	struct mm_work input_work;
+	struct mm_work output_work;
 	/* Work entry for sink memory reclamation. */
 	struct mm_work reclaim_work;
 
@@ -233,6 +233,8 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
 
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
+		    mm_work_routine_t input_routine,
+		    mm_work_routine_t output_routine,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    bool fixed_listener);
 
@@ -266,12 +268,6 @@ mm_event_yield_reader(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_yield_writer(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_reader_complete(struct mm_work *work, mm_value_t value UNUSED);
-
-void NONNULL(1)
-mm_event_writer_complete(struct mm_work *work, mm_value_t value UNUSED);
 
 /**********************************************************************
  * Event listening and notification.
