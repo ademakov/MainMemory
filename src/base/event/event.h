@@ -263,12 +263,6 @@ mm_event_spawn_reader(struct mm_event_fd *sink);
 void NONNULL(1)
 mm_event_spawn_writer(struct mm_event_fd *sink);
 
-void NONNULL(1)
-mm_event_yield_reader(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_yield_writer(struct mm_event_fd *sink);
-
 /**********************************************************************
  * Event listening and notification.
  **********************************************************************/
