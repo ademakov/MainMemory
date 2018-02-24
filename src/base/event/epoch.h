@@ -1,7 +1,7 @@
 /*
  * base/event/epoch.h - MainMemory event sink reclamation epochs.
  *
- * Copyright (C) 2016-2017  Aleksey Demakov
+ * Copyright (C) 2016-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
