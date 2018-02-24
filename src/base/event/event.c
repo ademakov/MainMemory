@@ -97,7 +97,7 @@ mm_event_complete(struct mm_event_fd *sink)
 	ENTER();
 
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_WRITER_SPAWNED)) != 0) {
+	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
 		/* Do nothing. */
 	} else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0) {
 		mm_event_close_fd(sink);
@@ -132,12 +132,12 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 		mm_fiber_run(sink->input_fiber);
 	} else {
 		// Check to see if a new reader should be spawned.
-		flags = sink->flags & (MM_EVENT_READER_SPAWNED | MM_EVENT_READER_PENDING);
-		if (flags == MM_EVENT_READER_PENDING) {
+		flags = sink->flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_INPUT_PENDING);
+		if (flags == MM_EVENT_INPUT_PENDING) {
 			if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-				sink->flags &= ~MM_EVENT_READER_PENDING;
+				sink->flags &= ~MM_EVENT_INPUT_PENDING;
 			// Remember a reader has been started.
-			sink->flags |= MM_EVENT_READER_SPAWNED;
+			sink->flags |= MM_EVENT_INPUT_STARTED;
 			// Submit a reader work.
 			mm_strand_add_work(sink->listener->strand, &sink->input_work);
 		} else if (flags == 0) {
@@ -167,12 +167,12 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 		mm_fiber_run(sink->output_fiber);
 	} else {
 		// Check to see if a new writer should be spawned.
-		flags = sink->flags & (MM_EVENT_WRITER_SPAWNED | MM_EVENT_WRITER_PENDING);
-		if (flags == MM_EVENT_WRITER_PENDING) {
+		flags = sink->flags & (MM_EVENT_OUTPUT_STARTED | MM_EVENT_OUTPUT_PENDING);
+		if (flags == MM_EVENT_OUTPUT_PENDING) {
 			if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-				sink->flags &= ~MM_EVENT_WRITER_PENDING;
+				sink->flags &= ~MM_EVENT_OUTPUT_PENDING;
 			// Remember a writer has been started.
-			sink->flags |= MM_EVENT_WRITER_SPAWNED;
+			sink->flags |= MM_EVENT_OUTPUT_STARTED;
 			// Submit a writer work.
 			mm_strand_add_work(sink->listener->strand, &sink->output_work);
 		} else if (flags == 0) {
@@ -192,22 +192,22 @@ mm_event_input_complete(struct mm_work *work, mm_value_t value UNUSED)
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Bail out if the event sink is shutdown.
-	ASSERT((sink->flags & MM_EVENT_READER_SPAWNED) != 0);
+	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
 	if (mm_event_input_closed(sink)) {
-		sink->flags &= ~MM_EVENT_READER_SPAWNED;
+		sink->flags &= ~MM_EVENT_INPUT_STARTED;
 		mm_event_complete(sink);
 		goto leave;
 	}
 
 	// Check to see if a new reader should be spawned.
 	uint32_t fd_flags = sink->flags & (MM_EVENT_READ_READY | MM_EVENT_READ_ERROR);
-	if ((sink->flags & MM_EVENT_READER_PENDING) != 0 && fd_flags != 0) {
+	if ((sink->flags & MM_EVENT_INPUT_PENDING) != 0 && fd_flags != 0) {
 		if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-			sink->flags &= ~MM_EVENT_READER_PENDING;
+			sink->flags &= ~MM_EVENT_INPUT_PENDING;
 		// Submit a reader work.
 		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 	} else {
-		sink->flags &= ~MM_EVENT_READER_SPAWNED;
+		sink->flags &= ~MM_EVENT_INPUT_STARTED;
 		mm_event_complete(sink);
 	}
 
@@ -224,22 +224,22 @@ mm_event_output_complete(struct mm_work *work, mm_value_t value UNUSED)
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	// Bail out if the event sink is shutdown.
-	ASSERT((sink->flags & MM_EVENT_WRITER_SPAWNED) != 0);
+	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
 	if (mm_event_output_closed(sink)) {
-		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
+		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
 		mm_event_complete(sink);
 		goto leave;
 	}
 
 	// Check to see if a new writer should be spawned.
 	uint32_t fd_flags = sink->flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR);
-	if ((sink->flags & MM_EVENT_WRITER_PENDING) != 0 && fd_flags != 0) {
+	if ((sink->flags & MM_EVENT_OUTPUT_PENDING) != 0 && fd_flags != 0) {
 		if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-			sink->flags &= ~MM_EVENT_WRITER_PENDING;
+			sink->flags &= ~MM_EVENT_OUTPUT_PENDING;
 		// Submit a writer work.
 		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 	} else {
-		sink->flags &= ~MM_EVENT_WRITER_SPAWNED;
+		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
 		mm_event_complete(sink);
 	}
 
@@ -297,14 +297,14 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		sink->flags |= MM_EVENT_FIXED_LISTENER;
 
 	if (input == MM_EVENT_REGULAR) {
-		sink->flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
+		sink->flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
 	} else if (input == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for stray sinks.
 		sink->flags |= MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER;
 	}
 
 	if (output == MM_EVENT_REGULAR) {
-		sink->flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_WRITER_PENDING;
+		sink->flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
 	} else if (output == MM_EVENT_ONESHOT) {
 		// Oneshot state cannot be properly managed for stray sinks.
 		sink->flags |= MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER;
@@ -417,7 +417,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
  **********************************************************************/
 
 void
-mm_event_spawn_reader(struct mm_event_fd *sink)
+mm_event_start_input_work(struct mm_event_fd *sink)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
@@ -425,13 +425,13 @@ mm_event_spawn_reader(struct mm_event_fd *sink)
 	if (mm_event_input_closed(sink))
 		goto leave;
 
-	if ((sink->flags & MM_EVENT_READER_SPAWNED) != 0) {
+	if ((sink->flags & MM_EVENT_INPUT_STARTED) != 0) {
 		// If a reader is already active then remember to start another
 		// one when it ends.
-		sink->flags |= MM_EVENT_READER_PENDING;
+		sink->flags |= MM_EVENT_INPUT_PENDING;
 	} else {
 		// Remember a reader has been started.
-		sink->flags |= MM_EVENT_READER_SPAWNED;
+		sink->flags |= MM_EVENT_INPUT_STARTED;
 		// Submit a reader work.
 		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 		// Let it start immediately.
@@ -443,7 +443,7 @@ leave:
 }
 
 void
-mm_event_spawn_writer(struct mm_event_fd *sink)
+mm_event_start_output_work(struct mm_event_fd *sink)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
@@ -451,13 +451,13 @@ mm_event_spawn_writer(struct mm_event_fd *sink)
 	if (mm_event_output_closed(sink))
 		goto leave;
 
-	if ((sink->flags & MM_EVENT_WRITER_SPAWNED) != 0) {
+	if ((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0) {
 		// If a writer is already active then remember to start another
 		// one when it ends.
-		sink->flags |= MM_EVENT_WRITER_PENDING;
+		sink->flags |= MM_EVENT_OUTPUT_PENDING;
 	} else {
 		// Remember a writer has been started.
-		sink->flags |= MM_EVENT_WRITER_SPAWNED;
+		sink->flags |= MM_EVENT_OUTPUT_STARTED;
 		// Submit a writer work.
 		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 		// Let it start immediately.

@@ -76,10 +76,10 @@ typedef enum {
 #define MM_EVENT_WRITE_ERROR	(1u << MM_EVENT_OUTPUT_ERROR)
 
 /* Fiber activity flags. */
-#define MM_EVENT_READER_SPAWNED	0x000010
-#define MM_EVENT_WRITER_SPAWNED	0x000020
-#define MM_EVENT_READER_PENDING	0x000040
-#define MM_EVENT_WRITER_PENDING	0x000080
+#define MM_EVENT_INPUT_STARTED	0x000010
+#define MM_EVENT_OUTPUT_STARTED	0x000020
+#define MM_EVENT_INPUT_PENDING	0x000040
+#define MM_EVENT_OUTPUT_PENDING	0x000080
 
 /* I/O event sink close flags. */
 #define MM_EVENT_CLOSED		0x000100
@@ -253,15 +253,11 @@ mm_event_trigger_input(struct mm_event_fd *sink);
 void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink);
 
-/**********************************************************************
- * Event sink fiber control.
- **********************************************************************/
+void NONNULL(1)
+mm_event_start_input_work(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_spawn_reader(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_spawn_writer(struct mm_event_fd *sink);
+mm_event_start_output_work(struct mm_event_fd *sink);
 
 /**********************************************************************
  * Event listening and notification.

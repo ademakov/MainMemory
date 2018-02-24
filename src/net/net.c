@@ -358,7 +358,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	// Initialize its data.
 	srv->proto = proto;
 	srv->event.fd = -1;
-	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_READER_PENDING;
+	srv->event.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
 	srv->name = NULL;
 	mm_work_prepare_simple(&srv->register_work, mm_net_register_server);
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
