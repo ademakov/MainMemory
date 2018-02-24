@@ -71,8 +71,8 @@ mm_selfpipe_clean(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	if ((selfpipe->sink.flags & MM_EVENT_READ_READY) != 0) {
-		selfpipe->sink.flags &= ~MM_EVENT_READ_READY;
+	if ((selfpipe->sink.flags & MM_EVENT_INPUT_READY) != 0) {
+		selfpipe->sink.flags &= ~MM_EVENT_INPUT_READY;
 
 		char dummy[64];
 		while (mm_read(selfpipe->sink.fd, dummy, sizeof dummy) == sizeof dummy) {

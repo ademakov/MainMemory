@@ -221,10 +221,10 @@ mm_event_backend_poller_finish(struct mm_event_backend *backend UNUSED, struct m
 /* Start processing of an event after it is accepted by the poller
    thread. */
 static inline void NONNULL(1, 2)
-mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
-	mm_event_handle_input(sink, 1 << event);
+	mm_event_handle_input(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
@@ -232,10 +232,10 @@ mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, s
 #endif
 }
 static inline void NONNULL(1, 2)
-mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
-	mm_event_handle_output(sink, 1 << event);
+	mm_event_handle_output(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
@@ -246,10 +246,10 @@ mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, 
 /* Start processing of an event after it is delivered to the target
    thread. */
 static inline void NONNULL(1)
-mm_event_backend_target_input(struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_target_input(struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
-	mm_event_handle_input(sink, 1 << event);
+	mm_event_handle_input(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
@@ -257,10 +257,10 @@ mm_event_backend_target_input(struct mm_event_fd *sink, mm_event_t event)
 #endif
 }
 static inline void NONNULL(1)
-mm_event_backend_target_output(struct mm_event_fd *sink, mm_event_t event)
+mm_event_backend_target_output(struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
-	mm_event_handle_output(sink, 1 << event);
+	mm_event_handle_output(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)

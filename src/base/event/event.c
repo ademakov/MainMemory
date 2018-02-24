@@ -99,7 +99,7 @@ mm_event_complete(struct mm_event_fd *sink)
 	const uint32_t flags = sink->flags;
 	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
 		/* Do nothing. */
-	} else if ((flags & (MM_EVENT_READ_ERROR | MM_EVENT_WRITE_ERROR)) != 0) {
+	} else if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
 		mm_event_close_fd(sink);
 	} else {
 		/* Mark a sink as having completed the processing of all the events
@@ -200,7 +200,7 @@ mm_event_input_complete(struct mm_work *work, mm_value_t value UNUSED)
 	}
 
 	// Check to see if a new reader should be spawned.
-	uint32_t fd_flags = sink->flags & (MM_EVENT_READ_READY | MM_EVENT_READ_ERROR);
+	uint32_t fd_flags = sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR);
 	if ((sink->flags & MM_EVENT_INPUT_PENDING) != 0 && fd_flags != 0) {
 		if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
 			sink->flags &= ~MM_EVENT_INPUT_PENDING;
@@ -232,7 +232,7 @@ mm_event_output_complete(struct mm_work *work, mm_value_t value UNUSED)
 	}
 
 	// Check to see if a new writer should be spawned.
-	uint32_t fd_flags = sink->flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR);
+	uint32_t fd_flags = sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR);
 	if ((sink->flags & MM_EVENT_OUTPUT_PENDING) != 0 && fd_flags != 0) {
 		if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
 			sink->flags &= ~MM_EVENT_OUTPUT_PENDING;
@@ -377,7 +377,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
 	ASSERT(!mm_event_input_closed(sink));
 
-	sink->flags &= ~MM_EVENT_READ_READY;
+	sink->flags &= ~MM_EVENT_INPUT_READY;
 
 	if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER)) == MM_EVENT_ONESHOT_INPUT) {
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
@@ -398,7 +398,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
 	ASSERT(!mm_event_output_closed(sink));
 
-	sink->flags &= ~MM_EVENT_WRITE_READY;
+	sink->flags &= ~MM_EVENT_OUTPUT_READY;
 
 	if ((sink->flags & (MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) == MM_EVENT_ONESHOT_OUTPUT) {
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;

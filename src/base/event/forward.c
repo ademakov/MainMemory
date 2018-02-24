@@ -32,9 +32,9 @@ static void NONNULL(1)
 mm_event_forward_handle(struct mm_event_fd *sink, mm_event_t event)
 {
 	if (event < MM_EVENT_OUTPUT) {
-		mm_event_backend_target_input(sink, event);
+		mm_event_backend_target_input(sink, (1u << event));
 	} else {
-		mm_event_backend_target_output(sink, event);
+		mm_event_backend_target_output(sink, (1u << event));
 	}
 }
 

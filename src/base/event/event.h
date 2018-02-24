@@ -31,9 +31,9 @@ struct mm_event_listener;
 /* Event types. */
 typedef enum {
 	MM_EVENT_INPUT = 0,
-	MM_EVENT_INPUT_ERROR = 1,
+	MM_EVENT_IN_ERR = 1,
 	MM_EVENT_OUTPUT = 2,
-	MM_EVENT_OUTPUT_ERROR = 3,
+	MM_EVENT_OUT_ERR = 3,
 } mm_event_t;
 
 /* I/O event repeat modes. */
@@ -70,10 +70,10 @@ typedef enum {
  */
 
 /* I/O status flags. */
-#define MM_EVENT_READ_READY	(1u << MM_EVENT_INPUT)
-#define MM_EVENT_WRITE_READY	(1u << MM_EVENT_OUTPUT)
-#define MM_EVENT_READ_ERROR	(1u << MM_EVENT_INPUT_ERROR)
-#define MM_EVENT_WRITE_ERROR	(1u << MM_EVENT_OUTPUT_ERROR)
+#define MM_EVENT_INPUT_READY	(1u << MM_EVENT_INPUT)
+#define MM_EVENT_OUTPUT_READY	(1u << MM_EVENT_OUTPUT)
+#define MM_EVENT_INPUT_ERROR	(1u << MM_EVENT_IN_ERR)
+#define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_OUT_ERR)
 
 /* Fiber activity flags. */
 #define MM_EVENT_INPUT_STARTED	0x000010
@@ -183,13 +183,13 @@ mm_event_output_closed(struct mm_event_fd *sink)
 static inline bool NONNULL(1)
 mm_event_input_ready(struct mm_event_fd *sink)
 {
-	return (sink->flags & (MM_EVENT_READ_READY | MM_EVENT_READ_ERROR)) != 0;
+	return (sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0;
 }
 
 static inline bool NONNULL(1)
 mm_event_output_ready(struct mm_event_fd *sink)
 {
-	return (sink->flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR)) != 0;
+	return (sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0;
 }
 
 static inline void NONNULL(1)

@@ -60,10 +60,9 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
  **********************************************************************/
 
 static void
-mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_t event)
+mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_event_fd *sink, uint32_t flag)
 {
-	uint8_t bit = 1u << event;
-	if ((sink->queued_events & bit) == 0) {
+	if ((sink->queued_events & flag) == 0) {
 		mm_event_update(sink);
 
 		if (sink->queued_events == 0) {
@@ -73,7 +72,7 @@ mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_eve
 			dispatch->sink_queue[index] = sink;
 		}
 
-		sink->queued_events |= bit;
+		sink->queued_events |= flag;
 		listener->events.enqueued++;
 	}
 }
@@ -90,11 +89,12 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 
 	while (sink->queued_events) {
 		mm_event_t event = mm_ctz(sink->queued_events);
-		sink->queued_events &= ~(1u << event);
+		uint32_t flag = 1u << event;
+		sink->queued_events &= ~flag;
 		if (event < MM_EVENT_OUTPUT)
-			mm_event_backend_poller_input(&listener->storage, sink, event);
+			mm_event_backend_poller_input(&listener->storage, sink, flag);
 		else
-			mm_event_backend_poller_output(&listener->storage, sink, event);
+			mm_event_backend_poller_output(&listener->storage, sink, flag);
 		listener->events.dequeued++;
 	}
 }
@@ -234,7 +234,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
-		sink->flags |= MM_EVENT_READ_READY;
+		sink->flags |= MM_EVENT_INPUT_READY;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
 #endif
@@ -247,14 +247,14 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 		// the target thread.
 		if (sink->listener == listener) {
 			mm_event_update(sink);
-			mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT);
+			mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_READY);
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
 			mm_event_forward(&listener->forward, sink, MM_EVENT_INPUT);
 			listener->events.forwarded++;
 		} else {
-			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT);
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_READY);
 		}
 	}
 
@@ -268,7 +268,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 
 	if (unlikely((sink->flags & MM_EVENT_NOTIFY_FD) != 0)) {
 		// Handle the event immediately.
-		sink->flags |= MM_EVENT_READ_ERROR;
+		sink->flags |= MM_EVENT_INPUT_ERROR;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
 #endif
@@ -285,7 +285,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
-			mm_event_forward(&listener->forward, sink, MM_EVENT_INPUT_ERROR);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_IN_ERR);
 			listener->events.forwarded++;
 		} else {
 			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_ERROR);
@@ -312,14 +312,14 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 		// the target thread.
 		if (sink->listener == listener) {
 			mm_event_update(sink);
-			mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT);
+			mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_READY);
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
 			mm_event_forward(&listener->forward, sink, MM_EVENT_OUTPUT);
 			listener->events.forwarded++;
 		} else {
-			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT);
+			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT_READY);
 		}
 	}
 
@@ -347,7 +347,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 			listener->events.direct++;
 		} else if (sink->listener != NULL) {
 			mm_event_update(sink);
-			mm_event_forward(&listener->forward, sink, MM_EVENT_OUTPUT_ERROR);
+			mm_event_forward(&listener->forward, sink, MM_EVENT_OUT_ERR);
 			listener->events.forwarded++;
 		} else {
 			mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT_ERROR);

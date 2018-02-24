@@ -238,7 +238,7 @@ retry:
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
 			mm_error(errno, "%s: accept()", srv->name);
 		} else {
-			srv->event.flags &= ~MM_EVENT_READ_READY;
+			srv->event.flags &= ~MM_EVENT_INPUT_READY;
 			rc = false;
 		}
 		goto leave;
@@ -592,7 +592,7 @@ retry:
 
 	// Block the fiber waiting for connection completion.
 	sock->event.output_fiber = sock->event.listener->strand->fiber;
-	while ((sock->event.flags & (MM_EVENT_WRITE_READY | MM_EVENT_WRITE_ERROR)) == 0) {
+	while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
 		mm_fiber_block();
 		// TODO: mm_fiber_testcancel();
 	}
