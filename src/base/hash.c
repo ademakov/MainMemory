@@ -49,8 +49,10 @@ mm_hash_murmur3_32_with_seed(const void *data, size_t size, uint32_t h)
 	switch(size & 3) {
 	case 3:
 		k ^= t[2] << 16;
+		FALLTHROUGH;
 	case 2:
 		k ^= t[1] << 8;
+		FALLTHROUGH;
 	case 1:
 		k ^= t[0];
 		k *= MM_HASH_MURMUR_C1;

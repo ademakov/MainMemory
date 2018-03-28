@@ -93,6 +93,8 @@
 #define UNUSED			__attribute__((__unused__))
 #define MALLOC			__attribute__((__malloc__))
 
+#define FALLTHROUGH		__attribute__ ((fallthrough))
+
 /**********************************************************************
  * Compiler Memory Ordering.
  **********************************************************************/

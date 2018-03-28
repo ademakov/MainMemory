@@ -103,6 +103,7 @@ mm_scan_digit(const char *sp, const char *ep)
 			    && mm_scan_dtab[(uint8_t) sp[2]] < 16) {	\
 				MM_SCAN_DIGITS(+, 16, n, m, 2);		\
 			} else {					\
+				FALLTHROUGH;				\
 		default:						\
 				MM_SCAN_DIGITS(+, 10, n, m, 0);		\
 			}						\
@@ -143,6 +144,7 @@ mm_scan_digit(const char *sp, const char *ep)
 			    && mm_scan_dtab[(uint8_t) sp[2]] < 16) {	\
 				MM_SCAN_DIGITS(+, 16, n, mx, 2);	\
 			} else {					\
+				FALLTHROUGH;				\
 		default:						\
 				MM_SCAN_DIGITS(+, 10, n, mp, 0);	\
 			}						\
