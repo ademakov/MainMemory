@@ -25,7 +25,7 @@ unsigned long g_consumer_delay = DEFAULT_CONSUMER_DELAY;
 
 int g_optimize = 0;
 
-static void
+static void NORETURN
 usage(char *prog_name, char *message)
 {
 	char *slash = strrchr(prog_name, '/');
