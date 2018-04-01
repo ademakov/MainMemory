@@ -1,8 +1,12 @@
 
-noinst_LTLIBRARIES = libmainbase.la
+noinst_LTLIBRARIES = libmainbase.la libcksum.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
+
+libcksum_la_SOURCES = \
+	cksum.c cksum.h
+libcksum_la_CFLAGS = @ARCH_CFLAGS@
 
 libmainbase_la_SOURCES = \
 	args.c args.h \
@@ -10,7 +14,6 @@ libmainbase_la_SOURCES = \
 	bitops.h \
 	bitset.c bitset.h \
 	bytes.h \
-	cksum.c cksum.h \
 	clock.c clock.h \
 	combiner.c combiner.h \
 	conf.c conf.h \
@@ -101,3 +104,5 @@ libmainbase_la_SOURCES += \
 	arch/generic/intrinsic.h \
 	arch/generic/syscall.h
 endif
+
+libmainbase_la_LIBADD = libcksum.la
