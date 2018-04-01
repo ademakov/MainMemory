@@ -93,7 +93,11 @@
 #define UNUSED			__attribute__((__unused__))
 #define MALLOC			__attribute__((__malloc__))
 
+#if __GNUC__ >= 7
 #define FALLTHROUGH		__attribute__ ((fallthrough))
+#else
+#define FALLTHROUGH		((void) 0)
+#endif
 
 /**********************************************************************
  * Compiler Memory Ordering.

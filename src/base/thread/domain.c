@@ -182,12 +182,16 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 			mm_thread_attr_setguardsize(&thread_attr, guard_size);
 		}
 
-#pragma GCC diagnostic ignored "-Wformat-truncation"
+#if __GNUC__ >= 7
 #pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wformat-truncation"
+#endif
 		char thread_name[MM_THREAD_NAME_SIZE];
 		snprintf(thread_name, sizeof thread_name, "%s %u", domain->name, i);
 		mm_thread_attr_setname(&thread_attr, thread_name);
+#if __GNUC__ >= 7
 #pragma GCC diagnostic pop
+#endif
 
 		domain->threads[i] = mm_thread_create(&thread_attr, start, i);
 	}
