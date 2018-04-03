@@ -100,10 +100,12 @@ mm_event_complete(struct mm_event_fd *sink)
 	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
 		/* Do nothing. */
 	} else if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
-		mm_event_close_fd(sink);
+		/* Close the sink on error. */
+		if ((flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0)
+			mm_event_close_fd(sink);
 	} else {
-		/* Mark a sink as having completed the processing of all the events
-		   delivered to the target thread so far. */
+		/* Mark the sink as having completed the processing of all
+		   the events delivered to the target thread so far. */
 #if ENABLE_SMP
 		/* TODO: release memory fence */
 		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
