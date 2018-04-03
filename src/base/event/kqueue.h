@@ -135,8 +135,8 @@ static inline void NONNULL(1, 2, 3)
 mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
 			      struct mm_event_fd *sink)
 {
-	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
-	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
+	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
+	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
 	uint32_t n = (input != 0) + (output != 0);
 	if (likely(n)) {
 		if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
