@@ -193,7 +193,7 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 	mm_set_nonblocking(fd);
 
 	// Initialize the corresponding event sink.
-	mm_event_prepare_fd(&backend->notify_fd, fd, MM_EVENT_IGNORED, MM_EVENT_IGNORED, false);
+	mm_event_prepare_fd(&backend->notify_fd, fd, NULL, NULL, MM_EVENT_IGNORED, MM_EVENT_IGNORED, false);
 	backend->notify_fd.flags = MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD;
 
 	// Register the event sink.
@@ -227,8 +227,8 @@ mm_event_epoll_notify_clean(struct mm_event_epoll *backend)
 {
 	ENTER();
 
-	if ((backend->notify_fd.flags & MM_EVENT_READ_READY) != 0) {
-		backend->notify_fd.flags &= ~MM_EVENT_READ_READY;
+	if ((backend->notify_fd.flags & MM_EVENT_INPUT_READY) != 0) {
+		backend->notify_fd.flags &= ~MM_EVENT_INPUT_READY;
 
 		uint64_t value;
 		int n = mm_read(backend->notify_fd.fd, &value, sizeof value);
