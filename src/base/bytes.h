@@ -204,8 +204,8 @@ mm_load_le64(void *p)
 #define mm_load_nll(x)	mm_load_be64(x)
 
 /* Load a value from bytes in host order. */
-# define mm_load_hs(x)	mm_load_h16(x)
-# define mm_load_hl(x)	mm_load_h32(x)
-# define mm_load_hll(x)	mm_load_h64(x)
+#define mm_load_hs(x)	mm_load_h16(x)
+#define mm_load_hl(x)	mm_load_h32(x)
+#define mm_load_hll(x)	mm_load_h64(x)
 
 #endif /* BASE_BYTES_H */
