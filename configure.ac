@@ -73,8 +73,10 @@ AC_CHECK_HEADERS([mach/mach_time.h sys/time.h time.h])
 AC_CHECK_HEADERS([xmmintrin.h])
 
 dnl Checks for typedefs, structures, and compiler characteristics.
-dnl AX_CHECK_COMPILE_FLAG([-msse4.2], AX_APPEND_FLAG([-msse4.2], [ARCH_CFLAGS]), [], [], [])
-AX_CHECK_COMPILE_FLAG([-march=native], AX_APPEND_FLAG([-march=native], [ARCH_CFLAGS]), [], [], [])
+AX_CHECK_COMPILE_FLAG([-msse4.2], [sse4_2=yes], [sse4_2=no], [], [])
+if test "x$sse4_2" = "xyes"; then
+	ARCH_CFLAGS=-msse4.2
+fi
 AC_SUBST([ARCH_CFLAGS], $ARCH_CFLAGS)
 
 dnl Checks for library functions.
@@ -97,6 +99,13 @@ AC_ARG_ENABLE([inline-syscalls],
 	[inline_syscalls="$enableval"], [inline_syscalls=yes])
 if test "x$inline_syscalls" = "xyes"; then
 	AC_DEFINE([ENABLE_INLINE_SYSCALLS], 1, [Define to 1 to enable inline syscalls.])
+fi
+
+AC_ARG_ENABLE([crc32-hash],
+	[AS_HELP_STRING([--enable-crc32-hash], [enable crc32 as a hash function (default=yes, if sse4.2 is supported by the compiler)])],
+	[crc32_hash="$enableval"], [crc32_hash="$sse4_2"])
+if test "x$crc32_hash" = "xyes"; then
+	AC_DEFINE([ENABLE_CRC32_HASH], 1, [Define to 1 to enable crc32 as hash function])
 fi
 
 AC_ARG_ENABLE([event-stats],

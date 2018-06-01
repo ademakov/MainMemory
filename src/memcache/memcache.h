@@ -32,7 +32,7 @@
 
 /* Build with -msse4.2 to enable hash based on the SSE4.2 crc32 instruction. */
 #ifndef mc_hash
-# if __SSE4_2__
+# if ENABLE_CRC32_HASH
 #  define mc_hash			mm_cksum
 # else
 #  define mc_hash			mm_hash_murmur3_32
