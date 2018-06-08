@@ -126,18 +126,9 @@ mm_net_socket_free(struct mm_event_fd *sink)
 }
 
 static struct mm_net_socket *
-mm_net_socket_create(struct mm_net_proto *proto)
+mm_net_create_accepted(struct mm_net_proto *proto)
 {
-	ENTER();
-
-	struct mm_net_socket *sock;
-	if (proto->create != NULL)
-		sock = (proto->create)();
-	else
-		sock = mm_net_socket_alloc();
-
-	LEAVE();
-	return sock;
+	return proto->create != NULL ? (proto->create)() : mm_net_socket_alloc();
 }
 
 /**********************************************************************
@@ -156,7 +147,7 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *)
 }
 
 static void
-mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd)
+mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd)
 {
 	uint32_t options = proto->options;
 	if (proto->reader == NULL && proto->writer != NULL)
@@ -216,7 +207,7 @@ retry:
 	mm_net_set_socket_options(fd, srv->proto->options);
 
 	// Allocate a new socket structure.
-	struct mm_net_socket *sock = mm_net_socket_create(srv->proto);
+	struct mm_net_socket *sock = mm_net_create_accepted(srv->proto);
 	if (unlikely(sock == NULL)) {
 		mm_error(0, "%s: failed to allocate a socket", srv->name);
 		mm_close(fd);
@@ -224,7 +215,7 @@ retry:
 	}
 
 	// Initialize the socket structure.
-	mm_net_socket_prepare(sock, srv->proto, fd);
+	mm_net_prepare_accepted(sock, srv->proto, fd);
 	if (sa.ss_family == AF_INET)
 		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
 	else if (sa.ss_family == AF_INET6)
