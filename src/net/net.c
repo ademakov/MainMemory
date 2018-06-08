@@ -172,16 +172,13 @@ mm_net_reclaim_routine(struct mm_work *work)
  * Socket initialization and cleanup.
  **********************************************************************/
 
-static void
-mm_net_socket_prepare_basic(struct mm_net_socket *sock, struct mm_net_proto *proto)
+void NONNULL(1, 2)
+mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *))
 {
 	// Initialize common socket fields.
 	sock->event.fd = -1;
 	sock->event.flags = 0;
-	if (proto->destroy != NULL)
-		sock->event.destroy = proto->destroy;
-	else
-		sock->event.destroy = mm_net_socket_free;
+	sock->event.destroy = destroy;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 }
@@ -207,7 +204,7 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	bool affinity = (options & MM_NET_BOUND) != 0;
 
 	// Initialize basic fields.
-	mm_net_socket_prepare_basic(sock, proto);
+	mm_net_prepare(sock, proto->destroy != NULL ? proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
 	mm_event_prepare_fd(&sock->event, fd, proto->reader, proto->writer, input, output, affinity);
 	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
@@ -508,25 +505,6 @@ mm_net_setup_server(struct mm_net_server *srv)
  * Network client connection sockets.
  **********************************************************************/
 
-// Zero protocol handler for client sockets.
-static struct mm_net_proto mm_net_dummy_proto;
-
-void NONNULL(1, 2)
-mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *))
-{
-	ENTER();
-
-	// Initialize common fields.
-	mm_net_socket_prepare_basic(sock, &mm_net_dummy_proto);
-	// Initialize the destruction routine.
-	sock->event.destroy = destroy;
-
-	// Initialize the required work items.
-	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
-
-	LEAVE();
-}
-
 struct mm_net_socket *
 mm_net_create(void)
 {
@@ -588,6 +566,7 @@ retry:
 
 	// Register the socket in the event loop.
 	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, true);
+	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
 	mm_event_register_fd(&sock->event);
 
 	// Block the fiber waiting for connection completion.
