@@ -249,6 +249,34 @@ leave:
 	LEAVE();
 }
 
+static mm_value_t
+mm_event_reclaim_routine(struct mm_work *work)
+{
+	ENTER();
+
+	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, reclaim_work);
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	// Notify a reader/writer about closing.
+	// TODO: don't block here, have a queue of closed sinks
+	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
+		struct mm_fiber *fiber = sink->listener->strand->fiber;
+		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
+		if (sink->input_fiber != NULL)
+			mm_fiber_hoist(sink->input_fiber, priority);
+		if (sink->output_fiber != NULL)
+			mm_fiber_hoist(sink->output_fiber, priority);
+		mm_fiber_yield();
+	}
+
+	// Destroy the sink.
+	ASSERT(mm_event_closed(sink));
+	(sink->destroy)(sink);
+
+	LEAVE();
+	return 0;
+}
+
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
@@ -262,8 +290,7 @@ mm_event_unexpected(struct mm_work *work UNUSED)
 
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
-		    mm_work_routine_t input_routine,
-		    mm_work_routine_t output_routine,
+		    mm_work_routine_t input_routine, mm_work_routine_t output_routine,
 		    mm_event_capacity_t input, mm_event_capacity_t output,
 		    bool fixed_listener)
 {
@@ -294,6 +321,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	} else {
 		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected);
 	}
+	mm_work_prepare_simple(&sink->reclaim_work, mm_event_reclaim_routine);
 
 	if (fixed_listener)
 		sink->flags |= MM_EVENT_FIXED_LISTENER;

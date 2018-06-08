@@ -140,36 +140,8 @@ mm_net_socket_create(struct mm_net_proto *proto)
 	return sock;
 }
 
-static mm_value_t
-mm_net_reclaim_routine(struct mm_work *work)
-{
-	ENTER();
-
-	struct mm_net_socket *sock = containerof(work, struct mm_net_socket, event.reclaim_work);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
-
-	// Notify a reader/writer about closing.
-	// TODO: don't block here, have a queue of closed socks
-	while (sock->event.input_fiber != NULL || sock->event.output_fiber != NULL) {
-		struct mm_fiber *fiber = mm_fiber_selfptr();
-		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
-		if (sock->event.input_fiber != NULL)
-			mm_fiber_hoist(sock->event.input_fiber, priority);
-		if (sock->event.output_fiber != NULL)
-			mm_fiber_hoist(sock->event.output_fiber, priority);
-		mm_fiber_yield();
-	}
-
-	// Destroy the socket.
-	ASSERT(mm_net_is_closed(sock));
-	(sock->event.destroy)(&sock->event);
-
-	LEAVE();
-	return 0;
-}
-
 /**********************************************************************
- * Socket initialization and cleanup.
+ * Socket initialization.
  **********************************************************************/
 
 void NONNULL(1, 2)
@@ -207,7 +179,6 @@ mm_net_socket_prepare(struct mm_net_socket *sock, struct mm_net_proto *proto, in
 	mm_net_prepare(sock, proto->destroy != NULL ? proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
 	mm_event_prepare_fd(&sock->event, fd, proto->reader, proto->writer, input, output, affinity);
-	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
 }
 
 /**********************************************************************
@@ -564,9 +535,9 @@ retry:
 		}
 	}
 
-	// Register the socket in the event loop.
+	// Initialize the event sink.
 	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, true);
-	mm_work_prepare_simple(&sock->event.reclaim_work, mm_net_reclaim_routine);
+	// Register the socket in the event loop.
 	mm_event_register_fd(&sock->event);
 
 	// Block the fiber waiting for connection completion.
