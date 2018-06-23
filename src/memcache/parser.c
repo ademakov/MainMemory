@@ -56,7 +56,7 @@ mc_parser_scan_value(struct mc_state *state)
 
 	// Try to read the value and required LF and optional CR.
 	uint32_t required = action->value_len + 1;
-	uint32_t available = mm_netbuf_getleft(&state->sock);
+	uint32_t available = mm_netbuf_size(&state->sock);
 	while (required > available) {
 		ssize_t n = mm_netbuf_fill(&state->sock, required - available + 1);
 		if (n <= 0) {
@@ -76,7 +76,7 @@ mc_parser_scan_value(struct mc_state *state)
 	} else {
 		char *end = mm_netbuf_rend(&state->sock);
 		if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
-			mm_netbuf_read_next(&state->sock);
+			mm_netbuf_rnext(&state->sock);
 			end = mm_netbuf_rend(&state->sock);
 		}
 
@@ -337,7 +337,7 @@ noinput:
 				}
 			}
 
-			if (!(rc = mm_netbuf_read_next(&parser->sock)))
+			if (!(rc = mm_netbuf_rnext(&parser->sock)))
 				goto leave;
 
 			s = mm_netbuf_rget(&parser->sock);

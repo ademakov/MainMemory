@@ -472,8 +472,16 @@ mm_buffer_size(struct mm_buffer *buf);
 size_t NONNULL(1, 2)
 mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos);
 
-void NONNULL(1)
-mm_buffer_compact(struct mm_buffer *buf);
+/* Improve space utilization of a buffer that was previously in use. */
+static inline void NONNULL(1)
+mm_buffer_compact(struct mm_buffer *buf)
+{
+	struct mm_buffer_reader pos;
+	/* Get the last read position. */
+	mm_buffer_reader_save(buf, &pos);
+	/* Consume everything up to it. */
+	mm_buffer_consume(buf, &pos);
+}
 
 size_t NONNULL(1)
 mm_buffer_skip(struct mm_buffer *buf, size_t size);

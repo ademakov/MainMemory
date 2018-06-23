@@ -54,9 +54,15 @@ mm_netbuf_empty(struct mm_netbuf_socket *sock)
 }
 
 static inline size_t NONNULL(1)
-mm_netbuf_getleft(struct mm_netbuf_socket *sock)
+mm_netbuf_size(struct mm_netbuf_socket *sock)
 {
 	return mm_buffer_size(&sock->rxbuf);
+}
+
+static inline ssize_t NONNULL(1)
+mm_netbuf_skip(struct mm_netbuf_socket *sock, size_t size)
+{
+	return mm_buffer_skip(&sock->rxbuf, size);
 }
 
 static inline ssize_t NONNULL(1, 2)
@@ -72,39 +78,51 @@ mm_netbuf_write(struct mm_netbuf_socket *sock, const void *data, size_t size)
 }
 
 static inline void NONNULL(1, 2)
-mm_netbuf_save_position(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
+mm_netbuf_capture_read_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
 {
 	mm_buffer_reader_save(pos, &sock->rxbuf);
 }
 
 static inline void NONNULL(1, 2)
-mm_netbuf_restore_position(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
+mm_netbuf_restore_read_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
 {
 	mm_buffer_reader_restore(pos, &sock->rxbuf);
 }
 
-static inline bool NONNULL(1)
-mm_netbuf_read_next(struct mm_netbuf_socket *sock)
+static inline void NONNULL(1, 2)
+mm_netbuf_consume_read_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
 {
-	return mm_buffer_reader_next(&sock->rxbuf.head, &sock->rxbuf);
+	mm_buffer_consume(&sock->rxbuf, pos);
+}
+
+static inline void NONNULL(1, 2)
+mm_netbuf_capture_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
+{
+	mm_buffer_reader_save(pos, &sock->txbuf);
+}
+
+static inline void NONNULL(1, 2)
+mm_netbuf_restore_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
+{
+	mm_buffer_reader_restore(pos, &sock->txbuf);
+}
+
+static inline void NONNULL(1, 2)
+mm_netbuf_consume_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
+{
+	mm_buffer_consume(&sock->txbuf, pos);
 }
 
 static inline void NONNULL(1)
-mm_netbuf_read_reset(struct mm_netbuf_socket *sock)
+mm_netbuf_compact_read_buf(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_compact(&sock->rxbuf);
 }
 
 static inline void NONNULL(1)
-mm_netbuf_write_reset(struct mm_netbuf_socket *sock)
+mm_netbuf_compact_write_buf(struct mm_netbuf_socket *sock)
 {
 	mm_buffer_compact(&sock->txbuf);
-}
-
-static inline ssize_t NONNULL(1)
-mm_netbuf_reduce(struct mm_netbuf_socket *sock, size_t size)
-{
-	return mm_buffer_skip(&sock->rxbuf, size);
 }
 
 void NONNULL(1, 2) FORMAT(2, 3)
@@ -159,6 +177,13 @@ static inline char * NONNULL(1)
 mm_netbuf_rend(struct mm_netbuf_socket *sock)
 {
 	return mm_buffer_reader_end(&sock->rxbuf.head);
+}
+
+/* Move to the next read chunk. */
+static inline bool NONNULL(1)
+mm_netbuf_rnext(struct mm_netbuf_socket *sock)
+{
+	return mm_buffer_reader_next(&sock->rxbuf.head, &sock->rxbuf);
 }
 
 /* Set the current read position. */

@@ -58,7 +58,7 @@ static struct mc_command_type *mc_binary_commands[256] = {
 static bool
 mc_binary_fill(struct mc_state *state, uint32_t required)
 {
-	uint32_t available = mm_netbuf_getleft(&state->sock);
+	uint32_t available = mm_netbuf_size(&state->sock);
 	while (required > available) {
 		ssize_t n = mm_netbuf_fill(&state->sock, required - available);
 		if (n <= 0) {
@@ -75,7 +75,7 @@ static bool
 mc_binary_skip(struct mc_state *state, uint32_t required)
 {
 	for (;;) {
-		required -= mm_netbuf_reduce(&state->sock, required);
+		required -= mm_netbuf_skip(&state->sock, required);
 		if (required == 0)
 			break;
 
@@ -118,7 +118,7 @@ mc_binary_set_key(struct mc_state *state, uint32_t key_len)
 
 	char *end = mm_netbuf_rend(&state->sock);
 	if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
-		mm_netbuf_read_next(&state->sock);
+		mm_netbuf_rnext(&state->sock);
 		end = mm_netbuf_rend(&state->sock);
 	}
 
@@ -197,7 +197,7 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 	// Read the value.
 	char *end = mm_netbuf_rend(&state->sock);
 	if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
-		mm_netbuf_read_next(&state->sock);
+		mm_netbuf_rnext(&state->sock);
 		end = mm_netbuf_rend(&state->sock);
 	}
 
@@ -266,7 +266,7 @@ mc_binary_parse(struct mc_state *state)
 	if (!mm_netbuf_span(&state->sock, sizeof(struct mc_binary_header)))
 		ABORT();
 
-	size_t size = mm_netbuf_getleft(&state->sock);
+	size_t size = mm_netbuf_size(&state->sock);
 	DEBUG("available bytes: %lu", size);
 	if (size < sizeof(struct mc_binary_header)) {
 		rc = false;

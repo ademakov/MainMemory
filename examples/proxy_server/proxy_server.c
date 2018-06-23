@@ -299,7 +299,7 @@ proxy_reader(struct mm_work *work)
 		}
 
 		// Consume already parsed read buffer data.
-		mm_netbuf_read_reset(&client->sock);
+		mm_netbuf_compact_read_buf(&client->sock);
 	}
 
 	return 0;

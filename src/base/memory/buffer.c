@@ -359,25 +359,6 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos)
 	return consumed;
 }
 
-/* Improve space utilization of an empty buffer that was previously in use. */
-void NONNULL(1)
-mm_buffer_compact(struct mm_buffer *buf)
-{
-	ENTER();
-
-	if (!mm_buffer_ready(buf))
-		goto leave;
-
-	// Get the last read position.
-	struct mm_buffer_reader pos = buf->head;
-
-	// Consume everything up to it.
-	mm_buffer_consume(buf, &pos);
-
-leave:
-	LEAVE();
-}
-
 size_t NONNULL(1)
 mm_buffer_size(struct mm_buffer *buf)
 {

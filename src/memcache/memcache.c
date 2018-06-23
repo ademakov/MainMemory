@@ -62,7 +62,7 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	// Transmit buffered results.
 	ssize_t n = mm_netbuf_flush(&state->sock);
 	if (n > 0)
-		mm_netbuf_write_reset(&state->sock);
+		mm_netbuf_compact_write_buf(&state->sock);
 
 	LEAVE();
 }
@@ -99,8 +99,8 @@ retry:
 	}
 
 	// Initialize the parser.
-	struct mm_buffer_reader start;
-	mm_netbuf_save_position(&state->sock, &start);
+	struct mm_buffer_reader safepoint;
+	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
 	mc_protocol_t protocol = mc_getprotocol(state);
 
 	state->command = NULL;
@@ -125,7 +125,7 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_netbuf_restore_position(&state->sock, &start);
+		mm_netbuf_restore_read_pos(&state->sock, &safepoint);
 		n = mm_netbuf_fill(&state->sock, 1);
 		goto retry;
 	}
@@ -133,17 +133,18 @@ parse:
 	// Process the parsed command.
 	mc_process_command(state, state->command);
 
+	// Update the safe consumed input position.
+	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
+
 	// If there is more input in the buffer then try to parse
 	// the next command.
 	if (!mm_netbuf_empty(&state->sock)) {
-		// Mark the parsed input as consumed.
-		mm_netbuf_save_position(&state->sock, &start);
 		state->command = NULL;
 		goto parse;
 	}
 
-	// Reset the buffer state.
-	mm_netbuf_read_reset(&state->sock);
+	// Compact the input buffer storage.
+	mm_netbuf_consume_read_pos(&state->sock, &safepoint);
 
 leave:
 	LEAVE();

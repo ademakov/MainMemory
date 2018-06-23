@@ -79,10 +79,10 @@ mm_netbuf_flush_iov(struct mm_netbuf_socket *sock, struct mm_buffer *buf, uint32
 	iov[0].iov_len = n;
 	iov[0].iov_base = p;
 	do {
-		n = mm_buffer_reader_next(&buf->head, buf);
+		n = mm_buffer_reader_next(&reader, buf);
 		if (n == 0)
 			break;
-		p = mm_buffer_reader_ptr(&buf->head);
+		p = mm_buffer_reader_ptr(&reader);
 
 		size += n;
 		iov[iovcnt].iov_len = n;
@@ -90,9 +90,6 @@ mm_netbuf_flush_iov(struct mm_netbuf_socket *sock, struct mm_buffer *buf, uint32
 		++iovcnt;
 
 	} while (iovcnt < MM_NETBUF_MAXIOV);
-
-	// Restore the saved read position.
-	mm_buffer_reader_restore(&reader, buf);
 
 	// Perform the write operation.
 	return mm_net_writev(&sock->sock, iov, iovcnt, size);
