@@ -478,7 +478,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 {
 	struct mm_buffer_reader pos;
 	/* Get the last read position. */
-	mm_buffer_reader_save(buf, &pos);
+	mm_buffer_reader_save(&pos, buf);
 	/* Consume everything up to it. */
 	mm_buffer_consume(buf, &pos);
 }
