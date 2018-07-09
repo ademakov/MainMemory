@@ -1,7 +1,7 @@
 /*
  * base/memory/chunk.h - MainMemory memory chunks.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -149,6 +149,12 @@ static inline struct mm_chunk * NONNULL(1)
 mm_chunk_queue_head(struct mm_queue *queue)
 {
 	return mm_chunk_from_qlink(mm_queue_head(queue));
+}
+
+static inline struct mm_chunk * NONNULL(1)
+mm_chunk_queue_tail(struct mm_queue *queue)
+{
+	return mm_chunk_from_qlink(mm_queue_tail(queue));
 }
 
 static inline struct mm_chunk * NONNULL(1)
