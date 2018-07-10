@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.c - MainMemory data buffers.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -42,16 +42,29 @@ mm_buffer_round_room(uint32_t size)
 }
 
 static inline uint32_t NONNULL(1)
-mm_buffer_chunk_size(const struct mm_chunk *chunk)
+mm_buffer_chunk_area(const struct mm_chunk *chunk)
 {
-	return mm_buffer_round_room(mm_chunk_getsize(chunk));
+	uint32_t room = mm_chunk_getsize(chunk) - MM_BUFFER_TERMINAL_SIZE;
+	return mm_buffer_round_room(room);
+}
+
+static inline struct mm_buffer_tsegment * NONNULL(1)
+mm_buffer_chunk_tseg_low(const struct mm_chunk *chunk, uint32_t chunk_area)
+{
+	return (struct mm_buffer_tsegment *) (chunk->data + chunk_area);
+}
+
+static inline struct mm_buffer_tsegment * NONNULL(1)
+mm_buffer_chunk_tseg(const struct mm_chunk *chunk)
+{
+	return mm_buffer_chunk_tseg_low(chunk, mm_buffer_chunk_area(chunk));
 }
 
 /**********************************************************************
  * Buffer chunks.
  **********************************************************************/
 
-static inline struct mm_chunk * NONNULL(1)
+static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_create_chunk(struct mm_buffer *buf, size_t size)
 {
 	// The chunk should have a reasonable size that does not strain
@@ -60,23 +73,31 @@ mm_buffer_create_chunk(struct mm_buffer *buf, size_t size)
 		size = buf->chunk_size;
 	else if (size > MM_BUFFER_MAX_CHUNK_SIZE)
 		size = MM_BUFFER_MAX_CHUNK_SIZE;
-	size = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
+	size = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE) + MM_BUFFER_TERMINAL_SIZE;
 
 	// Allocate a memory chunk.
-	DEBUG("create a buffer chunk of %zu (%u) bytes", size, buf->chunk_size);
-	return mm_chunk_create_private(size);
-}
-
-static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_append_chunk(struct mm_buffer *buf, struct mm_chunk *chunk)
-{
-	// Append the chunk to the buffer chunk list.
-	mm_chunk_queue_append(&buf->chunks, chunk);
+	DEBUG("create a buffer chunk of %zu (min %u) bytes", size, buf->chunk_size);
+	struct mm_chunk *chunk = mm_chunk_create_private(size);
 
 	// Initialize the initial segment.
 	struct mm_buffer_segment *seg = mm_buffer_segment_first(chunk);
-	seg->meta = mm_buffer_chunk_size(chunk) | MM_BUFFER_SEGMENT_TERMINAL;
+	seg->meta = mm_buffer_chunk_area(chunk);
 	seg->size = 0;
+
+	// Initialize the terminal segment.
+	struct mm_buffer_tsegment *tseg = mm_buffer_chunk_tseg_low(chunk, seg->meta);
+	tseg->meta = MM_BUFFER_SEGMENT_TERMINAL;
+	tseg->size = 0;
+	tseg->next = NULL;
+
+	// Append the chunk to the buffer chunk list.
+	if (!mm_queue_empty(&buf->chunks)) {
+		struct mm_chunk *tail = mm_chunk_queue_tail(&buf->chunks);
+		tseg = mm_buffer_chunk_tseg(tail);
+		ASSERT(tseg->meta == MM_BUFFER_SEGMENT_TERMINAL);
+		tseg->next = seg;
+	}
+	mm_chunk_queue_append(&buf->chunks, chunk);
 
 	return seg;
 }
@@ -106,45 +127,44 @@ mm_buffer_segment_insert(struct mm_buffer *buf, uint32_t type, uint32_t area, ui
 	if (!mm_buffer_ready(buf))
 		mm_buffer_make_ready(buf, area - MM_BUFFER_SEGMENT_SIZE);
 
-	// Find out the available room in the current tail segment and the
-	// area that is in use.
-	uint32_t free_area = mm_buffer_segment_area(buf->tail.seg);
-	uint32_t used_area = mm_buffer_segment_size(buf->tail.seg);
+	// Get the current tail segment.
+	struct mm_buffer_segment *seg = buf->tail.seg;
+
+	// Find out the available room in the current tail segment and the area
+	// that is in use.
+	uint32_t free_area = mm_buffer_segment_area(seg);
+	uint32_t used_area = mm_buffer_segment_size(seg);
 	if (used_area) {
 		used_area += MM_BUFFER_SEGMENT_SIZE;
 		used_area = mm_buffer_round_size(used_area);
 		free_area -= used_area;
 	}
 
-	// If the available room is not sufficient then get more advancing
-	// the tail segment to a next segment and allocating it if needed.
-	while (free_area < area) {
-		free_area = mm_buffer_writer_bump(&buf->tail, buf, area - MM_BUFFER_SEGMENT_SIZE);
+	// Determine the segment location.
+	if (free_area < area) {
+		// If the available room is not sufficient then get more advancing
+		// the tail segment to a next segment and allocating it if needed.
 		used_area = 0;
-	}
-
-	// Check if the current tail segment is the last one in its chunk.
-	struct mm_buffer_segment *seg = buf->tail.seg;
-	uint32_t flag = seg->meta & MM_BUFFER_SEGMENT_TERMINAL;
-
-	// If the segment is not empty it has to be split in two.
-	if (used_area) {
+		do {
+			free_area = mm_buffer_writer_bump(&buf->tail, buf, area - MM_BUFFER_SEGMENT_SIZE);
+		} while (free_area < area);
+		seg = buf->tail.seg;
+	} else if (used_area) {
+		// If the segment is not empty it has to be split in two.
 		seg->meta = used_area;
 		seg = mm_buffer_segment_next(seg);
 		buf->tail.seg = seg;
 	}
 
 	// Setup the result segment.
+	seg->meta = area | type;
 	seg->size = size;
+	// Move the buffer tail past the result segment.
 	if (free_area == area) {
-		seg->meta = area | type | flag;
-		// Move the buffer tail past the result segment.
 		mm_buffer_writer_bump(&buf->tail, buf, 0);
 	} else {
-		seg->meta = area | type;
-		// Move the buffer tail past the result segment.
 		buf->tail.seg = mm_buffer_segment_next(seg);
-		buf->tail.seg->meta = (free_area - area) | flag;
+		buf->tail.seg->meta = free_area - area;
 		buf->tail.seg->size = 0;
 	}
 
@@ -165,12 +185,10 @@ mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size)
 	mm_queue_prepare(&buf->chunks);
 
 	// Initialize the read iterator.
-	buf->head.chunk = NULL;
 	buf->head.seg = NULL;
 	buf->head.ptr = NULL;
 
 	// Initialize the write iterator.
-	buf->tail.chunk = NULL;
 	buf->tail.seg = NULL;
 
 	// Figure out the minimum chunk size.
@@ -192,11 +210,10 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
 	for (; chunk != NULL; chunk = mm_chunk_queue_next(chunk)) {
 		struct mm_buffer_segment *seg = mm_buffer_segment_first(chunk);
-		while (!mm_buffer_segment_terminal(seg)) {
+		do {
 			mm_buffer_segment_release(seg);
 			seg = mm_buffer_segment_next(seg);
-		}
-		mm_buffer_segment_release(seg);
+		} while (!mm_buffer_segment_terminal(seg));
 	}
 
 	// Release buffer chunks.
@@ -209,19 +226,13 @@ void NONNULL(1)
 mm_buffer_make_ready(struct mm_buffer *buf, size_t size_hint)
 {
 	ENTER();
+	ASSERT(!mm_buffer_ready(buf));
 
 	// Create the first buffer chunk.
-	ASSERT(!mm_buffer_ready(buf));
-	struct mm_chunk *chunk = mm_buffer_create_chunk(buf, size_hint);
-	struct mm_buffer_segment *seg = mm_buffer_append_chunk(buf, chunk);
-
+	struct mm_buffer_segment *seg = mm_buffer_create_chunk(buf, size_hint);
 	// Initialize the reader.
-	buf->head.chunk = chunk;
-	buf->head.seg = seg;
-	mm_buffer_reader_reset_ptr(&buf->head);
-
+	mm_buffer_reader_set(&buf->head, seg);
 	// Initialize the writer.
-	buf->tail.chunk = chunk;
 	buf->tail.seg = seg;
 
 	LEAVE();
@@ -235,14 +246,11 @@ void NONNULL(1, 2)
 mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_t size_hint)
 {
 	ENTER();
+	ASSERT(mm_buffer_ready(buf));
 
 	// Create another buffer chunk.
-	ASSERT(mm_buffer_ready(buf));
-	struct mm_chunk *chunk = mm_buffer_create_chunk(buf, size_hint);
-	struct mm_buffer_segment *seg = mm_buffer_append_chunk(buf, chunk);
-
+	struct mm_buffer_segment *seg = mm_buffer_create_chunk(buf, size_hint);
 	// Update the writer.
-	pos->chunk = chunk;
 	pos->seg = seg;
 
 	LEAVE();
@@ -259,92 +267,62 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos)
 	ASSERT(mm_buffer_ready(buf));
 	size_t consumed = 0;
 
-	// Consume the chunks that precede the given position.
-	for (;;) {
-		struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
-		if (chunk == pos->chunk)
-			break;
-
-		// Account the chunk size.
-		consumed += mm_buffer_chunk_size(chunk);
-
-		// Release external segments.
-		struct mm_buffer_segment *seg = mm_buffer_segment_first(chunk);
-		while (!mm_buffer_segment_terminal(seg)) {
-			mm_buffer_segment_release(seg);
-			seg = mm_buffer_segment_next(seg);
-		}
+	// Consume the segments that precede the given position and release no longer
+	// used chunks.
+	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
+	struct mm_buffer_segment *first = mm_buffer_segment_first(chunk);
+	for (struct mm_buffer_segment *seg = first; seg != pos->seg; ) {
+		// Account for the segment size.
+		consumed += mm_buffer_segment_area(seg);
+		// Release the external segment.
 		mm_buffer_segment_release(seg);
+		// Move to the next segment.
+		seg = mm_buffer_segment_next(seg);
+		// On a terminal segment move to the next chunk.
+		if (mm_buffer_segment_terminal(seg)) {
+			struct mm_chunk *next = mm_chunk_queue_next(chunk);
+			seg = first = mm_buffer_segment_first(next);
 
-		// Destroy the chunk.
-		mm_queue_remove(&buf->chunks);
-		mm_chunk_destroy(chunk);
-	}
-
-	// Consume the segments that precede the given position.
-	struct mm_buffer_segment *start = mm_buffer_segment_first(pos->chunk);
-	if (start != pos->seg) {
-		// Release an external segment.
-		mm_buffer_segment_release(start);
-
-		// Convert the first segment of a chunk to an empty internal
-		// segment.
-		start->meta = mm_buffer_segment_area(start);
-		start->size = 0;
-
-		// Combine the chunk segments.
-		for (;;) {
-			// Proceed to the next segment.
-			struct mm_buffer_segment *seg = mm_buffer_segment_next(start);
-			if (seg == pos->seg)
-				break;
-
-			// Release an external segment.
-			mm_buffer_segment_release(seg);
-
-			// Merge this segment with the first one.
-			start->meta += mm_buffer_segment_area(seg);
+			// Destroy the previous chunk.
+			mm_queue_remove(&buf->chunks);
+			mm_chunk_destroy(chunk);
+			chunk = next;
 		}
-
-		// Account the segment size.
-		consumed += start->meta;
 	}
 
-	// Handle the last consumed segment.
-	char *data = mm_buffer_segment_data(pos->seg);
-	char *data_end = data + mm_buffer_segment_size(pos->seg);
-	if (data_end == pos->ptr) {
+	// Handle the segment situated at the given position.
+	char *end = mm_buffer_reader_end(pos);
+	if (end > pos->ptr) {
+		// The last segment is not yet completely consumed. Account for
+		// the consumed data size.
+		if (mm_buffer_segment_internal(pos->seg))
+			consumed += pos->ptr - mm_buffer_segment_internal_data(pos->seg);
+		else
+			consumed += mm_buffer_segment_area(pos->seg);
+		// Merge the preceding segments in the current chunk.
+		if (first != pos->seg) {
+			first->meta = ((char *) pos->seg) - ((char *) first);
+			first->size = 0;
+		}
+	} else {
 		// Release an external segment.
 		mm_buffer_segment_release(pos->seg);
-
-		// Merge this segment with the first one.
-		uint32_t area = mm_buffer_segment_area(pos->seg);
-		uint32_t flag = pos->seg->meta & MM_BUFFER_SEGMENT_TERMINAL;
-		if (start == pos->seg) {
-			start->meta = area | flag;
-			start->size = 0;
-
-			// Move the read pointer to the segment start.
-			if (buf->head.seg == pos->seg) {
-				ASSERT(buf->head.ptr == pos->ptr);
-				mm_buffer_reader_reset_ptr(&buf->head);
-			}
-		} else {
-			start->meta += area | flag;
-
-			// Fix up the head and tail iterators if needed.
-			if (buf->head.seg == pos->seg) {
-				buf->head.seg = start;
-				if (buf->tail.seg == pos->seg)
-					buf->tail.seg = start;
-				// Move the read pointer to the segment start.
-				ASSERT(buf->head.ptr == pos->ptr);
-				mm_buffer_reader_reset_ptr(&buf->head);
-			}
-		}
-
 		// Account the segment size.
+		uint32_t area = mm_buffer_segment_area(pos->seg);
 		consumed += area;
+		// Merge this segment with the first one.
+		if (first == pos->seg)
+			first->meta = area;
+		else
+			first->meta = area + ((char *) pos->seg) - ((char *) first);
+		first->size = 0;
+		// Fix up the head and tail iterators if needed.
+		if (buf->head.seg == pos->seg) {
+			ASSERT(buf->head.ptr == pos->ptr);
+			if (buf->tail.seg == pos->seg)
+				buf->tail.seg = first;
+			mm_buffer_reader_set(&buf->head, first);
+		}
 	}
 
 	// Remember the maximum consumed data size to optimize later
@@ -368,14 +346,10 @@ mm_buffer_size(struct mm_buffer *buf)
 	uint32_t size = mm_buffer_reader_end(&buf->head) - mm_buffer_reader_ptr(&buf->head);
 
 	struct mm_buffer_segment *seg = buf->head.seg;
-	struct mm_chunk *chunk = buf->head.chunk;
 	while (seg != buf->tail.seg) {
-		if (mm_buffer_segment_terminal(seg)) {
-			chunk = mm_chunk_queue_next(chunk);
-			seg = mm_buffer_segment_first(chunk);
-		} else {
-			seg = mm_buffer_segment_next(seg);
-		}
+		seg = mm_buffer_segment_next(seg);
+		if (mm_buffer_segment_terminal(seg))
+			seg = ((struct mm_buffer_tsegment *) seg)->next;
 		size += mm_buffer_segment_size(seg);
 	}
 
@@ -546,8 +520,11 @@ mm_buffer_embed(struct mm_buffer *buf, uint32_t size)
 	// Advance the reader if necessary.
 	if (buf->head.seg == seg) {
 		ASSERT(mm_buffer_segment_embedded(seg));
-		mm_buffer_reader_next_unsafe(&buf->head);
-		mm_buffer_reader_reset_ptr(&buf->head);
+
+		seg = mm_buffer_segment_next(seg);
+		if (mm_buffer_segment_terminal(seg))
+			seg = ((struct mm_buffer_tsegment *) seg)->next;
+		mm_buffer_reader_set(&buf->head, seg);
 	}
 
 	LEAVE();
@@ -605,9 +582,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	if (rest_left == 0) {
 		// There is no actual data to insert so just advance
 		// the reader.
-		buf->head.seg = buf->tail.seg;
-		buf->head.chunk = buf->tail.chunk;
-		mm_buffer_reader_reset_ptr(&buf->head);
+		mm_buffer_reader_set_ptr(&buf->head, buf->tail.seg);
 	} else {
 		// Get the target address.
 		char *data = mm_buffer_segment_data(buf->tail.seg);

@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.h - MainMemory data buffers.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -63,23 +63,27 @@
 
 #define MM_BUFFER_MIN_CHUNK_SIZE	(1024 - MM_BUFFER_CHUNK_OVERHEAD)
 #define MM_BUFFER_MAX_CHUNK_SIZE	(4 * 1024 * 1024 - MM_BUFFER_CHUNK_OVERHEAD)
-#define MM_BUFFER_CHUNK_OVERHEAD	(MM_CHUNK_OVERHEAD + MM_BUFFER_SEGMENT_SIZE)
+#define MM_BUFFER_CHUNK_OVERHEAD	(MM_CHUNK_OVERHEAD + MM_BUFFER_SEGMENT_SIZE + MM_BUFFER_TERMINAL_SIZE)
 
 #define MM_BUFFER_SEGMENT_SIZE		sizeof(struct mm_buffer_segment)
-#define MM_BUFFER_SEGMENT_MASK		(MM_BUFFER_SEGMENT_SIZE - 1)
+#define MM_BUFFER_TERMINAL_SIZE		sizeof(struct mm_buffer_tsegment)
 
 /* External segment release routine. */
 typedef void (*mm_buffer_release_t)(uintptr_t release_data);
 
 /* Segment flags. Must fit into MM_BUFFER_SEGMENT_MASK. */
 enum {
+	/* Internal data segment. */
+	MM_BUFFER_SEGMENT_INTERNAL = 0,
 	/* External data segment. */
 	MM_BUFFER_SEGMENT_EXTERNAL = 1,
 	/* Embedded (allocated) segment. */
 	MM_BUFFER_SEGMENT_EMBEDDED = 2,
 	/* Terminal segment (the last one in a chunk). */
-	MM_BUFFER_SEGMENT_TERMINAL = 4,
+	MM_BUFFER_SEGMENT_TERMINAL = 3,
 };
+
+#define MM_BUFFER_SEGMENT_MASK		3
 
 /* Abstract buffer segment. */
 struct mm_buffer_segment
@@ -97,7 +101,7 @@ struct mm_buffer_isegment
 	uint32_t meta;
 	/* The real data size in the segment. */
 	uint32_t size;
-	/* The data block. */
+ 	/* The data block. */
 	char data[];
 };
 
@@ -116,6 +120,17 @@ struct mm_buffer_xsegment
 	uintptr_t release_data;
 };
 
+/* Terminal segment in a buffer chunk. */
+struct mm_buffer_tsegment
+{
+	/* The size and type of the segment. */
+	uint32_t meta;
+	/* The real data size in the segment (0). */
+	uint32_t size;
+	/* Pointer to the first segment of the next chunk. */
+	struct mm_buffer_segment *next;
+};
+
 /* Buffer read iterator. */
 struct mm_buffer_reader
 {
@@ -123,8 +138,6 @@ struct mm_buffer_reader
 	char *ptr;
 	/* The current segment. */
 	struct mm_buffer_segment *seg;
-	/* The current chunk. */
-	struct mm_chunk *chunk;
 };
 
 /* Buffer write iterator. */
@@ -132,8 +145,6 @@ struct mm_buffer_writer
 {
 	/* The current segment. */
 	struct mm_buffer_segment *seg;
-	/* The current chunk. */
-	struct mm_chunk *chunk;
 };
 
 /* Segmented data buffer. */
@@ -154,21 +165,27 @@ struct mm_buffer
  **********************************************************************/
 
 static inline bool NONNULL(1)
+mm_buffer_segment_internal(const struct mm_buffer_segment *seg)
+{
+	return (seg->meta & MM_BUFFER_SEGMENT_MASK) == MM_BUFFER_SEGMENT_INTERNAL;
+}
+
+static inline bool NONNULL(1)
 mm_buffer_segment_external(const struct mm_buffer_segment *seg)
 {
-	return (seg->meta & MM_BUFFER_SEGMENT_EXTERNAL) != 0;
+	return (seg->meta & MM_BUFFER_SEGMENT_MASK) == MM_BUFFER_SEGMENT_EXTERNAL;
 }
 
 static inline bool NONNULL(1)
 mm_buffer_segment_embedded(const struct mm_buffer_segment *seg)
 {
-	return (seg->meta & MM_BUFFER_SEGMENT_EMBEDDED) != 0;
+	return (seg->meta & MM_BUFFER_SEGMENT_MASK) == MM_BUFFER_SEGMENT_EMBEDDED;
 }
 
 static inline bool NONNULL(1)
 mm_buffer_segment_terminal(const struct mm_buffer_segment *seg)
 {
-	return (seg->meta & MM_BUFFER_SEGMENT_TERMINAL) != 0;
+	return (seg->meta & MM_BUFFER_SEGMENT_MASK) == MM_BUFFER_SEGMENT_TERMINAL;
 }
 
 /* The size a segment occupies in a buffer chunk. Includes the header size,
@@ -183,7 +200,7 @@ mm_buffer_segment_area(const struct mm_buffer_segment *seg)
 static inline uint32_t NONNULL(1)
 mm_buffer_segment_internal_room(const struct mm_buffer_segment *seg)
 {
-	ASSERT(!mm_buffer_segment_external(seg));
+	ASSERT(mm_buffer_segment_internal(seg) || mm_buffer_segment_embedded(seg));
 	return mm_buffer_segment_area(seg) - MM_BUFFER_SEGMENT_SIZE;
 }
 
@@ -195,14 +212,14 @@ mm_buffer_segment_external_room(const struct mm_buffer_segment *seg)
 }
 
 static inline char * NONNULL(1)
-mm_buffer_segment_internal_data(struct mm_buffer_segment *seg)
+mm_buffer_segment_internal_data(const struct mm_buffer_segment *seg)
 {
-	ASSERT(!mm_buffer_segment_external(seg));
+	ASSERT(mm_buffer_segment_internal(seg) || mm_buffer_segment_embedded(seg));
 	return ((struct mm_buffer_isegment *) seg)->data;
 }
 
 static inline char * NONNULL(1)
-mm_buffer_segment_external_data(struct mm_buffer_segment *seg)
+mm_buffer_segment_external_data(const struct mm_buffer_segment *seg)
 {
 	ASSERT(mm_buffer_segment_external(seg));
 	return ((struct mm_buffer_xsegment *) seg)->data;
@@ -222,12 +239,13 @@ mm_buffer_segment_room(const struct mm_buffer_segment *seg)
 static inline uint32_t NONNULL(1)
 mm_buffer_segment_size(const struct mm_buffer_segment *seg)
 {
+	ASSERT(!mm_buffer_segment_terminal(seg));
 	return seg->size;
 }
 
 /* The address of data in a segment. */
 static inline char * NONNULL(1)
-mm_buffer_segment_data(struct mm_buffer_segment *seg)
+mm_buffer_segment_data(const struct mm_buffer_segment *seg)
 {
 	if (mm_buffer_segment_external(seg))
 		return mm_buffer_segment_external_data(seg);
@@ -236,13 +254,13 @@ mm_buffer_segment_data(struct mm_buffer_segment *seg)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_segment_first(struct mm_chunk *chunk)
+mm_buffer_segment_first(const struct mm_chunk *chunk)
 {
 	return (struct mm_buffer_segment *) chunk->data;
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_segment_next(struct mm_buffer_segment *seg)
+mm_buffer_segment_next(const struct mm_buffer_segment *seg)
 {
 	uint32_t area = mm_buffer_segment_area(seg);
 	return (struct mm_buffer_segment *) (((char *) seg) + area);
@@ -260,7 +278,7 @@ mm_buffer_cleanup(struct mm_buffer *buf);
 
 /* Check if a buffer already has at least one memory chunk. */
 static inline bool NONNULL(1)
-mm_buffer_ready(struct mm_buffer *buf)
+mm_buffer_ready(const struct mm_buffer *buf)
 {
 	return buf->head.seg != NULL;
 }
@@ -273,35 +291,38 @@ mm_buffer_make_ready(struct mm_buffer *buf, size_t size_hint);
  * Buffer low-level read routines.
  **********************************************************************/
 
+/* Set the reader at the start of the given segment. */
+static inline void NONNULL(1)
+mm_buffer_reader_set(struct mm_buffer_reader *pos, struct mm_buffer_segment *seg)
+{
+	pos->seg = seg;
+	pos->ptr = mm_buffer_segment_data(seg);
+}
+
+/* Capture the current read position. */
 static inline void NONNULL(1, 2)
 mm_buffer_reader_save(struct mm_buffer_reader *pos, const struct mm_buffer *buf)
 {
 	*pos = buf->head;
 }
 
+/* Restore the current read position. */
 static inline void NONNULL(1, 2)
 mm_buffer_reader_restore(const struct mm_buffer_reader *pos, struct mm_buffer *buf)
 {
 	buf->head = *pos;
 }
 
-/* Set the read pointer to the start of the current segment. */
-static inline void NONNULL(1)
-mm_buffer_reader_reset_ptr(struct mm_buffer_reader *pos)
-{
-	pos->ptr = mm_buffer_segment_data(pos->seg);
-}
-
 /* Get the start pointer for the current read segment. */
 static inline char * NONNULL(1)
-mm_buffer_reader_ptr(struct mm_buffer_reader *pos)
+mm_buffer_reader_ptr(const struct mm_buffer_reader *pos)
 {
 	return pos->ptr;
 }
 
 /* Get the end pointer for the current read segment. */
 static inline char * NONNULL(1)
-mm_buffer_reader_end(struct mm_buffer_reader *pos)
+mm_buffer_reader_end(const struct mm_buffer_reader *pos)
 {
 	struct mm_buffer_segment *seg = pos->seg;
 	return mm_buffer_segment_data(seg) + mm_buffer_segment_size(seg);
@@ -314,18 +335,6 @@ mm_buffer_reader_last(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 	return pos->seg == buf->tail.seg;
 }
 
-/* Advance to the next read segment. It must be present. */
-static inline void NONNULL(1)
-mm_buffer_reader_next_unsafe(struct mm_buffer_reader *pos)
-{
-	if (mm_buffer_segment_terminal(pos->seg)) {
-		pos->chunk = mm_chunk_queue_next(pos->chunk);
-		pos->seg = mm_buffer_segment_first(pos->chunk);
-	} else {
-		pos->seg = mm_buffer_segment_next(pos->seg);
-	}
-}
-
 /* Advance to the next viable read segment if any. */
 static inline uint32_t NONNULL(1, 2)
 mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
@@ -334,16 +343,19 @@ mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 		return 0;
 
 	/* Advance to the next segment. */
-	mm_buffer_reader_next_unsafe(pos);
-
+	struct mm_buffer_segment *seg = mm_buffer_segment_next(pos->seg);
 	/* Skip any empty segments. So embedded segments are skipped too. */
-	size_t size = mm_buffer_segment_size(pos->seg);
-	while (size == 0 && !mm_buffer_reader_last(pos, buf)) {
-		mm_buffer_reader_next_unsafe(pos);
-		size = mm_buffer_segment_size(pos->seg);
+	size_t size = mm_buffer_segment_size(seg);
+	while (size == 0 && seg != buf->tail.seg) {
+		if (mm_buffer_segment_terminal(seg))
+			seg = ((struct mm_buffer_tsegment *) seg)->next;
+		else
+			seg = mm_buffer_segment_next(seg);
+		size = mm_buffer_segment_size(seg);
 	}
 
-	mm_buffer_reader_reset_ptr(&buf->head);
+	/* Update the position. */
+	mm_buffer_reader_set(&buf->head, seg);
 	return size;
 }
 
@@ -414,18 +426,12 @@ mm_buffer_writer_end(const struct mm_buffer_writer *pos)
 static inline bool NONNULL(1)
 mm_buffer_writer_next(struct mm_buffer_writer *pos)
 {
-	struct mm_buffer_segment *seg = pos->seg;
-	if (!mm_buffer_segment_terminal(seg)) {
-		pos->seg = mm_buffer_segment_next(seg);
-		return true;
-	}
-
-	struct mm_chunk *chunk = mm_chunk_queue_next(pos->chunk);
-	if (chunk == NULL)
+	struct mm_buffer_segment *seg = mm_buffer_segment_next(pos->seg);
+	if (mm_buffer_segment_terminal(seg))
+		seg = ((struct mm_buffer_tsegment *) seg)->next;
+	if (seg == NULL)
 		return false;
-
-	pos->seg = mm_buffer_segment_first(chunk);
-	pos->chunk = chunk;
+	pos->seg = seg;
 	return true;
 }
 
@@ -448,10 +454,7 @@ mm_buffer_writer_make_ready(struct mm_buffer *buf, size_t size_hint)
 	}
 
 	uint32_t room = mm_buffer_writer_room(&buf->tail);
-	if (room)
-		return room;
-
-	return mm_buffer_writer_bump(&buf->tail, buf, size_hint);
+	return room ? room : mm_buffer_writer_bump(&buf->tail, buf, size_hint);
 }
 
 /**********************************************************************
