@@ -582,7 +582,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	if (rest_left == 0) {
 		// There is no actual data to insert so just advance
 		// the reader.
-		mm_buffer_reader_set_ptr(&buf->head, buf->tail.seg);
+		mm_buffer_reader_set(&buf->head, buf->tail.seg);
 	} else {
 		// Get the target address.
 		char *data = mm_buffer_segment_data(buf->tail.seg);
