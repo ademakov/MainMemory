@@ -123,10 +123,8 @@ struct mm_buffer_xsegment
 /* Terminal segment in a buffer chunk. */
 struct mm_buffer_tsegment
 {
-	/* The size and type of the segment. */
-	uint32_t meta;
-	/* The real data size in the segment (0). */
-	uint32_t size;
+	/* The basic segment info. */
+	struct mm_buffer_segment base;
 	/* Pointer to the first segment of the next chunk. */
 	struct mm_buffer_segment *next;
 };
@@ -154,6 +152,8 @@ struct mm_buffer
 	struct mm_buffer_reader head;
 	/* The current incoming data position. */
 	struct mm_buffer_writer tail;
+	/* Initial pseudo-segment. */
+	struct mm_buffer_tsegment stub;
 	/* Entire buffer memory as a list of chunks. */
 	struct mm_queue chunks;
 	/* The minimum chunk size. */
@@ -200,7 +200,7 @@ mm_buffer_segment_area(const struct mm_buffer_segment *seg)
 static inline uint32_t NONNULL(1)
 mm_buffer_segment_internal_room(const struct mm_buffer_segment *seg)
 {
-	ASSERT(mm_buffer_segment_internal(seg) || mm_buffer_segment_embedded(seg));
+	ASSERT(!mm_buffer_segment_external(seg));
 	return mm_buffer_segment_area(seg) - MM_BUFFER_SEGMENT_SIZE;
 }
 
@@ -214,7 +214,7 @@ mm_buffer_segment_external_room(const struct mm_buffer_segment *seg)
 static inline char * NONNULL(1)
 mm_buffer_segment_internal_data(const struct mm_buffer_segment *seg)
 {
-	ASSERT(mm_buffer_segment_internal(seg) || mm_buffer_segment_embedded(seg));
+	ASSERT(!mm_buffer_segment_external(seg));
 	return ((struct mm_buffer_isegment *) seg)->data;
 }
 
@@ -239,7 +239,6 @@ mm_buffer_segment_room(const struct mm_buffer_segment *seg)
 static inline uint32_t NONNULL(1)
 mm_buffer_segment_size(const struct mm_buffer_segment *seg)
 {
-	ASSERT(!mm_buffer_segment_terminal(seg));
 	return seg->size;
 }
 
@@ -260,10 +259,25 @@ mm_buffer_segment_first(const struct mm_chunk *chunk)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_segment_next(const struct mm_buffer_segment *seg)
+mm_buffer_segment_adjacent_next(const struct mm_buffer_segment *seg)
 {
 	uint32_t area = mm_buffer_segment_area(seg);
 	return (struct mm_buffer_segment *) (((char *) seg) + area);
+}
+
+static inline struct mm_buffer_segment * NONNULL(1)
+mm_buffer_segment_terminal_next(const struct mm_buffer_segment *seg)
+{
+	return ((struct mm_buffer_tsegment *) seg)->next;
+}
+
+static inline struct mm_buffer_segment * NONNULL(1)
+mm_buffer_segment_next(const struct mm_buffer_segment *seg)
+{
+	if (mm_buffer_segment_terminal(seg))
+		return mm_buffer_segment_terminal_next(seg);
+	else
+		return mm_buffer_segment_adjacent_next(seg);
 }
 
 /**********************************************************************
@@ -275,17 +289,6 @@ mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size);
 
 void NONNULL(1)
 mm_buffer_cleanup(struct mm_buffer *buf);
-
-/* Check if a buffer already has at least one memory chunk. */
-static inline bool NONNULL(1)
-mm_buffer_ready(const struct mm_buffer *buf)
-{
-	return buf->head.seg != NULL;
-}
-
-/* Make sure that a buffer has at least one memory chunk. */
-void NONNULL(1)
-mm_buffer_make_ready(struct mm_buffer *buf, size_t size_hint);
 
 /**********************************************************************
  * Buffer low-level read routines.
@@ -339,38 +342,30 @@ mm_buffer_reader_last(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 static inline uint32_t NONNULL(1, 2)
 mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 {
-	if (mm_buffer_reader_last(pos, buf))
+	struct mm_buffer_segment *seg = pos->seg;
+	if (seg == buf->tail.seg)
 		return 0;
 
-	/* Advance to the next segment. */
-	struct mm_buffer_segment *seg = mm_buffer_segment_next(pos->seg);
-	/* Skip any empty segments. So embedded segments are skipped too. */
-	size_t size = mm_buffer_segment_size(seg);
-	while (size == 0 && seg != buf->tail.seg) {
-		if (mm_buffer_segment_terminal(seg))
-			seg = ((struct mm_buffer_tsegment *) seg)->next;
-		else
-			seg = mm_buffer_segment_next(seg);
-		size = mm_buffer_segment_size(seg);
-	}
+	/* Advance to the next segment. Skip empty segments. So embedded and
+	   termianl segments are skipped too (except the very last one). */
+	for (;;) {
+		seg = mm_buffer_segment_next(seg);
 
-	/* Update the position. */
-	mm_buffer_reader_set(&buf->head, seg);
-	return size;
+		size_t size = mm_buffer_segment_size(seg);
+		if (size || seg == buf->tail.seg) {
+			/* Update the position. */
+			mm_buffer_reader_set(&buf->head, seg);
+			return size;
+		}
+	}
 }
 
 /* Try to get a viable read segment in a buffer. */
 static inline uint32_t NONNULL(1)
 mm_buffer_reader_ready(struct mm_buffer *buf)
 {
-	if (!mm_buffer_ready(buf))
-		return 0;
-
 	uint32_t size = mm_buffer_reader_end(&buf->head) - mm_buffer_reader_ptr(&buf->head);
-	if (size)
-		return size;
-
-	return mm_buffer_reader_next(&buf->head, buf);
+	return size ? size : mm_buffer_reader_next(&buf->head, buf);
 }
 
 /**********************************************************************
@@ -427,8 +422,6 @@ static inline bool NONNULL(1)
 mm_buffer_writer_next(struct mm_buffer_writer *pos)
 {
 	struct mm_buffer_segment *seg = mm_buffer_segment_next(pos->seg);
-	if (mm_buffer_segment_terminal(seg))
-		seg = ((struct mm_buffer_tsegment *) seg)->next;
 	if (seg == NULL)
 		return false;
 	pos->seg = seg;
@@ -448,11 +441,6 @@ mm_buffer_writer_bump(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 static inline uint32_t NONNULL(1)
 mm_buffer_writer_make_ready(struct mm_buffer *buf, size_t size_hint)
 {
-	if (!mm_buffer_ready(buf)) {
-		mm_buffer_make_ready(buf, size_hint);
-		return mm_buffer_segment_internal_room(buf->tail.seg);
-	}
-
 	uint32_t room = mm_buffer_writer_room(&buf->tail);
 	return room ? room : mm_buffer_writer_bump(&buf->tail, buf, size_hint);
 }
@@ -464,9 +452,7 @@ mm_buffer_writer_make_ready(struct mm_buffer *buf, size_t size_hint)
 static inline bool NONNULL(1)
 mm_buffer_empty(struct mm_buffer *buf)
 {
-	if (!mm_buffer_ready(buf))
-		return true;
-	return buf->head.ptr == mm_buffer_writer_ptr(&buf->tail);
+	return mm_buffer_reader_ptr(&buf->head) == mm_buffer_writer_ptr(&buf->tail);
 }
 
 size_t NONNULL(1)
@@ -526,8 +512,10 @@ mm_buffer_span(struct mm_buffer *buf, size_t cnt)
 		end = mm_buffer_reader_end(&buf->head);
 	else
 		end = mm_buffer_writer_end(&buf->tail);
-	if ((size_t)(end - buf->head.ptr) >= cnt)
+
+	if ((size_t)(end - mm_buffer_reader_ptr(&buf->head)) >= cnt)
 		return true;
+
 	return mm_buffer_span_slow(buf, cnt);
 }
 

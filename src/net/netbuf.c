@@ -111,8 +111,10 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t size)
 		rc = mm_net_read(&sock->sock, p, n);
 
 		// On success bump the occupied data size.
-		if (rc > 0)
+		if (rc > 0) {
 			buf->tail.seg->size += rc;
+			mm_buffer_reader_ready(buf);
+		}
 	} else {
 		// Try to read using multiple segments.
 		rc = mm_netbuf_fill_iov(sock, size, buf, n, p);
@@ -129,6 +131,7 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t size)
 				n = mm_buffer_segment_internal_room(buf->tail.seg);
 			}
 			buf->tail.seg->size += size;
+			mm_buffer_reader_ready(buf);
 		}
 	}
 
