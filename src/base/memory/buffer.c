@@ -474,20 +474,11 @@ mm_buffer_embed(struct mm_buffer *buf, uint32_t size)
 	// Create the required embedded segment at the buffer tail.
 	uint32_t area = mm_buffer_round_size(size + MM_BUFFER_SEGMENT_SIZE);
 	struct mm_buffer_segment *seg = mm_buffer_segment_insert(buf, MM_BUFFER_SEGMENT_EMBEDDED, area, 0);
-	struct mm_buffer_isegment *iseg = (struct mm_buffer_isegment *) seg;
-
-	// Advance the reader if necessary.
-	if (buf->head.seg == seg) {
-		ASSERT(mm_buffer_segment_embedded(seg));
-
-		seg = mm_buffer_segment_next(seg);
-		if (mm_buffer_segment_terminal(seg))
-			seg = ((struct mm_buffer_tsegment *) seg)->next;
-		mm_buffer_reader_set(&buf->head, seg);
-	}
+	// Get the address of the embedded block.
+	void *data = mm_buffer_segment_internal_data(seg);
 
 	LEAVE();
-	return iseg->data;
+	return data;
 }
 
 /**********************************************************************

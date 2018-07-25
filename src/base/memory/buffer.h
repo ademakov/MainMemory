@@ -354,7 +354,7 @@ mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 		size_t size = mm_buffer_segment_size(seg);
 		if (size || seg == buf->tail.seg) {
 			/* Update the position. */
-			mm_buffer_reader_set(&buf->head, seg);
+			mm_buffer_reader_set(pos, seg);
 			return size;
 		}
 	}
