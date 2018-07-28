@@ -25,6 +25,8 @@
 #include "base/report.h"
 #include "base/memory/memory.h"
 
+#define MC_BINARY_DELTA_EXTRA_SIZE	20
+
 static struct mc_command_type *mc_binary_commands[256] = {
 	[MC_BINARY_OPCODE_GET]		= &mc_command_binary_get,
 	[MC_BINARY_OPCODE_GETQ]		= &mc_command_binary_getq,
@@ -218,7 +220,7 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 static bool
 mc_binary_read_delta(struct mc_state *state, uint32_t key_len)
 {
-	if (!mc_binary_fill(state, key_len))
+	if (!mc_binary_fill(state, key_len + MC_BINARY_DELTA_EXTRA_SIZE))
 		return false;
 
 	// Read the extras.
@@ -228,7 +230,7 @@ mc_binary_read_delta(struct mc_state *state, uint32_t key_len)
 		uint64_t value;
 		uint32_t exp_time;
 	} extras;
-	mm_netbuf_read(&state->sock, &extras, 20);
+	mm_netbuf_read(&state->sock, &extras, MC_BINARY_DELTA_EXTRA_SIZE);
 
 	struct mc_command *command = state->command;
 	command->delta = mm_ntohll(extras.delta);
@@ -348,7 +350,7 @@ mc_binary_parse(struct mc_state *state)
 		break;
 
 	case MC_COMMAND_DELTA:
-		if (unlikely(ext_len != 20)
+		if (unlikely(ext_len != MC_BINARY_DELTA_EXTRA_SIZE)
 		    || unlikely(key_len + ext_len != body_len)
 		    || unlikely(key_len == 0)) {
 			rc = mc_binary_invalid_arguments(state, body_len);
