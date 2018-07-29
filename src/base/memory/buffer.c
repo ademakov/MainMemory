@@ -511,7 +511,7 @@ mm_buffer_span_slow(struct mm_buffer *buf, size_t cnt)
 	if (buf->tail.seg != buf->head.seg)
 		room = mm_buffer_segment_room(buf->tail.seg);
 	else
-		room = mm_buffer_writer_end(&buf->tail) - buf->head.ptr;
+		room = mm_buffer_writer_end(&buf->tail) - mm_buffer_reader_ptr(&buf->head);
 
 	// If the available room is not sufficient then get more advancing
 	// the tail segment.
@@ -571,7 +571,7 @@ mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
 
 	/* Seek the given char in the current segment. */
 	char *ptr = mm_buffer_reader_ptr(&buf->head);
-	size_t len = mm_buffer_reader_end(&buf->head) - ptr;
+	size_t len = mm_buffer_reader_end(&buf->head) - mm_buffer_reader_ptr(&buf->head);
 	char *ret = memchr(ptr, c, len);
 
 	/* If not found then scan the following segments and merge them as
@@ -579,10 +579,9 @@ mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
 	if (ret == NULL && buf->tail.seg != buf->head.seg) {
 		struct mm_buffer_reader reader;
 		mm_buffer_reader_save(&reader, buf);
-
-		while (mm_buffer_reader_next(&buf->head, buf)) {
-			char *p = mm_buffer_reader_ptr(&buf->head);
-			size_t n = mm_buffer_reader_end(&buf->head) - p;
+		while (mm_buffer_reader_next(&reader, buf)) {
+			char *p = mm_buffer_reader_ptr(&reader);
+			size_t n = mm_buffer_reader_end(&reader) - p;
 			ret = memchr(p, c, n);
 			if (ret != NULL) {
 				len += ret - p;
@@ -591,7 +590,6 @@ mm_buffer_find(struct mm_buffer *buf, int c, size_t *poffset)
 			len += n;
 		}
 
-		mm_buffer_reader_restore(&reader, buf);
 		if (ret != NULL) {
 			if (mm_buffer_span_slow(buf, len + 1)) {
 				mm_error(0, "too long buffer span");
