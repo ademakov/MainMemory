@@ -133,18 +133,17 @@ parse:
 	// Process the parsed command.
 	mc_process_command(state, state->command);
 
-	// Update the safe consumed input position.
-	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
-
 	// If there is more input in the buffer then try to parse
 	// the next command.
 	if (!mm_netbuf_empty(&state->sock)) {
 		state->command = NULL;
+		// Update the safe consumed input position.
+		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
 		goto parse;
 	}
 
 	// Compact the input buffer storage.
-	mm_netbuf_consume_read_pos(&state->sock, &safepoint);
+	mm_netbuf_compact_read_buf(&state->sock);
 
 leave:
 	LEAVE();

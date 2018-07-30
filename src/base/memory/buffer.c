@@ -225,8 +225,9 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
  * Buffer top-level routines.
  **********************************************************************/
 
-size_t NONNULL(1, 2)
-mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos)
+/* Improve space utilization of a buffer that was previously in use. */
+size_t NONNULL(1)
+mm_buffer_compact(struct mm_buffer *buf)
 {
 	ENTER();
 	size_t consumed = 0;
@@ -235,7 +236,7 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos)
 	// used chunks.
 	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
 	struct mm_buffer_segment *first = mm_buffer_segment_first(chunk);
-	for (struct mm_buffer_segment *seg = first; seg != pos->seg; ) {
+	for (struct mm_buffer_segment *seg = first; seg != buf->head.seg; ) {
 		// Account for the segment size.
 		consumed += mm_buffer_segment_area(seg);
 		// Release the external segment.
@@ -254,39 +255,34 @@ mm_buffer_consume(struct mm_buffer *buf, const struct mm_buffer_reader *pos)
 		}
 	}
 
-	// Handle the segment situated at the given position.
-	char *end = mm_buffer_reader_end(pos);
-	if (end > pos->ptr) {
+	// Handle the last read segment.
+	const char *ptr = mm_buffer_reader_ptr(&buf->head);
+	if (ptr < mm_buffer_reader_end(&buf->head)) {
 		// The last segment is not yet completely consumed. Account for
 		// the consumed data size.
-		if (mm_buffer_segment_internal(pos->seg))
-			consumed += pos->ptr - mm_buffer_segment_internal_data(pos->seg);
+		if (mm_buffer_segment_internal(buf->head.seg))
+			consumed += ptr - mm_buffer_segment_internal_data(buf->head.seg);
 		else
-			consumed += mm_buffer_segment_area(pos->seg);
-		// Merge the preceding segments in the current chunk.
-		if (first != pos->seg) {
-			first->meta = ((char *) pos->seg) - ((char *) first);
+			consumed += mm_buffer_segment_area(buf->head.seg);
+		// Merge the preceding segments in the last read cheunk.
+		if (first != buf->head.seg) {
+			first->meta = ((char *) buf->head.seg) - ((char *) first);
 			first->size = 0;
 		}
 	} else {
 		// Release an external segment.
-		mm_buffer_segment_release(pos->seg);
-		// Account the segment size.
-		uint32_t area = mm_buffer_segment_area(pos->seg);
-		consumed += area;
-		// Merge this segment with the first one.
-		if (first == pos->seg)
-			first->meta = area;
-		else
-			first->meta = area + ((char *) pos->seg) - ((char *) first);
+		mm_buffer_segment_release(buf->head.seg);
+		// Merge the last read segment with preceding ones.
+		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
+		first->meta = area + ((char *) buf->head.seg - (char *) first);
 		first->size = 0;
-		// Fix up the head and tail iterators if needed.
-		if (buf->head.seg == pos->seg) {
-			ASSERT(buf->head.ptr == pos->ptr);
-			if (buf->tail.seg == pos->seg)
-				buf->tail.seg = first;
-			mm_buffer_reader_set(&buf->head, first);
-		}
+		// Account the last read segment size.
+		consumed += area;
+		// Fix up the tail iterator if needed.
+		if (buf->tail.seg == buf->head.seg)
+			buf->tail.seg = first;
+		// Fix up the head iterator.
+		mm_buffer_reader_set(&buf->head, first);
 	}
 
 	// Remember the maximum consumed data size to optimize later

@@ -89,30 +89,6 @@ mm_netbuf_restore_read_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reade
 	mm_buffer_reader_restore(pos, &sock->rxbuf);
 }
 
-static inline void NONNULL(1, 2)
-mm_netbuf_consume_read_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
-{
-	mm_buffer_consume(&sock->rxbuf, pos);
-}
-
-static inline void NONNULL(1, 2)
-mm_netbuf_capture_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
-{
-	mm_buffer_reader_save(pos, &sock->txbuf);
-}
-
-static inline void NONNULL(1, 2)
-mm_netbuf_restore_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
-{
-	mm_buffer_reader_restore(pos, &sock->txbuf);
-}
-
-static inline void NONNULL(1, 2)
-mm_netbuf_consume_write_pos(struct mm_netbuf_socket *sock, struct mm_buffer_reader *pos)
-{
-	mm_buffer_consume(&sock->txbuf, pos);
-}
-
 static inline void NONNULL(1)
 mm_netbuf_compact_read_buf(struct mm_netbuf_socket *sock)
 {
