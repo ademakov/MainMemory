@@ -97,10 +97,8 @@ struct mm_buffer_segment
 /* Internal buffer segment. */
 struct mm_buffer_isegment
 {
-	/* The size and type of the segment. */
-	uint32_t meta;
-	/* The real data size in the segment. */
-	uint32_t size;
+	/* The basic segment info. */
+	struct mm_buffer_segment base;
  	/* The data block. */
 	char data[];
 };
@@ -108,14 +106,12 @@ struct mm_buffer_isegment
 /* External buffer segment. */
 struct mm_buffer_xsegment
 {
-	/* The size and type of the segment. */
-	uint32_t meta;
-	/* The real data size in the segment. */
-	uint32_t size;
+	/* The basic segment info. */
+	struct mm_buffer_segment base;
 	/* The external data block. */
 	char *data;
 
-	/* Release info. */
+	/* The exteranl data release info. */
 	mm_buffer_release_t release;
 	uintptr_t release_data;
 };
@@ -208,7 +204,7 @@ static inline uint32_t NONNULL(1)
 mm_buffer_segment_external_room(const struct mm_buffer_segment *seg)
 {
 	ASSERT(mm_buffer_segment_external(seg));
-	return ((struct mm_buffer_xsegment *) seg)->size;
+	return seg->size;
 }
 
 static inline char * NONNULL(1)
