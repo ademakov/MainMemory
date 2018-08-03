@@ -38,7 +38,7 @@ mc_parser_scan_lf(struct mc_state *state, const char *s, const char *e)
 	} else {
 		struct mm_buffer *buf = &state->sock.rxbuf;
 		struct mm_buffer_reader reader = buf->head;
-		if (mm_buffer_reader_next(&reader, buf) && reader.ptr < mm_buffer_reader_end(&reader))
+		if (mm_buffer_reader_next(&reader, buf))
 			rc = *reader.ptr == '\n';
 	}
 	DEBUG("nl=%d", rc);
