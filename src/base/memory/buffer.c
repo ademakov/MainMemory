@@ -179,7 +179,7 @@ mm_buffer_cleanup(struct mm_buffer *buf)
  * Buffer low-level write routines.
  **********************************************************************/
 
-void NONNULL(1, 2)
+struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_t size)
 {
 	ENTER();
@@ -219,6 +219,7 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 	pos->seg = seg;
 
 	LEAVE();
+	return seg;
 }
 
 /**********************************************************************
@@ -339,7 +340,7 @@ mm_buffer_skip(struct mm_buffer *buf, size_t size)
 }
 
 size_t NONNULL(1, 2)
-mm_buffer_read(struct mm_buffer *buf, void *data, size_t size)
+mm_buffer_read(struct mm_buffer *buf, void *restrict data, size_t size)
 {
 	ENTER();
 
@@ -369,24 +370,49 @@ mm_buffer_read(struct mm_buffer *buf, void *data, size_t size)
 }
 
 void NONNULL(1, 2)
-mm_buffer_write(struct mm_buffer *buf, const void *data, size_t size)
+mm_buffer_write(struct mm_buffer *buf, const void *restrict data, size_t size)
 {
 	ENTER();
 
-	// Make sure that there is a viable buffer segment.
-	uint32_t n = mm_buffer_writer_make_ready(buf, size);
+	// Learn about the current tail segment free space.
+	struct mm_buffer_writer *const pos = &buf->tail;
+	uint32_t n = mm_buffer_writer_room(pos);
+	char *restrict p = mm_buffer_writer_ptr(pos);
 
-	// Copy data into buffer segments.
 	while (n < size) {
-		memcpy(mm_buffer_writer_ptr(&buf->tail), data, n);
-		buf->tail.seg->size += n;
-		data += n;
-		size -= n;
+		if (n == 0) {
+			// There is no space in the current tail segment. It might be
+			// either a terminal segment or a non-terminal segment that is
+			// already totally full with data.
+			if (mm_buffer_segment_terminal(pos->seg)) {
+				// Make sure that there is a new viable tail segment.
+				struct mm_buffer_segment *seg = mm_buffer_segment_terminal_next(pos->seg);
+				if (likely(seg == NULL))
+					seg = mm_buffer_writer_grow(pos, buf, size);
+				pos->seg = seg;
+			} else {
+				// Proceed with the next segment.
+				pos->seg = mm_buffer_segment_adjacent_next(pos->seg);
+			}
+		} else {
+			// Copy data into the current tail segment.
+			memcpy(p, data, n);
+			pos->seg->size += n;
+			data += n;
+			size -= n;
 
-		n = mm_buffer_writer_bump(&buf->tail, buf, size);
+			// Proceed with the next segment.
+			pos->seg = mm_buffer_segment_adjacent_next(pos->seg);
+		}
+
+		// Learn about the next tail segment free space.
+		n = mm_buffer_segment_internal_room(pos->seg);
+		p = mm_buffer_segment_internal_data(pos->seg);
 	}
-	memcpy(mm_buffer_writer_ptr(&buf->tail), data, size);
-	buf->tail.seg->size += size;
+
+	// Copy data into the last tail segment.
+	memcpy(p, data, size);
+	pos->seg->size += size;
 
 	LEAVE();
 }

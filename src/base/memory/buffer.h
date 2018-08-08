@@ -379,7 +379,7 @@ mm_buffer_reader_ready(struct mm_buffer *buf)
  */
 
 /* Append a new buffer chunk. */
-void NONNULL(1, 2)
+struct mm_buffer_segment * NONNULL(1, 2)
 mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_t size_hint);
 
 /* Capture the current write position. */
@@ -461,10 +461,10 @@ size_t NONNULL(1)
 mm_buffer_skip(struct mm_buffer *buf, size_t size);
 
 size_t NONNULL(1, 2)
-mm_buffer_read(struct mm_buffer *buf, void *data, size_t size);
+mm_buffer_read(struct mm_buffer *buf, void *restrict data, size_t size);
 
 void NONNULL(1, 2)
-mm_buffer_write(struct mm_buffer *buf, const void *data, size_t size);
+mm_buffer_write(struct mm_buffer *buf, const void *restrict data, size_t size);
 
 void NONNULL(1, 2) FORMAT(2, 3)
 mm_buffer_printf(struct mm_buffer *buf, const char *restrict fmt, ...);
@@ -473,7 +473,7 @@ void NONNULL(1, 2)
 mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va);
 
 void NONNULL(1, 2)
-mm_buffer_splice(struct mm_buffer *buf, char *data, uint32_t size,
+mm_buffer_splice(struct mm_buffer *buf, char *restrict data, uint32_t size,
 		 mm_buffer_release_t release, uintptr_t release_data);
 
 void * NONNULL(1)
