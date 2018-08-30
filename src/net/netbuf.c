@@ -127,8 +127,8 @@ mm_netbuf_fill(struct mm_netbuf_socket *sock, size_t size)
 				buf->tail.seg->size += n;
 				size -= n;
 
-				VERIFY(mm_buffer_writer_next(&buf->tail));
-				n = mm_buffer_segment_internal_room(buf->tail.seg);
+				n = mm_buffer_writer_next(&buf->tail);
+				VERIFY(n);
 			}
 			buf->tail.seg->size += size;
 			mm_buffer_reader_ready(buf);

@@ -339,21 +339,19 @@ static inline uint32_t NONNULL(1, 2)
 mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 {
 	struct mm_buffer_segment *seg = pos->seg;
-	if (seg == buf->tail.seg)
-		return 0;
-
-	/* Advance to the next segment. Skip empty segments. So embedded and
-	   termianl segments are skipped too (except the very last one). */
-	for (;;) {
+	/* Skip any empty segment except the last one. So embedded and terminal
+	   segments are skipped too. */
+	while (seg != buf->tail.seg) {
 		seg = mm_buffer_segment_next(seg);
-
 		size_t size = mm_buffer_segment_size(seg);
-		if (size || seg == buf->tail.seg) {
+		if (size) {
 			/* Update the position. */
 			mm_buffer_reader_set(pos, seg);
 			return size;
 		}
 	}
+	pos->seg = seg;
+	return 0;
 }
 
 /* Try to get a viable read segment in a buffer. */
@@ -414,23 +412,34 @@ mm_buffer_writer_end(const struct mm_buffer_writer *pos)
 }
 
 /* Advance to the next write segment if any. */
-static inline bool NONNULL(1)
+static inline uint32_t NONNULL(1)
 mm_buffer_writer_next(struct mm_buffer_writer *pos)
 {
-	struct mm_buffer_segment *seg = mm_buffer_segment_next(pos->seg);
-	if (seg == NULL)
-		return false;
-	pos->seg = seg;
-	return true;
+	struct mm_buffer_segment *seg = pos->seg;
+	for (;;) {
+		if (mm_buffer_segment_terminal(seg)) {
+			seg = mm_buffer_segment_terminal_next(seg);
+			if (seg == NULL)
+				break;
+		}
+		seg = mm_buffer_segment_adjacent_next(seg);
+		size_t room = mm_buffer_segment_internal_room(seg);
+		if (room)
+			return room;
+	}
+	return 0;
 }
 
 /* Advance to the next write segment creating it if needed. */
 static inline uint32_t NONNULL(1, 2)
 mm_buffer_writer_bump(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_t size_hint)
 {
-	if (!mm_buffer_writer_next(pos))
-		mm_buffer_writer_grow(pos, buf, size_hint);
-	return mm_buffer_segment_internal_room(pos->seg);
+	uint32_t room = mm_buffer_writer_next(pos);
+	if (!room) {
+		pos->seg = mm_buffer_writer_grow(pos, buf, size_hint);
+		room = mm_buffer_segment_internal_room(pos->seg);
+	}
+	return room;
 }
 
 /* Make sure there is a viable write segment in a buffer. */

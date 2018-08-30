@@ -212,11 +212,9 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 	tseg->next = NULL;
 	DEBUG("setup terminal segment %p", tseg);
 
-	// Link the initial segment with the previous terminal segmant.
+	// Link the initial segment with the previous terminal segment.
 	VERIFY(mm_buffer_segment_terminal(pos->seg));
 	((struct mm_buffer_tsegment *) pos->seg)->next = seg;
-	// Update the writer.
-	pos->seg = seg;
 
 	LEAVE();
 	return seg;
