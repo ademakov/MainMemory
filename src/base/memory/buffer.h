@@ -421,14 +421,19 @@ mm_buffer_writer_next(struct mm_buffer_writer *pos)
 	while (!mm_buffer_segment_terminal(seg)) {
 		seg = mm_buffer_segment_adjacent_next(seg);
 		size_t room = mm_buffer_segment_internal_room(seg);
-		if (room)
+		if (room) {
+			pos->seg = seg;
 			return room;
+		}
 	}
 	/* Here a terminal segment is either the last one or sometimes
 	   an empty internal segment might follow it.*/
-	seg = mm_buffer_segment_terminal_next(seg);
-	if (seg != NULL)
-		return mm_buffer_segment_internal_room(seg);
+	struct mm_buffer_segment *nseg = mm_buffer_segment_terminal_next(seg);
+	if (nseg != NULL) {
+		pos->seg = nseg;
+		return mm_buffer_segment_internal_room(nseg);
+	}
+	pos->seg = seg;
 	return 0;
 }
 
