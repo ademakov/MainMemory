@@ -338,20 +338,22 @@ mm_buffer_reader_last(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 static inline uint32_t NONNULL(1, 2)
 mm_buffer_reader_next(struct mm_buffer_reader *pos, struct mm_buffer *buf)
 {
+	/* Check if already at the last segment to read. */
 	struct mm_buffer_segment *seg = pos->seg;
-	/* Skip any empty segment except the last one. So embedded and terminal
-	   segments are skipped too. */
-	while (seg != buf->tail.seg) {
+	if (seg == buf->tail.seg)
+		return 0;
+
+	/* Advance to the next segment. Skip any empty segments except the
+	   last one. So embedded and terminal segments are skipped too. */
+	for (;;) {
 		seg = mm_buffer_segment_next(seg);
 		size_t size = mm_buffer_segment_size(seg);
-		if (size) {
+		if (size || seg == buf->tail.seg) {
 			/* Update the position. */
 			mm_buffer_reader_set(pos, seg);
 			return size;
 		}
 	}
-	pos->seg = seg;
-	return 0;
 }
 
 /* Try to get a viable read segment in a buffer. */
@@ -416,17 +418,17 @@ static inline uint32_t NONNULL(1)
 mm_buffer_writer_next(struct mm_buffer_writer *pos)
 {
 	struct mm_buffer_segment *seg = pos->seg;
-	for (;;) {
-		if (mm_buffer_segment_terminal(seg)) {
-			seg = mm_buffer_segment_terminal_next(seg);
-			if (seg == NULL)
-				break;
-		}
+	while (!mm_buffer_segment_terminal(seg)) {
 		seg = mm_buffer_segment_adjacent_next(seg);
 		size_t room = mm_buffer_segment_internal_room(seg);
 		if (room)
 			return room;
 	}
+	/* Here a terminal segment is either the last one or sometimes
+	   an empty internal segment might follow it.*/
+	seg = mm_buffer_segment_terminal_next(seg);
+	if (seg != NULL)
+		return mm_buffer_segment_internal_room(seg);
 	return 0;
 }
 
