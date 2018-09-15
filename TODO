@@ -7,7 +7,7 @@ v 0.2
 ** cleanup net and netbuf interfaces
 ** ensure open sockets are destroyed on shutdown
 ** optimize buffer usage for memtier with --pipeline=xx
-** optimize memcache txbuf flush for pipeined cmds
+** optimize memcache txbuf flush for pipelined cmds
 ** optimize memcache entry expiration checks
 ** ...
 
