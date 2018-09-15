@@ -241,7 +241,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		// Release the external segment.
 		mm_buffer_segment_release(seg);
 		// Move to the next segment.
-		seg = mm_buffer_segment_next(seg);
+		seg = mm_buffer_segment_adjacent_next(seg);
 		// On a terminal segment move to the next chunk.
 		if (mm_buffer_segment_terminal(seg)) {
 			struct mm_chunk *next = mm_chunk_queue_next(chunk);
@@ -299,7 +299,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 size_t NONNULL(1)
 mm_buffer_size(struct mm_buffer *buf)
 {
-	uint32_t size = mm_buffer_reader_end(&buf->head) - mm_buffer_reader_ptr(&buf->head);
+	size_t size = mm_buffer_reader_end(&buf->head) - mm_buffer_reader_ptr(&buf->head);
 
 	struct mm_buffer_segment *seg = buf->head.seg;
 	while (seg != buf->tail.seg) {
@@ -422,7 +422,7 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 
 	// Make sure that there is a viable buffer segment.
 	uint32_t n = mm_buffer_writer_make_ready(buf, 0);
-	char *p = mm_buffer_writer_ptr(&buf->tail);
+	char *restrict p = mm_buffer_writer_ptr(&buf->tail);
 
 	// Try to print into the available segment.
 	va_list va2;
