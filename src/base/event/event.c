@@ -91,7 +91,7 @@ mm_event_post_notify(struct mm_event_dispatch *dispatch, mm_stamp_t stamp UNUSED
  * Event sink activity.
  **********************************************************************/
 
-static void
+static void NONNULL(1)
 mm_event_complete(struct mm_event_fd *sink)
 {
 	ENTER();
@@ -249,7 +249,7 @@ leave:
 	LEAVE();
 }
 
-static mm_value_t
+static mm_value_t NONNULL(1)
 mm_event_reclaim_routine(struct mm_work *work)
 {
 	ENTER();
@@ -352,10 +352,10 @@ mm_event_register_fd(struct mm_event_fd *sink)
 	// Bind the sink to this thread's event listener.
 	struct mm_strand *strand = mm_strand_selfptr();
 	struct mm_event_listener *listener = strand->listener;
-	if (sink->listener == NULL) {
-		sink->listener = listener;
-	} else {
+	if (sink->listener != NULL) {
 		VERIFY(sink->listener == listener);
+	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0) {
+		sink->listener = listener;
 	}
 
 	// Register with the event backend.
@@ -446,7 +446,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
  * Event sink fiber control.
  **********************************************************************/
 
-void
+void NONNULL(1)
 mm_event_start_input_work(struct mm_event_fd *sink)
 {
 	ENTER();
@@ -472,7 +472,7 @@ leave:
 	LEAVE();
 }
 
-void
+void NONNULL(1)
 mm_event_start_output_work(struct mm_event_fd *sink)
 {
 	ENTER();

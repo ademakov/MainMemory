@@ -284,7 +284,7 @@ mm_event_listener_adjust_start(struct mm_event_listener *listener, uint32_t neve
 static inline bool NONNULL(1, 2)
 mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
-	if (sink->listener == listener && (sink->flags & MM_EVENT_NOTIFY_FD) == 0)
+	if (sink->listener == listener)
 		listener->direct_events_estimate++;
 	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
 }
