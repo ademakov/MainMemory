@@ -24,7 +24,7 @@
 #include "memcache/binary.h"
 
 #include "base/report.h"
-#include "net/netbuf.h"
+#include "base/net/netbuf.h"
 
 typedef enum {
 	MC_PROTOCOL_INIT = 0,

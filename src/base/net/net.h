@@ -21,13 +21,11 @@
 #define NET_NET_H
 
 #include "common.h"
-
-#include "net/address.h"
-
 #include "base/bitset.h"
 #include "base/list.h"
 #include "base/event/event.h"
 #include "base/event/listener.h"
+#include "base/net/address.h"
 
 #include <sys/socket.h>
 #include <sys/types.h>

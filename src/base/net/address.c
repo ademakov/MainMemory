@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "net/address.h"
+#include "base/net/address.h"
 
 #include "base/report.h"
 

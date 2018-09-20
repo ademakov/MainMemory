@@ -27,8 +27,7 @@
 #include "base/settings.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
-
-#include "net/net.h"
+#include "base/net/net.h"
 
 #include "memcache/memcache.h"
 

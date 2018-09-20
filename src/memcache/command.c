@@ -27,8 +27,7 @@
 #include "base/report.h"
 #include "base/memory/buffer.h"
 #include "base/memory/memory.h"
-
-#include "net/net.h"
+#include "base/net/net.h"
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;

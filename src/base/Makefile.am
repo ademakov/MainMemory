@@ -1,5 +1,6 @@
 
-noinst_LTLIBRARIES = libmainbase.la libcksum.la
+lib_LTLIBRARIES = libmainbase.la
+noinst_LTLIBRARIES = libcksum.la
 
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra -DMSPACES -DUSE_DL_PREFIX
@@ -66,6 +67,9 @@ libmainbase_la_SOURCES = \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
 	memory/space.c memory/space.h \
+	net/address.h net/address.c \
+	net/net.c net/net.h \
+	net/netbuf.c net/netbuf.h \
 	thread/backoff.c thread/backoff.h \
 	thread/barrier.c thread/barrier.h \
 	thread/domain.c thread/domain.h \
