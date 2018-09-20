@@ -1,5 +1,5 @@
 /*
- * net/net.h - MainMemory networking.
+ * base/net/net.h - MainMemory networking.
  *
  * Copyright (C) 2012-2018  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NET_NET_H
-#define NET_NET_H
+#ifndef BASE_NET_NET_H
+#define BASE_NET_NET_H
 
 #include "common.h"
 #include "base/bitset.h"
@@ -224,4 +224,4 @@ mm_net_writer_socket(struct mm_work *writer_work)
 	return containerof(writer_work, struct mm_net_socket, event.output_work);
 }
 
-#endif /* NET_NET_H */
+#endif /* BASE_NET_NET_H */

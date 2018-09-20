@@ -1,5 +1,5 @@
 /*
- * net/address.h - MainMemory network addresses.
+ * base/net/address.h - MainMemory network addresses.
  *
  * Copyright (C) 2012-2017  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NET_ADDRESS_H
-#define NET_ADDRESS_H
+#ifndef BASE_NET_ADDRESS_H
+#define BASE_NET_ADDRESS_H
 
 #include "common.h"
 
@@ -76,4 +76,4 @@ mm_net_set_inet6_addr(struct mm_net_addr *addr, const char *addrstr, uint16_t po
 	return mm_net_parse_in6_addr(&addr->in6_addr, addrstr, port);
 }
 
-#endif /* NET_ADDRESS_H */
+#endif /* BASE_NET_ADDRESS_H */

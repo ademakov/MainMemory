@@ -1,5 +1,5 @@
 /*
- * net/netbuf.c - MainMemory buffered network I/O.
+ * base/net/netbuf.c - MainMemory buffered network I/O.
  *
  * Copyright (C) 2013-2018  Aleksey Demakov
  *

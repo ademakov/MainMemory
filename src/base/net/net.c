@@ -1,5 +1,5 @@
 /*
- * net/net.c - MainMemory networking.
+ * base/net/net.c - MainMemory networking.
  *
  * Copyright (C) 2012-2018  Aleksey Demakov
  *

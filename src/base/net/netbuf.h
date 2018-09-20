@@ -1,5 +1,5 @@
 /*
- * net/netbuf.h - MainMemory buffered network I/O.
+ * base/net/netbuf.h - MainMemory buffered network I/O.
  *
  * Copyright (C) 2013-2018  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef NET_NETBUF_H
-#define NET_NETBUF_H
+#ifndef BASE_NET_NETBUF_H
+#define BASE_NET_NETBUF_H
 
 #include "common.h"
 #include "base/report.h"
@@ -178,4 +178,4 @@ mm_netbuf_radd(struct mm_netbuf_socket *sock, size_t cnt)
 	sock->rxbuf.head.ptr += cnt;
 }
 
-#endif /* NET_NETBUF_H */
+#endif /* BASE_NET_NETBUF_H */

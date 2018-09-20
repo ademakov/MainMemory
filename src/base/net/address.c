@@ -1,5 +1,5 @@
 /*
- * net/address.c - MainMemory network addresses.
+ * base/net/address.c - MainMemory network addresses.
  *
  * Copyright (C) 2012-2017  Aleksey Demakov
  *
