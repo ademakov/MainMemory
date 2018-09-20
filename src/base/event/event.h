@@ -30,11 +30,11 @@ struct mm_event_listener;
 
 /* Event types. */
 typedef enum {
-	MM_EVENT_INPUT = 0,
-	MM_EVENT_IN_ERR = 1,
-	MM_EVENT_OUTPUT = 2,
-	MM_EVENT_OUT_ERR = 3,
-} mm_event_t;
+	MM_EVENT_INDEX_INPUT = 0,
+	MM_EVENT_INDEX_INPUT_ERROR = 1,
+	MM_EVENT_INDEX_OUTPUT = 2,
+	MM_EVENT_INDEX_OUTPUT_ERROR = 3,
+} mm_event_index_t;
 
 /* I/O event repeat modes. */
 typedef enum {
@@ -54,10 +54,6 @@ typedef enum {
  * relevant event is expected. This bit is modified without acquiring any
  * locks by the thread the sink is bound to.
  *
- * Therefore it is forbidden to create oneshot sinks with stray affinity.
- * If it were allowed there would be race conditions modifying the oneshot
- * state.
- *
  * Additionally for oneshot sinks the epoll backend needs to modify (with
  * epoll_ctl) the corresponding file descriptor after each I/O event. So
  * if the event handler does the same thing directly then the backend can
@@ -70,10 +66,10 @@ typedef enum {
  */
 
 /* I/O status flags. */
-#define MM_EVENT_INPUT_READY	(1u << MM_EVENT_INPUT)
-#define MM_EVENT_OUTPUT_READY	(1u << MM_EVENT_OUTPUT)
-#define MM_EVENT_INPUT_ERROR	(1u << MM_EVENT_IN_ERR)
-#define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_OUT_ERR)
+#define MM_EVENT_INPUT_READY	(1u << MM_EVENT_INDEX_INPUT)
+#define MM_EVENT_OUTPUT_READY	(1u << MM_EVENT_INDEX_OUTPUT)
+#define MM_EVENT_INPUT_ERROR	(1u << MM_EVENT_INDEX_INPUT_ERROR)
+#define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_INDEX_OUTPUT_ERROR)
 
 /* Fiber activity flags. */
 #define MM_EVENT_INPUT_STARTED	0x000010

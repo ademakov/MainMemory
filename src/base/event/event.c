@@ -329,14 +329,12 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	if (input == MM_EVENT_REGULAR) {
 		sink->flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
 	} else if (input == MM_EVENT_ONESHOT) {
-		// Oneshot state cannot be properly managed for stray sinks.
 		sink->flags |= MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER;
 	}
 
 	if (output == MM_EVENT_REGULAR) {
 		sink->flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
 	} else if (output == MM_EVENT_ONESHOT) {
-		// Oneshot state cannot be properly managed for stray sinks.
 		sink->flags |= MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER;
 	}
 

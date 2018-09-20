@@ -88,10 +88,10 @@ mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
 	sink->listener = listener;
 
 	while (sink->queued_events) {
-		mm_event_t event = mm_ctz(sink->queued_events);
+		mm_event_index_t event = mm_ctz(sink->queued_events);
 		uint32_t flag = 1u << event;
 		sink->queued_events &= ~flag;
-		if (event < MM_EVENT_OUTPUT)
+		if (event < MM_EVENT_INDEX_OUTPUT)
 			mm_event_backend_poller_input(&listener->storage, sink, flag);
 		else
 			mm_event_backend_poller_output(&listener->storage, sink, flag);
@@ -250,7 +250,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 		listener->events.direct++;
 	} else if (sink->listener != NULL) {
 		mm_event_update(sink);
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INPUT);
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT);
 		listener->events.forwarded++;
 	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0) {
 		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_READY);
@@ -282,7 +282,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 		listener->events.direct++;
 	} else if (sink->listener != NULL) {
 		mm_event_update(sink);
-		mm_event_forward(&listener->forward, sink, MM_EVENT_IN_ERR);
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT_ERROR);
 		listener->events.forwarded++;
 	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0) {
 		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_ERROR);
@@ -314,7 +314,7 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 		listener->events.direct++;
 	} else if (sink->listener != NULL) {
 		mm_event_update(sink);
-		mm_event_forward(&listener->forward, sink, MM_EVENT_OUTPUT);
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT);
 		listener->events.forwarded++;
 	} else {
 		// Never register notify FD for output events.
@@ -342,7 +342,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 		listener->events.direct++;
 	} else if (sink->listener != NULL) {
 		mm_event_update(sink);
-		mm_event_forward(&listener->forward, sink, MM_EVENT_OUT_ERR);
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT_ERROR);
 		listener->events.forwarded++;
 	} else {
 		// Never register notify FD for output events.

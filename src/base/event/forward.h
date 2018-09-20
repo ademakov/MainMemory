@@ -35,7 +35,7 @@ struct mm_event_forward_buffer
 {
 	uint8_t nsinks;
 	uint8_t ntotal;
-	mm_event_t events[MM_EVENT_FORWARD_BUFFER_SIZE];
+	mm_event_index_t events[MM_EVENT_FORWARD_BUFFER_SIZE];
 	struct mm_event_fd *sinks[MM_EVENT_FORWARD_BUFFER_SIZE];
 };
 
@@ -58,6 +58,6 @@ void NONNULL(1)
 mm_event_forward_flush(struct mm_event_forward_cache *cache);
 
 void NONNULL(1, 2)
-mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_t event);
+mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_index_t event);
 
 #endif /* BASE_EVENT_FORWARD_H */

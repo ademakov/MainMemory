@@ -29,9 +29,9 @@
  **********************************************************************/
 
 static void NONNULL(1)
-mm_event_forward_handle(struct mm_event_fd *sink, mm_event_t event)
+mm_event_forward_handle(struct mm_event_fd *sink, mm_event_index_t event)
 {
-	if (event < MM_EVENT_OUTPUT) {
+	if (event < MM_EVENT_INDEX_OUTPUT) {
 		mm_event_backend_target_input(sink, (1u << event));
 	} else {
 		mm_event_backend_target_output(sink, (1u << event));
@@ -235,7 +235,7 @@ mm_event_forward_flush(struct mm_event_forward_cache *cache)
 }
 
 void NONNULL(1, 2)
-mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_t event)
+mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_index_t event)
 {
 	ENTER();
 
