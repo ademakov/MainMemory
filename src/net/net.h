@@ -1,7 +1,7 @@
 /*
  * net/net.h - MainMemory networking.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -160,9 +160,9 @@ ssize_t NONNULL(1, 2)
 mm_net_write(struct mm_net_socket *sock, const void *buffer, size_t nbytes);
 
 ssize_t NONNULL(1, 2)
-mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes);
+mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, size_t nbytes);
 ssize_t NONNULL(1, 2)
-mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, ssize_t nbytes);
+mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, int iovcnt, size_t nbytes);
 
 void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock);
