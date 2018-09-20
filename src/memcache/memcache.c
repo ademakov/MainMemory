@@ -73,9 +73,6 @@ mc_reader_routine(struct mm_work *work)
 	ENTER();
 
 	struct mm_net_socket *sock = mm_net_reader_socket(work);
-	if (sock == NULL)
-		goto leave;
-
 	struct mc_state *state = containerof(sock, struct mc_state, sock.sock);
 
 	// Try to get some input w/o blocking.

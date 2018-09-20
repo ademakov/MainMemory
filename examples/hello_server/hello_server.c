@@ -134,8 +134,6 @@ static mm_value_t
 hello_writer(struct mm_work *work)
 {
 	struct mm_net_socket *sock = mm_net_writer_socket(work);
-	if (sock == NULL)
-		return 0;
 
 	const char *msg = hello_msg;
 	size_t len = hello_len;

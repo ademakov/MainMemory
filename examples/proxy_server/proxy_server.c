@@ -259,10 +259,8 @@ static mm_value_t
 proxy_reader(struct mm_work *work)
 {
 	struct mm_net_socket *sock = mm_net_reader_socket(work);
-	if (sock == NULL)
-		return 0;
-
 	struct client_conn *client = containerof(sock, struct client_conn, sock.sock);
+
 	for (mm_timeout_t timeout = 0; ; timeout = 10000) {
 		mm_net_set_read_timeout(&client->sock.sock, timeout);
 		ssize_t rc = mm_netbuf_fill(&client->sock, 1);
