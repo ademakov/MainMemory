@@ -148,17 +148,21 @@ mm_event_epoll_notify_clean(struct mm_event_epoll *backend);
 static inline void NONNULL(1, 2)
 mm_event_epoll_register_fd(struct mm_event_epoll *backend, struct mm_event_fd *sink)
 {
-	struct epoll_event ee;
-	ee.events = EPOLLET;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
-		ee.events |= EPOLLIN | EPOLLRDHUP;
-	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
-		ee.events |= EPOLLOUT;
-	ee.data.ptr = sink;
+	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
+	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
+	if ((input | output) != 0) {
+		struct epoll_event ee;
+		ee.events = EPOLLET;
+		if (input)
+			ee.events |= EPOLLIN | EPOLLRDHUP;
+		if (output)
+			ee.events |= EPOLLOUT;
+		ee.data.ptr = sink;
 
-	int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
-	if (unlikely(rc < 0))
-		mm_error(errno, "epoll_ctl");
+		int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
+		if (unlikely(rc < 0))
+			mm_error(errno, "epoll_ctl");
+	}
 }
 
 void NONNULL(1, 2, 3)
@@ -170,15 +174,15 @@ mm_event_epoll_trigger_input(struct mm_event_epoll *backend, struct mm_event_fd 
 {
 	struct epoll_event ee;
 	ee.events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0)
-		ee.events |= EPOLLOUT;
 	ee.data.ptr = sink;
 
 	int rc;
-	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0) {
+		ee.events |= EPOLLOUT;
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
-	else
+	} else {
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
+	}
 	if (unlikely(rc < 0))
 		mm_error(errno, "epoll_ctl");
 }
@@ -188,15 +192,15 @@ mm_event_epoll_trigger_output(struct mm_event_epoll *backend, struct mm_event_fd
 {
 	struct epoll_event ee;
 	ee.events = EPOLLET | EPOLLOUT;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER)) != 0)
-		ee.events |= EPOLLIN | EPOLLRDHUP;
 	ee.data.ptr = sink;
 
 	int rc;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER)) != 0) {
+		ee.events |= EPOLLIN | EPOLLRDHUP;
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
-	else
+	} else {
 		rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
+	}
 	if (unlikely(rc < 0))
 		mm_error(errno, "epoll_ctl");
 }

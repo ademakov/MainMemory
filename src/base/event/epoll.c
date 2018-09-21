@@ -258,10 +258,14 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epo
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Delete the file descriptor from epoll.
-	struct epoll_event ee;
-	int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
-	if (unlikely(rc < 0))
-		mm_error(errno, "epoll_ctl");
+	if ((sink->flags
+	     & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER
+		| MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0) {
+		struct epoll_event ee;
+		int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
+		if (unlikely(rc < 0))
+			mm_error(errno, "epoll_ctl");
+	}
 
 	// Finish unregister call sequence.
 	mm_event_listener_unregister(listener, sink);
