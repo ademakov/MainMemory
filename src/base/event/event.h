@@ -212,6 +212,18 @@ mm_event_set_output_closed(struct mm_event_fd *sink)
 	sink->flags |= MM_EVENT_OUTPUT_CLOSED;
 }
 
+static inline void NONNULL(1)
+mm_event_reset_input_ready(struct mm_event_fd *sink)
+{
+	sink->flags &= ~MM_EVENT_INPUT_READY;
+}
+
+static inline void NONNULL(1)
+mm_event_reset_output_ready(struct mm_event_fd *sink)
+{
+	sink->flags &= ~MM_EVENT_OUTPUT_READY;
+}
+
 /**********************************************************************
  * Event sink activity.
  **********************************************************************/

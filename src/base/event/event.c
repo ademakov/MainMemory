@@ -313,11 +313,11 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	if (input == MM_EVENT_REGULAR)
 		flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
 	else if (input == MM_EVENT_ONESHOT)
-		flags |= MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER;
+		flags |= MM_EVENT_ONESHOT_INPUT;
 	if (output == MM_EVENT_REGULAR)
 		flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
 	else if (output == MM_EVENT_ONESHOT)
-		flags |= MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER;
+		flags |= MM_EVENT_ONESHOT_OUTPUT;
 	sink->flags = flags;
 
 	if (input_routine != NULL)
@@ -397,7 +397,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
 	ASSERT(!mm_event_input_closed(sink));
 
-	sink->flags &= ~MM_EVENT_INPUT_READY;
+	mm_event_reset_input_ready(sink);
 
 	if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER)) == MM_EVENT_ONESHOT_INPUT) {
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
@@ -418,7 +418,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
 	ASSERT(!mm_event_output_closed(sink));
 
-	sink->flags &= ~MM_EVENT_OUTPUT_READY;
+	mm_event_reset_output_ready(sink);
 
 	if ((sink->flags & (MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) == MM_EVENT_ONESHOT_OUTPUT) {
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;

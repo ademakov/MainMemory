@@ -164,7 +164,8 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, 
 		output = MM_EVENT_REGULAR;
 	}
 
-	uint32_t flags = 0;
+	// Assume that an accepted socket is ready for output right away.
+	uint32_t flags = MM_EVENT_OUTPUT_READY;
 	if ((options & MM_NET_BOUND) != 0)
 		flags = MM_EVENT_FIXED_LISTENER;
 
@@ -529,21 +530,29 @@ retry:
 		}
 	}
 
-	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_FIXED_LISTENER);
+	// Initialize the event sink. In the EINPROGRESS case it is required
+	// to wait for output readiness, otherwise assume it ready right away.
+	uint32_t flags = MM_EVENT_FIXED_LISTENER;
+	if (rc < 0)
+		flags |= MM_EVENT_OUTPUT_TRIGGER;
+	else
+		flags |= MM_EVENT_OUTPUT_READY;
+	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, flags);
+
 	// Register the socket in the event loop.
 	mm_event_register_fd(&sock->event);
 
-	// Block the fiber waiting for connection completion.
-	sock->event.output_fiber = sock->event.listener->strand->fiber;
-	while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
-		mm_fiber_block();
-		// TODO: mm_fiber_testcancel();
-	}
-	sock->event.output_fiber = NULL;
-
-	// Check for EINPROGRESS connection outcome.
+	// Handle the EINPROGRESS case.
 	if (rc == -1) {
+		// Block the fiber waiting for connection completion.
+		sock->event.output_fiber = sock->event.listener->strand->fiber;
+		while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
+			mm_fiber_block();
+			// TODO: mm_fiber_testcancel();
+		}
+		sock->event.output_fiber = NULL;
+
+		// Check the connection outcome.
 		int conn_errno = 0;
 		socklen_t len = sizeof(conn_errno);
 		if (getsockopt(fd, SOL_SOCKET, SO_ERROR, &conn_errno, &len) < 0)
@@ -771,7 +780,7 @@ retry:
 
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
 	if (n != 0 && (size_t) n < nbytes)
-		mm_event_trigger_input(&sock->event);
+		mm_event_reset_input_ready(&sock->event);
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -839,7 +848,7 @@ retry:
 
 	// Check for incomplete write.
 	if ((size_t) n < nbytes)
-		mm_event_trigger_output(&sock->event);
+		mm_event_reset_output_ready(&sock->event);
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -907,7 +916,7 @@ retry:
 
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
 	if (n != 0 && (size_t) n < nbytes)
-		mm_event_trigger_input(&sock->event);
+		mm_event_reset_input_ready(&sock->event);
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -975,7 +984,7 @@ retry:
 
 	// Check for incomplete write.
 	if ((size_t) n < nbytes)
-		mm_event_trigger_output(&sock->event);
+		mm_event_reset_output_ready(&sock->event);
 
 leave:
 	DEBUG("n: %ld", (long) n);
