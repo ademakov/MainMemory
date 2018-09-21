@@ -153,7 +153,7 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, 
 	if (proto->reader == NULL && proto->writer != NULL)
 		options |= MM_NET_EGRESS;
 
-	mm_event_capacity_t input, output;
+	mm_event_mode_t input, output;
 	if ((options & MM_NET_EGRESS) == 0) {
 		VERIFY(proto->reader != NULL);
 		input = MM_EVENT_REGULAR;
@@ -164,12 +164,14 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, 
 		output = MM_EVENT_REGULAR;
 	}
 
-	bool affinity = (options & MM_NET_BOUND) != 0;
+	uint32_t flags = 0;
+	if ((options & MM_NET_BOUND) != 0)
+		flags = MM_EVENT_FIXED_LISTENER;
 
 	// Initialize basic fields.
 	mm_net_prepare(sock, proto->destroy != NULL ? proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, proto->reader, proto->writer, input, output, affinity);
+	mm_event_prepare_fd(&sock->event, fd, proto->reader, proto->writer, input, output, flags);
 }
 
 /**********************************************************************
@@ -357,7 +359,8 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, mm_net_acceptor, NULL, MM_EVENT_REGULAR, MM_EVENT_IGNORED, true);
+	mm_event_prepare_fd(&srv->event, fd, mm_net_acceptor, NULL, MM_EVENT_REGULAR, MM_EVENT_IGNORED,
+			    MM_EVENT_FIXED_LISTENER);
 
 	struct mm_strand *strand = mm_thread_ident_to_strand(target);
 	mm_strand_submit_work(strand, &srv->register_work);
@@ -527,7 +530,7 @@ retry:
 	}
 
 	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, true);
+	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, MM_EVENT_FIXED_LISTENER);
 	// Register the socket in the event loop.
 	mm_event_register_fd(&sock->event);
 

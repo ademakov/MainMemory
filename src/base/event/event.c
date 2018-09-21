@@ -291,15 +291,14 @@ mm_event_unexpected(struct mm_work *work UNUSED)
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_work_routine_t input_routine, mm_work_routine_t output_routine,
-		    mm_event_capacity_t input, mm_event_capacity_t output,
-		    bool fixed_listener)
+		    mm_event_mode_t input, mm_event_mode_t output,
+		    uint32_t flags)
 {
 	ENTER();
 	DEBUG("fd %d", fd);
 	ASSERT(fd >= 0);
 
 	sink->fd = fd;
-	sink->flags = 0;
 	sink->listener = NULL;
 	sink->input_fiber = NULL;
 	sink->output_fiber = NULL;
@@ -311,32 +310,25 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 #endif
 	sink->queued_events = 0;
 
-	if (input_routine != NULL) {
+	if (input == MM_EVENT_REGULAR)
+		flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
+	else if (input == MM_EVENT_ONESHOT)
+		flags |= MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER;
+	if (output == MM_EVENT_REGULAR)
+		flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
+	else if (output == MM_EVENT_ONESHOT)
+		flags |= MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER;
+	sink->flags = flags;
+
+	if (input_routine != NULL)
 		mm_work_prepare(&sink->input_work, input_routine, mm_event_input_complete);
-	} else {
+	else
 		mm_work_prepare_simple(&sink->input_work, mm_event_unexpected);
-	}
-	if (output_routine != NULL) {
+	if (output_routine != NULL)
 		mm_work_prepare(&sink->output_work, output_routine, mm_event_output_complete);
-	} else {
+	else
 		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected);
-	}
 	mm_work_prepare_simple(&sink->reclaim_work, mm_event_reclaim_routine);
-
-	if (fixed_listener)
-		sink->flags |= MM_EVENT_FIXED_LISTENER;
-
-	if (input == MM_EVENT_REGULAR) {
-		sink->flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
-	} else if (input == MM_EVENT_ONESHOT) {
-		sink->flags |= MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER;
-	}
-
-	if (output == MM_EVENT_REGULAR) {
-		sink->flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
-	} else if (output == MM_EVENT_ONESHOT) {
-		sink->flags |= MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER;
-	}
 
 	LEAVE();
 }

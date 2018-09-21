@@ -45,7 +45,7 @@ typedef enum {
 	/* Single event is expected. To get another one it required
 	   to call a corresponding trigger function. */
 	MM_EVENT_ONESHOT,
-} mm_event_capacity_t;
+} mm_event_mode_t;
 
 /*
  * NB: Oneshot event sinks have some restrictions.
@@ -231,8 +231,8 @@ void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_work_routine_t input_routine,
 		    mm_work_routine_t output_routine,
-		    mm_event_capacity_t input, mm_event_capacity_t output,
-		    bool fixed_listener);
+		    mm_event_mode_t input, mm_event_mode_t output,
+		    uint32_t flags);
 
 void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink);
