@@ -543,7 +543,7 @@ retry:
 	mm_event_register_fd(&sock->event);
 
 	// Handle the EINPROGRESS case.
-	if (rc == -1) {
+	if (rc < 0) {
 		// Block the fiber waiting for connection completion.
 		sock->event.output_fiber = sock->event.listener->strand->fiber;
 		while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
@@ -611,6 +611,14 @@ mm_net_connect_inet6(struct mm_net_socket *sock, const char *addrstr, uint16_t p
 /**********************************************************************
  * Network socket I/O.
  **********************************************************************/
+
+static void
+mm_net_error(struct mm_net_socket *sock, const char *where)
+{
+	const int saved_errno = errno;
+	mm_error(saved_errno, "%s(%d, ...)", where, sock->event.fd);
+	errno = saved_errno;
+}
 
 static ssize_t
 mm_net_input_closed(struct mm_net_socket *sock)
@@ -731,53 +739,47 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, const size_t nbytes)
 	if (n < 0)
 		goto leave;
 
+	// Try to read fast (nonblocking).
+	if (mm_event_input_ready(&sock->event)) {
 retry:
-	// Try to read (nonblocking).
-	n = mm_read(sock->event.fd, buffer, nbytes);
-	if (unlikely(n < 0)) {
+		if ((n = mm_read(sock->event.fd, buffer, nbytes)) >= 0)
+			goto check;
 		if (errno == EINTR)
 			goto retry;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			const int saved_errno = errno;
-			mm_error(saved_errno, "read()");
-			errno = saved_errno;
+			mm_net_error(sock, "read");
 			goto leave;
-		}
-
-		// Remember the wait time.
-		struct mm_strand *strand = NULL;
-		mm_timeval_t deadline = MM_TIMEVAL_MAX;
-		if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-			strand = mm_net_get_socket_strand(sock);
-			deadline = mm_strand_gettime(strand) + sock->read_timeout;
-		}
-
-		// Turn on the input event notification if needed.
-		mm_event_trigger_input(&sock->event);
-
-		for (;;) {
-			// Try to read again (nonblocking).
-			n = mm_read(sock->event.fd, buffer, nbytes);
-			if (n >= 0)
-				break;
-
-			// Check for errors.
-			if (errno == EINTR)
-				continue;
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				const int saved_errno = errno;
-				mm_error(saved_errno, "read()");
-				errno = saved_errno;
-				goto leave;
-			}
-
-			// Wait for input readiness.
-			n = mm_net_input_wait(strand, sock, deadline);
-			if (n < 0)
-				goto leave;
 		}
 	}
 
+	// Remember the wait time.
+	struct mm_strand *strand = NULL;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
+		strand = mm_net_get_socket_strand(sock);
+		deadline = mm_strand_gettime(strand) + sock->read_timeout;
+	}
+
+	for (;;) {
+		// Turn on the input event notification if needed.
+		mm_event_trigger_input(&sock->event);
+
+		// Try to read again (nonblocking).
+		if ((n = mm_read(sock->event.fd, buffer, nbytes)) >= 0)
+			break;
+		if (errno == EINTR)
+			continue;
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			mm_net_error(sock, "read");
+			goto leave;
+		}
+
+		// Wait for input readiness.
+		if ((n = mm_net_input_wait(strand, sock, deadline)) < 0)
+			goto leave;
+	}
+
+check:
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
 	if (n != 0 && (size_t) n < nbytes)
 		mm_event_reset_input_ready(&sock->event);
@@ -799,53 +801,47 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, const size_t nbytes
 	if (n < 0)
 		goto leave;
 
+	// Try to write fast (nonblocking).
+	if (mm_event_output_ready(&sock->event)) {
 retry:
-	// Try to write (nonblocking).
-	n = mm_write(sock->event.fd, buffer, nbytes);
-	if (unlikely(n < 0)) {
+		if ((n = mm_write(sock->event.fd, buffer, nbytes)) >= 0)
+			goto check;
 		if (errno == EINTR)
 			goto retry;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			const int saved_errno = errno;
-			mm_error(saved_errno, "write()");
-			errno = saved_errno;
+			mm_net_error(sock, "write");
 			goto leave;
-		}
-
-		// Remember the wait time.
-		struct mm_strand *strand = NULL;
-		mm_timeval_t deadline = MM_TIMEVAL_MAX;
-		if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-			strand = mm_net_get_socket_strand(sock);
-			deadline = mm_strand_gettime(strand) + sock->write_timeout;
-		}
-
-		// Turn on the output event notification if needed.
-		mm_event_trigger_output(&sock->event);
-
-		for (;;) {
-			// Try to write again (nonblocking).
-			n = mm_write(sock->event.fd, buffer, nbytes);
-			if (n >= 0)
-				break;
-
-			// Check for errors.
-			if (errno == EINTR)
-				continue;
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				const int saved_errno = errno;
-				mm_error(saved_errno, "write()");
-				errno = saved_errno;
-				goto leave;
-			}
-
-			// Wait for output readiness.
-			n = mm_net_output_wait(strand, sock, deadline);
-			if (n < 0)
-				goto leave;
 		}
 	}
 
+	// Remember the wait time.
+	struct mm_strand *strand = NULL;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
+		strand = mm_net_get_socket_strand(sock);
+		deadline = mm_strand_gettime(strand) + sock->write_timeout;
+	}
+
+	for (;;) {
+		// Turn on the output event notification if needed.
+		mm_event_trigger_output(&sock->event);
+
+		// Try to write again (nonblocking).
+		if ((n = mm_write(sock->event.fd, buffer, nbytes)) >= 0)
+			break;
+		if (errno == EINTR)
+			continue;
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			mm_net_error(sock, "write");
+			goto leave;
+		}
+
+		// Wait for output readiness.
+		if ((n = mm_net_output_wait(strand, sock, deadline)) < 0)
+			goto leave;
+	}
+
+check:
 	// Check for incomplete write.
 	if ((size_t) n < nbytes)
 		mm_event_reset_output_ready(&sock->event);
@@ -867,53 +863,48 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, const int iovc
 	if (n < 0)
 		goto leave;
 
+	// Try to read fast (nonblocking).
+	if (mm_event_input_ready(&sock->event)) {
 retry:
-	// Try to read (nonblocking).
-	n = mm_readv(sock->event.fd, iov, iovcnt);
-	if (unlikely(n < 0)) {
+		if ((n = mm_readv(sock->event.fd, iov, iovcnt)) >= 0)
+			goto check;
 		if (errno == EINTR)
 			goto retry;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			const int saved_errno = errno;
-			mm_error(saved_errno, "readv()");
-			errno = saved_errno;
+			mm_net_error(sock, "readv");
 			goto leave;
-		}
-
-		// Remember the start time.
-		struct mm_strand *strand = NULL;
-		mm_timeval_t deadline = MM_TIMEVAL_MAX;
-		if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-			strand = mm_net_get_socket_strand(sock);
-			deadline = mm_strand_gettime(strand) + sock->read_timeout;
-		}
-
-		// Turn on the input event notification if needed.
-		mm_event_trigger_input(&sock->event);
-
-		for (;;) {
-			// Try to read again (nonblocking).
-			n = mm_readv(sock->event.fd, iov, iovcnt);
-			if (n >= 0)
-				break;
-
-			// Check for errors.
-			if (errno == EINTR)
-				continue;
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				const int saved_errno = errno;
-				mm_error(saved_errno, "readv()");
-				errno = saved_errno;
-				goto leave;
-			}
-
-			// Wait for input readiness.
-			n = mm_net_input_wait(strand, sock, deadline);
-			if (n < 0)
-				goto leave;
 		}
 	}
 
+	// Remember the start time.
+	struct mm_strand *strand = NULL;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
+		strand = mm_net_get_socket_strand(sock);
+		deadline = mm_strand_gettime(strand) + sock->read_timeout;
+	}
+
+	for (;;) {
+		// Turn on the input event notification if needed.
+		mm_event_trigger_input(&sock->event);
+
+		// Try to read again (nonblocking).
+		n = mm_readv(sock->event.fd, iov, iovcnt);
+		if (n >= 0)
+			break;
+		if (errno == EINTR)
+			continue;
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			mm_net_error(sock, "readv");
+			goto leave;
+		}
+
+		// Wait for input readiness.
+		if ((n = mm_net_input_wait(strand, sock, deadline)) < 0)
+			goto leave;
+	}
+
+check:
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
 	if (n != 0 && (size_t) n < nbytes)
 		mm_event_reset_input_ready(&sock->event);
@@ -935,53 +926,48 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, const int iov
 	if (n < 0)
 		goto leave;
 
+	// Try to write fast (nonblocking).
+	if (mm_event_output_ready(&sock->event)) {
 retry:
-	// Try to write (nonblocking).
-	n = mm_writev(sock->event.fd, iov, iovcnt);
-	if (unlikely(n < 0)) {
+		if ((n = mm_writev(sock->event.fd, iov, iovcnt)) >= 0)
+			goto check;
 		if (errno == EINTR)
 			goto retry;
 		if (errno != EAGAIN && errno != EWOULDBLOCK) {
-			const int saved_errno = errno;
-			mm_error(saved_errno, "writev()");
-			errno = saved_errno;
+			mm_net_error(sock, "writev");
 			goto leave;
-		}
-
-		// Remember the start time.
-		struct mm_strand *strand = NULL;
-		mm_timeval_t deadline = MM_TIMEVAL_MAX;
-		if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-			strand = mm_net_get_socket_strand(sock);
-			deadline = mm_strand_gettime(strand) + sock->write_timeout;
-		}
-
-		// Turn on the output event notification if needed.
-		mm_event_trigger_output(&sock->event);
-
-		for (;;) {
-			// Try to write again (nonblocking).
-			n = mm_writev(sock->event.fd, iov, iovcnt);
-			if (n >= 0)
-				break;
-
-			// Check for errors.
-			if (errno == EINTR)
-				continue;
-			if (errno != EAGAIN && errno != EWOULDBLOCK) {
-				const int saved_errno = errno;
-				mm_error(saved_errno, "writev()");
-				errno = saved_errno;
-				goto leave;
-			}
-
-			// Wait for output readiness.
-			n = mm_net_output_wait(strand, sock, deadline);
-			if (n < 0)
-				goto leave;
 		}
 	}
 
+	// Remember the start time.
+	struct mm_strand *strand = NULL;
+	mm_timeval_t deadline = MM_TIMEVAL_MAX;
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
+		strand = mm_net_get_socket_strand(sock);
+		deadline = mm_strand_gettime(strand) + sock->write_timeout;
+	}
+
+	for (;;) {
+		// Turn on the output event notification if needed.
+		mm_event_trigger_output(&sock->event);
+
+		// Try to write again (nonblocking).
+		n = mm_writev(sock->event.fd, iov, iovcnt);
+		if (n >= 0)
+			break;
+		if (errno == EINTR)
+			continue;
+		if (errno != EAGAIN && errno != EWOULDBLOCK) {
+			mm_net_error(sock, "writev");
+			goto leave;
+		}
+
+		// Wait for output readiness.
+		if ((n = mm_net_output_wait(strand, sock, deadline)) < 0)
+			goto leave;
+	}
+
+check:
 	// Check for incomplete write.
 	if ((size_t) n < nbytes)
 		mm_event_reset_output_ready(&sock->event);
