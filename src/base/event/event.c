@@ -623,7 +623,9 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_wait(listener, dispatch, timeout);
 	}
 
+#if ENABLE_SMP
 leave:
+#endif
 	LEAVE();
 }
 

@@ -243,8 +243,10 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 		mm_event_listener_handle_start(listener, n);
 		mm_event_kqueue_handle(listener, n);
 		mm_event_listener_handle_finish(listener);
+#if ENABLE_SMP
 	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
 		mm_event_listener_handle_queued(listener);
+#endif
 	}
 
 #if ENABLE_EVENT_STATS
