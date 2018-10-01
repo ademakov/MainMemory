@@ -59,11 +59,6 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 
 	} while (command != NULL);
 
-	// Transmit buffered results.
-	ssize_t n = mm_netbuf_flush(&state->sock);
-	if (n > 0)
-		mm_netbuf_compact_write_buf(&state->sock);
-
 	LEAVE();
 }
 
@@ -138,6 +133,10 @@ parse:
 		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
 		goto parse;
 	}
+
+	// Transmit buffered results and compact the output buffer storage.
+	mm_netbuf_flush(&state->sock);
+	mm_netbuf_compact_write_buf(&state->sock);
 
 	// Compact the input buffer storage.
 	mm_netbuf_compact_read_buf(&state->sock);
