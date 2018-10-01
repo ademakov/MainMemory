@@ -218,8 +218,7 @@ mm_event_backend_poller_finish(struct mm_event_backend *backend UNUSED, struct m
 #endif
 }
 
-/* Start processing of an event after it is accepted by the poller
-   thread. */
+/* Start processing of an event after it is accepted by the poller thread. */
 static inline void NONNULL(1, 2)
 mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
@@ -243,8 +242,7 @@ mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, 
 #endif
 }
 
-/* Start processing of an event after it is delivered to the target
-   thread. */
+/* Start processing of an event after it is delivered to the target thread. */
 static inline void NONNULL(1)
 mm_event_backend_target_input(struct mm_event_fd *sink, uint32_t flag)
 {
