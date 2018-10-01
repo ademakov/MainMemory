@@ -50,6 +50,7 @@ struct mm_event_dispatch
 	/* Counter for poller thread busy waiting. */
 	uint16_t poller_spin;
 
+#if ENABLE_SMP
 	/* A coarse-grained lock that protects event sinks from
 	   concurrent updates. */
 	mm_regular_lock_t sink_lock CACHE_ALIGN;
@@ -60,6 +61,7 @@ struct mm_event_dispatch
 	uint16_t sink_queue_head;
 	uint16_t sink_queue_tail;
 	uint16_t sink_queue_num;
+#endif
 };
 
 void NONNULL(1, 3)

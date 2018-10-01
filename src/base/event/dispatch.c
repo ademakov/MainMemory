@@ -56,6 +56,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->poller_spin = 0;
 
+#if ENABLE_SMP
 	// Initialize the sink queue.
 	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->sink_queue_num = 0;
@@ -63,6 +64,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 	dispatch->sink_queue_tail = 0;
 	dispatch->sink_queue_size = 2 * MM_EVENT_BACKEND_NEVENTS;
 	dispatch->sink_queue = mm_common_calloc(dispatch->sink_queue_size, sizeof(dispatch->sink_queue[0]));
+#endif
 
 	LEAVE();
 }
@@ -83,8 +85,10 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 	// Destroy the associated request queue.
 	mm_ring_mpmc_destroy(dispatch->async_queue);
 
+#if ENABLE_SMP
 	// Release the sink queue.
 	mm_common_free(dispatch->sink_queue);
+#endif
 
 	LEAVE();
 }

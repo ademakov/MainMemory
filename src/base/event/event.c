@@ -573,6 +573,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 	if (mm_event_backend_has_changes(&listener->storage)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
+#if ENABLE_SMP
 	} else {
 		// Check to see if there are any queued events. If so then
 		// try to bypass the entire poll/wait machinery. The check
@@ -590,6 +591,7 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 				goto leave;
 			}
 		}
+#endif
 	}
 
 	// The first arrived thread is elected to conduct the next event poll.
