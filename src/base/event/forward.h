@@ -33,8 +33,8 @@ struct mm_thread;
 /* Event sink forward buffer. */
 struct mm_event_forward_buffer
 {
-	uint8_t nsinks;
-	uint8_t ntotal;
+	uint32_t nsinks;
+	uint32_t ntotal;
 	mm_event_index_t events[MM_EVENT_FORWARD_BUFFER_SIZE];
 	struct mm_event_fd *sinks[MM_EVENT_FORWARD_BUFFER_SIZE];
 };

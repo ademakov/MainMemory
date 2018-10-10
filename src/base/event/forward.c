@@ -250,7 +250,7 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 		mm_event_forward_post(&dispatch->listeners[target], buffer);
 
 	// Add the event to the buffer.
-	uint8_t n = buffer->nsinks++;
+	uint32_t n = buffer->nsinks++;
 	buffer->sinks[n] = sink;
 	buffer->events[n] = event;
 	buffer->ntotal++;
