@@ -52,6 +52,8 @@ mm_event_epoll_adjust(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
 {
+	mm_event_listener_handle_start(listener);
+
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *event = &listener->storage.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
@@ -71,6 +73,8 @@ mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
 				mm_event_listener_output_error(listener, sink);
 		}
 	}
+
+	mm_event_listener_handle_finish(listener);
 }
 
 /**********************************************************************
@@ -159,13 +163,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	// Handle incoming events.
 	if (n != 0) {
 		mm_event_epoll_adjust(listener, n);
-		mm_event_listener_handle_start(listener, n);
 		mm_event_epoll_handle(listener, n);
-		mm_event_listener_handle_finish(listener);
-#if ENABLE_SMP
-	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
-		mm_event_listener_handle_queued(listener);
-#endif
 	}
 
 #if ENABLE_EVENT_STATS

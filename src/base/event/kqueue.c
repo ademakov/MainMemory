@@ -85,6 +85,8 @@ mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 {
+	mm_event_listener_handle_start(listener);
+
 	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &listener->storage.revents[i];
 
@@ -118,6 +120,8 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 			ASSERT(event->ident == MM_EVENT_KQUEUE_NOTIFY_ID);
 		}
 	}
+
+	mm_event_listener_handle_finish(listener);
 }
 
 static void
@@ -240,13 +244,7 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 	// Handle incoming events.
 	if (n != 0) {
 		mm_event_kqueue_adjust(listener, n);
-		mm_event_listener_handle_start(listener, n);
 		mm_event_kqueue_handle(listener, n);
-		mm_event_listener_handle_finish(listener);
-#if ENABLE_SMP
-	} else if (mm_memory_load(listener->dispatch->sink_queue_num) != 0) {
-		mm_event_listener_handle_queued(listener);
-#endif
 	}
 
 #if ENABLE_EVENT_STATS

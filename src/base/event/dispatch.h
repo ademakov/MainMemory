@@ -54,13 +54,6 @@ struct mm_event_dispatch
 	/* A coarse-grained lock that protects event sinks from
 	   concurrent updates. */
 	mm_regular_lock_t sink_lock CACHE_ALIGN;
-
-	/* A queue of event sinks waiting for an owner thread. */
-	struct mm_event_fd **sink_queue;
-	uint16_t sink_queue_size;
-	uint16_t sink_queue_head;
-	uint16_t sink_queue_tail;
-	uint16_t sink_queue_num;
 #endif
 };
 

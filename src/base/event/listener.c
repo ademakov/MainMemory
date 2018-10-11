@@ -56,54 +56,6 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 }
 
 /**********************************************************************
- * Event sink queue.
- **********************************************************************/
-
-#if ENABLE_SMP
-
-static void
-mm_event_listener_enqueue_sink(struct mm_event_listener *listener, struct mm_event_fd *sink, uint32_t flag)
-{
-	if ((sink->queued_events & flag) == 0) {
-		mm_event_update(sink);
-
-		if (sink->queued_events == 0) {
-			struct mm_event_dispatch *dispatch = listener->dispatch;
-			uint16_t mask = dispatch->sink_queue_size - 1;
-			uint16_t index = dispatch->sink_queue_tail++ & mask;
-			dispatch->sink_queue[index] = sink;
-		}
-
-		sink->queued_events |= flag;
-		listener->events.enqueued++;
-	}
-}
-
-static void
-mm_event_listener_dequeue_sink(struct mm_event_listener *listener)
-{
-	struct mm_event_dispatch *dispatch = listener->dispatch;
-	uint16_t mask = dispatch->sink_queue_size - 1;
-	uint16_t index = dispatch->sink_queue_head++ & mask;
-
-	struct mm_event_fd *sink = dispatch->sink_queue[index];
-	sink->listener = listener;
-
-	while (sink->queued_events) {
-		mm_event_index_t event = mm_ctz(sink->queued_events);
-		uint32_t flag = 1u << event;
-		sink->queued_events &= ~flag;
-		if (event < MM_EVENT_INDEX_OUTPUT)
-			mm_event_backend_poller_input(&listener->storage, sink, flag);
-		else
-			mm_event_backend_poller_output(&listener->storage, sink, flag);
-		listener->events.dequeued++;
-	}
-}
-
-#endif
-
-/**********************************************************************
  * Interface for handling incoming events.
  **********************************************************************/
 
@@ -114,6 +66,10 @@ mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_eve
 	if ((sink->flags & (MM_EVENT_FIXED_LISTENER | MM_EVENT_NOTIFY_FD)) != 0)
 		return;
 
+	// Keep current listener.
+	if (sink->listener == listener)
+		return;
+
 	// Cannot unbind if there is some event handling activity.
 	if (mm_event_active(sink))
 		return;
@@ -122,66 +78,21 @@ mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_eve
 	// then do it now. But make sure the target thread has some
 	// minimal amount if work.
 	ASSERT(sink->listener != NULL);
-	uint16_t nr = listener->events.dequeued;
-	if (sink->listener == listener) {
-		nr += listener->events.direct;
-		if (nr >= MM_EVENT_LISTENER_RETAIN_MAX)
-			sink->listener = NULL;
+	uint32_t nr = max(listener->events.direct, listener->direct_events_estimate);
+	if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
+		sink->listener = listener;
+#if 0
 	} else {
-		nr += max(listener->events.direct, listener->direct_events_estimate);
-		if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
-			sink->listener = listener;
-		} else {
-			mm_thread_t target = sink->listener - listener->dispatch->listeners;
-			uint32_t ntotal = listener->forward.buffers[target].ntotal;
-			if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
-				sink->listener = NULL;
-		}
+		mm_thread_t target = sink->listener - listener->dispatch->listeners;
+		uint32_t ntotal = listener->forward.buffers[target].ntotal;
+		if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
+			sink->listener = NULL;
+#endif
 	}
 }
 
 void NONNULL(1)
-mm_event_listener_handle_queued(struct mm_event_listener *listener UNUSED)
-{
-#if ENABLE_SMP
-	ENTER();
-
-	// Prepare the backend for handling events.
-	mm_event_backend_poller_start(&listener->storage);
-
-	struct mm_event_dispatch *dispatch = listener->dispatch;
-
-	// Acquire coarse-grained event sink lock.
-	if (!mm_regular_trylock(&dispatch->sink_lock))
-		goto leave;
-
-	// Try to pull events from the event sink queue.
-	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
-	for (; nq; --nq) {
-		mm_event_listener_dequeue_sink(listener);
-		if (listener->events.dequeued >= MM_EVENT_LISTENER_RETAIN_MAX)
-			break;
-	}
-	mm_memory_store(dispatch->sink_queue_num, nq);
-
-	// Release coarse-grained event sink lock.
-	mm_regular_unlock(&dispatch->sink_lock);
-
-	// Make the backend done with handling events.
-	mm_event_backend_poller_finish(&dispatch->backend, &listener->storage);
-
-#if ENABLE_EVENT_STATS
-	// Update event statistics.
-	listener->stats.dequeued_events += listener->events.dequeued;
-#endif
-
-leave:
-	LEAVE();
-#endif
-}
-
-void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents UNUSED)
+mm_event_listener_handle_start(struct mm_event_listener *listener)
 {
 	ENTER();
 
@@ -189,19 +100,8 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 	mm_event_backend_poller_start(&listener->storage);
 
 #if ENABLE_SMP
-	struct mm_event_dispatch *dispatch = listener->dispatch;
-
 	// Acquire coarse-grained event sink lock.
-	mm_regular_lock(&dispatch->sink_lock);
-
-	// Try to pull events from the event sink queue.
-	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
-	for (; nq; --nq) {
-		mm_event_listener_dequeue_sink(listener);
-		if (listener->events.dequeued >= MM_EVENT_LISTENER_RETAIN_MAX
-		    && (nq + nevents) <= dispatch->sink_queue_size)
-			break;
-	}
+	mm_regular_lock(&listener->dispatch->sink_lock);
 #endif
 
 	LEAVE();
@@ -215,17 +115,12 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 
 #if ENABLE_SMP
-	uint16_t nq = dispatch->sink_queue_tail - dispatch->sink_queue_head;
-	mm_memory_store(dispatch->sink_queue_num, nq);
-
 	// Release coarse-grained event sink lock.
 	mm_regular_unlock(&dispatch->sink_lock);
 
 	// Flush forwarded events.
 	if (listener->events.forwarded)
 		mm_event_forward_flush(&listener->forward);
-	if (listener->events.enqueued > MM_EVENT_LISTENER_RETAIN_MIN)
-		mm_event_wakeup_any(dispatch);
 #endif
 
 	// Make the backend done with handling events.
@@ -235,8 +130,6 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 #if ENABLE_EVENT_STATS
 	// Update event statistics.
 	listener->stats.direct_events += listener->events.direct;
-	listener->stats.enqueued_events += listener->events.enqueued;
-	listener->stats.dequeued_events += listener->events.dequeued;
 	listener->stats.forwarded_events += listener->events.forwarded;
 #endif
 
@@ -262,14 +155,11 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 		mm_event_update(sink);
 		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT);
 		listener->events.forwarded++;
-	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) != 0) {
+	} else {
+		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) != 0);
 		sink->flags |= MM_EVENT_INPUT_READY;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
-#endif
-#if ENABLE_SMP
-	} else {
-		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_READY);
 #endif
 	}
 
@@ -296,13 +186,10 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT_ERROR);
 		listener->events.forwarded++;
 	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) != 0) {
+		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) != 0);
 		sink->flags |= MM_EVENT_INPUT_ERROR;
 #if ENABLE_EVENT_STATS
 		listener->stats.stray_events++;
-#endif
-#if ENABLE_SMP
-	} else {
-		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_INPUT_ERROR);
 #endif
 	}
 
@@ -328,12 +215,9 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 		mm_event_update(sink);
 		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT);
 		listener->events.forwarded++;
-#if ENABLE_SMP
 	} else {
 		// Never register notify FD for output events.
-		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) == 0);
-		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT_READY);
-#endif
+		ABORT();
 	}
 
 	LEAVE();
@@ -358,12 +242,9 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 		mm_event_update(sink);
 		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT_ERROR);
 		listener->events.forwarded++;
-#if ENABLE_SMP
 	} else {
 		// Never register notify FD for output events.
-		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) == 0);
-		mm_event_listener_enqueue_sink(listener, sink, MM_EVENT_OUTPUT_ERROR);
-#endif
+		ABORT();
 	}
 
 	LEAVE();
@@ -442,8 +323,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.omit_calls = 0;
 	listener->stats.stray_events = 0;
 	listener->stats.direct_events = 0;
-	listener->stats.enqueued_events = 0;
-	listener->stats.dequeued_events = 0;
 	listener->stats.forwarded_events = 0;
 	listener->stats.enqueued_async_calls = 0;
 	listener->stats.enqueued_async_posts = 0;

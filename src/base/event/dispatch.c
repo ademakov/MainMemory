@@ -59,11 +59,6 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 #if ENABLE_SMP
 	// Initialize the sink queue.
 	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-	dispatch->sink_queue_num = 0;
-	dispatch->sink_queue_head = 0;
-	dispatch->sink_queue_tail = 0;
-	dispatch->sink_queue_size = 2 * MM_EVENT_BACKEND_NEVENTS;
-	dispatch->sink_queue = mm_common_calloc(dispatch->sink_queue_size, sizeof(dispatch->sink_queue[0]));
 #endif
 
 	LEAVE();
@@ -84,11 +79,6 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 
 	// Destroy the associated request queue.
 	mm_ring_mpmc_destroy(dispatch->async_queue);
-
-#if ENABLE_SMP
-	// Release the sink queue.
-	mm_common_free(dispatch->sink_queue);
-#endif
 
 	LEAVE();
 }
@@ -111,7 +101,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 
 		mm_log_fmt("listener %d:\n"
 			   " listen=%llu (wait=%llu poll=%llu/%llu omit=%llu)\n"
-			   " stray=%llu direct=%llu queued=%llu/%llu forwarded=%llu\n"
+			   " stray=%llu direct=%llu forwarded=%llu\n"
 			   " async-calls=%llu/%llu async-posts=%llu/%llu\n", i,
 			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->omit_calls),
 			   (unsigned long long) stats->wait_calls,
@@ -120,8 +110,6 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 			   (unsigned long long) stats->omit_calls,
 			   (unsigned long long) stats->stray_events,
 			   (unsigned long long) stats->direct_events,
-			   (unsigned long long) stats->enqueued_events,
-			   (unsigned long long) stats->dequeued_events,
 			   (unsigned long long) stats->forwarded_events,
 			   (unsigned long long) stats->enqueued_async_calls,
 			   (unsigned long long) stats->dequeued_async_calls,

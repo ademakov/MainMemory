@@ -559,8 +559,6 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_event_dispatch *dispatch = listener->dispatch;
-
 	if (mm_event_listener_got_events(listener)) {
 		// Presume that if there were incoming events moments ago then
 		// there is a chance to get some more immediately. Don't sleep
@@ -568,33 +566,13 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		timeout = 0;
 		// Reset event counters set at the previous cycle.
 		mm_event_listener_clear_events(listener);
-	}
-
-	if (mm_event_backend_has_changes(&listener->storage)) {
+	} else if (mm_event_backend_has_changes(&listener->storage)) {
 		// There may be changes that need to be immediately acknowledged.
 		timeout = 0;
-#if ENABLE_SMP
-	} else {
-		// Check to see if there are any queued events. If so then
-		// try to bypass the entire poll/wait machinery. The check
-		// does not have to be precise so there is no need to take
-		// the event_sink_lock lock.
-		if (mm_memory_load(dispatch->sink_queue_num) != 0) {
-			// Try to pull a few queued events. This may fail
-			// because of concurrent listeners doing the same.
-			mm_event_listener_handle_queued(listener);
-			if (listener->events.dequeued) {
-#if ENABLE_EVENT_STATS
-				// Update statistics.
-				listener->stats.omit_calls++;
-#endif
-				goto leave;
-			}
-		}
-#endif
 	}
 
 	// The first arrived thread is elected to conduct the next event poll.
+	struct mm_event_dispatch *dispatch = listener->dispatch;
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
 	if (is_poller_thread) {
 		// If the previous poller thread received some events then keep
@@ -623,9 +601,6 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_wait(listener, dispatch, timeout);
 	}
 
-#if ENABLE_SMP
-leave:
-#endif
 	LEAVE();
 }
 

@@ -71,8 +71,6 @@ struct mm_event_listener_stats
 
 	uint64_t stray_events;
 	uint64_t direct_events;
-	uint64_t enqueued_events;
-	uint64_t dequeued_events;
 	uint64_t forwarded_events;
 
 	/* Counters of asynchronous procedure calls. */
@@ -106,12 +104,9 @@ struct mm_event_listener
 	union {
 		struct {
 			/* The number of directly handled events. */
-			uint16_t direct;
-			/* The number of events published in the sink queue. */
-			uint16_t enqueued;
-			uint16_t dequeued;
+			uint32_t direct;
 			/* The number of events forwarded to other listeners. */
-			uint16_t forwarded;
+			uint32_t forwarded;
 		} events;
 
 		/* Storage for event counters. */
@@ -120,7 +115,7 @@ struct mm_event_listener
 
 	/* The number of locally handled events found while adjusting
 	   the listener for appropriate event forwarding strategy. */
-	uint16_t direct_events_estimate;
+	uint32_t direct_events_estimate;
 
 	/* Associated strand. */
 	struct mm_strand *strand;
@@ -294,10 +289,7 @@ mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd 
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_handle_queued(struct mm_event_listener *listener);
-
-void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents);
+mm_event_listener_handle_start(struct mm_event_listener *listener);
 
 void NONNULL(1)
 mm_event_listener_handle_finish(struct mm_event_listener *listener);
