@@ -44,13 +44,13 @@ struct mm_event_dispatch
 	/* The event sink reclamation epoch. */
 	mm_event_epoch_t global_epoch;
 
-	/* A lock that protects the poller thread election. */
-	mm_regular_lock_t poller_lock CACHE_ALIGN;
-
+#if ENABLE_SMP
 	/* Counter for poller thread busy waiting. */
 	uint16_t poller_spin;
 
-#if ENABLE_SMP
+	/* A lock that protects the poller thread election. */
+	mm_regular_lock_t poller_lock CACHE_ALIGN;
+
 	/* A coarse-grained lock that protects event sinks from
 	   concurrent updates. */
 	mm_regular_lock_t sink_lock CACHE_ALIGN;

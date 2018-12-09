@@ -492,7 +492,13 @@ leave:
  * Event listening and notification.
  **********************************************************************/
 
-#define MM_EVENT_POLLER_SPIN	(4)
+#if ENABLE_SMP
+#define MM_EVENT_POLLER_SPIN	(3)
+#else
+#define MM_EVENT_POLLER_SPIN	(6)
+#endif
+
+#if ENABLE_SMP
 
 static void NONNULL(1)
 mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
@@ -517,6 +523,8 @@ mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 
 	LEAVE();
 }
+
+#endif
 
 static void NONNULL(1)
 mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
@@ -549,35 +557,29 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
-static void
-mm_event_wakeup_req(uintptr_t *arguments UNUSED)
-{
-}
-
 void NONNULL(1)
 mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	ENTER();
 
-	if (mm_event_listener_got_events(listener)) {
-		// Presume that if there were incoming events moments ago then
-		// there is a chance to get some more immediately. Don't sleep
-		// to avoid a context switch.
+	if (listener->poller_spin) {
+		// If previously received some events then speculate that some
+		// more are coming so keep spinning for a while to avoid extra
+		// context switches.
+		listener->poller_spin--;
 		timeout = 0;
-		// Reset event counters set at the previous cycle.
-		mm_event_listener_clear_events(listener);
-	} else if (mm_event_backend_has_changes(&listener->storage)) {
-		// There may be changes that need to be immediately acknowledged.
+	} else if (mm_event_backend_has_urgent_changes(&listener->storage)) {
+		// There are event poll changes that need to be immediately
+		// acknowledged.
 		timeout = 0;
 	}
 
+#if ENABLE_SMP
 	// The first arrived thread is elected to conduct the next event poll.
-	struct mm_event_dispatch *dispatch = listener->dispatch;
+	struct mm_event_dispatch *const dispatch = listener->dispatch;
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
 	if (is_poller_thread) {
-		// If the previous poller thread received some events then keep
-		// spinning for a while to avoid extra context switches.
-		if (dispatch->poller_spin) {
+		if (timeout && dispatch->poller_spin) {
 			dispatch->poller_spin--;
 			timeout = 0;
 		}
@@ -586,20 +588,36 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		mm_event_poll(listener, dispatch, timeout);
 
 		// Reset the poller spin counter.
-		if (mm_event_listener_got_events(listener))
+		if (mm_event_listener_got_events(listener)) {
+			mm_event_listener_clear_events(listener);
 			dispatch->poller_spin = MM_EVENT_POLLER_SPIN;
+			listener->poller_spin = MM_EVENT_POLLER_SPIN;
+		}
 
 		// Give up the poller thread role.
 		mm_regular_unlock(&dispatch->poller_lock);
 
-	} else if (timeout == 0) {
-		// Poll for immediately available events.
-		mm_event_poll(listener, dispatch, 0);
-
 	} else {
+		// Flush event poll changes if any.
+		if (mm_event_backend_has_changes(&listener->storage)) {
+			mm_event_backend_flush(&dispatch->backend, &listener->storage);
+		}
+
 		// Wait for forwarded events or timeout expiration.
-		mm_event_wait(listener, dispatch, timeout);
+		if (timeout) {
+			mm_event_wait(listener, dispatch, timeout);
+		}
 	}
+#else
+	// Wait for incoming events or timeout expiration.
+	mm_event_poll(listener, listener->dispatch, timeout);
+
+	// Reset the poller spin counter and event counters.
+	if (mm_event_listener_got_events(listener)) {
+		mm_event_listener_clear_events(listener);
+		listener->poller_spin = MM_EVENT_POLLER_SPIN;
+	}
+#endif
 
 	LEAVE();
 }
@@ -630,6 +648,15 @@ mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
 	}
 
 	LEAVE();
+}
+
+/**********************************************************************
+ * Event listener wakeup.
+ **********************************************************************/
+
+static void
+mm_event_wakeup_req(uintptr_t *arguments UNUSED)
+{
 }
 
 /* Wakeup a listener if it sleeps. */
@@ -745,7 +772,6 @@ mm_event_handle_posts(struct mm_event_listener *listener UNUSED)
 	LEAVE();
 	return rc;
 }
-
 
 /**********************************************************************
  * Asynchronous procedure calls targeting a single listener.

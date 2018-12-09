@@ -117,6 +117,9 @@ struct mm_event_listener
 	   the listener for appropriate event forwarding strategy. */
 	uint32_t direct_events_estimate;
 
+	/* Counter for poller busy waiting. */
+	uint16_t poller_spin;
+
 	/* Associated strand. */
 	struct mm_strand *strand;
 
