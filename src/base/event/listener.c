@@ -100,8 +100,10 @@ mm_event_listener_handle_start(struct mm_event_listener *listener)
 	mm_event_backend_poller_start(&listener->storage);
 
 #if ENABLE_SMP
+#if ENABLE_EVENT_SINK_LOCK
 	// Acquire coarse-grained event sink lock.
 	mm_regular_lock(&listener->dispatch->sink_lock);
+#endif
 #endif
 
 	LEAVE();
@@ -115,8 +117,10 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 
 #if ENABLE_SMP
+#if ENABLE_EVENT_SINK_LOCK
 	// Release coarse-grained event sink lock.
 	mm_regular_unlock(&dispatch->sink_lock);
+#endif
 
 	// Flush forwarded events.
 	if (listener->events.forwarded)

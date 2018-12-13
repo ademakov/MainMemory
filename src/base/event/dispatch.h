@@ -25,6 +25,8 @@
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 
+#define ENABLE_EVENT_SINK_LOCK 0
+
 /* Forward declarations. */
 struct mm_strand;
 
@@ -51,9 +53,11 @@ struct mm_event_dispatch
 	/* A lock that protects the poller thread election. */
 	mm_regular_lock_t poller_lock CACHE_ALIGN;
 
+#if ENABLE_EVENT_SINK_LOCK
 	/* A coarse-grained lock that protects event sinks from
 	   concurrent updates. */
 	mm_regular_lock_t sink_lock CACHE_ALIGN;
+#endif
 #endif
 };
 

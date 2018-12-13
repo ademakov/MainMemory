@@ -57,8 +57,10 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthrea
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	dispatch->poller_spin = 0;
 
+#if ENABLE_EVENT_SINK_LOCK
 	// Initialize the event sink lock.
 	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+#endif
 #endif
 
 	LEAVE();
