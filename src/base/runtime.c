@@ -359,8 +359,15 @@ mm_common_start(void)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
 	// Allocate event dispatch memory and system resources.
-	mm_event_dispatch_prepare(&mm_regular_dispatch, mm_regular_nthreads, mm_regular_strands,
-				  mm_regular_nthreads * 32, mm_regular_nthreads * 32);
+	struct mm_event_dispatch_attr attr;
+	mm_event_dispatch_attr_prepare(&attr);
+	mm_event_dispatch_attr_setlisteners(&attr, mm_regular_nthreads);
+	mm_event_dispatch_attr_setdispatchqueuesize(&attr, mm_regular_nthreads * 32);
+	mm_event_dispatch_attr_setlistenerqueuesize(&attr, mm_regular_nthreads * 32);
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+		mm_event_dispatch_attr_setlistenerstrand(&attr, i, &mm_regular_strands[i]);
+	mm_event_dispatch_prepare(&mm_regular_dispatch, &attr);
+	mm_event_dispatch_attr_cleanup(&attr);
 
 	LEAVE();
 }

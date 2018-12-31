@@ -30,6 +30,20 @@
 /* Forward declarations. */
 struct mm_strand;
 
+/* Event dispatch attributes. */
+struct mm_event_dispatch_attr
+{
+	/* The number of event listeners. */
+	mm_thread_t nlisteners;
+
+	/* Common parameters. */
+	uint32_t dispatch_queue_size;
+	uint32_t listener_queue_size;
+
+	/* Individual listener parameters. */
+	struct mm_event_dispatch_listener_attr *listeners_attr;
+};
+
 /* Event dispatcher. */
 struct mm_event_dispatch
 {
@@ -61,9 +75,30 @@ struct mm_event_dispatch
 #endif
 };
 
+/**********************************************************************
+ * Event dispatcher setup and cleanup routines.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_dispatch_attr_prepare(struct mm_event_dispatch_attr *attr);
+
+void NONNULL(1)
+mm_event_dispatch_attr_cleanup(struct mm_event_dispatch_attr *attr);
+
+void NONNULL(1)
+mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thread_t n);
+
+void NONNULL(1)
+mm_event_dispatch_attr_setdispatchqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size);
+
+void NONNULL(1)
+mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size);
+
 void NONNULL(1, 3)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, mm_thread_t nthreads, struct mm_strand *strands,
-			  uint32_t dispatch_queue_size, uint32_t listener_queue_size);
+mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm_thread_t n, struct mm_strand *strand);
+
+void NONNULL(1, 2)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, struct mm_event_dispatch_attr *attr);
 
 void NONNULL(1)
 mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
