@@ -28,6 +28,13 @@
 
 #include <stdio.h>
 
+/* Individual thread creation attributes for domain. */
+struct mm_domain_thread_attr
+{
+	/* CPU affinity tag. */
+	uint32_t cpu_tag;
+};
+
 __thread struct mm_domain *__mm_domain_self = NULL;
 
 /**********************************************************************
@@ -50,12 +57,12 @@ mm_domain_attr_cleanup(struct mm_domain_attr *attr)
 void NONNULL(1)
 mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size)
 {
-	if (attr->nthreads != size) {
-		attr->nthreads = size;
-		if (attr->threads_attr != NULL) {
-			mm_global_free(attr->threads_attr);
-			attr->threads_attr = NULL;
-		}
+	VERIFY(size > 0);
+
+	attr->nthreads = size;
+	if (attr->threads_attr != NULL) {
+		mm_global_free(attr->threads_attr);
+		attr->threads_attr = NULL;
 	}
 }
 
@@ -91,16 +98,15 @@ mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name)
 }
 
 void NONNULL(1)
-mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
-			 uint32_t cpu_tag)
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag)
 {
+	if (unlikely(attr->nthreads == 0))
+		mm_fatal(0, "the number of threads is not set");
 	if (unlikely(n >= attr->nthreads))
-		mm_fatal(0, "invalid thread number");
+		mm_fatal(0, "invalid thread number: %d (max is %d)", n, attr->nthreads - 1);
 
 	if (attr->threads_attr == NULL) {
-		attr->threads_attr
-			= mm_global_calloc(attr->nthreads,
-					   sizeof(struct mm_domain_thread_attr));
+		attr->threads_attr = mm_global_calloc(attr->nthreads, sizeof(struct mm_domain_thread_attr));
 		for (mm_thread_t i = 0; i < attr->nthreads; i++) {
 			attr->threads_attr[i].cpu_tag = MM_THREAD_CPU_ANY;
 		}

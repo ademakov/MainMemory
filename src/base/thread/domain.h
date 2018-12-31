@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.h - MainMemory thread domain.
  *
- * Copyright (C) 2014-2017  Aleksey Demakov
+ * Copyright (C) 2014-2018  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -30,13 +30,6 @@
 
 /* Maximum domain name length (including terminating zero). */
 #define MM_DOMAIN_NAME_SIZE	32
-
-/* Individual thread creation attributes for domain. */
-struct mm_domain_thread_attr
-{
-	/* CPU affinity tag. */
-	uint32_t cpu_tag;
-};
 
 /* Domain creation attributes. */
 struct mm_domain_attr
@@ -112,8 +105,7 @@ void NONNULL(1)
 mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name);
 
 void NONNULL(1)
-mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n,
-			 uint32_t cpu_tag);
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag);
 
 struct mm_domain * NONNULL(2)
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start);
