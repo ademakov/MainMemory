@@ -36,9 +36,12 @@ struct mm_event_dispatch_attr
 	/* The number of event listeners. */
 	mm_thread_t nlisteners;
 
-	/* Common parameters. */
+	/* Queue parameters. */
 	uint32_t dispatch_queue_size;
 	uint32_t listener_queue_size;
+	/* Spinning parameters. */
+	uint16_t lock_spin_limit;
+	uint16_t poll_spin_limit;
 
 	/* Individual listener parameters. */
 	struct mm_event_dispatch_listener_attr *listeners_attr;
@@ -51,6 +54,10 @@ struct mm_event_dispatch
 	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
 
+	/* Spinning parameters. */
+	uint16_t lock_spin_limit;
+	uint16_t poll_spin_limit;
+
 	/* Asynchronous post queue. */
 	struct mm_ring_mpmc *async_queue;
 
@@ -61,11 +68,11 @@ struct mm_event_dispatch
 	mm_event_epoch_t global_epoch;
 
 #if ENABLE_SMP
-	/* Counter for poller thread busy waiting. */
-	uint16_t poller_spin;
-
 	/* A lock that protects the poller thread election. */
 	mm_regular_lock_t poller_lock CACHE_ALIGN;
+
+	/* Counter for poller thread busy waiting. */
+	uint16_t poll_spin_count;
 
 #if ENABLE_EVENT_SINK_LOCK
 	/* A coarse-grained lock that protects event sinks from
@@ -90,15 +97,19 @@ mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thre
 
 void NONNULL(1)
 mm_event_dispatch_attr_setdispatchqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size);
-
 void NONNULL(1)
 mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size);
+
+void NONNULL(1)
+mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value);
+void NONNULL(1)
+mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value);
 
 void NONNULL(1, 3)
 mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm_thread_t n, struct mm_strand *strand);
 
 void NONNULL(1, 2)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, struct mm_event_dispatch_attr *attr);
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_event_dispatch_attr *attr);
 
 void NONNULL(1)
 mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);

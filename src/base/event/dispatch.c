@@ -74,6 +74,18 @@ mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr,
 	attr->listener_queue_size = size;
 }
 
+void NONNULL(1)
+mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value)
+{
+	attr->lock_spin_limit = value;
+}
+
+void NONNULL(1)
+mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value)
+{
+	attr->poll_spin_limit = value;
+}
+
 void NONNULL(1, 3)
 mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm_thread_t n, struct mm_strand *strand)
 {
@@ -90,7 +102,7 @@ mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm
 }
 
 void NONNULL(1, 2)
-mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, struct mm_event_dispatch_attr *attr)
+mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_event_dispatch_attr *attr)
 {
 	ENTER();
 
@@ -116,6 +128,10 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, struct mm_event_di
 		sz = MM_DISPATCH_QUEUE_MIN_SIZE;
 	dispatch->async_queue = mm_ring_mpmc_create(sz);
 
+	// Initialize spinning parameters.
+	dispatch->lock_spin_limit = attr->lock_spin_limit;
+	dispatch->poll_spin_limit = attr->poll_spin_limit;
+
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);
 	// Initialize event sink reclamation data.
@@ -124,7 +140,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, struct mm_event_di
 #if ENABLE_SMP
 	// Initialize poller thread data.
 	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-	dispatch->poller_spin = 0;
+	dispatch->poll_spin_count = 0;
 
 #if ENABLE_EVENT_SINK_LOCK
 	// Initialize the event sink lock.

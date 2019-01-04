@@ -493,12 +493,6 @@ leave:
  **********************************************************************/
 
 #if ENABLE_SMP
-#define MM_EVENT_POLLER_SPIN	(3)
-#else
-#define MM_EVENT_POLLER_SPIN	(6)
-#endif
-
-#if ENABLE_SMP
 
 static void NONNULL(1)
 mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
@@ -558,15 +552,16 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 }
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
+mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 {
 	ENTER();
 
-	if (listener->poller_spin) {
+	struct mm_event_dispatch *const dispatch = listener->dispatch;
+	if (listener->spin_count) {
 		// If previously received some events then speculate that some
 		// more are coming so keep spinning for a while to avoid extra
 		// context switches.
-		listener->poller_spin--;
+		listener->spin_count--;
 		timeout = 0;
 	} else if (mm_event_backend_has_urgent_changes(&listener->storage)) {
 		// There are event poll changes that need to be immediately
@@ -576,11 +571,10 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 
 #if ENABLE_SMP
 	// The first arrived thread is elected to conduct the next event poll.
-	struct mm_event_dispatch *const dispatch = listener->dispatch;
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
 	if (is_poller_thread) {
-		if (timeout && dispatch->poller_spin) {
-			dispatch->poller_spin--;
+		if (dispatch->poll_spin_count) {
+			dispatch->poll_spin_count--;
 			timeout = 0;
 		}
 
@@ -590,8 +584,8 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 		// Reset the poller spin counter.
 		if (mm_event_listener_got_events(listener)) {
 			mm_event_listener_clear_events(listener);
-			dispatch->poller_spin = MM_EVENT_POLLER_SPIN;
-			listener->poller_spin = MM_EVENT_POLLER_SPIN;
+			listener->spin_count = dispatch->lock_spin_limit;
+			dispatch->poll_spin_count = dispatch->poll_spin_limit;
 		}
 
 		// Give up the poller thread role.
@@ -610,12 +604,12 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout)
 	}
 #else
 	// Wait for incoming events or timeout expiration.
-	mm_event_poll(listener, listener->dispatch, timeout);
+	mm_event_poll(listener, dispatch, timeout);
 
 	// Reset the poller spin counter and event counters.
 	if (mm_event_listener_got_events(listener)) {
 		mm_event_listener_clear_events(listener);
-		listener->poller_spin = MM_EVENT_POLLER_SPIN;
+		listener->spin_count = dispatch->poll_spin_limit;
 	}
 #endif
 
@@ -758,7 +752,6 @@ mm_event_handle_posts(struct mm_event_listener *listener UNUSED)
 	ENTER();
 	bool rc = false;
 
-#if ENABLE_SMP
 	struct mm_event_async async;
 	if (mm_event_receive_post(listener->dispatch, &async)) {
 		mm_event_async_execute(&async);
@@ -767,7 +760,6 @@ mm_event_handle_posts(struct mm_event_listener *listener UNUSED)
 #endif
 		rc = true;
 	}
-#endif
 
 	LEAVE();
 	return rc;

@@ -364,6 +364,8 @@ mm_common_start(void)
 	mm_event_dispatch_attr_setlisteners(&attr, mm_regular_nthreads);
 	mm_event_dispatch_attr_setdispatchqueuesize(&attr, mm_regular_nthreads * 32);
 	mm_event_dispatch_attr_setlistenerqueuesize(&attr, mm_regular_nthreads * 32);
+	mm_event_dispatch_attr_setlockspinlimit(&attr, mm_settings_get_uint32("event-lock-spin-limit", 1)); // TODO: uint16_t
+	mm_event_dispatch_attr_setpollspinlimit(&attr, mm_settings_get_uint32("event-poll-spin-limit", 4)); // TODO: uint16_t
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_event_dispatch_attr_setlistenerstrand(&attr, i, &mm_regular_strands[i]);
 	mm_event_dispatch_prepare(&mm_regular_dispatch, &attr);
@@ -411,6 +413,10 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 
 	// Prepare the settings storage.
 	mm_settings_init();
+	mm_settings_set_info("event-lock-spin-limit", MM_SETTINGS_REGULAR);
+	mm_settings_set_info("event-poll-spin-limit", MM_SETTINGS_REGULAR);
+	mm_settings_set_info("thread-affinity", MM_SETTINGS_BOOLEAN);
+	mm_settings_set_info("thread-number", MM_SETTINGS_REGULAR);
 
 	// Parse the command line arguments.
 	mm_args_init(argc, argv, ninfo, info);

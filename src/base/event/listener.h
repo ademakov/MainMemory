@@ -118,7 +118,7 @@ struct mm_event_listener
 	uint32_t direct_events_estimate;
 
 	/* Counter for poller busy waiting. */
-	uint16_t poller_spin;
+	uint16_t spin_count;
 
 	/* Associated strand. */
 	struct mm_strand *strand;

@@ -288,7 +288,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	ENTER();
 
 	listener->state = 0;
-	listener->poller_spin = 0;
+	listener->spin_count = 0;
 
 	// Set the pointers among associated entities.
 	listener->strand = strand;
