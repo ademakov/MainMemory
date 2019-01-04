@@ -95,7 +95,7 @@ mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm
 		mm_fatal(0, "invalid event listener number: %d (max is %d)", n, attr->nlisteners);
 
 	if (attr->listeners_attr == NULL) {
-		attr->listeners_attr = mm_global_calloc(n, sizeof(struct mm_event_dispatch_listener_attr));
+		attr->listeners_attr = mm_global_calloc(attr->nlisteners, sizeof(struct mm_event_dispatch_listener_attr));
 	}
 
 	attr->listeners_attr[n].strand = strand;
