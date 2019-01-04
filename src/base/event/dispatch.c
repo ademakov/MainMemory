@@ -131,6 +131,8 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	// Initialize spinning parameters.
 	dispatch->lock_spin_limit = attr->lock_spin_limit;
 	dispatch->poll_spin_limit = attr->poll_spin_limit;
+	mm_brief("event-lock-spin-limit: %d", dispatch->lock_spin_limit);
+	mm_brief("event-poll-spin-limit: %d", dispatch->poll_spin_limit);
 
 	// Initialize system-specific resources.
 	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);
