@@ -5,7 +5,7 @@
 	"thread-number" : 4,
 	"thread-affinity" : false,
 	"event-lock-spin-limit" : 2,
-	"event-poll-spin-limit" : 10,
+	"event-poll-spin-limit" : 4,
 
 	"memcache-ip" : "127.0.0.1",
 	"memcache-port" : 11211,
