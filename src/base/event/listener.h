@@ -47,10 +47,6 @@
 struct mm_event_dispatch;
 struct mm_strand;
 
-#define MM_EVENT_LISTENER_RETAIN_MIN	(3)
-#define MM_EVENT_LISTENER_RETAIN_MAX	(6)
-#define MM_EVENT_LISTENER_FORWARD_MAX	MM_EVENT_FORWARD_BUFFER_SIZE
-
 #define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
 
 typedef enum
@@ -113,9 +109,11 @@ struct mm_event_listener
 		uint64_t events_any;
 	};
 
-	/* The number of locally handled events found while adjusting
-	   the listener for appropriate event forwarding strategy. */
-	uint32_t direct_events_estimate;
+	/* The expected number of events to handle after a poll. The actual number might differ sometimes. */
+	uint32_t expected_events;
+
+	/* Flag indicating if event sharing mode is enabled. */
+	bool event_sharing;
 
 	/* Counter for poller busy waiting. */
 	uint16_t spin_count;
@@ -269,33 +267,20 @@ mm_event_listener_got_events(struct mm_event_listener *listener)
 }
 
 /**********************************************************************
- * Interface for estimating incoming events.
- **********************************************************************/
-
-static inline bool NONNULL(1)
-mm_event_listener_adjust_start(struct mm_event_listener *listener, uint32_t nevents)
-{
-	listener->direct_events_estimate = 0;
-	return nevents > MM_EVENT_LISTENER_RETAIN_MIN;
-}
-
-static inline bool NONNULL(1, 2)
-mm_event_listener_adjust(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	if (sink->listener == listener)
-		listener->direct_events_estimate++;
-	return listener->direct_events_estimate < MM_EVENT_LISTENER_RETAIN_MIN;
-}
-
-/**********************************************************************
  * Interface for handling incoming events.
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener);
+mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents);
 
 void NONNULL(1)
 mm_event_listener_handle_finish(struct mm_event_listener *listener);
+
+static inline void NONNULL(1)
+mm_event_listener_handle_next(struct mm_event_listener *listener)
+{
+	listener->expected_events--;
+}
 
 void NONNULL(1, 2)
 mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink);

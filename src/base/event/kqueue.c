@@ -64,30 +64,11 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
  **********************************************************************/
 
 static void
-mm_event_kqueue_adjust(struct mm_event_listener *listener, int nevents)
-{
-	if (!mm_event_listener_adjust_start(listener, nevents))
-		return;
-
-	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.revents[i];
-		if (event->filter == EVFILT_READ || event->filter == EVFILT_WRITE) {
-			if (unlikely((event->flags & EV_ERROR) != 0))
-				continue;
-
-			struct mm_event_fd *sink = event->udata;
-			if (!mm_event_listener_adjust(listener, sink))
-				return;
-		}
-	}
-}
-
-static void
 mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 {
-	mm_event_listener_handle_start(listener);
+	mm_event_listener_handle_start(listener, nevents);
 
-	for (int i = 0; i < nevents; i++) {
+	for (int i = 0; i < nevents; i++, mm_event_listener_handle_next(listener)) {
 		struct kevent *event = &listener->storage.revents[i];
 
 		if (event->filter == EVFILT_READ) {
@@ -243,7 +224,6 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 
 	// Handle incoming events.
 	if (n != 0) {
-		mm_event_kqueue_adjust(listener, n);
 		mm_event_kqueue_handle(listener, n);
 	}
 

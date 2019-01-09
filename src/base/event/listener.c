@@ -31,7 +31,10 @@
 # include <mach/task.h>
 #endif
 
-#define MM_LISTINER_QUEUE_MIN_SIZE 16
+#define MM_EVENT_LISTINER_QUEUE_MIN_SIZE	(16)
+
+#define MM_EVENT_LISTENER_RETAIN_MIN		(3)
+#define MM_EVENT_LISTENER_FORWARD_MAX		MM_EVENT_FORWARD_BUFFER_SIZE
 
 /* Mark a sink as having an incoming event received from the system. */
 static inline void
@@ -66,35 +69,34 @@ mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_eve
 	if ((sink->flags & (MM_EVENT_FIXED_LISTENER | MM_EVENT_NOTIFY_FD)) != 0)
 		return;
 
-	// Keep current listener.
-	if (sink->listener == listener)
-		return;
-
 	// Cannot unbind if there is some event handling activity.
+	ASSERT(sink->listener != NULL);
 	if (mm_event_active(sink))
 		return;
 
-	// If the event sink can be detached from its target thread
-	// then do it now. But make sure the target thread has some
-	// minimal amount if work.
-	ASSERT(sink->listener != NULL);
-	uint32_t nr = max(listener->events.direct, listener->direct_events_estimate);
-	if (nr < MM_EVENT_LISTENER_RETAIN_MIN) {
+	// If the event sink can be detached from its target thread then do it now.
+	if ((listener->events.direct + listener->expected_events) < MM_EVENT_LISTENER_RETAIN_MIN) {
 		sink->listener = listener;
+		return;
+	}
+
 #if 0
-	} else {
+	if (listener->event_sharing) {
 		mm_thread_t target = sink->listener - listener->dispatch->listeners;
 		uint32_t ntotal = listener->forward.buffers[target].ntotal;
 		if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
 			sink->listener = NULL;
-#endif
 	}
+#endif
 }
 
 void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener)
+mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents)
 {
 	ENTER();
+
+	// Remember the number of events to handle.
+	listener->expected_events = nevents;
 
 	// Prepare the backend for handling events.
 	mm_event_backend_poller_start(&listener->storage);
@@ -298,8 +300,8 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Create the private request queue.
 	uint32_t sz = mm_upper_pow2(listener_queue_size);
-	if (sz < MM_LISTINER_QUEUE_MIN_SIZE)
-		sz = MM_LISTINER_QUEUE_MIN_SIZE;
+	if (sz < MM_EVENT_LISTINER_QUEUE_MIN_SIZE)
+		sz = MM_EVENT_LISTINER_QUEUE_MIN_SIZE;
 	listener->async_queue = mm_ring_mpmc_create(sz);
 
 #if ENABLE_LINUX_FUTEX
