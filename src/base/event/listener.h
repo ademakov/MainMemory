@@ -109,14 +109,14 @@ struct mm_event_listener
 		uint64_t events_any;
 	};
 
+	/* Counter for poller busy waiting. */
+	uint32_t spin_count;
+
 	/* The expected number of events to handle after a poll. The actual number might differ sometimes. */
 	uint32_t expected_events;
 
 	/* Flag indicating if event sharing mode is enabled. */
 	bool event_sharing;
-
-	/* Counter for poller busy waiting. */
-	uint16_t spin_count;
 
 	/* Associated strand. */
 	struct mm_strand *strand;

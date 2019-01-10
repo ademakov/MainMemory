@@ -75,13 +75,13 @@ mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr,
 }
 
 void NONNULL(1)
-mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value)
+mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value)
 {
 	attr->lock_spin_limit = value;
 }
 
 void NONNULL(1)
-mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint16_t value)
+mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value)
 {
 	attr->poll_spin_limit = value;
 }
