@@ -364,8 +364,8 @@ mm_common_start(void)
 	mm_event_dispatch_attr_setlisteners(&attr, mm_regular_nthreads);
 	mm_event_dispatch_attr_setdispatchqueuesize(&attr, mm_regular_nthreads * 32);
 	mm_event_dispatch_attr_setlistenerqueuesize(&attr, mm_regular_nthreads * 32);
-	mm_event_dispatch_attr_setlockspinlimit(&attr, mm_settings_get_uint32("event-lock-spin-limit", 1)); // TODO: uint16_t
-	mm_event_dispatch_attr_setpollspinlimit(&attr, mm_settings_get_uint32("event-poll-spin-limit", 4)); // TODO: uint16_t
+	mm_event_dispatch_attr_setlockspinlimit(&attr, mm_settings_get_uint32("event-lock-spin-limit", 1));
+	mm_event_dispatch_attr_setpollspinlimit(&attr, mm_settings_get_uint32("event-poll-spin-limit", 4));
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_event_dispatch_attr_setlistenerstrand(&attr, i, &mm_regular_strands[i]);
 	mm_event_dispatch_prepare(&mm_regular_dispatch, &attr);
