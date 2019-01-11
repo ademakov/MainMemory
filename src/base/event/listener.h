@@ -63,7 +63,7 @@ struct mm_event_listener_stats
 	uint64_t poll_calls;
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
-	uint64_t omit_calls;
+	uint64_t spin_count;
 
 	uint64_t stray_events;
 	uint64_t direct_events;
@@ -114,6 +114,9 @@ struct mm_event_listener
 
 	/* The expected number of events to handle after a poll. The actual number might differ sometimes. */
 	uint32_t expected_events;
+
+	/* Next target for event sharing. */
+	mm_thread_t next_target;
 
 	/* Flag indicating if event sharing mode is enabled. */
 	bool event_sharing;

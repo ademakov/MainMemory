@@ -600,6 +600,11 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 		// Wait for forwarded events or timeout expiration.
 		if (timeout) {
 			mm_event_wait(listener, dispatch, timeout);
+#if ENABLE_EVENT_STATS
+		} else {
+			// Update statistics.
+			listener->stats.spin_count++;
+#endif
 		}
 	}
 #else

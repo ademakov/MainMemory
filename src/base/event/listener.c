@@ -34,7 +34,6 @@
 #define MM_EVENT_LISTINER_QUEUE_MIN_SIZE	(16)
 
 #define MM_EVENT_LISTENER_RETAIN_MIN		(3)
-#define MM_EVENT_LISTENER_FORWARD_MAX		MM_EVENT_FORWARD_BUFFER_SIZE
 
 /* Mark a sink as having an incoming event received from the system. */
 static inline void
@@ -77,17 +76,19 @@ mm_event_listener_test_binding(struct mm_event_listener *listener, struct mm_eve
 	// If the event sink can be detached from its target thread then do it now.
 	if ((listener->events.direct + listener->expected_events) < MM_EVENT_LISTENER_RETAIN_MIN) {
 		sink->listener = listener;
-		return;
+	} else if (listener->event_sharing) {
+		struct mm_event_dispatch *const dispatch = listener->dispatch;
+		mm_thread_t next = listener->next_target;
+		if (listener->forward.buffers[next].nsinks == MM_EVENT_FORWARD_BUFFER_SIZE) {
+			mm_thread_t self = listener - dispatch->listeners;
+			if (++next == dispatch->nlisteners)
+				next = 0;
+			if (next == self && ++next == dispatch->nlisteners)
+				next = 0;
+			listener->next_target = next;
+		}
+		sink->listener = &dispatch->listeners[next];
 	}
-
-#if 0
-	if (listener->event_sharing) {
-		mm_thread_t target = sink->listener - listener->dispatch->listeners;
-		uint32_t ntotal = listener->forward.buffers[target].ntotal;
-		if (ntotal >= MM_EVENT_LISTENER_FORWARD_MAX)
-			sink->listener = NULL;
-	}
-#endif
 }
 
 void NONNULL(1)
@@ -97,6 +98,17 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 
 	// Remember the number of events to handle.
 	listener->expected_events = nevents;
+
+	// Figure out if event sharing mode should be enabled.
+	const mm_thread_t nlisteners = listener->dispatch->nlisteners;
+	if (nlisteners > 1) {
+		listener->event_sharing = (nevents > (MM_EVENT_LISTENER_RETAIN_MIN * 2));
+		if (listener->event_sharing) {
+			listener->next_target = listener - listener->dispatch->listeners + 1;
+			if (listener->next_target == nlisteners)
+				listener->next_target = 0;
+		}
+	}
 
 	// Prepare the backend for handling events.
 	mm_event_backend_poller_start(&listener->storage);
@@ -327,7 +339,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
 	listener->stats.wait_calls = 0;
-	listener->stats.omit_calls = 0;
+	listener->stats.spin_count = 0;
 	listener->stats.stray_events = 0;
 	listener->stats.direct_events = 0;
 	listener->stats.forwarded_events = 0;
