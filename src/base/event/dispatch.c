@@ -1,7 +1,7 @@
 /*
  * base/event/dispatch.c - MainMemory event dispatch.
  *
- * Copyright (C) 2015-2018  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -26,7 +26,8 @@
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 
-#define MM_DISPATCH_QUEUE_MIN_SIZE	16
+#define MM_DISPATCH_EVENT_QUEUE_SIZE		(2 * MM_EVENT_BACKEND_NEVENTS)
+#define MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE	16
 
 struct mm_event_dispatch_listener_attr
 {
@@ -122,10 +123,10 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, strand, attr->listener_queue_size);
 	}
 
-	// Create the associated request queue.
+	// Create the associated synchronous post queue.
 	uint32_t sz = mm_upper_pow2(attr->dispatch_queue_size);
-	if (sz < MM_DISPATCH_QUEUE_MIN_SIZE)
-		sz = MM_DISPATCH_QUEUE_MIN_SIZE;
+	if (sz < MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE)
+		sz = MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE;
 	dispatch->async_queue = mm_ring_mpmc_create(sz);
 
 	// Initialize spinning parameters.
@@ -166,7 +167,7 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
 
-	// Destroy the associated request queue.
+	// Destroy the associated asynchronous post queue.
 	mm_ring_mpmc_destroy(dispatch->async_queue);
 
 	LEAVE();

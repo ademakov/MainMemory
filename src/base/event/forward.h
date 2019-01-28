@@ -1,7 +1,7 @@
 /*
  * base/event/forward.h - MainMemory event forwarding.
  *
- * Copyright (C) 2015-2018  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
 #include "common.h"
 #include "base/bitset.h"
 #include "base/event/event.h"
+
+#if ENABLE_SMP
 
 /* Forward declarations. */
 struct mm_event_dispatch;
@@ -55,9 +57,10 @@ void NONNULL(1)
 mm_event_forward_cleanup(struct mm_event_forward_cache *cache);
 
 void NONNULL(1)
-mm_event_forward_flush(struct mm_event_forward_cache *cache);
+mm_event_forward_flush(struct mm_event_forward_cache *cache, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1, 2)
 mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink, mm_event_index_t event);
 
+#endif /* ENABLE_SMP */
 #endif /* BASE_EVENT_FORWARD_H */

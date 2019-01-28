@@ -1,7 +1,7 @@
 /*
  * base/event/forward.c - MainMemory event forwarding.
  *
- * Copyright (C) 2015-2018  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/memory/memory.h"
+
+#if ENABLE_SMP
 
 /**********************************************************************
  * Event forwarding request handlers.
@@ -210,12 +212,9 @@ mm_event_forward_cleanup(struct mm_event_forward_cache *cache)
 }
 
 void NONNULL(1)
-mm_event_forward_flush(struct mm_event_forward_cache *cache)
+mm_event_forward_flush(struct mm_event_forward_cache *cache, struct mm_event_dispatch *dispatch)
 {
 	ENTER();
-
-	struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
-	struct mm_event_dispatch *dispatch = listener->dispatch;
 
 	mm_thread_t target = mm_bitset_find(&cache->targets, 0);
 	while (target != MM_THREAD_NONE) {
@@ -242,12 +241,13 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 	struct mm_event_listener *listener = containerof(cache, struct mm_event_listener, forward);
 	struct mm_event_dispatch *dispatch = listener->dispatch;
 
-	mm_thread_t target = sink->listener - dispatch->listeners;
-	struct mm_event_forward_buffer *buffer = &cache->buffers[target];
+	struct mm_event_listener *sink_listener = sink->listener;
+	mm_thread_t target = sink_listener - dispatch->listeners;
 
 	// Flush the buffer if it is full.
+	struct mm_event_forward_buffer *buffer = &cache->buffers[target];
 	if (buffer->nsinks == MM_EVENT_FORWARD_BUFFER_SIZE)
-		mm_event_forward_post(&dispatch->listeners[target], buffer);
+		mm_event_forward_post(sink_listener, buffer);
 
 	// Add the event to the buffer.
 	uint32_t n = buffer->nsinks++;
@@ -260,3 +260,6 @@ mm_event_forward(struct mm_event_forward_cache *cache, struct mm_event_fd *sink,
 
 	LEAVE();
 }
+
+#endif /* ENABLE_SMP */
+

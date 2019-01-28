@@ -1,7 +1,7 @@
 /*
  * base/event/listener.h - MainMemory event listener.
  *
- * Copyright (C) 2015-2018  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -112,6 +112,7 @@ struct mm_event_listener
 	/* Counter for poller busy waiting. */
 	uint32_t spin_count;
 
+#if ENABLE_SMP
 	/* The expected number of events to handle after a poll. The actual number might differ sometimes. */
 	uint32_t expected_events;
 
@@ -120,6 +121,7 @@ struct mm_event_listener
 
 	/* Flag indicating if event sharing mode is enabled. */
 	bool event_sharing;
+#endif
 
 	/* Associated strand. */
 	struct mm_strand *strand;
@@ -133,8 +135,10 @@ struct mm_event_listener
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;
 
+#if ENABLE_SMP
 	/* Listener's helper to forward events. */
 	struct mm_event_forward_cache forward;
+#endif
 
 	/* Private event storage. */
 	struct mm_event_backend_storage storage;
@@ -280,9 +284,11 @@ void NONNULL(1)
 mm_event_listener_handle_finish(struct mm_event_listener *listener);
 
 static inline void NONNULL(1)
-mm_event_listener_handle_next(struct mm_event_listener *listener)
+mm_event_listener_handle_next(struct mm_event_listener *listener UNUSED)
 {
+#if ENABLE_SMP
 	listener->expected_events--;
+#endif
 }
 
 void NONNULL(1, 2)
