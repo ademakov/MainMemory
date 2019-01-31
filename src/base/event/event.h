@@ -292,7 +292,7 @@ mm_event_wakeup_any(struct mm_event_dispatch *dispatch);
 #define MM_EVENT_ASYNC_MAX	(6)
 
 /* Request routines. */
-typedef void (*mm_event_async_routine_t)(uintptr_t arguments[MM_EVENT_ASYNC_MAX]);
+typedef void (*mm_event_async_routine_t)(struct mm_event_listener *listener, uintptr_t arguments[MM_EVENT_ASYNC_MAX]);
 
 /**********************************************************************
  * Asynchronous procedure call execution.

@@ -68,6 +68,8 @@ struct mm_event_listener_stats
 	uint64_t stray_events;
 	uint64_t direct_events;
 	uint64_t forwarded_events;
+	uint64_t received_forwarded_events;
+	uint64_t retargeted_forwarded_events;
 
 	/* Counters of asynchronous procedure calls. */
 	uint64_t enqueued_async_calls;

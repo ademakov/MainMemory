@@ -26,11 +26,10 @@
 #define MM_EVENT_EPOCH_POST_COUNT	(8)
 
 static void
-mm_event_epoch_observe_req(uintptr_t *arguments)
+mm_event_epoch_observe_req(struct mm_event_listener *listener, uintptr_t *arguments UNUSED)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = (struct mm_event_listener *) arguments[0];
 	if (mm_event_epoch_active(&listener->epoch))
 		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
 
@@ -116,7 +115,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		mm_event_epoch_snapshot_t listener_epoch = mm_memory_load(listener->epoch.epoch);
 		if (listener_epoch != epoch && listener_epoch != 0) {
 			if (local->count > MM_EVENT_EPOCH_POST_COUNT)
-				mm_event_call_1(listener, mm_event_epoch_observe_req, (uintptr_t) listener);
+				mm_event_call_0(listener, mm_event_epoch_observe_req);
 			goto leave;
 		}
 		local->index++;

@@ -30,82 +30,155 @@
  * Event forwarding request handlers.
  **********************************************************************/
 
-static void NONNULL(1)
-mm_event_forward_handle(struct mm_event_fd *sink, mm_event_index_t event)
+static int NONNULL(1)
+mm_event_forward_handle(struct mm_event_listener *listener, struct mm_event_fd *sink, mm_event_index_t event)
 {
+	// Check if the event sink has been bound to another target after forwarding the event.
+	struct mm_event_listener *sink_listener = sink->listener;
+	if (listener != sink_listener) {
+		struct mm_event_dispatch *dispatch = listener->dispatch;
+		mm_thread_t target = sink_listener - dispatch->listeners;
+
+		// Add the event to the buffer.
+		struct mm_event_forward_buffer *buffer = &listener->forward.buffers[target];
+		uint32_t n = buffer->nsinks++;
+		buffer->sinks[n] = sink;
+		buffer->events[n] = event;
+
+		// Account for it.
+		mm_bitset_set(&listener->forward.targets, target);
+		return 1;
+	}
+
 	if (event < MM_EVENT_INDEX_OUTPUT) {
 		mm_event_backend_target_input(sink, (1u << event));
 	} else {
 		mm_event_backend_target_output(sink, (1u << event));
 	}
+	return 0;
 }
 
 static void
-mm_event_forward_1(uintptr_t *arguments)
+mm_event_forward_1(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	// Handle events.
 	uintptr_t events = arguments[1];
-	mm_event_forward_handle((struct mm_event_fd *) arguments[0], events & 15);
+	int retargeted = mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[0], events & 15);
+
+	// Flush any events that changed their target.
+	if (retargeted) {
+		mm_event_forward_flush(&listener->forward, listener->dispatch);
+#if ENABLE_EVENT_STATS
+		listener->stats.retargeted_forwarded_events += retargeted;
+#endif
+	}
+#if ENABLE_EVENT_STATS
+	listener->stats.received_forwarded_events += 1;
+#endif
 
 	LEAVE();
 }
 
 static void
-mm_event_forward_2(uintptr_t *arguments)
+mm_event_forward_2(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	// Handle events.
 	uintptr_t events = arguments[2];
-	mm_event_forward_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[1], events >> 4);
+	int retargeted = mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[0], events & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[1], events >> 4);
+
+	// Flush any events that changed their target.
+	if (retargeted) {
+		mm_event_forward_flush(&listener->forward, listener->dispatch);
+#if ENABLE_EVENT_STATS
+		listener->stats.retargeted_forwarded_events += retargeted;
+#endif
+	}
+#if ENABLE_EVENT_STATS
+	listener->stats.received_forwarded_events += 2;
+#endif
 
 	LEAVE();
 }
 
 static void
-mm_event_forward_3(uintptr_t *arguments)
+mm_event_forward_3(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	// Handle events.
 	uintptr_t events = arguments[3];
-	mm_event_forward_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[2], events >> 8);
+	int retargeted = mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[0], events & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[2], events >> 8);
+
+	// Flush any events that changed their target.
+	if (retargeted) {
+		mm_event_forward_flush(&listener->forward, listener->dispatch);
+#if ENABLE_EVENT_STATS
+		listener->stats.retargeted_forwarded_events += retargeted;
+#endif
+	}
+#if ENABLE_EVENT_STATS
+	listener->stats.received_forwarded_events += 3;
+#endif
 
 	LEAVE();
 }
 
 static void
-mm_event_forward_4(uintptr_t *arguments)
+mm_event_forward_4(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	// Handle events.
 	uintptr_t events = arguments[4];
-	mm_event_forward_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[3], events >> 12);
+	int retargeted = mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[0], events & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[3], events >> 12);
+
+	// Flush any events that changed their target.
+	if (retargeted) {
+		mm_event_forward_flush(&listener->forward, listener->dispatch);
+#if ENABLE_EVENT_STATS
+		listener->stats.retargeted_forwarded_events += retargeted;
+#endif
+	}
+#if ENABLE_EVENT_STATS
+	listener->stats.received_forwarded_events += 4;
+#endif
 
 	LEAVE();
 }
 
 static void
-mm_event_forward_5(uintptr_t *arguments)
+mm_event_forward_5(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	// Handle events.
 	uintptr_t events = arguments[5];
-	mm_event_forward_handle((struct mm_event_fd *) arguments[0], events & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[1], (events >> 4) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[2], (events >> 8) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[3], (events >> 12) & 15);
-	mm_event_forward_handle((struct mm_event_fd *) arguments[4], events >> 16);
+	int retargeted = mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[0], events & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[1], (events >> 4) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[2], (events >> 8) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[3], (events >> 12) & 15);
+	retargeted += mm_event_forward_handle(listener, (struct mm_event_fd *) arguments[4], events >> 16);
+
+	// Flush any events that changed their target.
+	if (retargeted) {
+		mm_event_forward_flush(&listener->forward, listener->dispatch);
+#if ENABLE_EVENT_STATS
+		listener->stats.retargeted_forwarded_events += retargeted;
+#endif
+	}
+#if ENABLE_EVENT_STATS
+	listener->stats.received_forwarded_events += 5;
+#endif
 
 	LEAVE();
 }

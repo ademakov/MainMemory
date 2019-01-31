@@ -654,7 +654,7 @@ mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
  **********************************************************************/
 
 static void
-mm_event_wakeup_req(uintptr_t *arguments UNUSED)
+mm_event_wakeup_req(struct mm_event_listener *listener UNUSED, uintptr_t *arguments UNUSED)
 {
 }
 
@@ -707,9 +707,9 @@ struct mm_event_async
 };
 
 static inline void
-mm_event_async_execute(struct mm_event_async *post)
+mm_event_async_execute(struct mm_event_listener *listener, struct mm_event_async *post)
 {
-	(*post->routine)(post->arguments);
+	(*post->routine)(listener, post->arguments);
 }
 
 static inline bool NONNULL(1, 2)
@@ -738,7 +738,7 @@ mm_event_handle_calls(struct mm_event_listener *listener)
 		strand->state = MM_STRAND_CSWITCH;
 
 		do {
-			mm_event_async_execute(&async);
+			mm_event_async_execute(listener, &async);
 #if ENABLE_EVENT_STATS
 			listener->stats.dequeued_async_calls++;
 #endif
@@ -759,7 +759,7 @@ mm_event_handle_posts(struct mm_event_listener *listener UNUSED)
 
 	struct mm_event_async async;
 	if (mm_event_receive_post(listener->dispatch, &async)) {
-		mm_event_async_execute(&async);
+		mm_event_async_execute(listener, &async);
 #if ENABLE_EVENT_STATS
 		listener->stats.dequeued_async_posts++;
 #endif

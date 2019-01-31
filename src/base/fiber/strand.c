@@ -140,12 +140,12 @@ mm_strand_add_work(struct mm_strand *strand, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_strand_add_work_req(uintptr_t *arguments)
+mm_strand_add_work_req(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
 	struct mm_work *work = (struct mm_work *) arguments[0];
-	mm_strand_add_work(mm_strand_selfptr(), work);
+	mm_strand_add_work(listener->strand, work);
 
 	LEAVE();
 }
@@ -195,7 +195,7 @@ mm_strand_tender_work(struct mm_work *work)
 
 #if ENABLE_SMP
 static void
-mm_strand_run_fiber_req(uintptr_t *arguments)
+mm_strand_run_fiber_req(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -486,12 +486,11 @@ mm_strand_stats(struct mm_strand *strand)
  **********************************************************************/
 
 static void
-mm_strand_stop_req(uintptr_t *arguments)
+mm_strand_stop_req(struct mm_event_listener *listener, uintptr_t *arguments UNUSED)
 {
 	ENTER();
 
-	struct mm_strand *strand = (struct mm_strand *) arguments[0];
-	strand->stop = true;
+	listener->strand->stop = true;
 
 	LEAVE();
 }
@@ -595,7 +594,7 @@ mm_strand_stop(struct mm_strand *strand)
 {
 	ENTER();
 
-	mm_event_call_1(strand->listener, mm_strand_stop_req, (uintptr_t) strand);
+	mm_event_call_0(strand->listener, mm_strand_stop_req);
 
 	LEAVE();
 }
