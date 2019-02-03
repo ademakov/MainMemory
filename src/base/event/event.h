@@ -71,30 +71,28 @@ typedef enum {
 #define MM_EVENT_INPUT_ERROR	(1u << MM_EVENT_INDEX_INPUT_ERROR)
 #define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_INDEX_OUTPUT_ERROR)
 
-/* Fiber activity flags. */
-#define MM_EVENT_INPUT_STARTED	0x000010
-#define MM_EVENT_OUTPUT_STARTED	0x000020
-#define MM_EVENT_INPUT_PENDING	0x000040
-#define MM_EVENT_OUTPUT_PENDING	0x000080
-
 /* I/O event sink close flags. */
-#define MM_EVENT_CLOSED		0x000100
-#define MM_EVENT_INPUT_CLOSED	0x000200
-#define MM_EVENT_OUTPUT_CLOSED	0x000400
-#define MM_EVENT_BROKEN		0x000800
+#define MM_EVENT_CLOSED		0x000010
+#define MM_EVENT_INPUT_CLOSED	0x000020
+#define MM_EVENT_OUTPUT_CLOSED	0x000040
+#define MM_EVENT_BROKEN		0x000080
+
+/* Fiber activity flags. */
+#define MM_EVENT_INPUT_STARTED	0x000100
+#define MM_EVENT_OUTPUT_STARTED	0x000200
 
 /* Polling mode for I/O events. */
+#define MM_EVENT_INPUT_TRIGGER	0x000400
+#define MM_EVENT_OUTPUT_TRIGGER	0x000800
 #define MM_EVENT_REGULAR_INPUT	0x001000
 #define MM_EVENT_REGULAR_OUTPUT	0x002000
 #define MM_EVENT_ONESHOT_INPUT	0x004000
 #define MM_EVENT_ONESHOT_OUTPUT	0x008000
-#define MM_EVENT_INPUT_TRIGGER	0x010000
-#define MM_EVENT_OUTPUT_TRIGGER	0x020000
 
 /* Internal notification fd (selfpipe or eventfd). */
-#define MM_EVENT_NOTIFY_FD	0x040000
+#define MM_EVENT_NOTIFY_FD	0x010000
 /* Event dispatch is bound to a single listener. */
-#define MM_EVENT_FIXED_LISTENER	0x080000
+#define MM_EVENT_FIXED_LISTENER	0x020000
 
 /* A sink has a pending I/O event change. */
 #define MM_EVENT_CHANGE		0x100000
@@ -131,9 +129,6 @@ struct mm_event_fd
 	   such a condition it is safe to switch the sink's target thread. */
 	mm_event_stamp_t complete_stamp;
 #endif
-
-	/* Pending events for sinks in the dispatch queue. */
-	uint8_t queued_events;
 
 	/* Fibers bound to perform I/O. */
 	struct mm_fiber *input_fiber;

@@ -130,21 +130,12 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 #endif
 
 	if (sink->input_fiber != NULL) {
-		// Run the reader fiber presumably blocked on the socket.
+		// Run the fiber blocked on input.
 		mm_fiber_run(sink->input_fiber);
-	} else {
-		// Check to see if a new reader should be spawned.
-		flags = sink->flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_INPUT_PENDING);
-		if (flags == MM_EVENT_INPUT_PENDING) {
-			if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-				sink->flags &= ~MM_EVENT_INPUT_PENDING;
-			// Remember a reader has been started.
-			sink->flags |= MM_EVENT_INPUT_STARTED;
-			// Submit a reader work.
-			mm_strand_add_work(sink->listener->strand, &sink->input_work);
-		} else if (flags == 0) {
-			mm_event_complete(sink);
-		}
+	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
+		// Start a new input work.
+		sink->flags |= MM_EVENT_INPUT_STARTED;
+		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 	}
 
 	LEAVE();
@@ -165,21 +156,12 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 #endif
 
 	if (sink->output_fiber != NULL) {
-		// Run the writer fiber presumably blocked on the socket.
+		// Run the fiber blocked on output.
 		mm_fiber_run(sink->output_fiber);
-	} else {
-		// Check to see if a new writer should be spawned.
-		flags = sink->flags & (MM_EVENT_OUTPUT_STARTED | MM_EVENT_OUTPUT_PENDING);
-		if (flags == MM_EVENT_OUTPUT_PENDING) {
-			if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-				sink->flags &= ~MM_EVENT_OUTPUT_PENDING;
-			// Remember a writer has been started.
-			sink->flags |= MM_EVENT_OUTPUT_STARTED;
-			// Submit a writer work.
-			mm_strand_add_work(sink->listener->strand, &sink->output_work);
-		} else if (flags == 0) {
-			mm_event_complete(sink);
-		}
+	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
+		// Start a new output work.
+		sink->flags |= MM_EVENT_OUTPUT_STARTED;
+		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 	}
 
 	LEAVE();
@@ -192,28 +174,20 @@ mm_event_input_complete(struct mm_work *work, mm_value_t value UNUSED)
 
 	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, input_work);
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
-
-	// Bail out if the event sink is shutdown.
 	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
-	if (mm_event_input_closed(sink)) {
-		sink->flags &= ~MM_EVENT_INPUT_STARTED;
-		mm_event_complete(sink);
-		goto leave;
-	}
 
-	// Check to see if a new reader should be spawned.
-	uint32_t fd_flags = sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR);
-	if ((sink->flags & MM_EVENT_INPUT_PENDING) != 0 && fd_flags != 0) {
-		if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-			sink->flags &= ~MM_EVENT_INPUT_PENDING;
-		// Submit a reader work.
+	// Check to see if another input work should be started.
+	if ((sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0
+	    && (sink->flags & MM_EVENT_REGULAR_INPUT) != 0
+	    && !mm_event_input_closed(sink)) {
+		// Submit an input work for execution again.
 		mm_strand_add_work(sink->listener->strand, &sink->input_work);
 	} else {
+		// Done with input for now.
 		sink->flags &= ~MM_EVENT_INPUT_STARTED;
 		mm_event_complete(sink);
 	}
 
-leave:
 	LEAVE();
 }
 
@@ -224,29 +198,49 @@ mm_event_output_complete(struct mm_work *work, mm_value_t value UNUSED)
 
 	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, output_work);
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
-
-	// Bail out if the event sink is shutdown.
 	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
-	if (mm_event_output_closed(sink)) {
-		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
-		mm_event_complete(sink);
-		goto leave;
-	}
 
-	// Check to see if a new writer should be spawned.
-	uint32_t fd_flags = sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR);
-	if ((sink->flags & MM_EVENT_OUTPUT_PENDING) != 0 && fd_flags != 0) {
-		if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-			sink->flags &= ~MM_EVENT_OUTPUT_PENDING;
-		// Submit a writer work.
+	// Check to see if another output work should be started.
+	if ((sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0
+	    && (sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0
+	    && !mm_event_output_closed(sink)) {
+		// Submit an input work for execution again.
 		mm_strand_add_work(sink->listener->strand, &sink->output_work);
 	} else {
+		// Done with output for now.
 		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
 		mm_event_complete(sink);
 	}
 
-leave:
 	LEAVE();
+}
+
+static mm_value_t
+mm_event_unexpected_input(struct mm_work *work)
+{
+	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, input_work);
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	mm_error(0, "unexpected input handler on fd %d", sink->fd);
+
+	sink->flags &= ~MM_EVENT_INPUT_STARTED;
+	mm_event_complete(sink);
+
+	return 0;
+}
+
+static mm_value_t
+mm_event_unexpected_output(struct mm_work *work)
+{
+	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, output_work);
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	mm_error(0, "unexpected output handler on fd %d", sink->fd);
+
+	sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
+	mm_event_complete(sink);
+
+	return 0;
 }
 
 static mm_value_t NONNULL(1)
@@ -281,13 +275,6 @@ mm_event_reclaim_routine(struct mm_work *work)
  * Event sink I/O control.
  **********************************************************************/
 
-static mm_value_t
-mm_event_unexpected(struct mm_work *work UNUSED)
-{
-	mm_error(0, "unexpected event");
-	return 0;
-}
-
 void NONNULL(1)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 		    mm_work_routine_t input_routine, mm_work_routine_t output_routine,
@@ -308,14 +295,13 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	sink->dispatch_stamp = 0;
 	sink->complete_stamp = 0;
 #endif
-	sink->queued_events = 0;
 
 	if (input == MM_EVENT_REGULAR)
-		flags |= MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_PENDING;
+		flags |= MM_EVENT_REGULAR_INPUT;
 	else if (input == MM_EVENT_ONESHOT)
 		flags |= MM_EVENT_ONESHOT_INPUT;
 	if (output == MM_EVENT_REGULAR)
-		flags |= MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_PENDING;
+		flags |= MM_EVENT_REGULAR_OUTPUT;
 	else if (output == MM_EVENT_ONESHOT)
 		flags |= MM_EVENT_ONESHOT_OUTPUT;
 	sink->flags = flags;
@@ -323,11 +309,11 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	if (input_routine != NULL)
 		mm_work_prepare(&sink->input_work, input_routine, mm_event_input_complete);
 	else
-		mm_work_prepare_simple(&sink->input_work, mm_event_unexpected);
+		mm_work_prepare_simple(&sink->input_work, mm_event_unexpected_input);
 	if (output_routine != NULL)
 		mm_work_prepare(&sink->output_work, output_routine, mm_event_output_complete);
 	else
-		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected);
+		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected_output);
 	mm_work_prepare_simple(&sink->reclaim_work, mm_event_reclaim_routine);
 
 	LEAVE();
@@ -442,23 +428,12 @@ mm_event_start_input_work(struct mm_event_fd *sink)
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	if (mm_event_input_closed(sink))
-		goto leave;
-
-	if ((sink->flags & MM_EVENT_INPUT_STARTED) != 0) {
-		// If a reader is already active then remember to start another
-		// one when it ends.
-		sink->flags |= MM_EVENT_INPUT_PENDING;
-	} else {
-		// Remember a reader has been started.
+	// Submit an input work for execution if possible.
+	if (!mm_event_input_closed(sink) && (sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
 		sink->flags |= MM_EVENT_INPUT_STARTED;
-		// Submit a reader work.
 		mm_strand_add_work(sink->listener->strand, &sink->input_work);
-		// Let it start immediately.
-		mm_fiber_yield();
 	}
 
-leave:
 	LEAVE();
 }
 
@@ -468,23 +443,12 @@ mm_event_start_output_work(struct mm_event_fd *sink)
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	if (mm_event_output_closed(sink))
-		goto leave;
-
-	if ((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0) {
-		// If a writer is already active then remember to start another
-		// one when it ends.
-		sink->flags |= MM_EVENT_OUTPUT_PENDING;
-	} else {
-		// Remember a writer has been started.
+	// Submit an output work for execution if possible.
+	if (!mm_event_output_closed(sink) && (sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		// Submit a writer work.
 		mm_strand_add_work(sink->listener->strand, &sink->output_work);
-		// Let it start immediately.
-		mm_fiber_yield();
 	}
 
-leave:
 	LEAVE();
 }
 
