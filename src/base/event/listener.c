@@ -374,7 +374,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.enqueued_async_calls = 0;
 	listener->stats.enqueued_async_posts = 0;
 	listener->stats.dequeued_async_calls = 0;
-	listener->stats.dequeued_async_posts = 0;
+	listener->stats.direct_calls = 0;
 #endif
 
 	// Initialize private event storage.

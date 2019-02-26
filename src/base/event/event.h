@@ -1,7 +1,7 @@
 /*
  * base/event/event.h - MainMemory event loop.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -272,12 +272,6 @@ mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout);
 void NONNULL(1)
 mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
 
-void NONNULL(1)
-mm_event_wakeup(struct mm_event_listener *listener);
-
-void NONNULL(1)
-mm_event_wakeup_any(struct mm_event_dispatch *dispatch);
-
 /**********************************************************************
  * Asynchronous procedure call basic declarations.
  **********************************************************************/
@@ -295,9 +289,6 @@ typedef void (*mm_event_async_routine_t)(struct mm_event_listener *listener, uin
 
 void NONNULL(1)
 mm_event_handle_calls(struct mm_event_listener *listener);
-
-bool NONNULL(1)
-mm_event_handle_posts(struct mm_event_listener *listener);
 
 /**********************************************************************
  * Asynchronous procedure calls targeting a single listener.
@@ -364,55 +355,28 @@ mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t 
 void NONNULL(1, 2)
 mm_event_post_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r);
 
-bool NONNULL(1, 2)
-mm_event_trypost_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r);
-
 void NONNULL(1, 2)
 mm_event_post_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1);
-
-bool NONNULL(1, 2)
-mm_event_trypost_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1);
 
 void NONNULL(1, 2)
 mm_event_post_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2);
 
-bool NONNULL(1, 2)
-mm_event_trypost_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1, uintptr_t a2);
-
 void NONNULL(1, 2)
 mm_event_post_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3);
-
-bool NONNULL(1, 2)
-mm_event_trypost_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
 void NONNULL(1, 2)
 mm_event_post_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
-bool NONNULL(1, 2)
-mm_event_trypost_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
-
 void NONNULL(1, 2)
 mm_event_post_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
 
-bool NONNULL(1, 2)
-mm_event_trypost_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
-
 void NONNULL(1, 2)
 mm_event_post_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
-
-bool NONNULL(1, 2)
-mm_event_trypost_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 #endif /* BASE_EVENT_EVENT_H */

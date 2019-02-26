@@ -75,7 +75,7 @@ struct mm_event_listener_stats
 	uint64_t enqueued_async_calls;
 	uint64_t enqueued_async_posts;
 	uint64_t dequeued_async_calls;
-	uint64_t dequeued_async_posts;
+	uint64_t direct_calls;
 };
 #endif
 

@@ -64,12 +64,6 @@ mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thre
 }
 
 void NONNULL(1)
-mm_event_dispatch_attr_setdispatchqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size)
-{
-	attr->dispatch_queue_size = size;
-}
-
-void NONNULL(1)
 mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size)
 {
 	attr->listener_queue_size = size;
@@ -123,12 +117,6 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, strand, attr->listener_queue_size);
 	}
 
-	// Create the associated synchronous post queue.
-	uint32_t sz = mm_upper_pow2(attr->dispatch_queue_size);
-	if (sz < MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE)
-		sz = MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE;
-	dispatch->async_queue = mm_ring_mpmc_create(sz);
-
 	// Initialize spinning parameters.
 	dispatch->lock_spin_limit = attr->lock_spin_limit;
 	dispatch->poll_spin_limit = attr->poll_spin_limit;
@@ -167,9 +155,6 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
 	mm_common_free(dispatch->listeners);
 
-	// Destroy the associated asynchronous post queue.
-	mm_ring_mpmc_destroy(dispatch->async_queue);
-
 	LEAVE();
 }
 
@@ -192,7 +177,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 		mm_log_fmt("listener %d:\n"
 			   " listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
 			   " stray=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n"
-			   " async-calls=%llu/%llu async-posts=%llu/%llu\n", i,
+			   " async-calls=%llu/%llu/%llu async-calls=%llu\n", i,
 			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->spin_count),
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
@@ -206,7 +191,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 			   (unsigned long long) stats->enqueued_async_calls,
 			   (unsigned long long) stats->dequeued_async_calls,
 			   (unsigned long long) stats->enqueued_async_posts,
-			   (unsigned long long) stats->dequeued_async_posts);
+			   (unsigned long long) stats->direct_calls);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->storage.nevents_stats[j];

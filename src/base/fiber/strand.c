@@ -435,9 +435,7 @@ mm_strand_dealer(mm_value_t arg)
 		mm_strand_halt(strand);
 
 		// Run the queued fibers if any.
-		do {
-			mm_fiber_yield();
-		} while (mm_event_handle_posts(strand->listener));
+		mm_fiber_yield();
 
 		// Release excessive resources allocated by fibers.
 		mm_strand_trim(strand);
