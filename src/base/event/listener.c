@@ -334,6 +334,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	strand->listener = listener;
 	strand->dispatch = dispatch;
 
+	// Prepare storage for tasks.
+	mm_event_task_prepare(&listener->task_list);
+
 	// Create the private request queue.
 	uint32_t sz = mm_upper_pow2(listener_queue_size);
 	if (sz < MM_EVENT_LISTINER_QUEUE_MIN_SIZE)
@@ -388,8 +391,16 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
 
+	// Destroy storage for tasks.
+	mm_event_task_prepare(&listener->task_list);
+
 	// Destroy the associated request queue.
 	mm_ring_mpmc_destroy(listener->async_queue);
+
+#if ENABLE_SMP
+	// Release event forwarding data.
+	mm_event_forward_cleanup(&listener->forward);
+#endif
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

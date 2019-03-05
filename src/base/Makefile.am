@@ -48,6 +48,7 @@ libmainbase_la_SOURCES = \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \
 	event/selfpipe.c event/selfpipe.h \
+	event/task.c event/task.h \
 	fiber/async.c fiber/async.h \
 	fiber/combiner.c fiber/combiner.h \
 	fiber/fiber.c fiber/fiber.h \
