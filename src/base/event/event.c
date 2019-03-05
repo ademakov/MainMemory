@@ -100,7 +100,7 @@ mm_event_post_stat(void)
 }
 
 static inline void
-mm_event_direct_call_stat(struct mm_event_listener *listener)
+mm_event_direct_call_stat(struct mm_event_listener *listener UNUSED)
 {
 #if ENABLE_EVENT_STATS
 	// Update statistics.
