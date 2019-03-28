@@ -307,6 +307,8 @@ mm_strand_master(mm_value_t arg)
 	// Force creation of the minimal number of workers.
 	while (strand->nworkers < strand->nworkers_min)
 		mm_strand_worker_create(strand);
+	// Let them start and execute queued tasks if any.
+	mm_fiber_yield();
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {

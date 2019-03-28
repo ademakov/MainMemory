@@ -174,10 +174,13 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 		struct mm_event_listener *listener = &listeners[i];
 		struct mm_event_listener_stats *stats = &listener->stats;
 
-		mm_log_fmt("listener %d:\n"
-			   " listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
+		mm_log_fmt("listener %d:\n", i);
+		mm_log_fmt(" tasks=%llu task-rings=%llu\n",
+			   (unsigned long long) listener->task_list.tail_count,
+			   (unsigned long long) listener->task_list.ring_count);
+		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
 			   " stray=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n"
-			   " async-calls=%llu/%llu/%llu async-calls=%llu\n", i,
+			   " async-calls=%llu/%llu/%llu async-calls=%llu\n",
 			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->spin_count),
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,

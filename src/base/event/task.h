@@ -53,7 +53,7 @@ typedef const struct mm_event_task *mm_event_task_t;
  **********************************************************************/
 
 /* This value must be a power of two. */
-#define MM_EVENT_TASK_RING_SIZE (4)
+#define MM_EVENT_TASK_RING_SIZE (256)
 
 struct mm_event_task_slot
 {
