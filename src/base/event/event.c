@@ -127,30 +127,6 @@ mm_event_find_listener(struct mm_event_dispatch *dispatch)
  * Event sink activity.
  **********************************************************************/
 
-static void NONNULL(1)
-mm_event_complete(struct mm_event_fd *sink)
-{
-	ENTER();
-
-	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
-		/* Do nothing. */
-	} else if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
-		/* Close the sink on error. */
-		if ((flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0)
-			mm_event_close_fd(sink);
-	} else {
-		/* Mark the sink as having completed the processing of all
-		   the events delivered to the target thread so far. */
-#if ENABLE_SMP
-		/* TODO: release memory fence */
-		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
-#endif
-	}
-
-	LEAVE();
-}
-
 void NONNULL(1)
 mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 {
@@ -171,7 +147,7 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
 		// Start a new input work.
 		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_strand_add_work(sink->listener->strand, &sink->input_work);
+		mm_strand_add_task(sink->listener->strand, &sink->io->input, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -197,64 +173,44 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
 		// Start a new output work.
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_strand_add_work(sink->listener->strand, &sink->output_work);
+		mm_strand_add_task(sink->listener->strand, &sink->io->output, (mm_value_t) sink);
 	}
 
 	LEAVE();
 }
 
+/**********************************************************************
+ * Event sink I/O tasks.
+ **********************************************************************/
+
 static void NONNULL(1)
-mm_event_input_complete(struct mm_work *work, mm_value_t value UNUSED)
+mm_event_complete(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, input_work);
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
-	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
-
-	// Check to see if another input work should be started.
-	if ((sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0
-	    && (sink->flags & MM_EVENT_REGULAR_INPUT) != 0
-	    && !mm_event_input_closed(sink)) {
-		// Submit an input work for execution again.
-		mm_strand_add_work(sink->listener->strand, &sink->input_work);
+	const uint32_t flags = sink->flags;
+	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
+		/* Do nothing. */
+	} else if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
+		/* Close the sink on error. */
+		if ((flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0)
+			mm_event_close_fd(sink);
 	} else {
-		// Done with input for now.
-		sink->flags &= ~MM_EVENT_INPUT_STARTED;
-		mm_event_complete(sink);
-	}
-
-	LEAVE();
-}
-
-static void NONNULL(1)
-mm_event_output_complete(struct mm_work *work, mm_value_t value UNUSED)
-{
-	ENTER();
-
-	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, output_work);
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
-	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
-
-	// Check to see if another output work should be started.
-	if ((sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0
-	    && (sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0
-	    && !mm_event_output_closed(sink)) {
-		// Submit an input work for execution again.
-		mm_strand_add_work(sink->listener->strand, &sink->output_work);
-	} else {
-		// Done with output for now.
-		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
-		mm_event_complete(sink);
+		/* Mark the sink as having completed the processing of all
+		   the events delivered to the target thread so far. */
+#if ENABLE_SMP
+		/* TODO: release memory fence */
+		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
+#endif
 	}
 
 	LEAVE();
 }
 
 static mm_value_t
-mm_event_unexpected_input(struct mm_work *work)
+mm_event_unexpected_input(mm_value_t arg)
 {
-	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, input_work);
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	mm_error(0, "unexpected input handler on fd %d", sink->fd);
@@ -266,9 +222,9 @@ mm_event_unexpected_input(struct mm_work *work)
 }
 
 static mm_value_t
-mm_event_unexpected_output(struct mm_work *work)
+mm_event_unexpected_output(mm_value_t arg)
 {
-	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, output_work);
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
 	mm_error(0, "unexpected output handler on fd %d", sink->fd);
@@ -279,32 +235,88 @@ mm_event_unexpected_output(struct mm_work *work)
 	return 0;
 }
 
-static mm_value_t NONNULL(1)
-mm_event_reclaim_routine(struct mm_work *work)
+static void
+mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 {
 	ENTER();
 
-	struct mm_event_fd *sink = containerof(work, struct mm_event_fd, reclaim_work);
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
 
-	// Notify a reader/writer about closing.
-	// TODO: don't block here, have a queue of closed sinks
-	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
-		struct mm_fiber *fiber = sink->listener->strand->fiber;
-		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
-		if (sink->input_fiber != NULL)
-			mm_fiber_hoist(sink->input_fiber, priority);
-		if (sink->output_fiber != NULL)
-			mm_fiber_hoist(sink->output_fiber, priority);
-		mm_fiber_yield();
+	// Check to see if another input work should be started.
+	if ((sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0
+	    && (sink->flags & MM_EVENT_REGULAR_INPUT) != 0
+	    && !mm_event_input_closed(sink)) {
+		// Submit an input work for execution again.
+		mm_strand_add_task(sink->listener->strand, &sink->io->input, arg);
+	} else {
+		// Done with input for now.
+		sink->flags &= ~MM_EVENT_INPUT_STARTED;
+		mm_event_complete(sink);
 	}
 
-	// Destroy the sink.
-	ASSERT(mm_event_closed(sink));
-	(sink->destroy)(sink);
+	LEAVE();
+}
+
+static void
+mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
+{
+	ENTER();
+
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
+
+	// Check to see if another output work should be started.
+	if ((sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0
+	    && (sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0
+	    && !mm_event_output_closed(sink)) {
+		// Submit an input work for execution again.
+		mm_strand_add_task(sink->listener->strand, &sink->io->output, arg);
+	} else {
+		// Done with output for now.
+		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
+		mm_event_complete(sink);
+	}
 
 	LEAVE();
-	return 0;
+}
+
+static bool
+mm_event_reassign_io(mm_value_t arg UNUSED, struct mm_event_listener *listener UNUSED)
+{
+	return false;
+}
+
+void NONNULL(1)
+mm_event_prepare_io(struct mm_event_io *io, mm_event_execute_t input, mm_event_execute_t output)
+{
+	if (input == NULL)
+		input = mm_event_unexpected_input;
+	if (output == NULL)
+		output = mm_event_unexpected_output;
+
+	mm_event_task_prepare(&io->input, input, mm_event_input_complete, mm_event_reassign_io);
+	mm_event_task_prepare(&io->output, output, mm_event_output_complete, mm_event_reassign_io);
+}
+
+struct mm_event_io *
+mm_event_instant_io(void)
+{
+	static struct mm_event_io instant_io = {
+		.input = {
+			.execute = mm_event_unexpected_input,
+			.complete = mm_event_complete_noop,
+			.reassign = mm_event_reassign_off
+		},
+		.output = {
+			.execute = mm_event_unexpected_output,
+			.complete = mm_event_complete_noop,
+			.reassign = mm_event_reassign_off
+		}
+	};
+	return &instant_io;
 }
 
 /**********************************************************************
@@ -312,16 +324,15 @@ mm_event_reclaim_routine(struct mm_work *work)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
-		    mm_work_routine_t input_routine, mm_work_routine_t output_routine,
-		    mm_event_mode_t input, mm_event_mode_t output,
-		    uint32_t flags)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
+		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags)
 {
 	ENTER();
 	DEBUG("fd %d", fd);
 	ASSERT(fd >= 0);
 
 	sink->fd = fd;
+	sink->io = io;
 	sink->listener = NULL;
 	sink->input_fiber = NULL;
 	sink->output_fiber = NULL;
@@ -341,16 +352,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
 	else if (output == MM_EVENT_ONESHOT)
 		flags |= MM_EVENT_ONESHOT_OUTPUT;
 	sink->flags = flags;
-
-	if (input_routine != NULL)
-		mm_work_prepare(&sink->input_work, input_routine, mm_event_input_complete);
-	else
-		mm_work_prepare_simple(&sink->input_work, mm_event_unexpected_input);
-	if (output_routine != NULL)
-		mm_work_prepare(&sink->output_work, output_routine, mm_event_output_complete);
-	else
-		mm_work_prepare_simple(&sink->output_work, mm_event_unexpected_output);
-	mm_work_prepare_simple(&sink->reclaim_work, mm_event_reclaim_routine);
 
 	LEAVE();
 }
@@ -467,7 +468,7 @@ mm_event_start_input_work(struct mm_event_fd *sink)
 	// Submit an input work for execution if possible.
 	if (!mm_event_input_closed(sink) && (sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
 		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_strand_add_work(sink->listener->strand, &sink->input_work);
+		mm_strand_add_task(sink->listener->strand, &sink->io->input, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -482,7 +483,7 @@ mm_event_start_output_work(struct mm_event_fd *sink)
 	// Submit an output work for execution if possible.
 	if (!mm_event_output_closed(sink) && (sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_strand_add_work(sink->listener->strand, &sink->output_work);
+		mm_strand_add_task(sink->listener->strand, &sink->io->output, (mm_value_t) sink);
 	}
 
 	LEAVE();

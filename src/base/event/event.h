@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "base/fiber/work.h"
+#include "base/event/task.h"
 
 /* Forward declarations. */
 struct mm_event_dispatch;
@@ -104,14 +104,23 @@ typedef uint16_t mm_event_stamp_t;
  * I/O event sink.
  **********************************************************************/
 
+/* Task entries to perform I/O on a sink. */
+struct mm_event_io
+{
+	struct mm_event_task input;
+	struct mm_event_task output;
+};
+
+/* I/O event sink. */
 struct mm_event_fd
 {
+	/* Task entries to perform I/O. */
+	struct mm_event_io *io;
 	/* Listener (along with associated thread) that owns the sink. */
 	struct mm_event_listener *listener;
 
 	/* File descriptor to watch. */
 	int fd;
-
 	/* State flags. */
 	uint32_t flags;
 
@@ -133,17 +142,9 @@ struct mm_event_fd
 	/* Fibers bound to perform I/O. */
 	struct mm_fiber *input_fiber;
 	struct mm_fiber *output_fiber;
-	/* Work entries to perform I/O. */
-	struct mm_work input_work;
-	struct mm_work output_work;
-	/* Work entry for sink memory reclamation. */
-	struct mm_work reclaim_work;
 
 	/* Reclaim queue link. */
-	union {
-		struct mm_qlink retire_link;
-		struct mm_slink reclaim_link;
-	};
+	struct mm_qlink retire_link;
 
 	/* Sink destruction routine. */
 	void (*destroy)(struct mm_event_fd *);
@@ -234,12 +235,18 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
  * Event sink I/O control.
  **********************************************************************/
 
+/* Prepare I/O tasks for an I/O event sink. */
 void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd,
-		    mm_work_routine_t input_routine,
-		    mm_work_routine_t output_routine,
-		    mm_event_mode_t input, mm_event_mode_t output,
-		    uint32_t flags);
+mm_event_prepare_io(struct mm_event_io *tasks, mm_event_execute_t input, mm_event_execute_t output);
+
+/* Get a stub for I/O tasks that is used in some special cases. */
+struct mm_event_io *
+mm_event_instant_io(void);
+
+/* Prepare an I/O event sink. */
+void NONNULL(1, 3)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
+		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags);
 
 void NONNULL(1)
 mm_event_register_fd(struct mm_event_fd *sink);

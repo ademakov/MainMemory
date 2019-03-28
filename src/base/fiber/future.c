@@ -1,7 +1,7 @@
 /*
  * base/fiber/future.c - MainMemory delayed computation.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,6 +21,9 @@
 
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/event/listener.h"
+#include "base/event/task.h"
+#include "base/fiber/fiber.h"
 #include "base/memory/pool.h"
 
 // The memory pool for futures.
@@ -29,7 +32,7 @@ static struct mm_pool mm_future_pool;
 static void
 mm_future_prepare_low(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
-	future->task = NULL;
+	future->fiber = NULL;
 	future->start = start;
 	future->start_arg = start_arg;
 	future->result = MM_RESULT_DEFERRED;
@@ -48,21 +51,25 @@ mm_future_cleanup_low(struct mm_future *future)
 		// at this point. It is required to wait until it cannot
 		// access the future structure anymore.
 		uint32_t count = 0;
-		while (mm_memory_load(future->task) != NULL)
+		while (mm_memory_load(future->fiber) != NULL)
 			count = mm_thread_backoff(count);
 	}
 }
 
+/**********************************************************************
+ * Future tasks.
+ **********************************************************************/
+
 static mm_value_t
-mm_future_routine(struct mm_work *work)
+mm_future_execute(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_future *future = containerof(work, struct mm_future, work);
+	struct mm_future *future = (struct mm_future *) arg;
 	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
 
 	// Advertise that the future task is running.
-	mm_memory_store(future->task, mm_fiber_selfptr());
+	mm_memory_store(future->fiber, mm_fiber_selfptr());
 	mm_memory_store_fence();
 
 	// Actually start the future unless already canceled.
@@ -78,6 +85,58 @@ mm_future_routine(struct mm_work *work)
 	LEAVE();
 	return result;
 }
+
+static void
+mm_future_complete(mm_value_t arg, mm_value_t result)
+{
+	ENTER();
+
+	struct mm_future *future = (struct mm_future *) arg;
+	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
+
+	// Synchronize with waiters.
+	mm_regular_lock(&future->lock);
+
+	// Store the result.
+	mm_memory_store(future->result, result);
+
+	// Wakeup all the waiters.
+	mm_waitset_broadcast(&future->waitset, &future->lock);
+
+	// Advertise the future task has finished. This must be the last
+	// access to the future structure performed by the task.
+	mm_memory_store_fence();
+	mm_memory_store(future->fiber, NULL);
+
+	LEAVE();
+}
+
+static void
+mm_future_unique_complete(mm_value_t arg, mm_value_t result)
+{
+	ENTER();
+
+	struct mm_future *future = (struct mm_future *) arg;
+	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
+
+	// Store the result.
+	mm_memory_store(future->result, result);
+
+	// Wakeup all the waiters.
+	mm_waitset_unique_signal(&future->waitset);
+
+	// Advertise the future task has finished. This must be the last
+	// access to the future structure performed by the task.
+	mm_memory_store_fence();
+	mm_memory_store(future->fiber, NULL);
+
+	LEAVE();
+}
+
+MM_EVENT_TASK(mm_future_task, mm_future_execute, mm_future_complete, mm_event_reassign_on);
+MM_EVENT_TASK(mm_future_fixed_task, mm_future_execute, mm_future_complete, mm_event_reassign_off);
+MM_EVENT_TASK(mm_future_unique_task, mm_future_execute, mm_future_unique_complete, mm_event_reassign_on);
+MM_EVENT_TASK(mm_future_unique_fixed_task, mm_future_execute, mm_future_unique_complete, mm_event_reassign_off);
 
 /**********************************************************************
  * Futures global data initialization and cleanup.
@@ -119,38 +178,12 @@ mm_future_init(void)
  * Futures with multiple waiter tasks.
  **********************************************************************/
 
-static void
-mm_future_finish(struct mm_work *work, mm_value_t result)
-{
-	ENTER();
-
-	struct mm_future *future = containerof(work, struct mm_future, work);
-	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
-
-	// Synchronize with waiters.
-	mm_regular_lock(&future->lock);
-
-	// Store the result.
-	mm_memory_store(future->result, result);
-
-	// Wakeup all the waiters.
-	mm_waitset_broadcast(&future->waitset, &future->lock);
-
-	// Advertise the future task has finished. This must be the last
-	// access to the future structure performed by the task.
-	mm_memory_store_fence();
-	mm_memory_store(future->task, NULL);
-
-	LEAVE();
-}
-
 void NONNULL(1)
 mm_future_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
 	mm_future_prepare_low(future, start, start_arg);
-	mm_work_prepare(&future->work, mm_future_routine, mm_future_finish);
 
 	future->lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 	mm_waitset_prepare(&future->waitset);
@@ -203,10 +236,13 @@ mm_future_start(struct mm_future *future, struct mm_strand *strand)
 
 	// Initiate execution of the future routine.
 	if (result == MM_RESULT_DEFERRED) {
-		if (strand != NULL)
-			mm_strand_submit_work(strand, &future->work);
-		else
-			mm_strand_tender_work(&future->work);
+		if (strand == NULL) {
+			strand = mm_strand_selfptr();
+			mm_strand_add_task(strand, &mm_future_task, (mm_value_t) future);
+		} else {
+			ASSERT(strand == mm_strand_selfptr());
+			mm_strand_add_task(strand, &mm_future_fixed_task, (mm_value_t) future);
+		}
 		result = MM_RESULT_NOTREADY;
 	}
 
@@ -300,36 +336,12 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
  * Futures with single waiter task.
  **********************************************************************/
 
-static void
-mm_future_unique_finish(struct mm_work *work, mm_value_t result)
-{
-	ENTER();
-
-	struct mm_future *future = containerof(work, struct mm_future, work);
-	ASSERT(mm_memory_load(future->result) == MM_RESULT_NOTREADY);
-
-	// Store the result.
-	mm_memory_store(future->result, result);
-
-	// Wakeup all the waiters.
-	mm_waitset_unique_signal(&future->waitset);
-
-	// Advertise the future task has finished. This must be the last
-	// access to the future structure performed by the task.
-	mm_memory_store_fence();
-	mm_memory_store(future->task, NULL);
-
-	LEAVE();
-}
-
 void NONNULL(1)
 mm_future_unique_prepare(struct mm_future *future, mm_routine_t start, mm_value_t start_arg)
 {
 	ENTER();
 
 	mm_future_prepare_low(future, start, start_arg);
-
-	mm_work_prepare(&future->work, mm_future_routine, mm_future_unique_finish);
 
 	mm_waitset_unique_prepare(&future->waitset);
 
@@ -378,10 +390,13 @@ mm_future_unique_start(struct mm_future *future, struct mm_strand *strand)
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_DEFERRED) {
 		future->result = result = MM_RESULT_NOTREADY;
-		if (strand != NULL)
-			mm_strand_submit_work(strand, &future->work);
-		else
-			mm_strand_tender_work(&future->work);
+		if (strand == NULL) {
+			strand = mm_strand_selfptr();
+			mm_strand_add_task(strand, &mm_future_unique_task, (mm_value_t) future);
+		} else {
+			ASSERT(strand == mm_strand_selfptr());
+			mm_strand_add_task(strand, &mm_future_unique_fixed_task, (mm_value_t) future);
+		}
 	}
 
 	LEAVE();
@@ -464,12 +479,12 @@ mm_future_cancel(struct mm_future *future)
 
 	mm_value_t result = mm_memory_load(future->result);
 	if (result == MM_RESULT_NOTREADY) {
-		struct mm_fiber *task = mm_memory_load(future->task);
-		if (task != NULL) {
+		struct mm_fiber *fiber = mm_memory_load(future->fiber);
+		if (fiber != NULL) {
 			// TODO: task cancel across threads
 			// TODO: catch and stop cancel in the future routine.
 #if 0
-			mm_fiber_cancel(task);
+			mm_fiber_cancel(fiber);
 #else
 			mm_warning(0, "running future cancellation is not implemented");
 #endif

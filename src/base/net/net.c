@@ -147,19 +147,19 @@ mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *)
 }
 
 static void
-mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, int fd)
+mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_server *srv, int fd)
 {
-	uint32_t options = proto->options;
-	if (proto->reader == NULL && proto->writer != NULL)
+	uint32_t options = srv->proto->options;
+	if (srv->proto->reader == NULL && srv->proto->writer != NULL)
 		options |= MM_NET_EGRESS;
 
 	mm_event_mode_t input, output;
 	if ((options & MM_NET_EGRESS) == 0) {
-		VERIFY(proto->reader != NULL);
+		VERIFY(srv->proto->reader != NULL);
 		input = MM_EVENT_REGULAR;
 		output = MM_EVENT_ONESHOT;
 	} else {
-		VERIFY(proto->writer != NULL);
+		VERIFY(srv->proto->writer != NULL);
 		input = MM_EVENT_ONESHOT;
 		output = MM_EVENT_REGULAR;
 	}
@@ -170,9 +170,9 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_proto *proto, 
 		flags = MM_EVENT_FIXED_LISTENER;
 
 	// Initialize basic fields.
-	mm_net_prepare(sock, proto->destroy != NULL ? proto->destroy : mm_net_socket_free);
+	mm_net_prepare(sock, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, proto->reader, proto->writer, input, output, flags);
+	mm_event_prepare_fd(&sock->event, fd, &srv->tasks, input, output, flags);
 }
 
 /**********************************************************************
@@ -218,7 +218,7 @@ retry:
 	}
 
 	// Initialize the socket structure.
-	mm_net_prepare_accepted(sock, srv->proto, fd);
+	mm_net_prepare_accepted(sock, srv, fd);
 	if (sa.ss_family == AF_INET)
 		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
 	else if (sa.ss_family == AF_INET6)
@@ -235,12 +235,12 @@ leave:
 }
 
 static mm_value_t
-mm_net_acceptor(struct mm_work *work)
+mm_net_acceptor(mm_value_t arg)
 {
 	ENTER();
 
 	// Find the pertinent server.
-	struct mm_net_server *srv = containerof(work, struct mm_net_server, event.input_work);
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
 
 	// Accept incoming connections.
 	while (mm_net_accept(srv))
@@ -255,7 +255,9 @@ mm_net_acceptor(struct mm_work *work)
  **********************************************************************/
 
 /* Global server list. */
-static struct mm_list MM_LIST_INIT(mm_server_list);
+static struct mm_list MM_LIST_INIT(mm_net_server_list);
+/* Acceptor I/O tasks. */
+static struct mm_event_io mm_net_acceptor_tasks;
 
 static void
 mm_net_exit_cleanup(void)
@@ -264,8 +266,8 @@ mm_net_exit_cleanup(void)
 
 	// Go through the the global server list and remove files
 	// associated with unix-domain sockets.
-	struct mm_link *link = mm_list_head(&mm_server_list);
-	while (!mm_list_is_tail(&mm_server_list, link)) {
+	struct mm_link *link = mm_list_head(&mm_net_server_list);
+	while (!mm_list_is_tail(&mm_net_server_list, link)) {
 		struct mm_net_server *srv = containerof(link, struct mm_net_server, link);
 		if (srv->event.fd >= 0)
 			mm_net_remove_unix_socket(&srv->addr);
@@ -296,12 +298,12 @@ mm_net_shutdown_server(struct mm_net_server *srv)
 }
 
 static mm_value_t
-mm_net_register_server(struct mm_work *work)
+mm_net_register_server(mm_value_t arg)
 {
 	ENTER();
 
 	// Register a server for events.
-	struct mm_net_server *srv = containerof(work, struct mm_net_server, register_work);
+	struct mm_net_server *srv = (struct mm_net_server *) arg;
 	ASSERT(srv->event.fd >= 0);
 	mm_event_register_fd(&srv->event);
 
@@ -314,6 +316,14 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 {
 	ENTER();
 
+	// On the very first server do global initialization.
+	if (mm_list_empty(&mm_net_server_list)) {
+		// Register the server cleanup routine.
+		mm_atexit(mm_net_exit_cleanup);
+		// Prepare acceptor I/O tasks.
+		mm_event_prepare_io(&mm_net_acceptor_tasks, mm_net_acceptor, NULL);
+	}
+
 	// Allocate a server.
 	struct mm_net_server *srv = mm_global_alloc(sizeof(struct mm_net_server));
 
@@ -322,18 +332,14 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	srv->event.fd = -1;
 	srv->event.flags = MM_EVENT_REGULAR_INPUT;
 	srv->name = NULL;
-	mm_work_prepare_simple(&srv->register_work, mm_net_register_server);
+	mm_event_prepare_io(&srv->tasks, proto->reader, proto->writer);
 	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
-
-	// On the very first server register the server cleanup routine.
-	if (mm_list_empty(&mm_server_list))
-		mm_atexit(mm_net_exit_cleanup);
 
 	// Register the server stop hook.
 	mm_common_stop_hook_1((void (*)(void *)) mm_net_shutdown_server, srv);
 
 	// Link it to the global server list.
-	mm_list_append(&mm_server_list, &srv->link);
+	mm_list_append(&mm_net_server_list, &srv->link);
 
 	LEAVE();
 	return srv;
@@ -360,11 +366,12 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, mm_net_acceptor, NULL, MM_EVENT_REGULAR, MM_EVENT_IGNORED,
-			    MM_EVENT_FIXED_LISTENER);
+	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks,
+			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_FIXED_LISTENER);
 
+	MM_EVENT_TASK(register_task, mm_net_register_server, mm_event_complete_noop, mm_event_reassign_off);
 	struct mm_strand *strand = mm_thread_ident_to_strand(target);
-	mm_strand_submit_work(strand, &srv->register_work);
+	mm_strand_send_task(strand, &register_task, (mm_value_t) srv);
 
 	LEAVE();
 }
@@ -537,7 +544,7 @@ retry:
 		flags |= MM_EVENT_OUTPUT_TRIGGER;
 	else
 		flags |= MM_EVENT_OUTPUT_READY;
-	mm_event_prepare_fd(&sock->event, fd, NULL, NULL, MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, flags);
+	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, flags);
 
 	// Register the socket in the event loop.
 	mm_event_register_fd(&sock->event);

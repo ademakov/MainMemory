@@ -1,7 +1,7 @@
 /*
  * base/fiber/future.h - MainMemory delayed computation tasks.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,17 +22,15 @@
 
 #include "common.h"
 #include "base/lock.h"
-#include "base/fiber/fiber.h"
 #include "base/fiber/wait.h"
-#include "base/fiber/work.h"
+
+/* Forward declarations. */
+struct mm_strand;
 
 struct mm_future
 {
-	/* The future work item. */
-	struct mm_work work;
-
 	/* The future task if running. */
-	struct mm_fiber *task;
+	struct mm_fiber *fiber;
 
 	/* The future task parameters. */
 	mm_routine_t start;

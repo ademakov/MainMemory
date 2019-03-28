@@ -1,7 +1,7 @@
 /*
  * base/fiber/strand.c - MainMemory fiber strand.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #include "base/logger.h"
 #include "base/event/dispatch.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/work.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
@@ -47,7 +46,7 @@ __thread struct mm_strand *__mm_strand_self;
  * Idle queue.
  **********************************************************************/
 
-void
+static void
 mm_strand_idle(struct mm_strand *strand, bool tail)
 {
 	ENTER();
@@ -105,31 +104,18 @@ mm_strand_poke(struct mm_strand *strand)
  * Work queue.
  **********************************************************************/
 
-static inline bool
-mm_strand_has_work(struct mm_strand *strand)
-{
-	return strand->nwork != 0;
-}
-
-static struct mm_work *
-mm_strand_get_work(struct mm_strand *strand)
-{
-	ASSERT(mm_strand_has_work(strand));
-
-	strand->nwork--;
-	struct mm_qlink *link = mm_queue_remove(&strand->workq);
-	return containerof(link, struct mm_work, link);
-}
-
 void NONNULL(1, 2)
-mm_strand_add_work(struct mm_strand *strand, struct mm_work *work)
+mm_strand_add_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg)
 {
 	ENTER();
 	ASSERT(strand == mm_strand_selfptr());
 
-	// Enqueue the work item.
-	mm_queue_append(&strand->workq, &work->link);
-	strand->nwork++;
+	// Check to see if the added task is going to be the only one in the
+	// queue until another is added.
+	//bool first = mm_event_task_list_empty(strand->task_list);
+
+	// Enqueue the the task.
+	mm_event_task_add(strand->task_list, task, arg);
 
 	// If there is a fiber waiting for work then let it run now.
 	mm_strand_poke(strand);
@@ -140,12 +126,14 @@ mm_strand_add_work(struct mm_strand *strand, struct mm_work *work)
 #if ENABLE_SMP
 
 static void
-mm_strand_add_work_req(struct mm_event_listener *listener, uintptr_t *arguments)
+mm_strand_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_work *work = (struct mm_work *) arguments[0];
-	mm_strand_add_work(listener->strand, work);
+	struct mm_event_task *task = (struct mm_event_task *) arguments[0];
+	mm_value_t arg = arguments[1];
+
+	mm_strand_add_task(listener->strand, task, arg);
 
 	LEAVE();
 }
@@ -153,17 +141,17 @@ mm_strand_add_work_req(struct mm_event_listener *listener, uintptr_t *arguments)
 #endif
 
 void NONNULL(1, 2)
-mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work)
+mm_strand_send_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg)
 {
 	ENTER();
 
 #if ENABLE_SMP
 	if (strand == mm_strand_selfptr()) {
 		// Enqueue it directly if on the same strand.
-		mm_strand_add_work(strand, work);
+		mm_strand_add_task(strand, task, arg);
 	} else {
 		// Submit the work item to the thread request queue.
-		mm_event_call_1(strand->listener, mm_strand_add_work_req, (uintptr_t) work);
+		mm_event_call_2(strand->listener, mm_strand_add_task_req, (uintptr_t) task, arg);
 	}
 #else
 	mm_strand_add_work(strand, work);
@@ -173,21 +161,20 @@ mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work)
 }
 
 void NONNULL(1)
-mm_strand_tender_work(struct mm_work *work)
+mm_strand_post_task(mm_event_task_t task, mm_value_t arg)
 {
 	ENTER();
 
 	struct mm_strand *strand = mm_strand_selfptr();
 #if ENABLE_SMP
 	// Submit the work item to the domain request queue.
-	mm_event_post_1(strand->dispatch, mm_strand_add_work_req, (uintptr_t) work);
+	mm_event_post_2(strand->dispatch, mm_strand_add_task_req, (mm_value_t) task, arg);
 #else
-	mm_strand_add_work(strand, work);
+	mm_strand_add_task(strand, task, arg);
 #endif
 
 	LEAVE();
 }
-
 
 /**********************************************************************
  * Fiber queue.
@@ -235,11 +222,11 @@ static void
 mm_strand_worker_cleanup(uintptr_t arg)
 {
 	struct mm_strand *strand = mm_strand_selfptr();
-	struct mm_work *work = *((struct mm_work **) arg);
+	struct mm_event_task_slot *slot = (struct mm_event_task_slot *) arg;
 
 	// Notify that the current work has been canceled.
-	if (work != NULL)
-		(work->complete)(work, MM_RESULT_CANCELED);
+	if (slot->task != NULL)
+		(slot->task->complete)(slot->task_arg, MM_RESULT_CANCELED);
 
 	// Wake up the master possibly waiting for worker availability.
 	if (strand->nworkers == strand->nworkers_max)
@@ -253,38 +240,29 @@ static mm_value_t
 mm_strand_worker(mm_value_t arg)
 {
 	ENTER();
+	struct mm_strand *const strand = (struct mm_strand *) arg;
 
-	// The work item to cancel.
-	struct mm_work *cancel = NULL;
+	// The task to execute and possibly cancel.
+	struct mm_event_task_slot slot;
 
 	// Ensure cleanup on exit.
-	mm_fiber_cleanup_push(mm_strand_worker_cleanup, &cancel);
+	mm_fiber_cleanup_push(mm_strand_worker_cleanup, &slot);
 
-	// Handle the work item supplied by the master.
-	if (arg) {
-		struct mm_work *work = (struct mm_work *) arg;
-		// Execute the work routine.
-		mm_memory_store(cancel, work);
-		mm_value_t result = (work->routine)(work);
-		mm_memory_store(cancel, NULL);
-		// Perform completion notification on return.
-		(work->complete)(work, result);
-	}
-
-	struct mm_strand *const strand = mm_strand_selfptr();
 	for (;;) {
-		// Wait for work standing at the front of the idle queue.
-		while (!mm_strand_has_work(strand))
+		// Try to get a task.
+		if (!mm_event_task_get(strand->task_list, &slot)) {
+			// Wait for a task standing at the front of the idle queue.
 			mm_strand_idle(strand, false);
+			continue;
+		}
 
-		// Handle the first available work item.
-		struct mm_work *work = mm_strand_get_work(strand);
-		// Execute the work routine.
-		mm_memory_store(cancel, work);
-		mm_value_t result = (work->routine)(work);
-		mm_memory_store(cancel, NULL);
+		// Execute the task.
+		const struct mm_event_task *const task = slot.task;
+		const mm_value_t result = (task->execute)(slot.task_arg);
+		// Protect against a spurious cancel call from the completion routine.
+		mm_memory_store(slot.task, NULL);
 		// Perform completion notification on return.
-		(work->complete)(work, result);
+		(task->complete)(slot.task_arg, result);
 	}
 
 	// Cleanup on return.
@@ -295,7 +273,7 @@ mm_strand_worker(mm_value_t arg)
 }
 
 static void
-mm_strand_worker_create(struct mm_strand *strand, mm_value_t arg)
+mm_strand_worker_create(struct mm_strand *strand)
 {
 	ENTER();
 
@@ -308,7 +286,7 @@ mm_strand_worker_create(struct mm_strand *strand, mm_value_t arg)
 	mm_fiber_attr_init(&attr);
 	mm_fiber_attr_setpriority(&attr, MM_PRIO_WORKER);
 	mm_fiber_attr_setname(&attr, name);
-	mm_fiber_create(&attr, mm_strand_worker, arg);
+	mm_fiber_create(&attr, mm_strand_worker, (mm_value_t) strand);
 
 	// Account for the newcomer worker.
 	strand->nworkers++;
@@ -324,37 +302,39 @@ static mm_value_t
 mm_strand_master(mm_value_t arg)
 {
 	ENTER();
-
-	struct mm_strand *strand = (struct mm_strand *) arg;
-	bool verbose = mm_get_verbose_enabled();
+	struct mm_strand *const strand = (struct mm_strand *) arg;
 
 	// Force creation of the minimal number of workers.
 	while (strand->nworkers < strand->nworkers_min)
-		mm_strand_worker_create(strand, 0);
+		mm_strand_worker_create(strand);
 
+	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
-		// Check to see if there are enough workers.
-		if (strand->nworkers >= strand->nworkers_max) {
-			mm_fiber_block();
+		// Check to see if there are outstanding tasks.
+		if (!mm_event_task_list_empty(strand->task_list)) {
+			if (strand->nidle) {
+				// Activate an idle worker fiber.
+				mm_strand_poke(strand);
+			} else if (strand->nworkers < strand->nworkers_max) {
+				// Report the status of all fibers.
+				if (mm_get_verbose_enabled())
+					mm_strand_print_fibers(strand);
+				// Make a new worker fiber.
+				mm_strand_worker_create(strand);
+			} else {
+				// There are enough workers already.
+				mm_fiber_block();
+				continue;
+			}
+
+			// Let the activated/created worker run.
+			mm_fiber_yield();
 			continue;
 		}
 
-		// Wait for work at the back end of the idle queue.
+		// Wait for tasks at the back end of the idle queue.
 		// So any idle worker would take work before the master.
 		mm_strand_idle(strand, true);
-
-		// Check to see if there is outstanding work.
-		if (mm_strand_has_work(strand)) {
-			// Take the first available work item.
-			struct mm_work *work = mm_strand_get_work(strand);
-
-			// Make a new worker fiber to handle it.
-			mm_strand_worker_create(strand, (mm_value_t) work);
-
-			// Inform about the status of all fibers.
-			if (verbose)
-				mm_strand_print_fibers(strand);
-		}
 	}
 
 	LEAVE();
@@ -464,7 +444,8 @@ void NONNULL(1)
 mm_strand_print_fibers(struct mm_strand *strand)
 {
 	mm_brief("fibers on thread %d (#idle=%u, #work=%u):",
-		 mm_thread_getnumber(strand->thread), strand->nidle, strand->nwork);
+		 mm_thread_getnumber(strand->thread), strand->nidle,
+		 mm_event_task_list_size(strand->task_list));
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_strand_print_fiber_list(&strand->runq.bins[i]);
 	mm_strand_print_fiber_list(&strand->block);
@@ -503,13 +484,11 @@ mm_strand_prepare(struct mm_strand *strand)
 	mm_list_prepare(&strand->dead);
 	mm_list_prepare(&strand->block);
 	mm_list_prepare(&strand->async);
-	mm_queue_prepare(&strand->workq);
 
 	mm_wait_cache_prepare(&strand->wait_cache);
 
 	strand->state = MM_STRAND_INVALID;
 
-	strand->nwork = 0;
 	strand->nidle = 0;
 	strand->nworkers = 0;
 	strand->nworkers_min = MM_NWORKERS_MIN;

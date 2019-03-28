@@ -57,7 +57,6 @@ libmainbase_la_SOURCES = \
 	fiber/strand.c fiber/strand.h \
 	fiber/timer.c fiber/timer.h \
 	fiber/wait.c fiber/wait.h \
-	fiber/work.c fiber/work.h \
 	memory/alloc.h \
 	memory/arena.h \
 	memory/buffer.c memory/buffer.h \

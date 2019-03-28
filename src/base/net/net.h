@@ -45,12 +45,10 @@ struct mm_net_server
 {
 	/* Event handling data. */
 	struct mm_event_fd event;
+	struct mm_event_io tasks;
 
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
-
-	/* Work items for server tasks. */
-	struct mm_work register_work;
 
 	/* Global server list link. */
 	struct mm_link link;
@@ -86,8 +84,8 @@ struct mm_net_proto
 	struct mm_net_socket * (*create)(void);
 	void (*destroy)(struct mm_event_fd *);
 
-	mm_work_routine_t reader;
-	mm_work_routine_t writer;
+	mm_event_execute_t reader;
+	mm_event_execute_t writer;
 };
 
 /**********************************************************************
@@ -213,15 +211,10 @@ mm_net_set_write_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
  **********************************************************************/
 
 static inline struct mm_net_socket *
-mm_net_reader_socket(struct mm_work *reader_work)
+mm_net_arg_to_socket(mm_value_t arg)
 {
-	return containerof(reader_work, struct mm_net_socket, event.input_work);
-}
-
-static inline struct mm_net_socket *
-mm_net_writer_socket(struct mm_work *writer_work)
-{
-	return containerof(writer_work, struct mm_net_socket, event.output_work);
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
+	return containerof(sink, struct mm_net_socket, event);
 }
 
 #endif /* BASE_NET_NET_H */

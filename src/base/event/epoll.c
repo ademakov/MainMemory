@@ -176,8 +176,8 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 	mm_set_nonblocking(fd);
 
 	// Initialize the corresponding event sink.
-	mm_event_prepare_fd(&backend->notify_fd, fd, NULL, NULL, MM_EVENT_IGNORED, MM_EVENT_IGNORED,
-			    MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD);
+	mm_event_prepare_fd(&backend->notify_fd, fd, mm_event_instant_io(),
+			    MM_EVENT_IGNORED, MM_EVENT_IGNORED, MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD);
 
 	// Register the event sink.
 	struct epoll_event ee;

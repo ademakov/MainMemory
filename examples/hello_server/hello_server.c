@@ -27,7 +27,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 
-static mm_value_t hello_writer(struct mm_work *work);
+static mm_value_t hello_writer(mm_value_t arg);
 
 // Server descriptor.
 static struct mm_net_proto hello_proto = { .writer = hello_writer };
@@ -131,9 +131,9 @@ main(int ac, char *av[])
 // This function gets an open client connection as argument,
 // transmits the response message and closes the connection.
 static mm_value_t
-hello_writer(struct mm_work *work)
+hello_writer(mm_value_t arg)
 {
-	struct mm_net_socket *sock = mm_net_writer_socket(work);
+	struct mm_net_socket *sock = mm_net_arg_to_socket(arg);
 
 	const char *msg = hello_msg;
 	size_t len = hello_len;

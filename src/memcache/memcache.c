@@ -63,11 +63,11 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 }
 
 static mm_value_t
-mc_reader_routine(struct mm_work *work)
+mc_reader_routine(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = mm_net_reader_socket(work);
+	struct mm_net_socket *sock = mm_net_arg_to_socket(arg);
 	struct mc_state *state = containerof(sock, struct mc_state, sock.sock);
 
 	// Try to get some input w/o blocking.

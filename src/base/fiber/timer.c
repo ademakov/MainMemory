@@ -19,8 +19,8 @@
 
 #include "base/fiber/timer.h"
 
+#include "base/event/task.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/work.h"
 
 #define MM_TIMER_QUEUE_MAX_WIDTH	500
 #define MM_TIMER_QUEUE_MAX_COUNT	2000
@@ -30,9 +30,6 @@ struct mm_timer
 {
 	/* A timer queue node. */
 	struct mm_timeq_entry entry;
-
-	/* Timer task work item. */
-	struct mm_work work;
 
 	/* Clock type. */
 	mm_clock_t clock;
@@ -65,6 +62,29 @@ struct mm_timer_resume
 	struct mm_fiber *task;
 };
 
+/**********************************************************************
+ * Timer task.
+ **********************************************************************/
+
+static mm_value_t
+mm_timer_execute(mm_value_t arg)
+{
+	struct mm_timer *timer = (struct mm_timer *) arg;
+	return (timer->start)(timer->start_arg);
+}
+
+static void
+mm_timer_complete(mm_value_t arg, mm_value_t result UNUSED)
+{
+	struct mm_timer *timer = (struct mm_timer *) arg;
+	timer->active = false;
+}
+
+MM_EVENT_TASK(mm_timer_task, mm_timer_execute, mm_timer_complete, mm_event_reassign_off);
+
+/**********************************************************************
+ * Timer handling.
+ **********************************************************************/
 
 static bool
 mm_timer_is_armed(struct mm_timeq_entry *entry)
@@ -88,7 +108,7 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 				mm_warning(0, "timer is still active");
 			} else {
 				timer->active = true;
-				mm_strand_add_work(mm_strand_selfptr(), &timer->work);
+				mm_strand_add_task(mm_strand_selfptr(), &mm_timer_task, (mm_value_t) timer);
 			}
 		}
 
@@ -172,20 +192,6 @@ mm_timer_next(struct mm_time_manager *manager)
  * Timed task execution.
  **********************************************************************/
 
-static mm_value_t
-mm_timer_routine(struct mm_work *work)
-{
-	struct mm_timer *timer = containerof(work, struct mm_timer, work);
-	return (timer->start)(timer->start_arg);
-}
-
-static void
-mm_timer_complete(struct mm_work *work, mm_value_t value UNUSED)
-{
-	struct mm_timer *timer = containerof(work, struct mm_timer, work);
-	timer->active = false;
-}
-
 mm_timer_t NONNULL(2)
 mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 {
@@ -206,7 +212,6 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 	}
 
 	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
-	mm_work_prepare(&timer->work, mm_timer_routine, mm_timer_complete);
 	timer->clock = clock;
 	timer->active = false;
 	timer->start = start;
@@ -302,7 +307,7 @@ mm_timer_block(mm_timeout_t timeout)
 	struct mm_strand *strand = mm_strand_selfptr();
 	struct mm_time_manager *manager = &strand->time_manager;
 	mm_timeval_t time = mm_timer_getclocktime(manager) + timeout;
-	DEBUG("time: %llu", time);
+	DEBUG("time: %lld", (long long) time);
 
 	struct mm_timer_resume timer = { .manager = manager,
 					 .task = mm_fiber_selfptr() };

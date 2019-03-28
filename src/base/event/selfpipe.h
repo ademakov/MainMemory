@@ -1,7 +1,7 @@
 /*
  * base/event/selfpipe.h - MainMemory self-pipe trick.
  *
- * Copyright (C) 2013-2018  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,8 +25,7 @@
 
 struct mm_selfpipe
 {
-	struct mm_event_fd sink;
-
+	struct mm_event_fd event;
 	int write_fd;
 };
 

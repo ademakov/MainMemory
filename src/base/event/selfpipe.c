@@ -1,7 +1,7 @@
 /*
  * base/event/selfpipe.c - MainMemory self-pipe trick.
  *
- * Copyright (C) 2013-2018  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -38,8 +38,8 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe)
 	mm_set_nonblocking(fds[0]);
 	mm_set_nonblocking(fds[1]);
 
-	mm_event_prepare_fd(&selfpipe->sink, fds[0], NULL, NULL, MM_EVENT_IGNORED, MM_EVENT_IGNORED,
-			    MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD);
+	mm_event_prepare_fd(&selfpipe->event, fds[0], mm_event_instant_io(),
+			    MM_EVENT_IGNORED, MM_EVENT_IGNORED, MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD);
 	selfpipe->write_fd = fds[1];
 
 	LEAVE();
@@ -50,7 +50,7 @@ mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	mm_close(selfpipe->sink.fd);
+	mm_close(selfpipe->event.fd);
 	mm_close(selfpipe->write_fd);
 
 	LEAVE();
@@ -71,11 +71,11 @@ mm_selfpipe_clean(struct mm_selfpipe *selfpipe)
 {
 	ENTER();
 
-	if ((selfpipe->sink.flags & MM_EVENT_INPUT_READY) != 0) {
-		selfpipe->sink.flags &= ~MM_EVENT_INPUT_READY;
+	if ((selfpipe->event.flags & MM_EVENT_INPUT_READY) != 0) {
+		selfpipe->event.flags &= ~MM_EVENT_INPUT_READY;
 
 		char dummy[64];
-		while (mm_read(selfpipe->sink.fd, dummy, sizeof dummy) == sizeof dummy) {
+		while (mm_read(selfpipe->event.fd, dummy, sizeof dummy) == sizeof dummy) {
 			/* do nothing */
 		}
 	}

@@ -21,6 +21,7 @@
 
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 
 #define MM_EVENT_EPOCH_POST_COUNT	(8)
@@ -36,6 +37,34 @@ mm_event_epoch_observe_req(struct mm_event_listener *listener, uintptr_t *argume
 	LEAVE();
 }
 
+static mm_value_t
+mm_event_epoch_reclaim_execute(mm_value_t arg)
+{
+	ENTER();
+
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+
+	// Notify a reader/writer about closing.
+	// TODO: don't block here, have a queue of closed sinks
+	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
+		struct mm_fiber *fiber = sink->listener->strand->fiber;
+		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
+		if (sink->input_fiber != NULL)
+			mm_fiber_hoist(sink->input_fiber, priority);
+		if (sink->output_fiber != NULL)
+			mm_fiber_hoist(sink->output_fiber, priority);
+		mm_fiber_yield();
+	}
+
+	// Destroy the sink.
+	ASSERT(mm_event_closed(sink));
+	(sink->destroy)(sink);
+
+	LEAVE();
+	return 0;
+}
+
 static void
 mm_event_epoch_reclaim(struct mm_event_fd *sink)
 {
@@ -46,7 +75,11 @@ mm_event_epoch_reclaim(struct mm_event_fd *sink)
 	// or queued past work items for it. So relying on the FIFO order
 	// of the work queue submit a work item that might safely cleanup
 	// the socket being the last one that refers to it.
-	mm_strand_add_work(sink->listener->strand, &sink->reclaim_work);
+	MM_EVENT_TASK(reclaim_task,
+		      mm_event_epoch_reclaim_execute,
+		      mm_event_complete_noop,
+		      mm_event_reassign_off);
+	mm_strand_add_task(sink->listener->strand, &reclaim_task, (mm_value_t) sink);
 
 	LEAVE();
 }
@@ -83,7 +116,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		struct mm_stack *limbo = &local->limbo[(epoch >> 1) & 1];
 		while (!mm_stack_empty(limbo)) {
 			struct mm_slink *link = mm_stack_remove(limbo);
-			struct mm_event_fd *sink = containerof(link, struct mm_event_fd, reclaim_link);
+			struct mm_event_fd *sink = containerof(link, struct mm_event_fd, retire_link);
 			mm_event_epoch_reclaim(sink);
 			local->count--;
 		}

@@ -25,6 +25,7 @@
 #include "base/hash.h"
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/event/task.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/memory.h"
 
@@ -169,11 +170,11 @@ mc_table_expand(struct mc_tpart *part, uint32_t n)
 }
 
 static mm_value_t
-mc_table_stride_routine(struct mm_work *work)
+mc_table_stride_routine(mm_value_t arg)
 {
 	ENTER();
 
-	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
+	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->striding);
 
 	struct mc_action action;
@@ -185,11 +186,11 @@ mc_table_stride_routine(struct mm_work *work)
 }
 
 static void
-mc_table_stride_complete(struct mm_work *work, mm_value_t result UNUSED)
+mc_table_stride_complete(mm_value_t arg, mm_value_t result UNUSED)
 {
 	ENTER();
 
-	struct mc_tpart *part = containerof(work, struct mc_tpart, stride_work);
+	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->striding);
 
 #if ENABLE_SMP
@@ -206,11 +207,8 @@ mc_table_start_striding(struct mc_tpart *part)
 {
 	ENTER();
 
-#if ENABLE_MEMCACHE_DELEGATE
-	mm_strand_add_work(mm_strand_selfptr(), &part->stride_work);
-#else
-	mm_strand_tender_work(&part->stride_work);
-#endif
+	MM_EVENT_TASK(stride_task, mc_table_stride_routine, mc_table_stride_complete, mm_event_reassign_on);
+	mm_strand_post_task(&stride_task, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -220,11 +218,11 @@ mc_table_start_striding(struct mc_tpart *part)
  **********************************************************************/
 
 static mm_value_t
-mc_table_evict_routine(struct mm_work *work)
+mc_table_evict_routine(mm_value_t arg)
 {
 	ENTER();
 
-	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
+	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->evicting);
 
 	struct mc_action action;
@@ -241,11 +239,11 @@ mc_table_evict_routine(struct mm_work *work)
 }
 
 static void
-mm_table_evict_complete(struct mm_work *work, mm_value_t result UNUSED)
+mc_table_evict_complete(mm_value_t arg, mm_value_t result UNUSED)
 {
 	ENTER();
 
-	struct mc_tpart *part = containerof(work, struct mc_tpart, evict_work);
+	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->evicting);
 
 #if ENABLE_SMP
@@ -262,11 +260,8 @@ mc_table_start_evicting(struct mc_tpart *part)
 {
 	ENTER();
 
-#if ENABLE_MEMCACHE_DELEGATE
-	mm_strand_add_work(mm_strand_selfptr(), &part->stride_work);
-#else
-	mm_strand_tender_work(&part->evict_work);
-#endif
+	MM_EVENT_TASK(evict_task, mc_table_evict_routine, mc_table_evict_complete, mm_event_reassign_on);
+	mm_strand_post_task(&evict_task, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -351,9 +346,6 @@ mc_table_init_part(mm_thread_t index, struct mm_strand *target UNUSED)
 	part->evicting = false;
 	part->striding = false;
 #endif
-
-	mm_work_prepare(&part->evict_work, mc_table_evict_routine, mm_table_evict_complete);
-	mm_work_prepare(&part->stride_work, mc_table_stride_routine, mc_table_stride_complete);
 
 	part->stamp = index + 1;
 

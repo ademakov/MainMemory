@@ -1,7 +1,7 @@
 /*
  * base/fiber/strand.h - MainMemory fiber strand.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@
 #include "common.h"
 
 #include "base/list.h"
+#include "base/event/task.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/timer.h"
 #include "base/fiber/wait.h"
@@ -31,7 +32,6 @@
 struct mm_event_dispatch;
 struct mm_event_listener;
 struct mm_fiber;
-struct mm_work;
 
 typedef enum
 {
@@ -55,6 +55,7 @@ struct mm_strand
 	/* Event dispatch support. */
 	struct mm_event_listener *listener;
 	struct mm_event_dispatch *dispatch;
+	struct mm_event_task_list *task_list;
 
 	/* Queue of blocked fibers. */
 	struct mm_list block;
@@ -70,12 +71,6 @@ struct mm_strand
 
 	/* List of asynchronous operations. */
 	struct mm_list async;
-
-	/* Queue of pending work items. */
-	struct mm_queue workq;
-
-	/* The number of items in the work queue. */
-	uint32_t nwork;
 
 	/* Current and maximum number of worker fibers. */
 	mm_fiber_t nidle;
@@ -130,17 +125,17 @@ mm_strand_stop(struct mm_strand *strand);
  * Strand fiber execution.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_strand_add_work(struct mm_strand *strand, struct mm_work *work);
-
-void NONNULL(1, 2)
-mm_strand_submit_work(struct mm_strand *strand, struct mm_work *work);
-
-void NONNULL(1)
-mm_strand_tender_work(struct mm_work *work);
-
 void NONNULL(1)
 mm_strand_run_fiber(struct mm_fiber *fiber);
+
+void NONNULL(1, 2)
+mm_strand_add_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg);
+
+void NONNULL(1, 2)
+mm_strand_send_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg);
+
+void NONNULL(1)
+mm_strand_post_task(mm_event_task_t task, mm_value_t arg);
 
 /**********************************************************************
  * Strand information.

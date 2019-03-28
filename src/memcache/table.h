@@ -25,7 +25,6 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
-#include "base/fiber/work.h"
 #include "base/memory/space.h"
 
 #if ENABLE_MEMCACHE_LOCKING
@@ -77,8 +76,6 @@ struct mc_tpart
 	bool evicting;
 	bool striding;
 #endif
-	struct mm_work evict_work;
-	struct mm_work stride_work;
 
 	/* The last used value for CAS command. */
 	uint64_t stamp;

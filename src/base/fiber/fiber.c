@@ -162,7 +162,7 @@ mm_fiber_set_attr(struct mm_fiber *fiber, const struct mm_fiber_attr *attr)
 {
 	fiber->result = MM_RESULT_NOTREADY;
 
-	if (unlikely(attr == NULL)) {	
+	if (unlikely(attr == NULL)) {
 		fiber->flags = 0;
 		fiber->original_priority = MM_PRIO_WORKER;
 		strcpy(fiber->name, "unnamed");

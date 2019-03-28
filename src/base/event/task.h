@@ -23,49 +23,41 @@
 #include "common.h"
 #include "base/list.h"
 
-/* Forward declaration. */
+/* Forward declarations. */
 struct mm_event_listener;
-struct mm_event_task;
 
 /**********************************************************************
  * Abstract asynchronous task.
  **********************************************************************/
 
-#if 0
-#define MM_EVENT_TASK_VTABLE(name, e, c, r)			\
-	static const struct mm_event_task_vtable name = {	\
-		.execute = (mm_event_task_execute_t) e,		\
-		.complete = (mm_event_task_complete_t) c,	\
-		.reassign = (mm_event_task_reassign_t) r,	\
-	}
-#endif
-
 /* A task routine. */
-typedef mm_value_t (*mm_event_task_execute_t)(struct mm_event_task *task, mm_value_t arg);
+typedef mm_value_t (*mm_event_execute_t)(mm_value_t arg);
 
 /* A task completion notification routine. */
-typedef void (*mm_event_task_complete_t)(struct mm_event_task *task, mm_value_t result);
+typedef void (*mm_event_complete_t)(mm_value_t arg, mm_value_t result);
 
 /* A task reassignment routine. */
-typedef bool (*mm_event_task_reassign_t)(struct mm_event_task *task, struct mm_event_listener *listener);
+typedef bool (*mm_event_reassign_t)(mm_value_t arg, struct mm_event_listener *listener);
 
 struct mm_event_task
 {
-	mm_event_task_execute_t execute;
-	mm_event_task_complete_t complete;
-	mm_event_task_reassign_t reassign;
+	mm_event_execute_t execute;
+	mm_event_complete_t complete;
+	mm_event_reassign_t reassign;
 };
+
+typedef const struct mm_event_task *mm_event_task_t;
 
 /**********************************************************************
  * Task ring buffer.
  **********************************************************************/
 
 /* This value must be a power of two. */
-#define MM_EVENT_TASK_RING_SIZE (16)
+#define MM_EVENT_TASK_RING_SIZE (4)
 
-struct mm_event_task_node
+struct mm_event_task_slot
 {
-	struct mm_event_task *task;
+	mm_event_task_t task;
 	mm_value_t task_arg;
 };
 
@@ -74,7 +66,7 @@ struct mm_event_task_ring
 	uint32_t head;
 	uint32_t tail;
 	struct mm_qlink link;
-	struct mm_event_task_node ring[MM_EVENT_TASK_RING_SIZE];
+	struct mm_event_task_slot ring[MM_EVENT_TASK_RING_SIZE];
 };
 
 /**********************************************************************
@@ -86,20 +78,100 @@ struct mm_event_task_list
 	/* Task rings. */
 	struct mm_queue list;
 	/* Statistics. */
-	uint64_t total_task_count;
-	uint64_t total_ring_count;
+	uint64_t head_count;
+	uint64_t tail_count;
+	uint64_t ring_count;
 };
 
 void NONNULL(1)
-mm_event_task_prepare(struct mm_event_task_list *task_list);
+mm_event_task_list_prepare(struct mm_event_task_list *task_list);
 
 void NONNULL(1)
-mm_event_task_cleanup(struct mm_event_task_list *task_list);
+mm_event_task_list_cleanup(struct mm_event_task_list *task_list);
 
-void NONNULL(1, 2)
-mm_event_task_add(struct mm_event_task_list *task_list, struct mm_event_task *task, mm_value_t arg);
+struct mm_event_task_ring * NONNULL(1)
+mm_event_task_append_ring(struct mm_event_task_list *task_list);
 
-bool NONNULL(1, 2, 3)
-mm_event_task_get(struct mm_event_task_list *task_list, struct mm_event_task **task, mm_value_t *arg);
+struct mm_event_task_ring * NONNULL(1)
+mm_event_task_next_ring(struct mm_event_task_list *task_list);
+
+static inline bool NONNULL(1)
+mm_event_task_list_size(struct mm_event_task_list *task_list)
+{
+	return task_list->head_count - task_list->tail_count;
+}
+
+static inline bool NONNULL(1)
+mm_event_task_list_empty(struct mm_event_task_list *task_list)
+{
+	return task_list->head_count == task_list->tail_count;
+}
+
+static inline void NONNULL(1, 2)
+mm_event_task_add(struct mm_event_task_list *task_list, mm_event_task_t task, mm_value_t arg)
+{
+	struct mm_qlink *link = mm_queue_tail(&task_list->list);
+	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
+	if ((ring->tail - ring->head) == MM_EVENT_TASK_RING_SIZE)
+		ring = mm_event_task_append_ring(task_list);
+
+	uint32_t index = ring->tail & (MM_EVENT_TASK_RING_SIZE - 1);
+	ring->ring[index].task = task;
+	ring->ring[index].task_arg = arg;
+
+	ring->tail++;
+	task_list->tail_count++;
+}
+
+static inline bool NONNULL(1, 2)
+mm_event_task_get(struct mm_event_task_list *task_list, struct mm_event_task_slot *task_slot)
+{
+	struct mm_qlink *link = mm_queue_head(&task_list->list);
+	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
+	if (ring->tail == ring->head) {
+		if (mm_queue_is_tail(&ring->link))
+			return false;
+		ring = mm_event_task_next_ring(task_list);
+	}
+
+	uint32_t index = ring->head & (MM_EVENT_TASK_RING_SIZE - 1);
+	*task_slot = ring->ring[index];
+
+	ring->head++;
+	task_list->head_count++;
+
+	return true;
+}
+
+/**********************************************************************
+ * Task initialization.
+ **********************************************************************/
+
+#define MM_EVENT_TASK(name, e, c, r)				\
+	static const struct mm_event_task name = {		\
+		.execute = (mm_event_execute_t) e,		\
+		.complete = (mm_event_complete_t) c,		\
+		.reassign = (mm_event_reassign_t) r,		\
+	}
+
+void mm_event_complete_noop(mm_value_t arg, mm_value_t result);
+bool mm_event_reassign_on(mm_value_t arg, struct mm_event_listener* listener);
+bool mm_event_reassign_off(mm_value_t arg, struct mm_event_listener* listener);
+
+static inline void NONNULL(1, 2, 3, 4)
+mm_event_task_prepare(struct mm_event_task *task, mm_event_execute_t execute,
+		      mm_event_complete_t complete, mm_event_reassign_t reassign)
+{
+	task->execute = execute;
+	task->complete = complete;
+	task->reassign = reassign;
+}
+
+static inline void NONNULL(1, 2)
+mm_event_task_prepare_simple(struct mm_event_task *task, mm_event_execute_t execute, bool reassign)
+{
+	mm_event_task_prepare(task, execute, mm_event_complete_noop,
+			      reassign ? mm_event_reassign_on : mm_event_reassign_off);
+}
 
 #endif /* BASE_EVENT_TASK_H */
