@@ -1,7 +1,7 @@
 /*
  * base/fiber/async.c - MainMemory asynchronous operations.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,9 +21,14 @@
 
 #include "base/list.h"
 #include "base/report.h"
+#include "base/syscall.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
+#include "base/fiber/strand.h"
 
+
+#include <sys/syscall.h>
 #include <sys/uio.h>
 
 /* Asynchronous operation information. */
@@ -80,6 +85,7 @@ mm_async_syscall_1_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 	mm_async_syscall_result(node, result);
 }
 
+#if 0
 static void
 mm_async_syscall_2_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
 {
@@ -93,6 +99,7 @@ mm_async_syscall_2_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
 	mm_async_syscall_result(node, result);
 }
+#endif
 
 static void
 mm_async_syscall_3_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
@@ -109,6 +116,7 @@ mm_async_syscall_3_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 	mm_async_syscall_result(node, result);
 }
 
+#if 0
 static void
 mm_async_syscall_4_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
 {
@@ -124,6 +132,7 @@ mm_async_syscall_4_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 	struct mm_async_node *node = (struct mm_async_node *) arguments[0];
 	mm_async_syscall_result(node, result);
 }
+#endif
 
 /**********************************************************************
  * Asynchronous call helpers.
@@ -176,7 +185,7 @@ mm_async_wait(struct mm_async_node *node)
  * Asynchronous system call requests.
  **********************************************************************/
 
-intptr_t NONNULL(1, 2)
+static intptr_t NONNULL(1, 2)
 mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1)
 {
@@ -196,7 +205,8 @@ mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 	return result;
 }
 
-intptr_t NONNULL(1, 2)
+#if 0
+static intptr_t NONNULL(1, 2)
 mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2)
 {
@@ -215,8 +225,9 @@ mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 	LEAVE();
 	return result;
 }
+#endif
 
-intptr_t NONNULL(1, 2)
+static intptr_t NONNULL(1, 2)
 mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
@@ -236,7 +247,8 @@ mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 	return result;
 }
 
-intptr_t NONNULL(1, 2)
+#if 0
+static intptr_t NONNULL(1, 2)
 mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
@@ -254,4 +266,48 @@ mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 
 	LEAVE();
 	return result;
+}
+#endif
+
+/**********************************************************************
+ * Asynchronous system call routines.
+ **********************************************************************/
+
+inline ssize_t
+mm_async_read(int fd, void *buffer, size_t nbytes)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->listener->dispatch, "read", MM_SYSCALL_N(SYS_read),
+				  fd, (uintptr_t) buffer, nbytes);
+}
+
+inline ssize_t
+mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->listener->dispatch, "readv", MM_SYSCALL_N(SYS_readv),
+				  fd, (uintptr_t) iov, iovcnt);
+}
+
+inline ssize_t
+mm_async_write(int fd, const void *buffer, size_t nbytes)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->listener->dispatch, "write", MM_SYSCALL_N(SYS_write),
+				  fd, (uintptr_t) buffer, nbytes);
+}
+
+inline ssize_t
+mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_3(strand->listener->dispatch, "writev", MM_SYSCALL_N(SYS_writev),
+				  fd, (uintptr_t) iov, iovcnt);
+}
+
+inline ssize_t
+mm_async_close(int fd)
+{
+	struct mm_strand *strand = mm_strand_selfptr();
+	return mm_async_syscall_1(strand->listener->dispatch, "close", MM_SYSCALL_N(SYS_close), fd);
 }
