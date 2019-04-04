@@ -208,7 +208,7 @@ mc_table_start_striding(struct mc_tpart *part)
 	ENTER();
 
 	MM_EVENT_TASK(stride_task, mc_table_stride_routine, mc_table_stride_complete, mm_event_reassign_on);
-	mm_strand_post_task(&stride_task, (mm_value_t) part);
+	mm_event_post_task(&stride_task, (mm_value_t) part);
 
 	LEAVE();
 }
@@ -261,7 +261,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 	ENTER();
 
 	MM_EVENT_TASK(evict_task, mc_table_evict_routine, mc_table_evict_complete, mm_event_reassign_on);
-	mm_strand_post_task(&evict_task, (mm_value_t) part);
+	mm_event_post_task(&evict_task, (mm_value_t) part);
 
 	LEAVE();
 }

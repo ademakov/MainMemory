@@ -30,15 +30,16 @@ struct mm_event_listener;
  * Abstract asynchronous task.
  **********************************************************************/
 
-/* A task routine. */
+/* A task execution routine. */
 typedef mm_value_t (*mm_event_execute_t)(mm_value_t arg);
 
-/* A task completion notification routine. */
+/* A task completion routine. */
 typedef void (*mm_event_complete_t)(mm_value_t arg, mm_value_t result);
 
 /* A task reassignment routine. */
 typedef bool (*mm_event_reassign_t)(mm_value_t arg, struct mm_event_listener *listener);
 
+/* A set of routines for a task. */
 struct mm_event_task
 {
 	mm_event_execute_t execute;
@@ -48,18 +49,19 @@ struct mm_event_task
 
 typedef const struct mm_event_task *mm_event_task_t;
 
+/* Deferred task invocation information. */
+struct mm_event_task_slot
+{
+	mm_event_task_t task;
+	mm_value_t task_arg;
+};
+
 /**********************************************************************
  * Task ring buffer.
  **********************************************************************/
 
 /* This value must be a power of two. */
 #define MM_EVENT_TASK_RING_SIZE (256)
-
-struct mm_event_task_slot
-{
-	mm_event_task_t task;
-	mm_value_t task_arg;
-};
 
 struct mm_event_task_ring
 {
@@ -90,10 +92,10 @@ void NONNULL(1)
 mm_event_task_list_cleanup(struct mm_event_task_list *task_list);
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_append_ring(struct mm_event_task_list *task_list);
+mm_event_task_list_add_ring(struct mm_event_task_list *task_list);
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_next_ring(struct mm_event_task_list *task_list);
+mm_event_task_list_next_ring(struct mm_event_task_list *task_list);
 
 static inline bool NONNULL(1)
 mm_event_task_list_size(struct mm_event_task_list *task_list)
@@ -108,12 +110,12 @@ mm_event_task_list_empty(struct mm_event_task_list *task_list)
 }
 
 static inline void NONNULL(1, 2)
-mm_event_task_add(struct mm_event_task_list *task_list, mm_event_task_t task, mm_value_t arg)
+mm_event_task_list_add(struct mm_event_task_list *task_list, mm_event_task_t task, mm_value_t arg)
 {
 	struct mm_qlink *link = mm_queue_tail(&task_list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 	if ((ring->tail - ring->head) == MM_EVENT_TASK_RING_SIZE)
-		ring = mm_event_task_append_ring(task_list);
+		ring = mm_event_task_list_add_ring(task_list);
 
 	uint32_t index = ring->tail & (MM_EVENT_TASK_RING_SIZE - 1);
 	ring->ring[index].task = task;
@@ -124,14 +126,14 @@ mm_event_task_add(struct mm_event_task_list *task_list, mm_event_task_t task, mm
 }
 
 static inline bool NONNULL(1, 2)
-mm_event_task_get(struct mm_event_task_list *task_list, struct mm_event_task_slot *task_slot)
+mm_event_task_list_get(struct mm_event_task_list *task_list, struct mm_event_task_slot *task_slot)
 {
 	struct mm_qlink *link = mm_queue_head(&task_list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 	if (ring->tail == ring->head) {
 		if (mm_queue_is_tail(&ring->link))
 			return false;
-		ring = mm_event_task_next_ring(task_list);
+		ring = mm_event_task_list_next_ring(task_list);
 	}
 
 	uint32_t index = ring->head & (MM_EVENT_TASK_RING_SIZE - 1);

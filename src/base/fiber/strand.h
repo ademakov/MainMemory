@@ -54,8 +54,6 @@ struct mm_strand
 
 	/* Event dispatch support. */
 	struct mm_event_listener *listener;
-	struct mm_event_dispatch *dispatch;
-	struct mm_event_task_list *task_list;
 
 	/* Queue of blocked fibers. */
 	struct mm_list block;
@@ -84,17 +82,14 @@ struct mm_strand
 	/* Time-related data. */
 	struct mm_time_manager time_manager;
 
+	/* The underlying thread. */
+	struct mm_thread *thread;
+
 	/* Master fiber. */
 	struct mm_fiber *master;
 
-	/* Dealer fiber. */
-	struct mm_fiber *dealer;
-
 	/* The bootstrap fiber. */
 	struct mm_fiber *boot;
-
-	/* The underlying thread. */
-	struct mm_thread *thread;
 
 	/*
 	 * The fields below engage in cross-strand communication.
@@ -127,15 +122,6 @@ mm_strand_stop(struct mm_strand *strand);
 
 void NONNULL(1)
 mm_strand_run_fiber(struct mm_fiber *fiber);
-
-void NONNULL(1, 2)
-mm_strand_add_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg);
-
-void NONNULL(1, 2)
-mm_strand_send_task(struct mm_strand *strand, mm_event_task_t task, mm_value_t arg);
-
-void NONNULL(1)
-mm_strand_post_task(mm_event_task_t task, mm_value_t arg);
 
 /**********************************************************************
  * Strand information.

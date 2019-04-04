@@ -30,7 +30,7 @@ mm_event_task_list_prepare(struct mm_event_task_list *task_list)
 	task_list->tail_count = 0;
 	task_list->ring_count = 0;
 
-	mm_event_task_append_ring(task_list);
+	mm_event_task_list_add_ring(task_list);
 }
 
 void NONNULL(1)
@@ -44,7 +44,7 @@ mm_event_task_list_cleanup(struct mm_event_task_list *task_list)
 }
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_append_ring(struct mm_event_task_list *task_list)
+mm_event_task_list_add_ring(struct mm_event_task_list *task_list)
 {
 	struct mm_event_task_ring *ring = mm_common_alloc(sizeof(struct mm_event_task_ring));
 	ring->head = 0;
@@ -55,7 +55,7 @@ mm_event_task_append_ring(struct mm_event_task_list *task_list)
 }
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_next_ring(struct mm_event_task_list *task_list)
+mm_event_task_list_next_ring(struct mm_event_task_list *task_list)
 {
 	struct mm_qlink *link = mm_queue_remove(&task_list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);

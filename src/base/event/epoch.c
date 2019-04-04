@@ -79,7 +79,7 @@ mm_event_epoch_reclaim(struct mm_event_fd *sink)
 		      mm_event_epoch_reclaim_execute,
 		      mm_event_complete_noop,
 		      mm_event_reassign_off);
-	mm_strand_add_task(sink->listener->strand, &reclaim_task, (mm_value_t) sink);
+	mm_event_add_task(sink->listener, &reclaim_task, (mm_value_t) sink);
 
 	LEAVE();
 }

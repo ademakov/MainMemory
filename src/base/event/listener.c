@@ -332,11 +332,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->strand = strand;
 	listener->dispatch = dispatch;
 	strand->listener = listener;
-	strand->dispatch = dispatch;
-	strand->task_list = &listener->task_list;
 
 	// Prepare storage for tasks.
-	mm_event_task_list_prepare(&listener->task_list);
+	mm_event_task_list_prepare(&listener->tasks);
 
 	// Create the private request queue.
 	uint32_t sz = mm_upper_pow2(listener_queue_size);
@@ -393,7 +391,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 	ENTER();
 
 	// Destroy storage for tasks.
-	mm_event_task_list_cleanup(&listener->task_list);
+	mm_event_task_list_cleanup(&listener->tasks);
 
 	// Destroy the associated request queue.
 	mm_ring_mpmc_destroy(listener->async_queue);

@@ -386,4 +386,17 @@ void NONNULL(1, 2)
 mm_event_post_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
+/**********************************************************************
+ * Asynchronous task scheduling.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_add_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg);
+
+void NONNULL(1, 2)
+mm_event_send_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg);
+
+void NONNULL(1)
+mm_event_post_task(mm_event_task_t task, mm_value_t arg);
+
 #endif /* BASE_EVENT_EVENT_H */

@@ -133,7 +133,7 @@ struct mm_event_listener
 	struct mm_event_dispatch *dispatch;
 
 	/* Tasks to execute locally. */
-	struct mm_event_task_list task_list;
+	struct mm_event_task_list tasks;
 
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc *async_queue;

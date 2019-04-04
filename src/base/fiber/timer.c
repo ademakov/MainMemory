@@ -20,6 +20,7 @@
 #include "base/fiber/timer.h"
 
 #include "base/event/task.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 
 #define MM_TIMER_QUEUE_MAX_WIDTH	500
@@ -108,7 +109,8 @@ mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 				mm_warning(0, "timer is still active");
 			} else {
 				timer->active = true;
-				mm_strand_add_task(mm_strand_selfptr(), &mm_timer_task, (mm_value_t) timer);
+				struct mm_strand *strand = mm_strand_selfptr();
+				mm_event_add_task(strand->listener, &mm_timer_task, (mm_value_t) timer);
 			}
 		}
 

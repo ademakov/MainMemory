@@ -1,7 +1,7 @@
 /*
  * base/fiber/fiber.h - MainMemory user-space threads.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -45,11 +45,7 @@ typedef int8_t			mm_priority_t;
 
 /* Basic fiber priorities. */
 #define MM_PRIO_BOOT		MM_PRIO_LOWERMOST
-#define MM_PRIO_IDLE		MM_PRIO_UPPER(MM_PRIO_BOOT, 1)
-
-/* Specific fiber priorities. */
-#define MM_PRIO_DEALER		MM_PRIO_IDLE
-#define MM_PRIO_MASTER		MM_PRIO_UPPER(MM_PRIO_DEALER, 1)
+#define MM_PRIO_MASTER		MM_PRIO_UPPER(MM_PRIO_BOOT, 1)
 #define MM_PRIO_WORKER		MM_PRIO_UPPER(MM_PRIO_MASTER, 1)
 
 /* Fiber state values. */
@@ -66,11 +62,11 @@ typedef enum {
 /* Flags for cancellation handling. */
 #define MM_FIBER_CANCEL_ENABLE		0x00
 #define MM_FIBER_CANCEL_DISABLE		0x01
-#define MM_FIBER_CANCEL_DEFERRED		0x00
-#define MM_FIBER_CANCEL_REQUIRED		0x02
-#define MM_FIBER_CANCEL_OCCURRED		0x04
+#define MM_FIBER_CANCEL_DEFERRED	0x00
+#define MM_FIBER_CANCEL_REQUIRED	0x02
+#define MM_FIBER_CANCEL_OCCURRED	0x04
 /* Flags for fibers blocked for various reasons. */
-#define MM_FIBER_WAITING			0x08
+#define MM_FIBER_WAITING		0x08
 #define MM_FIBER_COMBINING		0x10
 
 /* Fiber flags type. */
