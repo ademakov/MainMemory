@@ -31,7 +31,7 @@ mm_thread_backoff_slow(uint32_t count)
 		mm_event_handle_calls(strand->listener);
 		// If there are any waiting working fibers and this is a
 		// working fiber too then yield to let them make progress.
-		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_IDLE) && strand->fiber->priority < MM_PRIO_IDLE) {
+		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_MASTER) && strand->fiber->priority < MM_PRIO_MASTER) {
 			mm_fiber_yield();
 			return count + count + 1;
 		}
