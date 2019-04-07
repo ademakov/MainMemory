@@ -281,25 +281,26 @@ mm_strand_master(mm_value_t arg)
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
-		// Release excessive resources allocated by fibers.
-		mm_strand_trim(strand);
-
-		// Check to see if there are outstanding tasks.
+		// Check to see if there are pending tasks.
 		if (mm_event_task_list_empty(&strand->listener->tasks)) {
+			// Release excessive resources allocated by fibers.
+			mm_strand_trim(strand);
 			// Halt waiting for any incoming events.
 			mm_strand_halt(strand);
 		}
 
-		// Activate a fiber to handle outstanding tasks and incoming events.
+		// Activate a worker fiber to handle pending tasks.
 		if (strand->nidle) {
-			// Activate an idle worker fiber.
+			// Activate an idle worker.
 			mm_strand_poke(strand);
-		} else if (strand->nworkers < strand->nworkers_max) {
+		} else {
 			// Report the status of all fibers.
 			if (mm_get_verbose_enabled())
 				mm_strand_print_fibers(strand);
-			// Make a new worker fiber.
-			mm_strand_worker_create(strand);
+			// Create a new worker if feasible.
+			if (!mm_event_task_list_empty(&strand->listener->tasks)
+			    && strand->nworkers < strand->nworkers_max)
+				mm_strand_worker_create(strand);
 		}
 
 		// Run active fibers if any.
