@@ -329,9 +329,9 @@ mm_strand_print_fiber_list(struct mm_list *list)
 void NONNULL(1)
 mm_strand_print_fibers(struct mm_strand *strand)
 {
-	mm_brief("fibers on thread %d (#idle=%u, #task=%u):",
+	mm_brief("fibers on thread %d (#idle=%u, #task=%lu):",
 		 mm_thread_getnumber(strand->thread), strand->nidle,
-		 mm_event_task_list_size(&strand->listener->tasks));
+		 (unsigned long) mm_event_task_list_size(&strand->listener->tasks));
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_strand_print_fiber_list(&strand->runq.bins[i]);
 	mm_strand_print_fiber_list(&strand->block);
