@@ -63,6 +63,7 @@ struct mm_event_task_slot
 /* This value must be a power of two. */
 #define MM_EVENT_TASK_RING_SIZE (256)
 
+/* Fixed size ring buffer for task storage. */
 struct mm_event_task_ring
 {
 	uint32_t head;
@@ -75,6 +76,10 @@ struct mm_event_task_ring
  * Task queue.
  **********************************************************************/
 
+/* The maximum number of tasks that could be sent to another listener at once. */
+#define MM_EVENT_TASK_SEND_MAX	(3)
+
+/* Flexible task storage that normally contains one ring buffer but might add more on demand. */
 struct mm_event_task_list
 {
 	/* Task rings. */
@@ -83,67 +88,71 @@ struct mm_event_task_list
 	uint64_t head_count;
 	uint64_t tail_count;
 	uint64_t ring_count;
+	uint64_t send_count[MM_EVENT_TASK_SEND_MAX + 1];
 };
 
 void NONNULL(1)
-mm_event_task_list_prepare(struct mm_event_task_list *task_list);
+mm_event_task_list_prepare(struct mm_event_task_list *list);
 
 void NONNULL(1)
-mm_event_task_list_cleanup(struct mm_event_task_list *task_list);
+mm_event_task_list_cleanup(struct mm_event_task_list *list);
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_list_add_ring(struct mm_event_task_list *task_list);
+mm_event_task_list_add_ring(struct mm_event_task_list *list);
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_list_next_ring(struct mm_event_task_list *task_list);
+mm_event_task_list_get_ring(struct mm_event_task_list *list);
 
-static inline bool NONNULL(1)
-mm_event_task_list_size(struct mm_event_task_list *task_list)
+static inline size_t NONNULL(1)
+mm_event_task_list_size(struct mm_event_task_list *list)
 {
-	return task_list->head_count - task_list->tail_count;
+	return list->head_count - list->tail_count;
 }
 
 static inline bool NONNULL(1)
-mm_event_task_list_empty(struct mm_event_task_list *task_list)
+mm_event_task_list_empty(struct mm_event_task_list *list)
 {
-	return task_list->head_count == task_list->tail_count;
+	return list->head_count == list->tail_count;
 }
 
 static inline void NONNULL(1, 2)
-mm_event_task_list_add(struct mm_event_task_list *task_list, mm_event_task_t task, mm_value_t arg)
+mm_event_task_list_add(struct mm_event_task_list *list, mm_event_task_t task, mm_value_t arg)
 {
-	struct mm_qlink *link = mm_queue_tail(&task_list->list);
+	struct mm_qlink *link = mm_queue_tail(&list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 	if ((ring->tail - ring->head) == MM_EVENT_TASK_RING_SIZE)
-		ring = mm_event_task_list_add_ring(task_list);
+		ring = mm_event_task_list_add_ring(list);
 
 	uint32_t index = ring->tail & (MM_EVENT_TASK_RING_SIZE - 1);
 	ring->ring[index].task = task;
 	ring->ring[index].task_arg = arg;
 
 	ring->tail++;
-	task_list->tail_count++;
+	list->tail_count++;
 }
 
 static inline bool NONNULL(1, 2)
-mm_event_task_list_get(struct mm_event_task_list *task_list, struct mm_event_task_slot *task_slot)
+mm_event_task_list_get(struct mm_event_task_list *list, struct mm_event_task_slot *slot)
 {
-	struct mm_qlink *link = mm_queue_head(&task_list->list);
+	struct mm_qlink *link = mm_queue_head(&list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 	if (ring->tail == ring->head) {
 		if (mm_queue_is_tail(&ring->link))
 			return false;
-		ring = mm_event_task_list_next_ring(task_list);
+		ring = mm_event_task_list_get_ring(list);
 	}
 
 	uint32_t index = ring->head & (MM_EVENT_TASK_RING_SIZE - 1);
-	*task_slot = ring->ring[index];
+	*slot = ring->ring[index];
 
 	ring->head++;
-	task_list->head_count++;
+	list->head_count++;
 
 	return true;
 }
+
+bool NONNULL(1, 2)
+mm_event_task_list_reassign(struct mm_event_task_list *list, struct mm_event_listener *target);
 
 /**********************************************************************
  * Task initialization.

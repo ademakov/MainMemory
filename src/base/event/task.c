@@ -20,47 +20,161 @@
 #include "base/event/task.h"
 
 #include "base/report.h"
+#include "base/event/listener.h"
 #include "base/memory/memory.h"
 
-void NONNULL(1)
-mm_event_task_list_prepare(struct mm_event_task_list *task_list)
-{
-	mm_queue_prepare(&task_list->list);
-	task_list->head_count = 0;
-	task_list->tail_count = 0;
-	task_list->ring_count = 0;
+/**********************************************************************
+ * Task submission.
+ **********************************************************************/
 
-	mm_event_task_list_add_ring(task_list);
+static void
+mm_event_task_add_1(struct mm_event_listener *listener, uintptr_t *arguments)
+{
+	ENTER();
+
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[0], arguments[1]);
+
+	LEAVE();
+}
+
+static void
+mm_event_task_add_2(struct mm_event_listener *listener, uintptr_t *arguments)
+{
+	ENTER();
+
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[0], arguments[1]);
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[2], arguments[3]);
+
+	LEAVE();
+}
+
+static void
+mm_event_task_add_3(struct mm_event_listener *listener, uintptr_t *arguments)
+{
+	ENTER();
+
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[0], arguments[1]);
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[2], arguments[3]);
+	mm_event_task_list_add(&listener->tasks, (mm_event_task_t) arguments[4], arguments[5]);
+
+	LEAVE();
+}
+
+static void
+mm_event_task_submit(struct mm_event_listener *listener, struct mm_event_task_slot* tasks, uint32_t count)
+{
+	ENTER();
+	DEBUG("count: %d", count);
+
+	switch (count)
+	{
+	case 1:
+		mm_event_call_2(listener, mm_event_task_add_1,
+				(uintptr_t) tasks[0].task,
+				tasks[0].task_arg);
+		break;
+	case 2:
+		mm_event_call_4(listener, mm_event_task_add_2,
+				(uintptr_t) tasks[0].task,
+				tasks[0].task_arg,
+				(uintptr_t) tasks[1].task,
+				tasks[1].task_arg);
+		break;
+	case 3:
+		mm_event_call_6(listener, mm_event_task_add_3,
+				(uintptr_t) tasks[0].task,
+				tasks[0].task_arg,
+				(uintptr_t) tasks[1].task,
+				tasks[1].task_arg,
+				(uintptr_t) tasks[2].task,
+				tasks[2].task_arg);
+		break;
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Task management.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_task_list_prepare(struct mm_event_task_list *list)
+{
+	mm_queue_prepare(&list->list);
+	list->head_count = 0;
+	list->tail_count = 0;
+	list->ring_count = 0;
+
+	for (int i = 0; i < MM_EVENT_TASK_SEND_MAX; i++)
+		list->send_count[i] = 0;
+
+	mm_event_task_list_add_ring(list);
 }
 
 void NONNULL(1)
-mm_event_task_list_cleanup(struct mm_event_task_list *task_list)
+mm_event_task_list_cleanup(struct mm_event_task_list *list)
 {
 	do {
-		struct mm_qlink *link = mm_queue_remove(&task_list->list);
+		struct mm_qlink *link = mm_queue_remove(&list->list);
 		struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 		mm_common_free(ring);
-	} while (!mm_queue_empty(&task_list->list));
+	} while (!mm_queue_empty(&list->list));
 }
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_list_add_ring(struct mm_event_task_list *task_list)
+mm_event_task_list_add_ring(struct mm_event_task_list *list)
 {
 	struct mm_event_task_ring *ring = mm_common_alloc(sizeof(struct mm_event_task_ring));
 	ring->head = 0;
 	ring->tail = 0;
-	mm_queue_append(&task_list->list, &ring->link);
-	task_list->ring_count++;
+	mm_queue_append(&list->list, &ring->link);
+	list->ring_count++;
 	return ring;
 }
 
 struct mm_event_task_ring * NONNULL(1)
-mm_event_task_list_next_ring(struct mm_event_task_list *task_list)
+mm_event_task_list_get_ring(struct mm_event_task_list *list)
 {
-	struct mm_qlink *link = mm_queue_remove(&task_list->list);
+	struct mm_qlink *link = mm_queue_remove(&list->list);
 	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
 	mm_common_free(ring);
-	return containerof(mm_queue_head(&task_list->list), struct mm_event_task_ring, link);
+	return containerof(mm_queue_head(&list->list), struct mm_event_task_ring, link);
+}
+
+bool NONNULL(1, 2)
+mm_event_task_list_reassign(struct mm_event_task_list *list, struct mm_event_listener *target)
+{
+	ENTER();
+
+	uint32_t count = 0;
+	struct mm_event_task_slot tasks[MM_EVENT_TASK_SEND_MAX];
+
+	struct mm_qlink *link = mm_queue_head(&list->list);
+	struct mm_event_task_ring *ring = containerof(link, struct mm_event_task_ring, link);
+	do {
+		if (ring->tail == ring->head) {
+			if (mm_queue_is_tail(&ring->link))
+				break;
+			ring = mm_event_task_list_get_ring(list);
+		}
+
+		uint32_t index = ring->head & (MM_EVENT_TASK_RING_SIZE - 1);
+		struct mm_event_task_slot *slot = &ring->ring[index];
+		if (!(slot->task->reassign)(slot->task_arg, target))
+			break;
+
+		tasks[count++] = *slot;
+		ring->head++;
+
+	} while (count < MM_EVENT_TASK_SEND_MAX);
+
+	list->head_count += count;
+	list->send_count[count]++;
+	mm_event_task_submit(target, tasks, count);
+
+	LEAVE();
+	return count == MM_EVENT_TASK_SEND_MAX;
 }
 
 /**********************************************************************
