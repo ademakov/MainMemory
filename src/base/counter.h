@@ -35,19 +35,25 @@ mm_counter_prepare(mm_counter_t *counter, uint64_t value)
 }
 
 static inline void
-mm_counter_inc(mm_counter_t *counter)
+mm_counter_local_inc(mm_counter_t *counter)
 {
 	counter->value++;
 }
 
 static inline void
-mm_counter_add(mm_counter_t *counter, uint64_t value)
+mm_counter_local_add(mm_counter_t *counter, uint64_t value)
 {
 	counter->value += value;
 }
 
 static inline uint64_t
-mm_counter_load(mm_counter_t *counter)
+mm_counter_local_load(mm_counter_t *counter)
+{
+	return counter->value;
+}
+
+static inline uint64_t
+mm_counter_shared_load(mm_counter_t *counter)
 {
 #if MM_WORD_64BIT
 	return mm_memory_load(counter->value);
