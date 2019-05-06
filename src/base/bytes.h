@@ -1,7 +1,7 @@
 /*
  * base/bytes.h - Byte order operations.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,21 +20,7 @@
 #ifndef BASE_BYTES_H
 #define BASE_BYTES_H
 
-#include "config.h"
-#include <stdint.h>
-
-#ifndef __BYTE_ORDER__
-# error "Missing predefined compiler macro __BYTE_ORDER__."
-#endif
-#ifndef __ORDER_BIG_ENDIAN__
-# error "Missing predefined compiler macro __ORDER_BIG_ENDIAN__."
-#endif
-#ifndef __ORDER_LITTLE_ENDIAN__
-# error "Missing predefined compiler macro __ORDER_LITTLE_ENDIAN__."
-#endif
-#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
-# error "Unsupported byte order."
-#endif
+#include "common.h"
 
 /**********************************************************************
  * Byte-order conversion.

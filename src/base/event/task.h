@@ -21,6 +21,7 @@
 #define BASE_EVENT_TASK_H
 
 #include "common.h"
+#include "base/counter.h"
 #include "base/list.h"
 
 /* Forward declarations. */
@@ -85,10 +86,10 @@ struct mm_event_task_list
 	/* Task rings. */
 	struct mm_queue list;
 	/* Statistics. */
-	uint64_t head_count;
-	uint64_t tail_count;
-	uint64_t ring_count;
-	uint64_t send_count[MM_EVENT_TASK_SEND_MAX + 1];
+	mm_counter_t head_count;
+	mm_counter_t tail_count;
+	mm_counter_t ring_count;
+	mm_counter_t send_count[MM_EVENT_TASK_SEND_MAX + 1];
 };
 
 void NONNULL(1)
@@ -106,13 +107,25 @@ mm_event_task_list_get_ring(struct mm_event_task_list *list);
 static inline size_t NONNULL(1)
 mm_event_task_list_size(struct mm_event_task_list *list)
 {
-	return list->head_count - list->tail_count;
+	uint64_t head = mm_counter_local_load(&list->head_count);
+	uint64_t tail = mm_counter_local_load(&list->tail_count);
+	return head - tail;
+}
+
+static inline size_t NONNULL(1)
+mm_event_task_peer_list_size(struct mm_event_task_list *list)
+{
+	uint64_t head = mm_counter_shared_load(&list->head_count);
+	uint64_t tail = mm_counter_shared_load(&list->tail_count);
+	return head - tail;
 }
 
 static inline bool NONNULL(1)
 mm_event_task_list_empty(struct mm_event_task_list *list)
 {
-	return list->head_count == list->tail_count;
+	uint64_t head = mm_counter_local_load(&list->head_count);
+	uint64_t tail = mm_counter_local_load(&list->tail_count);
+	return head == tail;
 }
 
 static inline void NONNULL(1, 2)
@@ -128,7 +141,7 @@ mm_event_task_list_add(struct mm_event_task_list *list, mm_event_task_t task, mm
 	ring->ring[index].task_arg = arg;
 
 	ring->tail++;
-	list->tail_count++;
+	mm_counter_local_inc(&list->tail_count);
 }
 
 static inline bool NONNULL(1, 2)
@@ -146,7 +159,7 @@ mm_event_task_list_get(struct mm_event_task_list *list, struct mm_event_task_slo
 	*slot = ring->ring[index];
 
 	ring->head++;
-	list->head_count++;
+	mm_counter_local_inc(&list->head_count);
 
 	return true;
 }

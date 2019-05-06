@@ -102,12 +102,12 @@ void NONNULL(1)
 mm_event_task_list_prepare(struct mm_event_task_list *list)
 {
 	mm_queue_prepare(&list->list);
-	list->head_count = 0;
-	list->tail_count = 0;
-	list->ring_count = 0;
+	mm_counter_prepare(&list->head_count, 0);
+	mm_counter_prepare(&list->tail_count, 0);
+	mm_counter_prepare(&list->ring_count, 0);
 
 	for (int i = 0; i < MM_EVENT_TASK_SEND_MAX; i++)
-		list->send_count[i] = 0;
+		mm_counter_prepare(&list->send_count[i], 0);
 
 	mm_event_task_list_add_ring(list);
 }
@@ -129,7 +129,7 @@ mm_event_task_list_add_ring(struct mm_event_task_list *list)
 	ring->head = 0;
 	ring->tail = 0;
 	mm_queue_append(&list->list, &ring->link);
-	list->ring_count++;
+	mm_counter_local_inc(&list->ring_count);
 	return ring;
 }
 
@@ -169,8 +169,8 @@ mm_event_task_list_reassign(struct mm_event_task_list *list, struct mm_event_lis
 
 	} while (count < MM_EVENT_TASK_SEND_MAX);
 
-	list->head_count += count;
-	list->send_count[count]++;
+	mm_counter_local_add(&list->head_count, count);
+	mm_counter_local_inc(&list->send_count[count]);
 	mm_event_task_submit(target, tasks, count);
 
 	LEAVE();

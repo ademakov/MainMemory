@@ -1,7 +1,7 @@
 /*
  * common.h - MainMemory common definitions.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -47,6 +47,19 @@
 # include "base/arch/x86-64/basic.h"
 #else
 # include "base/arch/generic/basic.h"
+#endif
+
+#ifndef __BYTE_ORDER__
+# error "Missing predefined compiler macro __BYTE_ORDER__."
+#endif
+#ifndef __ORDER_BIG_ENDIAN__
+# error "Missing predefined compiler macro __ORDER_BIG_ENDIAN__."
+#endif
+#ifndef __ORDER_LITTLE_ENDIAN__
+# error "Missing predefined compiler macro __ORDER_LITTLE_ENDIAN__."
+#endif
+#if __BYTE_ORDER__ != __ORDER_BIG_ENDIAN__ && __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
+# error "Unsupported byte order."
 #endif
 
 /**********************************************************************
