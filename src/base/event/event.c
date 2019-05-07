@@ -552,6 +552,33 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
+static void NONNULL(1)
+mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_event_listener *const listener)
+{
+	ENTER();
+
+	size_t ntasks = mm_event_task_list_size(&listener->tasks);
+	if (ntasks > (2 * MM_EVENT_TASK_SEND_MAX)) {
+		const uint32_t nlisteners = dispatch->nlisteners;
+		const uint32_t self_index = listener - dispatch->listeners;
+		const uint32_t limit = (ntasks + nlisteners - 1) / nlisteners;
+
+		for (uint32_t index = 0; index < nlisteners; index++) {
+			if (index == self_index)
+				continue;
+
+			struct mm_event_listener *peer = &dispatch->listeners[index];
+			uint64_t n = mm_event_task_peer_list_size(&peer->tasks);
+			n += mm_ring_mpmc_size(peer->async_queue) * MM_EVENT_TASK_SEND_MAX;
+			while (n < limit && mm_event_task_list_reassign(&listener->tasks, peer)) {
+				n += MM_EVENT_TASK_SEND_MAX;
+			}
+		}
+	}
+
+	LEAVE();
+}
+
 void NONNULL(1)
 mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 {
@@ -592,6 +619,8 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 		// Give up the poller thread role.
 		mm_regular_unlock(&dispatch->poller_lock);
 
+		// Share event tasks with other listeners if feasible.
+		mm_event_distribute_tasks(dispatch, listener);
 	} else {
 		// Flush event poll changes if any.
 		if (mm_event_backend_has_changes(&listener->storage)) {
@@ -608,7 +637,7 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 #endif
 		}
 	}
-#else
+#else // !ENABLE_SMP
 	// Wait for incoming events or timeout expiration.
 	mm_event_poll(listener, dispatch, timeout);
 
@@ -617,7 +646,7 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 		mm_event_listener_clear_events(listener);
 		listener->spin_count = dispatch->poll_spin_limit;
 	}
-#endif
+#endif // !ENABLE_SMP
 
 	LEAVE();
 }
@@ -973,7 +1002,7 @@ mm_event_post_task(mm_event_task_t task, mm_value_t arg)
 
 	struct mm_strand *strand = mm_strand_selfptr();
 #if ENABLE_SMP
-	// Submit the work item to the domain request queue.
+	// Dispatch the task.
 	mm_event_post_2(strand->listener->dispatch, mm_event_add_task_req, (mm_value_t) task, arg);
 #else
 	mm_event_add_task(strand->listener, task, arg);
