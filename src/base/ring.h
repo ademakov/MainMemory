@@ -1,7 +1,7 @@
 /*
  * base/ring.h - MainMemory single-consumer circular buffer of pointers.
  *
- * Copyright (C) 2013-2016  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -104,14 +104,14 @@ mm_ring_atomic_cas(mm_ring_atomic_t *p, mm_stamp_t e, mm_stamp_t v)
 /*
  * The algorithm is based on the single-producer/single-consumer algorithm
  * described in the following paper:
- * 
+ *
  * John Giacomoni, Tipp Moseley, Manish Vachharajani
  * FastForward for Efficient Pipeline Parallelism: A Cache-Optimized
  * Concurrent Lock-Free Queue.
  *
  * However currently only the basic algorithm is implemented, the suggested
  * enhancements like temporal slipping are not.
- * 
+ *
  * Instead it is extended to optionally support multiple producers and
  * consumers with spinlock protection.
  */
@@ -225,6 +225,15 @@ mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring);
 
 void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size);
+
+static inline uint32_t
+mm_ring_mpmc_size(struct mm_ring_mpmc *ring)
+{
+	uint32_t head = mm_memory_load(ring->base.head);
+	mm_memory_load_fence();
+	int32_t size = mm_memory_load(ring->base.tail) - head;
+	return size > 0 ? size : 0;
+}
 
 static inline void NONNULL(1)
 mm_ring_mpmc_busywait(struct mm_ring_node *node, mm_stamp_t lock)
