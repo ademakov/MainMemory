@@ -68,7 +68,7 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 {
 	mm_event_listener_handle_start(listener, nevents);
 
-	for (int i = 0; i < nevents; i++, mm_event_listener_handle_next(listener)) {
+	for (int i = 0; i < nevents; i++) {
 		struct kevent *event = &listener->storage.revents[i];
 
 		if (event->filter == EVFILT_READ) {

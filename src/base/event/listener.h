@@ -115,17 +115,6 @@ struct mm_event_listener
 	/* Counter for poller busy waiting. */
 	uint32_t spin_count;
 
-#if ENABLE_SMP
-	/* The expected number of events to handle after a poll. The actual number might differ sometimes. */
-	uint32_t expected_events;
-
-	/* Next target for event sharing. */
-	mm_thread_t next_target;
-
-	/* Flag indicating if event sharing mode is enabled. */
-	bool event_sharing;
-#endif
-
 	/* Associated strand. */
 	struct mm_strand *strand;
 
@@ -288,14 +277,6 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 
 void NONNULL(1)
 mm_event_listener_handle_finish(struct mm_event_listener *listener);
-
-static inline void NONNULL(1)
-mm_event_listener_handle_next(struct mm_event_listener *listener UNUSED)
-{
-#if ENABLE_SMP
-	listener->expected_events--;
-#endif
-}
 
 void NONNULL(1, 2)
 mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink);

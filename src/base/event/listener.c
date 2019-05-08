@@ -35,8 +35,6 @@
 
 #if ENABLE_SMP
 
-#define MM_EVENT_LISTENER_RETAIN_MIN		(3)
-
 /* Mark a sink as having an incoming event received from the system. */
 static inline void
 mm_event_update(struct mm_event_fd *sink UNUSED)
@@ -65,24 +63,8 @@ mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *si
 	if (mm_event_active(sink))
 		return true;
 
-	// If the event sink can be detached from its target thread then do it now.
-	if ((listener->events.direct + listener->expected_events) < MM_EVENT_LISTENER_RETAIN_MIN) {
-		sink->listener = listener;
-	} else if (listener->event_sharing) {
-		struct mm_event_dispatch *const dispatch = listener->dispatch;
-		mm_thread_t next = listener->next_target;
-		if (listener->forward.buffers[next].nsinks == MM_EVENT_FORWARD_BUFFER_SIZE) {
-			const mm_thread_t nlisteners = dispatch->nlisteners;
-			const mm_thread_t self = listener - dispatch->listeners;
-			if (++next == nlisteners)
-				next = 0;
-			if (next == self && ++next == nlisteners)
-				next = 0;
-			listener->next_target = next;
-		}
-		sink->listener = &dispatch->listeners[next];
-	}
-
+	// Attach the sink to the poller.
+	sink->listener = listener;
 	return true;
 }
 
@@ -100,25 +82,9 @@ mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t neve
 	// Prepare the backend for handling events.
 	mm_event_backend_poller_start(&listener->storage);
 
-#if ENABLE_SMP
-	// Remember the number of events to handle.
-	listener->expected_events = nevents;
-
-	// Figure out if event sharing mode should be enabled.
-	const mm_thread_t nlisteners = listener->dispatch->nlisteners;
-	if (nlisteners > 1) {
-		listener->event_sharing = (nevents > (MM_EVENT_LISTENER_RETAIN_MIN * 2));
-		if (listener->event_sharing) {
-			listener->next_target = listener - listener->dispatch->listeners + 1;
-			if (listener->next_target == nlisteners)
-				listener->next_target = 0;
-		}
-	}
-
-#if ENABLE_EVENT_SINK_LOCK
+#if ENABLE_SMP && ENABLE_EVENT_SINK_LOCK
 	// Acquire coarse-grained event sink lock.
 	mm_regular_lock(&listener->dispatch->sink_lock);
-#endif
 #endif
 
 	LEAVE();
@@ -175,7 +141,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 	// Count the received event.
 	mm_event_update(sink);
 
-	// If the event sink belongs to the control thread then handle it immediately,
+	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->listener == listener) {
 		mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_READY);
@@ -210,7 +176,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 	// Count the received event.
 	mm_event_update(sink);
 
-	// If the event sink belongs to the control thread then handle it immediately,
+	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->listener == listener) {
 		mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_ERROR);
@@ -242,7 +208,7 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 	// Count the received event.
 	mm_event_update(sink);
 
-	// If the event sink belongs to the control thread then handle it immediately,
+	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->listener == listener) {
 		mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_READY);
@@ -274,7 +240,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 	// Count the received event.
 	mm_event_update(sink);
 
-	// If the event sink belongs to the control thread then handle it immediately,
+	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to he target thread.
 	if (sink->listener == listener) {
 		mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_ERROR);

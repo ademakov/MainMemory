@@ -248,7 +248,7 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if ((sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0
 	    && (sink->flags & MM_EVENT_REGULAR_INPUT) != 0
 	    && !mm_event_input_closed(sink)) {
-		// Submit an input work for execution again.
+		// Submit an input task for execution again.
 		mm_event_add_task(sink->listener, &sink->io->input, arg);
 	} else {
 		// Done with input for now.
@@ -272,7 +272,7 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if ((sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0
 	    && (sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0
 	    && !mm_event_output_closed(sink)) {
-		// Submit an input work for execution again.
+		// Submit an output task for execution again.
 		mm_event_add_task(sink->listener, &sink->io->output, arg);
 	} else {
 		// Done with output for now.
@@ -284,9 +284,22 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 }
 
 static bool
-mm_event_reassign_io(mm_value_t arg UNUSED, struct mm_event_listener *listener UNUSED)
+mm_event_reassign_io(mm_value_t arg, struct mm_event_listener *listener)
 {
-	return false;
+	ENTER();
+	bool reassigned = false;
+
+	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
+	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
+	bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
+	if (input_started != output_started) {
+		sink->listener = listener;
+		reassigned = true;
+	}
+
+	LEAVE();
+	return reassigned;
 }
 
 void NONNULL(1)
