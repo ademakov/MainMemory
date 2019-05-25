@@ -291,11 +291,13 @@ mm_event_reassign_io(mm_value_t arg, struct mm_event_listener *listener)
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
-	bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
-	bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
-	if (input_started != output_started) {
-		sink->listener = listener;
-		reassigned = true;
+	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0) {
+		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
+		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
+		if (input_started != output_started) {
+			sink->listener = listener;
+			reassigned = true;
+		}
 	}
 
 	LEAVE();
@@ -571,21 +573,22 @@ mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_ev
 	ENTER();
 
 	size_t ntasks = mm_event_task_list_size(&listener->tasks);
-	if (ntasks > (2 * MM_EVENT_TASK_SEND_MAX)) {
+	if (ntasks > (10 * MM_EVENT_TASK_SEND_MAX)) {
 		const uint32_t nlisteners = dispatch->nlisteners;
 		const uint32_t self_index = listener - dispatch->listeners;
-		const uint32_t limit = (ntasks + nlisteners - 1) / nlisteners;
+		static const uint32_t limit = 2 * MM_EVENT_TASK_SEND_MAX;
 
-		for (uint32_t index = 0; index < nlisteners; index++) {
+		uint32_t count = 0;
+		for (uint32_t index = 0; index < nlisteners && count < 2; index++) {
 			if (index == self_index)
 				continue;
 
 			struct mm_event_listener *peer = &dispatch->listeners[index];
 			uint64_t n = mm_event_task_peer_list_size(&peer->tasks);
 			n += mm_ring_mpmc_size(peer->async_queue) * MM_EVENT_TASK_SEND_MAX;
-			while (n < limit && mm_event_task_list_reassign(&listener->tasks, peer)) {
+			while (n < limit && mm_event_task_list_reassign(&listener->tasks, peer))
 				n += MM_EVENT_TASK_SEND_MAX;
-			}
+			count++;
 		}
 	}
 
