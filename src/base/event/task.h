@@ -109,7 +109,7 @@ mm_event_task_list_size(struct mm_event_task_list *list)
 {
 	uint64_t head = mm_counter_local_load(&list->head_count);
 	uint64_t tail = mm_counter_local_load(&list->tail_count);
-	return head - tail;
+	return tail - head;
 }
 
 static inline size_t NONNULL(1)
@@ -117,7 +117,7 @@ mm_event_task_peer_list_size(struct mm_event_task_list *list)
 {
 	uint64_t head = mm_counter_shared_load(&list->head_count);
 	uint64_t tail = mm_counter_shared_load(&list->tail_count);
-	return head - tail;
+	return tail - head;
 }
 
 static inline bool NONNULL(1)
