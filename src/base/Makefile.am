@@ -18,6 +18,7 @@ libmainbase_la_SOURCES = \
 	clock.c clock.h \
 	combiner.c combiner.h \
 	conf.c conf.h \
+	counter.h \
 	cstack.c cstack.h \
 	daemon.c daemon.h \
 	exit.c exit.h \
