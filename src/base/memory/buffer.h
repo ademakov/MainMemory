@@ -111,7 +111,7 @@ struct mm_buffer_xsegment
 	/* The external data block. */
 	char *data;
 
-	/* The exteranl data release info. */
+	/* The external data release info. */
 	mm_buffer_release_t release;
 	uintptr_t release_data;
 };
