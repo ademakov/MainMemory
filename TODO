@@ -2,12 +2,9 @@
 v 0.2
 =====
 
+* optimize buffer usage for memtier with --pipeline=xx
+* optimize memcache entry expiration checks
 * parallel polling mechanism
-* cleanup and optimizations here and there
-** cleanup net and netbuf interfaces
-** ensure open sockets are destroyed on shutdown
-** optimize buffer usage for memtier with --pipeline=xx
-** optimize memcache entry expiration checks
 
 v 0.3
 =====
@@ -21,6 +18,8 @@ v 0.3
 ;;; At this point it becomes ready to challenge stock memcached
 
 Essentials:
+* cleanup net and netbuf interfaces
+* ensure open sockets are destroyed on shutdown
 * support signals
 * system call threads
 * disk I/O threads
