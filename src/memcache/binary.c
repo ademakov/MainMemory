@@ -1,7 +1,7 @@
 /*
  * memcache/binary.h - MainMemory memcache binary protocol support.
  *
- * Copyright (C) 2015-2016  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -114,7 +114,7 @@ mc_binary_invalid_arguments(struct mc_state *state, uint32_t body_len)
 }
 
 static void
-mc_binary_set_key(struct mc_state *state, uint32_t key_len)
+mc_binary_set_key(struct mc_state *state, uint16_t key_len)
 {
 	struct mc_command *command = state->command;
 
@@ -136,7 +136,7 @@ mc_binary_set_key(struct mc_state *state, uint32_t key_len)
 }
 
 static bool
-mc_binary_read_key(struct mc_state *state, uint32_t key_len)
+mc_binary_read_key(struct mc_state *state, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, key_len))
 		return false;
@@ -148,7 +148,7 @@ mc_binary_read_key(struct mc_state *state, uint32_t key_len)
 }
 
 static bool
-mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint32_t key_len)
+mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, body_len))
 		return false;
@@ -167,10 +167,10 @@ mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint32_t key_len
 	// Create an entry.
 	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len - sizeof extras;
-	mc_action_create(&command->action, value_len);
+	mc_action_create(&command->storage, value_len);
 
 	// Initialize the entry and its key.
-	struct mc_entry *entry = command->action.new_entry;
+	struct mc_entry *entry = command->storage.new_entry;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
 	mc_entry_setkey(entry, command->action.key);
@@ -183,7 +183,7 @@ mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint32_t key_len
 }
 
 static bool
-mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len)
+mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, body_len))
 		return false;
@@ -194,7 +194,7 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 	// Find the value length.
 	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len;
-	command->action.value_len = value_len;
+	command->storage.value_len = value_len;
 
 	// Read the value.
 	char *end = mm_netbuf_rend(&state->sock);
@@ -205,12 +205,12 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 
 	struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
 	if (iter->ptr + value_len <= end) {
-		command->action.alter_value = iter->ptr;
+		command->storage.alter_value = iter->ptr;
 		iter->ptr += value_len;
 	} else {
 		char *value = mm_private_alloc(value_len);
 		mm_netbuf_read(&state->sock, value, value_len);
-		command->action.alter_value = value;
+		command->storage.alter_value = value;
 		command->own_alter_value = true;
 	}
 
@@ -218,7 +218,7 @@ mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint32_t key_len
 }
 
 static bool
-mc_binary_read_delta(struct mc_state *state, uint32_t key_len)
+mc_binary_read_delta(struct mc_state *state, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, key_len + MC_BINARY_DELTA_EXTRA_SIZE))
 		return false;
@@ -293,7 +293,7 @@ mc_binary_parse(struct mc_state *state)
 
 	// The current command.
 	uint32_t body_len = mm_load_nl(&header->body_len);
-	uint32_t key_len = mm_load_ns(&header->key_len);
+	uint16_t key_len = mm_load_ns(&header->key_len);
 	uint32_t ext_len = header->ext_len;
 	if (unlikely((key_len + ext_len) > body_len)) {
 		rc = mc_binary_invalid_arguments(state, body_len);
@@ -326,7 +326,7 @@ mc_binary_parse(struct mc_state *state)
 			goto leave;
 		}
 		rc = mc_binary_read_entry(state, body_len, key_len);
-		command->action.stamp = mm_load_nll(&header->stamp);
+		command->storage.stamp = mm_load_nll(&header->stamp);
 		break;
 
 	case MC_COMMAND_CONCAT:
@@ -339,11 +339,11 @@ mc_binary_parse(struct mc_state *state)
 		switch (header->opcode) {
 		case MC_BINARY_OPCODE_APPEND:
 		case MC_BINARY_OPCODE_APPENDQ:
-			command->action.alter_type = MC_ACTION_ALTER_APPEND;
+			command->storage.alter_type = MC_ACTION_ALTER_APPEND;
 			break;
 		case MC_BINARY_OPCODE_PREPEND:
 		case MC_BINARY_OPCODE_PREPENDQ:
-			command->action.alter_type = MC_ACTION_ALTER_PREPEND;
+			command->storage.alter_type = MC_ACTION_ALTER_PREPEND;
 			break;
 		}
 		rc = mc_binary_read_chunk(state, body_len, key_len);

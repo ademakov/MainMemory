@@ -1,7 +1,7 @@
 /*
  * memcache/action.c - MainMemory memcache table actions.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -258,7 +258,7 @@ mc_action_find_victims(struct mc_tpart *part,
 }
 
 static bool
-mc_action_match_entry(struct mc_action *action, struct mc_entry *entry)
+mc_action_match_entry(struct mc_action_simple *action, struct mc_entry *entry)
 {
 	if (action->hash != entry->hash)
 		return false;
@@ -268,24 +268,24 @@ mc_action_match_entry(struct mc_action *action, struct mc_entry *entry)
 }
 
 static void
-mc_action_bucket_insert(struct mc_action *action,
+mc_action_bucket_insert(struct mc_action_storage *action,
 			struct mm_stack *bucket,
 			uint8_t state)
 {
 	ASSERT(action->new_entry->state == MC_ENTRY_NOT_USED);
 	ASSERT(state != MC_ENTRY_NOT_USED || state != MC_ENTRY_FREE);
 	action->new_entry->state = state;
-	action->new_entry->stamp = action->part->stamp;
+	action->new_entry->stamp = action->base.part->stamp;
 	mm_stack_insert(bucket, &action->new_entry->link);
-	action->part->stamp += mc_table.nparts;
-	action->part->volume += mc_entry_size(action->new_entry);
+	action->base.part->stamp += mc_table.nparts;
+	action->base.part->volume += mc_entry_size(action->new_entry);
 
 	// Store stamp value needed for binary protocol response.
 	action->stamp = action->new_entry->stamp;
 }
 
 static void
-mc_action_bucket_lookup(struct mc_action *action,
+mc_action_bucket_lookup(struct mc_action_simple *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
@@ -314,7 +314,7 @@ mc_action_bucket_lookup(struct mc_action *action,
 }
 
 static void
-mc_action_bucket_delete(struct mc_action *action,
+mc_action_bucket_delete(struct mc_action_simple *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
@@ -343,11 +343,11 @@ mc_action_bucket_delete(struct mc_action *action,
 }
 
 static void
-mc_action_bucket_update(struct mc_action *action,
+mc_action_bucket_update(struct mc_action_storage *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
-	struct mc_tpart *part = action->part;
+	struct mc_tpart *part = action->base.part;
 	struct mm_slink *pred = &bucket->head;
 	uint32_t time = mc_action_get_exp_time();
 
@@ -358,13 +358,13 @@ mc_action_bucket_update(struct mc_action *action,
 			mc_action_unlink_entry(part, pred, entry);
 			mm_stack_insert(freelist, &entry->link);
 		} else {
-			if (mc_action_match_entry(action, entry)) {
-				action->old_entry = entry;
+			if (mc_action_match_entry(&action->base, entry)) {
+				action->base.old_entry = entry;
 				action->entry_match = (!action->stamp
 						       || action->stamp == entry->stamp);
 				if (action->entry_match) {
 					uint8_t state = entry->state;
-					mc_action_unlink_entry(action->part, pred, entry);
+					mc_action_unlink_entry(action->base.part, pred, entry);
 					mm_stack_insert(freelist, &entry->link);
 					mc_action_bucket_insert(action, bucket, state);
 				}
@@ -374,12 +374,12 @@ mc_action_bucket_update(struct mc_action *action,
 		}
 	}
 
-	action->old_entry = NULL;
+	action->base.old_entry = NULL;
 	action->entry_match = false;
 }
 
 static struct mm_stack *
-mm_action_bucket_start(struct mc_action *action, struct mm_stack *freelist)
+mm_action_bucket_start(struct mc_action_simple *action, struct mm_stack *freelist)
 {
 	mm_stack_prepare(freelist);
 
@@ -390,7 +390,7 @@ mm_action_bucket_start(struct mc_action *action, struct mm_stack *freelist)
 }
 
 static void
-mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
+mc_action_bucket_finish(struct mc_action_simple *action, struct mm_stack *freelist)
 {
 	mc_table_lookup_unlock(action->part);
 
@@ -402,7 +402,7 @@ mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
 }
 
 static void
-mc_action_complete(struct mc_action *action UNUSED)
+mc_action_complete(struct mc_action_simple *action UNUSED)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mm_memory_store_fence();
@@ -415,7 +415,7 @@ mc_action_complete(struct mc_action *action UNUSED)
  **********************************************************************/
 
 void
-mc_action_lookup_low(struct mc_action *action)
+mc_action_lookup_low(struct mc_action_simple *action)
 {
 	ENTER();
 
@@ -436,7 +436,7 @@ mc_action_lookup_low(struct mc_action *action)
 }
 
 void
-mc_action_finish_low(struct mc_action *action)
+mc_action_finish_low(struct mc_action_simple *action)
 {
 	ENTER();
 
@@ -453,7 +453,7 @@ mc_action_finish_low(struct mc_action *action)
 }
 
 void
-mc_action_delete_low(struct mc_action *action)
+mc_action_delete_low(struct mc_action_simple *action)
 {
 	ENTER();
 
@@ -470,196 +470,199 @@ mc_action_delete_low(struct mc_action *action)
 }
 
 void
-mc_action_create_low(struct mc_action *action)
+mc_action_create_low(struct mc_action_storage *action)
 {
 	ENTER();
 
-	mc_table_freelist_lock(action->part);
+	struct mc_tpart *const part = action->base.part;
+	mc_table_freelist_lock(part);
 
 	for (;;) {
-		if (!mm_stack_empty(&action->part->free_list)) {
-			struct mm_slink *link = mm_stack_remove(&action->part->free_list);
+		if (!mm_stack_empty(&part->free_list)) {
+			struct mm_slink *link = mm_stack_remove(&part->free_list);
 			action->new_entry = containerof(link, struct mc_entry, link);
-			ASSERT(action->part->nentries_free);
-			action->part->nentries_free--;
+			ASSERT(part->nentries_free);
+			part->nentries_free--;
 			break;
 		}
 
-		if (action->part->nentries_void) {
-			action->new_entry = action->part->entries_end++;
-			action->part->nentries_void--;
+		if (part->nentries_void) {
+			action->new_entry = part->entries_end++;
+			part->nentries_void--;
 			break;
 		}
-		if (mc_table_expand(action->part, mc_table.nentries_increment)) {
-			ASSERT(action->part->nentries_void);
-			action->new_entry = action->part->entries_end++;
-			action->part->nentries_void--;
+		if (mc_table_expand(part, mc_table.nentries_increment)) {
+			ASSERT(part->nentries_void);
+			action->new_entry = part->entries_end++;
+			part->nentries_void--;
 			break;
 		}
 
-		mc_table_freelist_unlock(action->part);
+		mc_table_freelist_unlock(part);
 
 		struct mm_stack victims;
-		mc_table_lookup_lock(action->part);
-		mc_action_find_victims(action->part, &victims, 1);
-		mc_table_lookup_unlock(action->part);
+		mc_table_lookup_lock(part);
+		mc_action_find_victims(part, &victims, 1);
+		mc_table_lookup_unlock(part);
 
-		mc_table_freelist_lock(action->part);
-		mc_action_free_entries(action->part, &victims);
+		mc_table_freelist_lock(part);
+		mc_action_free_entries(part, &victims);
 	}
 
 	ASSERT(action->new_entry->state == MC_ENTRY_FREE);
 	action->new_entry->state = MC_ENTRY_NOT_USED;
 	action->new_entry->ref_count = 1;
 
-	action->new_entry->hash = action->hash;
-	action->new_entry->key_len = action->key_len;
+	action->new_entry->hash = action->base.hash;
+	action->new_entry->key_len = action->base.key_len;
 	action->new_entry->value_len = action->value_len;
-	mc_action_alloc_chunks(action->part, action->new_entry);
+	mc_action_alloc_chunks(part, action->new_entry);
 
-	mc_table_freelist_unlock(action->part);
-	mc_table_reserve_entries(action->part);
+	mc_table_freelist_unlock(part);
+	mc_table_reserve_entries(part);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_resize_low(struct mc_action *action)
+mc_action_resize_low(struct mc_action_storage *action)
 {
 	ENTER();
 
 	action->new_entry->value_len = action->value_len;
 
-	mc_table_freelist_lock(action->part);
-	mc_action_free_chunks(action->part, action->new_entry);
-	mc_action_alloc_chunks(action->part, action->new_entry);
-	mc_table_freelist_unlock(action->part);
+	struct mc_tpart *const part = action->base.part;
+	mc_table_freelist_lock(part);
+	mc_action_free_chunks(part, action->new_entry);
+	mc_action_alloc_chunks(part, action->new_entry);
+	mc_table_freelist_unlock(part);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_cancel_low(struct mc_action *action)
+mc_action_cancel_low(struct mc_action_storage *action)
 {
 	ENTER();
 
-	mc_table_freelist_lock(action->part);
-	mc_action_free_chunks(action->part, action->new_entry);
-	mc_action_free_entry(action->part, action->new_entry);
-	mc_table_freelist_unlock(action->part);
+	struct mc_tpart *const part = action->base.part;
+	mc_table_freelist_lock(part);
+	mc_action_free_chunks(part, action->new_entry);
+	mc_action_free_entry(part, action->new_entry);
+	mc_table_freelist_unlock(part);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_insert_low(struct mc_action *action)
+mc_action_insert_low(struct mc_action_storage *action)
 {
 	ENTER();
 
 	struct mm_stack freelist;
-	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
+	struct mm_stack *bucket = mm_action_bucket_start(&action->base, &freelist);
 
-	mc_action_bucket_lookup(action, bucket, &freelist);
-	if (action->old_entry == NULL)
+	mc_action_bucket_lookup(&action->base, bucket, &freelist);
+	if (action->base.old_entry == NULL)
 		mc_action_bucket_insert(action, bucket, MC_ENTRY_USED_MIN);
 
-	mc_action_bucket_finish(action, &freelist);
+	mc_action_bucket_finish(&action->base, &freelist);
 
-	if (action->old_entry == NULL)
-		mc_table_reserve_volume(action->part);
+	if (action->base.old_entry == NULL)
+		mc_table_reserve_volume(action->base.part);
 	else
 		mc_action_cancel_low(action);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_update_low(struct mc_action *action)
+mc_action_update_low(struct mc_action_storage *action)
 {
 	ENTER();
 
 	struct mm_stack freelist;
-	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
+	struct mm_stack *bucket = mm_action_bucket_start(&action->base, &freelist);
 
 	mc_action_bucket_update(action, bucket, &freelist);
 	if (action->entry_match)
 		mc_action_access_entry(action->new_entry);
 
-	mc_action_bucket_finish(action, &freelist);
+	mc_action_bucket_finish(&action->base, &freelist);
 
 	if (action->entry_match)
-		mc_table_reserve_volume(action->part);
+		mc_table_reserve_volume(action->base.part);
 	else
 		mc_action_cancel_low(action);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_upsert_low(struct mc_action *action)
+mc_action_upsert_low(struct mc_action_storage *action)
 {
 	ENTER();
 
 	struct mm_stack freelist;
-	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
+	struct mm_stack *bucket = mm_action_bucket_start(&action->base, &freelist);
 
-	mc_action_bucket_delete(action, bucket, &freelist);
+	mc_action_bucket_delete(&action->base, bucket, &freelist);
 	mc_action_bucket_insert(action, bucket, MC_ENTRY_USED_MIN);
 
-	mc_action_bucket_finish(action, &freelist);
+	mc_action_bucket_finish(&action->base, &freelist);
 
-	mc_table_reserve_volume(action->part);
+	mc_table_reserve_volume(action->base.part);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_alter_low(struct mc_action *action)
+mc_action_alter_low(struct mc_action_storage *action)
 {
 	ENTER();
 
-	uint32_t flags = action->old_entry->flags;
-	uint32_t exp_time = action->old_entry->exp_time;
-	mc_action_finish_low(action);
+	uint32_t flags = action->base.old_entry->flags;
+	uint32_t exp_time = action->base.old_entry->exp_time;
+	mc_action_finish_low(&action->base);
 
 	struct mm_stack freelist;
-	struct mm_stack *bucket = mm_action_bucket_start(action, &freelist);
+	struct mm_stack *bucket = mm_action_bucket_start(&action->base, &freelist);
 
 	mc_action_bucket_update(action, bucket, &freelist);
 	if (action->entry_match) {
 		mc_action_access_entry(action->new_entry);
 		action->new_entry->flags = flags;
 		action->new_entry->exp_time = exp_time;
-	} else if (action->old_entry != NULL) {
-		mc_action_ref_entry(action->old_entry);
+	} else if (action->base.old_entry != NULL) {
+		mc_action_ref_entry(action->base.old_entry);
 	}
 
-	mc_action_bucket_finish(action, &freelist);
+	mc_action_bucket_finish(&action->base, &freelist);
 
 	if (action->entry_match)
-		mc_table_reserve_volume(action->part);
-	else if (action->old_entry == NULL)
+		mc_table_reserve_volume(action->base.part);
+	else if (action->base.old_entry == NULL)
 		mc_action_cancel_low(action);
 
-	mc_action_complete(action);
+	mc_action_complete(&action->base);
 
 	LEAVE();
 }
 
 void
-mc_action_stride_low(struct mc_action *action)
+mc_action_stride_low(struct mc_action_simple *action)
 {
 	ENTER();
 
@@ -710,7 +713,7 @@ mc_action_stride_low(struct mc_action *action)
 }
 
 void
-mc_action_evict_low(struct mc_action *action)
+mc_action_evict_low(struct mc_action_simple *action)
 {
 	ENTER();
 
@@ -731,7 +734,7 @@ mc_action_evict_low(struct mc_action *action)
 }
 
 void
-mc_action_flush_low(struct mc_action *action)
+mc_action_flush_low(struct mc_action_simple *action)
 {
 	ENTER();
 

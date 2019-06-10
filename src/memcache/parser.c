@@ -1,7 +1,7 @@
 /*
  * memcache/parser.c - MainMemory memcache parser.
  *
- * Copyright (C) 2012-2016  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@ mc_parser_scan_value(struct mc_state *state)
 	bool rc = true;
 
 	struct mc_command *command = state->command;
-	struct mc_action *action = &command->action;
+	struct mc_action_storage *action = &command->storage;
 
 	// Try to read the value and required LF and optional CR.
 	uint32_t required = action->value_len + 1;
@@ -252,13 +252,13 @@ noinput:
 		shift = S_SET_1;
 	} else if (start == Cx4('a', 'p', 'p', 'e')) {
 		command->type = &mc_command_ascii_append;
-		command->action.alter_type = MC_ACTION_ALTER_APPEND;
+		command->storage.alter_type = MC_ACTION_ALTER_APPEND;
 		state = S_MATCH;
 		match = "nd";
 		shift = S_SET_1;
 	} else if (start == Cx4('p', 'r', 'e', 'p')) {
 		command->type = &mc_command_ascii_prepend;
-		command->action.alter_type = MC_ACTION_ALTER_PREPEND;
+		command->storage.alter_type = MC_ACTION_ALTER_PREPEND;
 		state = S_MATCH;
 		match = "end";
 		shift = S_SET_1;
@@ -444,7 +444,7 @@ again:
 				state = shift;
 				goto again;
 			} else {
-				struct mc_action *action = &command->action;
+				struct mc_action_simple *action = &command->action;
 				if (action->key_len == MC_KEY_LEN_MAX) {
 					DEBUG("too long key");
 					state = S_ERROR;
@@ -552,15 +552,15 @@ again:
 			goto again;
 
 		case S_SET_5:
-			mc_action_hash(&command->action);
-			if (command->action.alter_type == MC_ACTION_ALTER_OTHER) {
-				mc_action_create(&command->action, num32);
-				command->action.new_entry->flags = set_flags;
-				command->action.new_entry->exp_time = set_exp_time;
-				mc_entry_setkey(command->action.new_entry,
-						command->action.key);
+			mc_action_hash(&command->storage.base);
+			if (command->storage.alter_type == MC_ACTION_ALTER_OTHER) {
+				mc_action_create(&command->storage, num32);
+				command->storage.new_entry->flags = set_flags;
+				command->storage.new_entry->exp_time = set_exp_time;
+				mc_entry_setkey(command->storage.new_entry,
+						command->storage.base.key);
 			} else {
-				command->action.value_len = num32;
+				command->storage.value_len = num32;
 			}
 			if (command->type == &mc_command_ascii_cas) {
 				state = S_NUM64;
@@ -582,7 +582,7 @@ again:
 			goto again;
 
 		case S_CAS:
-			command->action.stamp = num64;
+			command->storage.stamp = num64;
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -795,9 +795,9 @@ again:
 		case S_ERROR:
 			// If it was a SET command then it is required
 			// to free a newly created entry.
-			if (command->action.new_entry != NULL) {
-				mc_action_cancel(&command->action);
-				command->action.new_entry = NULL;
+			if (command->storage.new_entry != NULL) {
+				mc_action_cancel(&command->storage);
+				command->storage.new_entry = NULL;
 			}
 			// If it was a GET command then it is required
 			// to destroy all commands past the first one.

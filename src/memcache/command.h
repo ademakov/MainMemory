@@ -1,7 +1,7 @@
 /*
  * memcache/command.h - MainMemory memcache commands.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -141,7 +141,12 @@ struct mc_command
 {
 	struct mc_command *next;
 	struct mc_command_type *type;
-	struct mc_action action;
+
+	union
+	{
+		struct mc_action_simple action;
+		struct mc_action_storage storage;
+	};
 
 	union
 	{

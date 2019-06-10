@@ -1,7 +1,7 @@
 /*
  * memcache/action.h - MainMemory memcache table actions.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -40,34 +40,18 @@ typedef enum
 	MC_ACTION_ALTER_PREPEND,
 } mc_action_alter_t;
 
-struct mc_action
+struct mc_action_simple
 {
-	uint32_t hash;
-	uint32_t key_len;
-
-	/* If not zero then match it against old_entry stamp. */
-	uint64_t stamp;
-
 	/* The entry key. */
 	const char *key;
-
 	/* The table partition corresponding to the key. */
 	struct mc_tpart *part;
 
-	struct mc_entry *new_entry;
+	/* A matching table entry. */
 	struct mc_entry *old_entry;
 
-	/* The value length. */
-	uint32_t value_len;
-
-	/* Output flag indicating if the entry match succeeded. */
-	bool entry_match;
-
-	/* The alter action type. */
-	mc_action_alter_t alter_type;
-
-	/* The alter action value. */
-	const char *alter_value;
+	uint32_t hash;
+	uint16_t key_len;
 
 #if ENABLE_MEMCACHE_COMBINER
 	uint8_t ready;
@@ -77,47 +61,70 @@ struct mc_action
 #endif
 };
 
-void NONNULL(1)
-mc_action_lookup_low(struct mc_action *action);
+struct mc_action_storage
+{
+	struct mc_action_simple base;
+
+	/* If not zero then match it against old_entry stamp. */
+	uint64_t stamp;
+
+	/* A newly created table entry. */
+	struct mc_entry *new_entry;
+
+	/* The alter action value. */
+	const char *alter_value;
+
+	/* The value length. */
+	uint32_t value_len;
+
+	/* The alter action type. */
+	mc_action_alter_t alter_type;
+
+	/* Output flag indicating if the entry match succeeded. */
+	bool entry_match;
+};
 
 void NONNULL(1)
-mc_action_finish_low(struct mc_action *action);
+mc_action_lookup_low(struct mc_action_simple *action);
 
 void NONNULL(1)
-mc_action_delete_low(struct mc_action *action);
+mc_action_finish_low(struct mc_action_simple *action);
 
 void NONNULL(1)
-mc_action_create_low(struct mc_action *action);
+mc_action_delete_low(struct mc_action_simple *action);
 
 void NONNULL(1)
-mc_action_resize_low(struct mc_action *action);
+mc_action_create_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_cancel_low(struct mc_action *action);
+mc_action_resize_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_insert_low(struct mc_action *action);
+mc_action_cancel_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_update_low(struct mc_action *action);
+mc_action_insert_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_upsert_low(struct mc_action *action);
+mc_action_update_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_alter_low(struct mc_action *action);
+mc_action_upsert_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_stride_low(struct mc_action *action);
+mc_action_alter_low(struct mc_action_storage *action);
 
 void NONNULL(1)
-mc_action_evict_low(struct mc_action *action);
+mc_action_stride_low(struct mc_action_simple *action);
 
 void NONNULL(1)
-mc_action_flush_low(struct mc_action *action);
+mc_action_evict_low(struct mc_action_simple *action);
+
+void NONNULL(1)
+mc_action_flush_low(struct mc_action_simple *action);
 
 static inline void NONNULL(1)
-mc_action_cleanup(struct mc_action *action UNUSED)
+mc_action_cleanup(struct mc_action_simple *action UNUSED)
 {
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_future_unique_cleanup(&action->future);
@@ -125,14 +132,14 @@ mc_action_cleanup(struct mc_action *action UNUSED)
 }
 
 static inline void NONNULL(1)
-mc_action_hash(struct mc_action *action)
+mc_action_hash(struct mc_action_simple *action)
 {
 	action->hash = mc_hash(action->key, action->key_len);
 	action->part = mc_table_part(action->hash);
 }
 
 static inline void NONNULL(1, 2)
-mc_action_set_key(struct mc_action *action, const char *key, uint32_t key_len)
+mc_action_set_key(struct mc_action_simple *action, const char *key, uint16_t key_len)
 {
 	action->key_len = key_len;
 	action->key = key;
@@ -176,7 +183,7 @@ mc_delegate_execute(struct mc_action *action, void (*routine)(struct mc_action *
 
 /* Find an entry. */
 static inline void NONNULL(1)
-mc_action_lookup(struct mc_action *action)
+mc_action_lookup(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_lookup_low);
@@ -189,7 +196,7 @@ mc_action_lookup(struct mc_action *action)
 
 /* Finish using a found entry. */
 static inline void NONNULL(1)
-mc_action_finish(struct mc_action *action)
+mc_action_finish(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_finish_low);
@@ -202,7 +209,7 @@ mc_action_finish(struct mc_action *action)
 
 /* Delete a matching entry if any. */
 static inline void NONNULL(1)
-mc_action_delete(struct mc_action *action)
+mc_action_delete(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_delete_low);
@@ -215,7 +222,7 @@ mc_action_delete(struct mc_action *action)
 
 /* Create a new entry. */
 static inline void NONNULL(1)
-mc_action_create(struct mc_action *action, uint32_t value_len)
+mc_action_create(struct mc_action_storage *action, uint32_t value_len)
 {
 	action->value_len = value_len;
 #if ENABLE_MEMCACHE_COMBINER
@@ -229,7 +236,7 @@ mc_action_create(struct mc_action *action, uint32_t value_len)
 
 /* Resize a new entry. */
 static inline void NONNULL(1)
-mc_action_resize(struct mc_action *action, uint32_t value_len)
+mc_action_resize(struct mc_action_storage *action, uint32_t value_len)
 {
 	action->value_len = value_len;
 #if ENABLE_MEMCACHE_COMBINER
@@ -243,7 +250,7 @@ mc_action_resize(struct mc_action *action, uint32_t value_len)
 
 /* Abandon a newly created entry. */
 static inline void NONNULL(1)
-mc_action_cancel(struct mc_action *action)
+mc_action_cancel(struct mc_action_storage *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_cancel_low);
@@ -256,7 +263,7 @@ mc_action_cancel(struct mc_action *action)
 
 /* Insert a newly created entry. */
 static inline void NONNULL(1)
-mc_action_insert(struct mc_action *action)
+mc_action_insert(struct mc_action_storage *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_insert_low);
@@ -269,7 +276,7 @@ mc_action_insert(struct mc_action *action)
 
 /* Replace a matching entry if any. */
 static inline void NONNULL(1)
-mc_action_update(struct mc_action *action)
+mc_action_update(struct mc_action_storage *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_update_low);
@@ -282,7 +289,7 @@ mc_action_update(struct mc_action *action)
 
 /* Either replace a matching entry or insert a new one. */
 static inline void NONNULL(1)
-mc_action_upsert(struct mc_action *action)
+mc_action_upsert(struct mc_action_storage *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_upsert_low);
@@ -295,7 +302,7 @@ mc_action_upsert(struct mc_action *action)
 
 /* Replace a matching entry with conflict detection. */
 static inline void NONNULL(1)
-mc_action_alter(struct mc_action *action)
+mc_action_alter(struct mc_action_storage *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_alter_low);
@@ -307,7 +314,7 @@ mc_action_alter(struct mc_action *action)
 }
 
 static inline void NONNULL(1)
-mc_action_stride(struct mc_action *action)
+mc_action_stride(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_stride_low);
@@ -319,7 +326,7 @@ mc_action_stride(struct mc_action *action)
 }
 
 static inline void NONNULL(1)
-mc_action_evict(struct mc_action *action)
+mc_action_evict(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_evict_low);
@@ -331,7 +338,7 @@ mc_action_evict(struct mc_action *action)
 }
 
 static inline void NONNULL(1)
-mc_action_flush(struct mc_action *action)
+mc_action_flush(struct mc_action_simple *action)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mc_combiner_execute(action, mc_action_flush_low);
