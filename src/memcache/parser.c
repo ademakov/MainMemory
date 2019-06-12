@@ -807,7 +807,7 @@ again:
 				do {
 					struct mc_command *tmp = command;
 					command = command->next;
-					mc_command_destroy(tmp);
+					mc_command_cleanup(tmp);
 				} while (command != NULL);
 
 				parser->command->next = NULL;

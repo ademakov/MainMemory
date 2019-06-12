@@ -191,13 +191,16 @@ struct mc_command
 struct mc_command * NONNULL(1)
 mc_command_create(struct mc_state *state);
 
-void NONNULL(1)
-mc_command_destroy(struct mc_command *command);
-
 static inline void NONNULL(1, 2)
 mc_command_execute(struct mc_state *state, struct mc_command *command)
 {
 	(command->type->exec)(state, command);
+}
+
+static inline void NONNULL(1)
+mc_command_cleanup(struct mc_command *command)
+{
+	mc_action_cleanup(&command->action);
 }
 
 #endif /* MEMCACHE_COMMAND_H */

@@ -48,13 +48,9 @@ mc_process_command(struct mc_state *state, struct mc_command *command)
 	ENTER();
 
 	do {
-		// Handle the command if it has associated
-		// execution routine.
-		mc_command_execute(state, command);
-
-		// Release the command data
 		struct mc_command *next = command->next;
-		mc_command_destroy(command);
+		mc_command_execute(state, command);
+		mc_command_cleanup(command);
 		command = next;
 
 	} while (command != NULL);
@@ -107,7 +103,7 @@ parse:
 
 	if (!rc) {
 		if (state->command != NULL) {
-			mc_command_destroy(state->command);
+			mc_command_cleanup(state->command);
 			state->command = NULL;
 		}
 		if (state->trash) {

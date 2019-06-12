@@ -90,19 +90,6 @@ mc_command_create(struct mc_state *state)
 	return command;
 }
 
-void NONNULL(1)
-mc_command_destroy(struct mc_command *command)
-{
-	ENTER();
-
-	if (command->own_alter_value)
-		mm_private_free((char *) command->storage.alter_value);
-
-	mc_action_cleanup(&command->action);
-
-	LEAVE();
-}
-
 /**********************************************************************
  * Command processing helpers.
  **********************************************************************/
@@ -382,6 +369,9 @@ mc_command_append(struct mc_command *command)
 			break;
 	}
 
+	if (command->own_alter_value)
+		mm_private_free((char *) alter_value);
+
 	LEAVE();
 }
 
@@ -417,6 +407,9 @@ mc_command_prepend(struct mc_command *command)
 		if (action->entry_match)
 			break;
 	}
+
+	if (command->own_alter_value)
+		mm_private_free((char *) alter_value);
 
 	LEAVE();
 }
