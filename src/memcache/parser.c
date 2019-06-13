@@ -185,24 +185,11 @@ noinput:
 		goto leave;
 	}
 
-	// Allocate a command.
-	struct mc_command *command = mc_command_create(parser);
-	parser->command = command;
-
 	// Initialize the scanner state.
+	struct mc_command *command;
 	enum parser_state state = S_ERROR;
 	enum parser_state shift = S_ERROR;
-	uint32_t num32 = 0;
-	uint64_t num64 = 0;
 	char *match = "";
-
-	// Initialize storage command parameters.
-	uint32_t set_flags = 0;
-	uint32_t set_exp_time = 0;
-
-	// The count of scanned chars. Used to check if the client sends
-	// too much junk data.
-	int count = 0;
 
 #define Cx4(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
 
@@ -210,94 +197,95 @@ noinput:
 	uint32_t start = Cx4(s[0], s[1], s[2], s[3]);
 	s += 4;
 	if (start == Cx4('g', 'e', 't', ' ')) {
-		command->type = &mc_command_ascii_get;
+		command = mc_command_create_simple(parser, &mc_command_ascii_get);
 		state = S_SPACE;
 		shift = S_GET_1;
 	} else if (start == Cx4('s', 'e', 't', ' ')) {
-		command->type = &mc_command_ascii_set;
+		command = mc_command_create_storage(parser, &mc_command_ascii_set);
 		state = S_SPACE;
 		shift = S_SET_1;
 	} else if (start == Cx4('r', 'e', 'p', 'l')) {
-		command->type = &mc_command_ascii_replace;
+		command = mc_command_create_storage(parser, &mc_command_ascii_replace);
 		state = S_MATCH;
 		match = "ace";
 		shift = S_SET_1;
 	} else if (start == Cx4('d', 'e', 'l', 'e')) {
-		command->type = &mc_command_ascii_delete;
+		command = mc_command_create_simple(parser, &mc_command_ascii_delete);
 		state = S_MATCH;
 		match = "te";
 		shift = S_DELETE_1;
 	} else if (start == Cx4('a', 'd', 'd', ' ')) {
-		command->type = &mc_command_ascii_add;
+		command = mc_command_create_storage(parser, &mc_command_ascii_add);
 		state = S_SPACE;
 		shift = S_SET_1;
 	} else if (start == Cx4('i', 'n', 'c', 'r')) {
-		command->type = &mc_command_ascii_incr;
+		command = mc_command_create_storage(parser, &mc_command_ascii_incr);
 		state = S_MATCH;
 		//match = "";
 		shift = S_DELTA_1;
 	} else if (start == Cx4('d', 'e', 'c', 'r')) {
-		command->type = &mc_command_ascii_decr;
+		command = mc_command_create_storage(parser, &mc_command_ascii_decr);
 		state = S_MATCH;
 		//match = "";
 		shift = S_DELTA_1;
 	} else if (start == Cx4('g', 'e', 't', 's')) {
-		command->type = &mc_command_ascii_gets;
+		command = mc_command_create_simple(parser, &mc_command_ascii_gets);
 		state = S_MATCH;
 		//match = "";
 		shift = S_GET_1;
 	} else if (start == Cx4('c', 'a', 's', ' ')) {
-		command->type = &mc_command_ascii_cas;
+		command = mc_command_create_storage(parser, &mc_command_ascii_cas);
 		state = S_SPACE;
 		shift = S_SET_1;
 	} else if (start == Cx4('a', 'p', 'p', 'e')) {
-		command->type = &mc_command_ascii_append;
+		command = mc_command_create_storage(parser, &mc_command_ascii_append);
 		command->storage.alter_type = MC_ACTION_ALTER_APPEND;
 		state = S_MATCH;
 		match = "nd";
 		shift = S_SET_1;
 	} else if (start == Cx4('p', 'r', 'e', 'p')) {
-		command->type = &mc_command_ascii_prepend;
+		command = mc_command_create_storage(parser, &mc_command_ascii_prepend);
 		command->storage.alter_type = MC_ACTION_ALTER_PREPEND;
 		state = S_MATCH;
 		match = "end";
 		shift = S_SET_1;
 	} else if (start == Cx4('t', 'o', 'u', 'c')) {
-		command->type = &mc_command_ascii_touch;
+		command = mc_command_create_simple(parser, &mc_command_ascii_touch);
 		state = S_MATCH;
 		match = "h";
 		shift = S_TOUCH_1;
 	} else if (start == Cx4('s', 'l', 'a', 'b')) {
-		command->type = &mc_command_ascii_slabs;
+		command = mc_command_create_simple(parser, &mc_command_ascii_slabs);
 		state = S_MATCH;
 		match = "s";
 		shift = S_OPT;
 	} else if (start == Cx4('s', 't', 'a', 't')) {
-		command->type = &mc_command_ascii_stats;
+		command = mc_command_create_simple(parser, &mc_command_ascii_stats);
 		state = S_MATCH;
 		match = "s";
 		shift = S_OPT;
 	} else if (start == Cx4('f', 'l', 'u', 's')) {
-		command->type = &mc_command_ascii_flush_all;
+		command = mc_command_create_simple(parser, &mc_command_ascii_flush_all);
 		state = S_MATCH;
 		match = "h_all";
 		shift = S_FLUSH_ALL_1;
 	} else if (start == Cx4('v', 'e', 'r', 's')) {
-		command->type = &mc_command_ascii_version;
+		command = mc_command_create_simple(parser, &mc_command_ascii_version);
 		state = S_MATCH;
 		match = "ion";
 		shift = S_EOL;
 	} else if (start == Cx4('v', 'e', 'r', 'b')) {
-		command->type = &mc_command_ascii_verbosity;
+		command = mc_command_create_simple(parser, &mc_command_ascii_verbosity);
 		state = S_MATCH;
 		match = "osity";
 		shift = S_VERBOSITY_1;
 	} else if (start == Cx4('q', 'u', 'i', 't')) {
-		command->type = &mc_command_ascii_quit;
+		command = mc_command_create_simple(parser, &mc_command_ascii_quit);
 		state = S_SPACE;
 		shift = S_EOL;
 	} else {
 		DEBUG("unrecognized command");
+		command = NULL;
 		// Need to check the first 4 chars one by one again for a
 		// possible '\n' among them.
 		s -= 4;
@@ -305,7 +293,18 @@ noinput:
 
 #undef Cx4
 
+	// Numeric values.
+	uint32_t num32 = 0;
+	uint64_t num64 = 0;
+	// Initialize storage command parameters.
+	uint32_t set_flags = 0;
+	uint32_t set_exp_time = 0;
+	// The count of scanned chars. Used to check if the client sends
+	// too much junk data.
+	int count = 0;
+
 	// Parse the rest of the command.
+	parser->command = command;
 	for (;; s++) {
 		while (unlikely(s == e)) {
 			if (command->type->kind != MC_COMMAND_LOOKUP)
@@ -523,8 +522,7 @@ again:
 				goto again;
 			} else {
 				state = S_KEY;
-				command->next = mc_command_create(parser);
-				command->next->type = command->type;
+				command->next = mc_command_create_simple(parser, command->type);
 				command = command->next;
 				goto again;
 			}
@@ -793,27 +791,25 @@ again:
 			}
 
 		case S_ERROR:
-			// If it was a SET command then it is required
-			// to free a newly created entry.
-			if (command->storage.new_entry != NULL) {
-				mc_action_cancel(&command->storage);
-				command->storage.new_entry = NULL;
-			}
-			// If it was a GET command then it is required
-			// to destroy all commands past the first one.
-			// The first one is for the error response.
-			if (parser->command->next != NULL) {
-				command = parser->command->next;
+			if (parser->command != NULL) {
+				// If it was a SET command then it is required
+				// to free a newly created entry.
+				if ((command->type->kind == MC_COMMAND_STORAGE
+				     || command->type->kind == MC_COMMAND_CONCAT
+				     || command->type->kind == MC_COMMAND_DELTA)
+				    && command->storage.new_entry != NULL) {
+					mc_action_cancel(&command->storage);
+					command->storage.new_entry = NULL;
+				}
+
+				command = parser->command;
 				do {
 					struct mc_command *tmp = command;
 					command = command->next;
 					mc_command_cleanup(tmp);
 				} while (command != NULL);
-
-				parser->command->next = NULL;
-				command = parser->command;
 			}
-			command->type = &mc_command_ascii_error;
+			parser->command = mc_command_create_simple(parser, &mc_command_ascii_error);
 			state = S_ERROR_1;
 			/* no break */
 		case S_ERROR_1:

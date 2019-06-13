@@ -79,8 +79,7 @@ retry:
 
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create(state);
-			command->type = &mc_command_ascii_quit;
+			struct mc_command *command = mc_command_create_simple(state, &mc_command_ascii_quit);
 			mc_process_command(state, command);
 		}
 		goto leave;

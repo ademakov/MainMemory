@@ -140,7 +140,7 @@ struct mc_command_stats
 struct mc_command
 {
 	struct mc_command *next;
-	struct mc_command_type *type;
+	const struct mc_command_type *type;
 
 	union
 	{
@@ -189,7 +189,10 @@ struct mc_command
  **********************************************************************/
 
 struct mc_command * NONNULL(1)
-mc_command_create(struct mc_state *state);
+mc_command_create_simple(struct mc_state *state, const struct mc_command_type *type);
+
+struct mc_command * NONNULL(1)
+mc_command_create_storage(struct mc_state *state, const struct mc_command_type *type);
 
 static inline void NONNULL(1, 2)
 mc_command_execute(struct mc_state *state, struct mc_command *command)

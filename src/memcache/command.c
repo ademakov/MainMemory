@@ -79,12 +79,26 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  **********************************************************************/
 
 struct mc_command * NONNULL(1)
-mc_command_create(struct mc_state *state)
+mc_command_create_simple(struct mc_state *state, const struct mc_command_type *type)
+{
+	ENTER();
+
+	struct mc_command *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command));
+	command->next = NULL;
+	command->type = type;
+
+	LEAVE();
+	return command;
+}
+
+struct mc_command * NONNULL(1)
+mc_command_create_storage(struct mc_state *state, const struct mc_command_type *type)
 {
 	ENTER();
 
 	struct mc_command *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command));
 	memset(command, 0, sizeof(struct mc_command));
+	command->type = type;
 
 	LEAVE();
 	return command;
