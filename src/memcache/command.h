@@ -23,6 +23,9 @@
 #include "memcache/memcache.h"
 #include "memcache/action.h"
 
+/* Forward declaration. */
+struct mc_binary_header;
+
 /**********************************************************************
  * Command type declarations.
  **********************************************************************/
@@ -52,64 +55,63 @@ enum mc_command_kind {
  * Some preprocessor magic to emit command definitions.
  */
 
-#define MC_COMMAND_LIST(_)				\
-	_(ascii_get,		MC_COMMAND_LOOKUP)	\
-	_(ascii_gets,		MC_COMMAND_LOOKUP)	\
-	_(ascii_set,		MC_COMMAND_STORAGE)	\
-	_(ascii_add,		MC_COMMAND_STORAGE)	\
-	_(ascii_replace,	MC_COMMAND_STORAGE)	\
-	_(ascii_append,		MC_COMMAND_CONCAT)	\
-	_(ascii_prepend,	MC_COMMAND_CONCAT)	\
-	_(ascii_cas,		MC_COMMAND_STORAGE)	\
-	_(ascii_incr,		MC_COMMAND_DELTA)	\
-	_(ascii_decr,		MC_COMMAND_DELTA)	\
-	_(ascii_delete,		MC_COMMAND_DELETE)	\
-	_(ascii_touch,		MC_COMMAND_TOUCH)	\
-	_(ascii_slabs,		MC_COMMAND_CUSTOM)	\
-	_(ascii_stats,		MC_COMMAND_CUSTOM)	\
-	_(ascii_flush_all,	MC_COMMAND_FLUSH)	\
-	_(ascii_version,	MC_COMMAND_CUSTOM)	\
-	_(ascii_verbosity,	MC_COMMAND_CUSTOM)	\
-	_(ascii_quit,		MC_COMMAND_CUSTOM)	\
-	_(ascii_error,		MC_COMMAND_ERROR)	\
-	_(binary_get,		MC_COMMAND_LOOKUP)	\
-	_(binary_getq,		MC_COMMAND_LOOKUP)	\
-	_(binary_getk,		MC_COMMAND_LOOKUP)	\
-	_(binary_getkq,		MC_COMMAND_LOOKUP)	\
-	_(binary_set,		MC_COMMAND_STORAGE)	\
-	_(binary_setq,		MC_COMMAND_STORAGE)	\
-	_(binary_add,		MC_COMMAND_STORAGE)	\
-	_(binary_addq,		MC_COMMAND_STORAGE)	\
-	_(binary_replace,	MC_COMMAND_STORAGE)	\
-	_(binary_replaceq,	MC_COMMAND_STORAGE)	\
-	_(binary_append,	MC_COMMAND_CONCAT)	\
-	_(binary_appendq,	MC_COMMAND_CONCAT)	\
-	_(binary_prepend,	MC_COMMAND_CONCAT)	\
-	_(binary_prependq,	MC_COMMAND_CONCAT)	\
-	_(binary_increment,	MC_COMMAND_DELTA)	\
-	_(binary_incrementq,	MC_COMMAND_DELTA)	\
-	_(binary_decrement,	MC_COMMAND_DELTA)	\
-	_(binary_decrementq,	MC_COMMAND_DELTA)	\
-	_(binary_delete,	MC_COMMAND_DELETE)	\
-	_(binary_deleteq,	MC_COMMAND_DELETE)	\
-	_(binary_noop,		MC_COMMAND_CUSTOM)	\
-	_(binary_quit,		MC_COMMAND_CUSTOM)	\
-	_(binary_quitq,		MC_COMMAND_CUSTOM)	\
-	_(binary_flush,		MC_COMMAND_FLUSH)	\
-	_(binary_flushq,	MC_COMMAND_FLUSH)	\
-	_(binary_version,	MC_COMMAND_CUSTOM)	\
-	_(binary_stat,		MC_COMMAND_CUSTOM)	\
-	_(binary_error,		MC_COMMAND_ERROR)
+#define MC_COMMAND_LIST(_)					\
+	_(ascii,  get,		simple,  MC_COMMAND_LOOKUP)	\
+	_(ascii,  gets,		simple,  MC_COMMAND_LOOKUP)	\
+	_(ascii,  set,		storage, MC_COMMAND_STORAGE)	\
+	_(ascii,  add,		storage, MC_COMMAND_STORAGE)	\
+	_(ascii,  replace,	storage, MC_COMMAND_STORAGE)	\
+	_(ascii,  append,	storage, MC_COMMAND_CONCAT)	\
+	_(ascii,  prepend,	storage, MC_COMMAND_CONCAT)	\
+	_(ascii,  cas,		storage, MC_COMMAND_STORAGE)	\
+	_(ascii,  incr,		storage, MC_COMMAND_DELTA)	\
+	_(ascii,  decr,		storage, MC_COMMAND_DELTA)	\
+	_(ascii,  delete,	simple,  MC_COMMAND_DELETE)	\
+	_(ascii,  touch,	simple,  MC_COMMAND_TOUCH)	\
+	_(ascii,  slabs,	simple,  MC_COMMAND_CUSTOM)	\
+	_(ascii,  stats,	simple,  MC_COMMAND_CUSTOM)	\
+	_(ascii,  flush_all,	simple,  MC_COMMAND_FLUSH)	\
+	_(ascii,  version,	simple,  MC_COMMAND_CUSTOM)	\
+	_(ascii,  verbosity,	simple,  MC_COMMAND_CUSTOM)	\
+	_(ascii,  quit,		simple,  MC_COMMAND_CUSTOM)	\
+	_(ascii,  error,	simple,  MC_COMMAND_ERROR)	\
+	_(binary, get,		simple,  MC_COMMAND_LOOKUP)	\
+	_(binary, getq,		simple,  MC_COMMAND_LOOKUP)	\
+	_(binary, getk,		simple,  MC_COMMAND_LOOKUP)	\
+	_(binary, getkq,	simple,  MC_COMMAND_LOOKUP)	\
+	_(binary, set,		storage, MC_COMMAND_STORAGE)	\
+	_(binary, setq,		storage, MC_COMMAND_STORAGE)	\
+	_(binary, add,		storage, MC_COMMAND_STORAGE)	\
+	_(binary, addq,		storage, MC_COMMAND_STORAGE)	\
+	_(binary, replace,	storage, MC_COMMAND_STORAGE)	\
+	_(binary, replaceq,	storage, MC_COMMAND_STORAGE)	\
+	_(binary, append,	storage, MC_COMMAND_CONCAT)	\
+	_(binary, appendq,	storage, MC_COMMAND_CONCAT)	\
+	_(binary, prepend,	storage, MC_COMMAND_CONCAT)	\
+	_(binary, prependq,	storage, MC_COMMAND_CONCAT)	\
+	_(binary, increment,	storage, MC_COMMAND_DELTA)	\
+	_(binary, incrementq,	storage, MC_COMMAND_DELTA)	\
+	_(binary, decrement,	storage, MC_COMMAND_DELTA)	\
+	_(binary, decrementq,	storage, MC_COMMAND_DELTA)	\
+	_(binary, delete,	simple,  MC_COMMAND_DELETE)	\
+	_(binary, deleteq,	simple,  MC_COMMAND_DELETE)	\
+	_(binary, noop,		simple,  MC_COMMAND_CUSTOM)	\
+	_(binary, quit,		simple,  MC_COMMAND_CUSTOM)	\
+	_(binary, quitq,	simple,  MC_COMMAND_CUSTOM)	\
+	_(binary, flush,	simple,  MC_COMMAND_FLUSH)	\
+	_(binary, flushq,	simple,  MC_COMMAND_FLUSH)	\
+	_(binary, version,	simple,  MC_COMMAND_CUSTOM)	\
+	_(binary, stat,		simple,  MC_COMMAND_CUSTOM)	\
+	_(binary, error,	simple,  MC_COMMAND_ERROR)
 
 /*
  * Declare command handling info.
  */
 
 struct mc_state;
-struct mc_command;
+struct mc_command_base;
 
-typedef void (*mc_command_execute_t)(struct mc_state *state,
-				     struct mc_command *command);
+typedef void (*mc_command_execute_t)(struct mc_state *state, struct mc_command_base *command);
 
 struct mc_command_type
 {
@@ -118,8 +120,8 @@ struct mc_command_type
 	const char *name;
 };
 
-#define MC_COMMAND_TYPE(cmd, value)	\
-	extern struct mc_command_type mc_command_##cmd;
+#define MC_COMMAND_TYPE(proto, cmd, actn_kind, cmd_kind)		\
+	extern struct mc_command_type mc_command_##proto##_##cmd;
 
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
 
@@ -129,81 +131,52 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
  * Command data.
  **********************************************************************/
 
-struct mc_command_slabs
+struct mc_command_base
 {
-};
-
-struct mc_command_stats
-{
-};
-
-struct mc_command
-{
-	struct mc_command *next;
 	const struct mc_command_type *type;
+	struct mc_command_base *next;
+};
 
-	union
-	{
-		struct mc_action_simple action;
-		struct mc_action_storage storage;
-	};
+struct mc_command_simple
+{
+	struct mc_command_base base;
+	struct mc_action action;
+};
 
-	union
-	{
-		struct
-		{
-			bool noreply;
-			bool last;
-		} ascii;
-
-		struct
-		{
-			uint32_t opaque;
-			uint8_t opcode;
-		} binary;
-	};
-
-	union
-	{
-		struct
-		{
-			uint64_t value;
-			uint64_t delta;
-		};
-		struct mc_command_slabs slabs;
-		struct mc_command_stats stats;
-	};
-
-	union
-	{
-		uint32_t exp_time;
-		uint32_t nopts;
-	};
-
-	/* Action value memory is owned by the command. */
-	bool own_alter_value;
+struct mc_command_storage
+{
+	struct mc_command_base base;
+	struct mc_action_storage action;
+	uint64_t binary_value;
+	uint64_t binary_delta;
 };
 
 /**********************************************************************
  * Command routines.
  **********************************************************************/
 
-struct mc_command * NONNULL(1)
+struct mc_command_simple * NONNULL(1, 2)
 mc_command_create_simple(struct mc_state *state, const struct mc_command_type *type);
 
-struct mc_command * NONNULL(1)
-mc_command_create_storage(struct mc_state *state, const struct mc_command_type *type);
+struct mc_command_storage * NONNULL(1, 2)
+mc_command_create_ascii_storage(struct mc_state *state, const struct mc_command_type *type);
+
+struct mc_command_simple * NONNULL(1, 2, 3)
+mc_command_create_binary_simple(struct mc_state *state, const struct mc_command_type *type, const struct mc_binary_header *header);
+
+struct mc_command_storage * NONNULL(1, 2, 3)
+mc_command_create_binary_storage(struct mc_state *state, const struct mc_command_type *type, const struct mc_binary_header *header);
 
 static inline void NONNULL(1, 2)
-mc_command_execute(struct mc_state *state, struct mc_command *command)
+mc_command_execute(struct mc_state *state, struct mc_command_base *command)
 {
 	(command->type->exec)(state, command);
 }
 
 static inline void NONNULL(1)
-mc_command_cleanup(struct mc_command *command)
+mc_command_cleanup(struct mc_command_base *command)
 {
-	mc_action_cleanup(&command->action);
+	mc_action_cleanup(&((struct mc_command_simple *) command)->action);
 }
 
 #endif /* MEMCACHE_COMMAND_H */

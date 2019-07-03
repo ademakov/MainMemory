@@ -37,8 +37,9 @@ struct mc_state
 	/* The client socket. */
 	struct mm_netbuf_socket sock;
 
-	/* Currently constructed command. */
-	struct mc_command *command;
+	/* Parsed commands. */
+	struct mc_command_base *command_first;
+	struct mc_command_base *command_last;
 
 	/* Memcache protocol. */
 	uint8_t protocol;

@@ -25,7 +25,8 @@
 #include "base/report.h"
 #include "base/memory/memory.h"
 
-#define MC_BINARY_DELTA_EXTRA_SIZE	20
+#define MC_BINARY_STORAGE_EXTRA_SIZE	(8)
+#define MC_BINARY_DELTA_EXTRA_SIZE	(20)
 
 static const struct mc_command_type *mc_binary_commands[256] = {
 	[MC_BINARY_OPCODE_GET]		= &mc_command_binary_get,
@@ -76,6 +77,7 @@ mc_binary_fill(struct mc_state *state, uint32_t required)
 static bool
 mc_binary_skip(struct mc_state *state, uint32_t required)
 {
+	// TODO: reuse memory for large sizes.
 	for (;;) {
 		required -= mm_netbuf_skip(&state->sock, required);
 		if (required == 0)
@@ -92,66 +94,74 @@ mc_binary_skip(struct mc_state *state, uint32_t required)
 }
 
 static bool
-mc_binary_error(struct mc_state *state, uint32_t body_len, uint16_t status)
+mc_binary_error(struct mc_state *state, const struct mc_binary_header *header, uint32_t body_len, uint16_t status)
 {
 	if (!mc_binary_skip(state, body_len))
 		return false;
-	state->command->type = &mc_command_binary_error;
-	state->command->value = status;
+
+	struct mc_command_simple *command = mc_command_create_binary_simple(state, &mc_command_binary_error, header);
+	command->action.binary_status = status;
+
 	return true;
 }
 
 static bool
-mc_binary_unknown_command(struct mc_state *state, uint32_t body_len)
+mc_binary_unknown_command(struct mc_state *state, const struct mc_binary_header *header, uint32_t body_len)
 {
-	return mc_binary_error(state, body_len, MC_BINARY_STATUS_UNKNOWN_COMMAND);
+	return mc_binary_error(state, header, body_len, MC_BINARY_STATUS_UNKNOWN_COMMAND);
 }
 
 static bool
-mc_binary_invalid_arguments(struct mc_state *state, uint32_t body_len)
+mc_binary_invalid_arguments(struct mc_state *state, const struct mc_binary_header *header, uint32_t body_len)
 {
-	return mc_binary_error(state, body_len, MC_BINARY_STATUS_INVALID_ARGUMENTS);
+	return mc_binary_error(state, header, body_len, MC_BINARY_STATUS_INVALID_ARGUMENTS);
 }
 
 static void
-mc_binary_set_key(struct mc_state *state, uint16_t key_len)
+mc_binary_set_key(struct mc_state *state, struct mc_action *action, uint16_t key_len)
 {
-	struct mc_command *command = state->command;
-
+	char *key = mm_netbuf_rget(&state->sock);
 	char *end = mm_netbuf_rend(&state->sock);
-	if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
+	if (unlikely(key == end)) {
 		mm_netbuf_rnext(&state->sock);
+		key = mm_netbuf_rget(&state->sock);
 		end = mm_netbuf_rend(&state->sock);
 	}
 
-	char *key = mm_netbuf_rget(&state->sock);
 	if (key + key_len <= end) {
-		state->sock.rxbuf.head.ptr += key_len;
+		mm_netbuf_radd(&state->sock, key_len);
 	} else {
 		key = mm_buffer_embed(&state->sock.txbuf, key_len);
 		mm_netbuf_read(&state->sock, key, key_len);
 	}
 
-	mc_action_set_key(&command->action, key, key_len);
+	mc_action_set_key(action, key, key_len);
 }
 
 static bool
-mc_binary_read_key(struct mc_state *state, uint16_t key_len)
+mc_binary_lookup_command(struct mc_state *state, const struct mc_command_type *type,
+			 const struct mc_binary_header *header, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, key_len))
 		return false;
 
+	struct mc_command_simple *command = mc_command_create_binary_simple(state, type, header);
+
 	// Read the key.
-	mc_binary_set_key(state, key_len);
+	mc_binary_set_key(state, &command->action, key_len);
 
 	return true;
 }
 
 static bool
-mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint16_t key_len)
+mc_binary_storage_command(struct mc_state *state, const struct mc_command_type *type,
+			  const struct mc_binary_header *header, uint32_t body_len, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, body_len))
 		return false;
+
+	struct mc_command_storage *command = mc_command_create_binary_storage(state, type, header);
+	command->action.stamp = mm_load_nll(&header->stamp);
 
 	// Read the extras.
 	struct
@@ -159,21 +169,21 @@ mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint16_t key_len
 		uint32_t flags;
 		uint32_t exp_time;
 	} extras;
-	mm_netbuf_read(&state->sock, &extras, sizeof extras);
+	ASSERT(sizeof(extras) == MC_BINARY_STORAGE_EXTRA_SIZE);
+	mm_netbuf_read(&state->sock, &extras, MC_BINARY_STORAGE_EXTRA_SIZE);
 
 	// Read the key.
-	mc_binary_set_key(state, key_len);
+	mc_binary_set_key(state, &command->action.base, key_len);
 
 	// Create an entry.
-	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len - sizeof extras;
-	mc_action_create(&command->storage, value_len);
+	mc_action_create(&command->action, value_len);
 
 	// Initialize the entry and its key.
-	struct mc_entry *entry = command->storage.new_entry;
+	struct mc_entry *entry = command->action.new_entry;
 	entry->flags = mm_ntohl(extras.flags);
 	entry->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
-	mc_entry_setkey(entry, command->action.key);
+	mc_entry_setkey(entry, command->action.base.key);
 
 	// Read the entry value.
 	char *value = mc_entry_getvalue(entry);
@@ -183,42 +193,45 @@ mc_binary_read_entry(struct mc_state *state, uint32_t body_len, uint16_t key_len
 }
 
 static bool
-mc_binary_read_chunk(struct mc_state *state, uint32_t body_len, uint16_t key_len)
+mc_binary_concat_command(struct mc_state *state, const struct mc_command_type *type,
+			 const struct mc_binary_header *header, uint32_t body_len, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, body_len))
 		return false;
 
+	struct mc_command_storage *command = mc_command_create_binary_storage(state, type, header);
+
 	// Read the key.
-	mc_binary_set_key(state, key_len);
+	mc_binary_set_key(state, &command->action.base, key_len);
 
 	// Find the value length.
-	struct mc_command *command = state->command;
 	uint32_t value_len = body_len - key_len;
-	command->storage.value_len = value_len;
+	command->action.value_len = value_len;
 
 	// Read the value.
+	char *value = mm_netbuf_rget(&state->sock);
 	char *end = mm_netbuf_rend(&state->sock);
-	if (unlikely(mm_netbuf_rget(&state->sock) == end)) {
+	if (unlikely(value == end)) {
 		mm_netbuf_rnext(&state->sock);
+		value = mm_netbuf_rget(&state->sock);
 		end = mm_netbuf_rend(&state->sock);
 	}
-
-	struct mm_buffer_reader *iter = &state->sock.rxbuf.head;
-	if (iter->ptr + value_len <= end) {
-		command->storage.alter_value = iter->ptr;
-		iter->ptr += value_len;
+	if (value + value_len <= end) {
+		mm_netbuf_radd(&state->sock, value_len);
+		command->action.own_alter_value = false;
 	} else {
-		char *value = mm_private_alloc(value_len);
+		value = mm_private_alloc(value_len);
 		mm_netbuf_read(&state->sock, value, value_len);
-		command->storage.alter_value = value;
-		command->own_alter_value = true;
+		command->action.own_alter_value = true;
 	}
+	command->action.alter_value = value;
 
 	return true;
 }
 
 static bool
-mc_binary_read_delta(struct mc_state *state, uint16_t key_len)
+mc_binary_delta_command(struct mc_state *state, const struct mc_command_type *type,
+			const struct mc_binary_header *header, uint16_t key_len)
 {
 	if (!mc_binary_fill(state, key_len + MC_BINARY_DELTA_EXTRA_SIZE))
 		return false;
@@ -230,30 +243,34 @@ mc_binary_read_delta(struct mc_state *state, uint16_t key_len)
 		uint64_t value;
 		uint32_t exp_time;
 	} extras;
+	ASSERT(sizeof(extras) == MC_BINARY_DELTA_EXTRA_SIZE);
 	mm_netbuf_read(&state->sock, &extras, MC_BINARY_DELTA_EXTRA_SIZE);
 
-	struct mc_command *command = state->command;
-	command->delta = mm_ntohll(extras.delta);
-	command->value = mm_ntohll(extras.value);
-	command->exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
+	struct mc_command_storage *command = mc_command_create_binary_storage(state, type, header);
+	command->binary_delta = mm_ntohll(extras.delta);
+	command->binary_value = mm_ntohll(extras.value);
+	command->action.base.binary_exp_time = mc_entry_fix_exptime(mm_ntohl(extras.exp_time));
 
 	// Read the key.
-	mc_binary_set_key(state, key_len);
+	mc_binary_set_key(state, &command->action.base, key_len);
 
 	return true;
 }
 
 static bool
-mc_binary_read_flush(struct mc_state *state)
+mc_binary_flush_command(struct mc_state *state, const struct mc_command_type *type,
+			const struct mc_binary_header *header, uint8_t ext_len)
 {
-	if (!mc_binary_fill(state, 4))
-		return false;
+	// Read the extras if present.
+	uint32_t exp_time = 0;
+	if (ext_len) {
+		if (!mc_binary_fill(state, sizeof exp_time))
+			return false;
+		mm_netbuf_read(&state->sock, &exp_time, sizeof exp_time);
+	}
 
-	uint32_t exp_time;
-	mm_netbuf_read(&state->sock, &exp_time, sizeof exp_time);
-
-	struct mc_command *command = state->command;
-	command->exp_time = mm_ntohl(exp_time);
+	struct mc_command_simple *command = mc_command_create_binary_simple(state, type, header);
+	command->action.binary_exp_time = mm_ntohl(exp_time);
 
 	return true;
 }
@@ -285,16 +302,17 @@ mc_binary_parse(struct mc_state *state)
 
 	// The header pointer might be unaligned so numeric fields on non-x86
 	// archs must be accessed with care.
-	const struct mc_command_type *const type = mc_binary_commands[header->opcode];
 	const uint8_t ext_len = header->ext_len;
 	const uint16_t key_len = mm_load_ns(&header->key_len);
 	const uint32_t body_len = mm_load_nl(&header->body_len);
 	if (unlikely((key_len + ext_len) > body_len)) {
-		rc = mc_binary_invalid_arguments(state, body_len);
+		rc = mc_binary_invalid_arguments(state, header, body_len);
 		goto leave;
 	}
+
+	const struct mc_command_type *const type = mc_binary_commands[header->opcode];
 	if (unlikely(type == NULL)) {
-		rc = mc_binary_unknown_command(state, body_len);
+		rc = mc_binary_unknown_command(state, header, body_len);
 		goto leave;
 	}
 	DEBUG("command type: %s", type->name);
@@ -302,83 +320,43 @@ mc_binary_parse(struct mc_state *state)
 	switch (type->kind) {
 	case MC_COMMAND_LOOKUP:
 	case MC_COMMAND_DELETE:
-		if (unlikely(ext_len != 0)
-		    || unlikely(key_len != body_len)
-		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(state, body_len);
-			goto leave;
-		}
-		state->command = mc_command_create_simple(state, type);
-		state->command->binary.opcode = header->opcode;
-		state->command->binary.opaque = mm_load_hl(&header->opaque);
-		rc = mc_binary_read_key(state, key_len);
+		if (unlikely(ext_len != 0) || unlikely(key_len != body_len) || unlikely(key_len == 0))
+			rc = mc_binary_invalid_arguments(state, header, body_len);
+		else
+			rc = mc_binary_lookup_command(state, type, header, key_len);
 		break;
 
 	case MC_COMMAND_STORAGE:
-		if (unlikely(ext_len != 8)
-		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(state, body_len);
-			goto leave;
-		}
-		state->command = mc_command_create_storage(state, type);
-		state->command->binary.opcode = header->opcode;
-		state->command->binary.opaque = mm_load_hl(&header->opaque);
-		state->command->storage.stamp = mm_load_nll(&header->stamp);
-		rc = mc_binary_read_entry(state, body_len, key_len);
+		if (unlikely(ext_len != MC_BINARY_STORAGE_EXTRA_SIZE) || unlikely(key_len == 0))
+			rc = mc_binary_invalid_arguments(state, header, body_len);
+		else
+			rc = mc_binary_storage_command(state, type, header, body_len, key_len);
 		break;
 
 	case MC_COMMAND_CONCAT:
-		if (unlikely(ext_len != 0)
-		    || unlikely(key_len == body_len)
-		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(state, body_len);
-			goto leave;
-		}
-		state->command = mc_command_create_storage(state, type);
-		state->command->binary.opcode = header->opcode;
-		state->command->binary.opaque = mm_load_hl(&header->opaque);
-		switch (header->opcode) {
-		case MC_BINARY_OPCODE_APPEND:
-		case MC_BINARY_OPCODE_APPENDQ:
-			state->command->storage.alter_type = MC_ACTION_ALTER_APPEND;
-			break;
-		case MC_BINARY_OPCODE_PREPEND:
-		case MC_BINARY_OPCODE_PREPENDQ:
-			state->command->storage.alter_type = MC_ACTION_ALTER_PREPEND;
-			break;
-		}
-		rc = mc_binary_read_chunk(state, body_len, key_len);
+		if (unlikely(ext_len != 0) || unlikely(key_len == body_len) || unlikely(key_len == 0))
+			rc = mc_binary_invalid_arguments(state, header, body_len);
+		else
+			rc = mc_binary_concat_command(state, type, header, body_len, key_len);
 		break;
 
 	case MC_COMMAND_DELTA:
-		if (unlikely(ext_len != MC_BINARY_DELTA_EXTRA_SIZE)
-		    || unlikely(key_len + ext_len != body_len)
-		    || unlikely(key_len == 0)) {
-			rc = mc_binary_invalid_arguments(state, body_len);
-			goto leave;
-		}
-		state->command = mc_command_create_storage(state, type);
-		state->command->binary.opcode = header->opcode;
-		state->command->binary.opaque = mm_load_hl(&header->opaque);
-		rc = mc_binary_read_delta(state, key_len);
+		if (unlikely(ext_len != MC_BINARY_DELTA_EXTRA_SIZE) || unlikely(key_len + ext_len != body_len) || unlikely(key_len == 0))
+			rc = mc_binary_invalid_arguments(state, header, body_len);
+		else
+			rc = mc_binary_delta_command(state, type, header, key_len);
 		break;
 
 	case MC_COMMAND_FLUSH:
-		if (unlikely(ext_len != 0 && ext_len != 4)
-		    || unlikely(key_len != 0)
-		    || unlikely(body_len != ext_len)) {
-			rc = mc_binary_invalid_arguments(state, body_len);
-			goto leave;
-		}
-		state->command = mc_command_create_simple(state, type);
-		state->command->binary.opcode = header->opcode;
-		state->command->binary.opaque = mm_load_hl(&header->opaque);
-		if (ext_len)
-			rc = mc_binary_read_flush(state);
+		if (unlikely(ext_len != 0 && ext_len != 4) || unlikely(key_len != 0) || unlikely(body_len != ext_len))
+			rc = mc_binary_invalid_arguments(state, header, body_len);
+		else
+			rc = mc_binary_flush_command(state, type, header, ext_len);
 		break;
 
 	default:
-		mc_binary_skip(state, body_len);
+		if ((rc = mc_binary_skip(state, body_len)))
+			mc_command_create_binary_simple(state, type, header);
 		break;
 	}
 

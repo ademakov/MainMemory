@@ -27,6 +27,64 @@
 
 #define MC_KEY_LEN_MAX		250
 
+// Common states.
+enum
+{
+	S_EOL,
+	S_EOL_1,
+	S_MATCH,
+	S_SPACE,
+	S_KEY,
+	S_KEY_N,
+	S_NUM32,
+	S_NUM32_N,
+	S_NOREPLY,
+	S_ERROR,
+	S_ERROR_1,
+	S_OTHER_BASE // This must be the last one here.
+};
+
+// Lookup command states.
+enum {
+	S_KEY_EDGE = S_OTHER_BASE,
+	S_KEY_COPY,
+	S_GET_1,
+	S_GET_N,
+};
+
+// Storage command states.
+enum {
+	S_NUM64 = S_OTHER_BASE,
+	S_NUM64_N,
+	S_SET_1,
+	S_SET_2,
+	S_SET_3,
+	S_SET_4,
+	S_SET_5,
+	S_SET_6,
+	S_CAS,
+	S_DELTA_1,
+	S_DELTA_2,
+	S_DELTA_3,
+	S_VALUE,
+	S_VALUE_1,
+	S_VALUE_2,
+};
+
+// Other states.
+enum {
+	S_DELETE_1 = S_OTHER_BASE,
+	S_DELETE_2,
+	S_TOUCH_1,
+	S_TOUCH_2,
+	S_TOUCH_3,
+	S_FLUSH_ALL_1,
+	S_FLUSH_ALL_2,
+	S_VERBOSITY_1,
+	S_VERBOSITY_2,
+	S_OPT,
+	S_OPT_N,
+};
 
 static bool
 mc_parser_scan_lf(struct mc_state *state, const char *s, const char *e)
@@ -45,13 +103,13 @@ mc_parser_scan_lf(struct mc_state *state, const char *s, const char *e)
 }
 
 static bool
-mc_parser_scan_value(struct mc_state *state)
+mc_parser_scan_value(struct mc_state *state, uint32_t kind)
 {
 	ENTER();
 	bool rc = true;
 
-	struct mc_command *command = state->command;
-	struct mc_action_storage *action = &command->storage;
+	struct mc_command_storage *command = (struct mc_command_storage *) state->command_last;
+	struct mc_action_storage *action = &command->action;
 
 	// Try to read the value and required LF and optional CR.
 	uint32_t required = action->value_len + 1;
@@ -68,7 +126,7 @@ mc_parser_scan_value(struct mc_state *state)
 	}
 
 	// Read the entry value.
-	if (action->alter_type == MC_ACTION_ALTER_OTHER) {
+	if (kind != MC_COMMAND_CONCAT) {
 		struct mc_entry *entry = action->new_entry;
 		char *value = mc_entry_getvalue(entry);
 		mm_netbuf_read(&state->sock, value, action->value_len);
@@ -87,7 +145,7 @@ mc_parser_scan_value(struct mc_state *state)
 			char *value = mm_private_alloc(action->value_len);
 			mm_netbuf_read(&state->sock, value, action->value_len);
 			action->alter_value = value;
-			command->own_alter_value = true;
+			action->own_alter_value = true;
 		}
 	}
 
@@ -98,223 +156,37 @@ leave:
 
 // TODO: Really support some options.
 static void
-mc_parser_handle_option(struct mc_command *command)
+mc_parser_handle_option(struct mc_command_simple *command)
 {
 	ENTER();
 
-	if (command->type == &mc_command_ascii_stats) {
-		command->nopts++;
-	} else if (command->type == &mc_command_ascii_slabs) {
-		command->nopts++;
+	if (command->base.type == &mc_command_ascii_stats) {
+		command->action.ascii_stats++;
+	} else if (command->base.type == &mc_command_ascii_slabs) {
+		// do nothing
 	}
 
 	LEAVE();
 }
 
-bool NONNULL(1)
-mc_parser_parse(struct mc_state *parser)
+static bool
+mc_parser_lookup_command(struct mc_state *parser, const struct mc_command_type *type,
+			 char *s, char *e, int state, int shift, char *match)
 {
-	ENTER();
-
-	enum parser_state {
-		S_MATCH,
-		S_SPACE,
-		S_KEY,
-		S_KEY_N,
-		S_KEY_EDGE,
-		S_KEY_COPY,
-		S_NUM32,
-		S_NUM32_N,
-		S_NUM64,
-		S_NUM64_N,
-		S_GET_1,
-		S_GET_N,
-		S_SET_1,
-		S_SET_2,
-		S_SET_3,
-		S_SET_4,
-		S_SET_5,
-		S_SET_6,
-		S_CAS,
-		S_DELTA_1,
-		S_DELTA_2,
-		S_DELTA_3,
-		S_DELETE_1,
-		S_DELETE_2,
-		S_TOUCH_1,
-		S_TOUCH_2,
-		S_TOUCH_3,
-		S_FLUSH_ALL_1,
-		S_FLUSH_ALL_2,
-		S_VERBOSITY_1,
-		S_VERBOSITY_2,
-		S_NOREPLY,
-		S_OPT,
-		S_OPT_N,
-		S_VALUE,
-		S_VALUE_1,
-		S_VALUE_2,
-		S_EOL,
-		S_EOL_1,
-		S_ERROR,
-		S_ERROR_1,
-	};
-
-	// Initialize the result.
-	bool rc = true;
-
-	// Have enough contiguous space to identify any command.
-	if (!mm_netbuf_span(&parser->sock, 1024))
-		ABORT();
-
-	// Get the input buffer position.
-	char *s = mm_netbuf_rget(&parser->sock);
-	char *e = mm_netbuf_rend(&parser->sock);
-	DEBUG("%d %.*s", (int) (e - s), (int) (e - s), s);
-
-	// Skip any leading whitespace.
-	while (s < e && *s == ' ')
-		s++;
-
-	// Check if the input is sane.
-	if ((e - s) < 4) {
-noinput:
-		if ((e - mm_netbuf_rget(&parser->sock)) >= 1024)
-			parser->trash = true;
-		rc = false;
-		goto leave;
-	}
-
-	// Initialize the scanner state.
-	struct mc_command *command;
-	enum parser_state state = S_ERROR;
-	enum parser_state shift = S_ERROR;
-	char *match = "";
-
-#define Cx4(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
-
-	// Identify the command by its first 4 chars.
-	uint32_t start = Cx4(s[0], s[1], s[2], s[3]);
-	s += 4;
-	if (start == Cx4('g', 'e', 't', ' ')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_get);
-		state = S_SPACE;
-		shift = S_GET_1;
-	} else if (start == Cx4('s', 'e', 't', ' ')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_set);
-		state = S_SPACE;
-		shift = S_SET_1;
-	} else if (start == Cx4('r', 'e', 'p', 'l')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_replace);
-		state = S_MATCH;
-		match = "ace";
-		shift = S_SET_1;
-	} else if (start == Cx4('d', 'e', 'l', 'e')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_delete);
-		state = S_MATCH;
-		match = "te";
-		shift = S_DELETE_1;
-	} else if (start == Cx4('a', 'd', 'd', ' ')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_add);
-		state = S_SPACE;
-		shift = S_SET_1;
-	} else if (start == Cx4('i', 'n', 'c', 'r')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_incr);
-		state = S_MATCH;
-		//match = "";
-		shift = S_DELTA_1;
-	} else if (start == Cx4('d', 'e', 'c', 'r')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_decr);
-		state = S_MATCH;
-		//match = "";
-		shift = S_DELTA_1;
-	} else if (start == Cx4('g', 'e', 't', 's')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_gets);
-		state = S_MATCH;
-		//match = "";
-		shift = S_GET_1;
-	} else if (start == Cx4('c', 'a', 's', ' ')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_cas);
-		state = S_SPACE;
-		shift = S_SET_1;
-	} else if (start == Cx4('a', 'p', 'p', 'e')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_append);
-		command->storage.alter_type = MC_ACTION_ALTER_APPEND;
-		state = S_MATCH;
-		match = "nd";
-		shift = S_SET_1;
-	} else if (start == Cx4('p', 'r', 'e', 'p')) {
-		command = mc_command_create_storage(parser, &mc_command_ascii_prepend);
-		command->storage.alter_type = MC_ACTION_ALTER_PREPEND;
-		state = S_MATCH;
-		match = "end";
-		shift = S_SET_1;
-	} else if (start == Cx4('t', 'o', 'u', 'c')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_touch);
-		state = S_MATCH;
-		match = "h";
-		shift = S_TOUCH_1;
-	} else if (start == Cx4('s', 'l', 'a', 'b')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_slabs);
-		state = S_MATCH;
-		match = "s";
-		shift = S_OPT;
-	} else if (start == Cx4('s', 't', 'a', 't')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_stats);
-		state = S_MATCH;
-		match = "s";
-		shift = S_OPT;
-	} else if (start == Cx4('f', 'l', 'u', 's')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_flush_all);
-		state = S_MATCH;
-		match = "h_all";
-		shift = S_FLUSH_ALL_1;
-	} else if (start == Cx4('v', 'e', 'r', 's')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_version);
-		state = S_MATCH;
-		match = "ion";
-		shift = S_EOL;
-	} else if (start == Cx4('v', 'e', 'r', 'b')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_verbosity);
-		state = S_MATCH;
-		match = "osity";
-		shift = S_VERBOSITY_1;
-	} else if (start == Cx4('q', 'u', 'i', 't')) {
-		command = mc_command_create_simple(parser, &mc_command_ascii_quit);
-		state = S_SPACE;
-		shift = S_EOL;
-	} else {
-		DEBUG("unrecognized command");
-		command = NULL;
-		// Need to check the first 4 chars one by one again for a
-		// possible '\n' among them.
-		s -= 4;
-	}
-
-#undef Cx4
-
-	// Numeric values.
-	uint32_t num32 = 0;
-	uint64_t num64 = 0;
-	// Initialize storage command parameters.
-	uint32_t set_flags = 0;
-	uint32_t set_exp_time = 0;
-	// The count of scanned chars. Used to check if the client sends
-	// too much junk data.
+	// The count of scanned chars. Used to check if the client sends too much junk data.
 	int count = 0;
 
 	// Parse the rest of the command.
-	parser->command = command;
+	struct mc_command_simple *command = mc_command_create_simple(parser, type);
+	struct mc_command_simple *command_first = command;
+	command->action.ascii_get_last = false;
+
 	for (;; s++) {
 		while (unlikely(s == e)) {
-			if (command->type->kind != MC_COMMAND_LOOKUP)
-				goto noinput;
-
 			count += e - mm_netbuf_rget(&parser->sock);
 			if (count > (16 * 1024)) {
 				parser->trash = true;
-				rc = false;
-				goto leave;
+				return false;
 			}
 
 			if (state == S_KEY_N) {
@@ -335,8 +207,8 @@ noinput:
 				}
 			}
 
-			if (!(rc = mm_netbuf_rnext(&parser->sock)))
-				goto leave;
+			if (!mm_netbuf_rnext(&parser->sock))
+				return false;
 
 			s = mm_netbuf_rget(&parser->sock);
 			e = mm_netbuf_rend(&parser->sock);
@@ -443,7 +315,7 @@ again:
 				state = shift;
 				goto again;
 			} else {
-				struct mc_action_simple *action = &command->action;
+				struct mc_action *action = &command->action;
 				if (action->key_len == MC_KEY_LEN_MAX) {
 					DEBUG("too long key");
 					state = S_ERROR;
@@ -451,6 +323,166 @@ again:
 					char *str = (char *) action->key;
 					str[action->key_len++] = c;
 				}
+				break;
+			}
+
+		case S_GET_1:
+			state = S_KEY;
+			shift = S_GET_N;
+			goto again;
+
+		case S_GET_N:
+			ASSERT(c != ' ');
+			mc_action_hash(&command->action);
+			if (c == '\r' || c == '\n') {
+				state = S_EOL;
+				command->action.ascii_get_last = true;
+				goto again;
+			} else {
+				state = S_KEY;
+				command = mc_command_create_simple(parser, type);
+				command->action.ascii_get_last = false;
+				goto again;
+			}
+
+		case S_EOL:
+			ASSERT(c != ' ');
+			if (likely(c == '\r')) {
+				state = S_EOL_1;
+				break;
+			}
+			/* no break */
+		case S_EOL_1:
+			if (likely(c == '\n')) {
+				mm_netbuf_rset(&parser->sock, s + 1);
+				return true;
+			} else {
+				DEBUG("no eol");
+				state = S_ERROR;
+				break;
+			}
+
+		case S_ERROR:
+			command = (struct mc_command_simple *) command_first->base.next;
+			while (command != NULL) {
+				struct mc_command_simple *next = (struct mc_command_simple *) command->base.next;
+				mc_command_cleanup(&command->base);
+				command = next;
+			}
+
+			command_first->base.type = &mc_command_ascii_error;
+			state = S_ERROR_1;
+			/* no break */
+		case S_ERROR_1:
+			if (c == '\n') {
+				mm_netbuf_rset(&parser->sock, s + 1);
+				return true;
+			} else {
+				// Skip char.
+				break;
+			}
+		}
+	}
+}
+
+static bool
+mc_parser_storage_command(struct mc_state *parser, const struct mc_command_type *type,
+			  char *s, char *e, int state, int shift, char *match)
+{
+	// Initialize storage command parameters.
+	uint32_t set_flags = 0;
+	uint32_t set_exp_time = 0;
+	// Temporary storage for numeric parameters.
+	uint32_t num32 = 0;
+	uint64_t num64 = 0;
+
+	struct mc_command_storage *command = mc_command_create_ascii_storage(parser, type);
+	command->action.base.ascii_noreply = false;
+	command->action.own_alter_value = false;
+	command->action.new_entry = NULL;
+
+	for (;; s++) {
+		if (unlikely(s == e)) {
+			if ((e - mm_netbuf_rget(&parser->sock)) >= 1024)
+				parser->trash = true;
+			return false;
+		}
+
+		int c = *s;
+again:
+		switch (state) {
+		case S_MATCH:
+			if (c == *match) {
+				// So far so good.
+				if (unlikely(c == 0)) {
+					// Hmm, a zero byte in the input.
+					state = S_ERROR;
+					break;
+				}
+				match++;
+				break;
+			} else if (unlikely(*match)) {
+				DEBUG("unexpected char before the end");
+				state = S_ERROR;
+				goto again;
+			} else if (c == ' ') {
+				DEBUG("match");
+				state = S_SPACE;
+				break;
+			} else if (c == '\r' || c == '\n') {
+				DEBUG("match");
+				state = shift;
+				goto again;
+			} else {
+				DEBUG("unexpected char after the end");
+				state = S_ERROR;
+				break;
+			}
+
+		case S_SPACE:
+			if (c == ' ') {
+				// Skip space.
+				break;
+			} else {
+				state = shift;
+				goto again;
+			}
+
+		case S_KEY:
+			ASSERT(c != ' ');
+			if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s, e)) || unlikely(c == '\n')) {
+				DEBUG("missing key");
+				state = S_ERROR;
+				goto again;
+			} else {
+				state = S_KEY_N;
+				command->action.base.key = s;
+				break;
+			}
+
+		case S_KEY_N:
+			if (c == ' ') {
+				size_t len = s - command->action.base.key;
+				if (unlikely(len > MC_KEY_LEN_MAX)) {
+					DEBUG("too long key");
+					state = S_ERROR;
+				} else {
+					state = S_SPACE;
+					command->action.base.key_len = len;
+				}
+				break;
+			} else if ((c == '\r' && mc_parser_scan_lf(parser, s, e)) || c == '\n') {
+				size_t len = s - command->action.base.key;
+				if (len > MC_KEY_LEN_MAX) {
+					DEBUG("too long key");
+					state = S_ERROR;
+				} else {
+					state = shift;
+					command->action.base.key_len = len;
+				}
+				goto again;
+			} else {
+				// Move over to the next char.
 				break;
 			}
 
@@ -508,25 +540,6 @@ again:
 				break;
 			}
 
-		case S_GET_1:
-			state = S_KEY;
-			shift = S_GET_N;
-			goto again;
-
-		case S_GET_N:
-			ASSERT(c != ' ');
-			mc_action_hash(&command->action);
-			if (c == '\r' || c == '\n') {
-				state = S_EOL;
-				command->ascii.last = true;
-				goto again;
-			} else {
-				state = S_KEY;
-				command->next = mc_command_create_simple(parser, command->type);
-				command = command->next;
-				goto again;
-			}
-
 		case S_SET_1:
 			state = S_KEY;
 			shift = S_SET_2;
@@ -550,17 +563,16 @@ again:
 			goto again;
 
 		case S_SET_5:
-			mc_action_hash(&command->storage.base);
-			if (command->storage.alter_type == MC_ACTION_ALTER_OTHER) {
-				mc_action_create(&command->storage, num32);
-				command->storage.new_entry->flags = set_flags;
-				command->storage.new_entry->exp_time = set_exp_time;
-				mc_entry_setkey(command->storage.new_entry,
-						command->storage.base.key);
+			mc_action_hash(&command->action.base);
+			if (type->kind != MC_COMMAND_CONCAT) {
+				mc_action_create(&command->action, num32);
+				command->action.new_entry->flags = set_flags;
+				command->action.new_entry->exp_time = set_exp_time;
+				mc_entry_setkey(command->action.new_entry, command->action.base.key);
 			} else {
-				command->storage.value_len = num32;
+				command->action.value_len = num32;
 			}
-			if (command->type == &mc_command_ascii_cas) {
+			if (command->base.type == &mc_command_ascii_cas) {
 				state = S_NUM64;
 				shift = S_CAS;
 				goto again;
@@ -575,12 +587,12 @@ again:
 			}
 
 		case S_SET_6:
-			command->ascii.noreply = true;
+			command->action.base.ascii_noreply = true;
 			state = S_VALUE;
 			goto again;
 
 		case S_CAS:
-			command->storage.stamp = num64;
+			command->action.stamp = num64;
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -598,13 +610,13 @@ again:
 			goto again;
 
 		case S_DELTA_2:
-			mc_action_hash(&command->action);
+			mc_action_hash(&command->action.base);
 			state = S_NUM64;
 			shift = S_DELTA_3;
 			goto again;
 
 		case S_DELTA_3:
-			command->delta = num64;
+			command->binary_delta = num64;
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -614,6 +626,203 @@ again:
 			} else {
 				state = S_EOL;
 				goto again;
+			}
+
+		case S_NOREPLY:
+			command->action.base.ascii_noreply = true;
+			state = S_EOL;
+			goto again;
+
+		case S_VALUE:
+			ASSERT(c != ' ');
+			if (likely(c == '\r')) {
+				state = S_VALUE_1;
+				break;
+			}
+			/* no break */
+		case S_VALUE_1:
+			if (likely(c == '\n')) {
+				state = S_VALUE_2;
+				break;
+			} else {
+				state = S_ERROR;
+				break;
+			}
+
+		case S_VALUE_2:
+			mm_netbuf_rset(&parser->sock, s);
+			if (unlikely(!mc_parser_scan_value(parser, type->kind)))
+				return false;
+			s = mm_netbuf_rget(&parser->sock);
+			e = mm_netbuf_rend(&parser->sock);
+			state = S_EOL;
+			ASSERT(s < e);
+			c = *s;
+			goto again;
+
+		case S_EOL:
+			ASSERT(c != ' ');
+			if (likely(c == '\r')) {
+				state = S_EOL_1;
+				break;
+			}
+			/* no break */
+		case S_EOL_1:
+			if (likely(c == '\n')) {
+				mm_netbuf_rset(&parser->sock, s + 1);
+				return true;
+			} else {
+				DEBUG("no eol");
+				state = S_ERROR;
+				break;
+			}
+
+		case S_ERROR:
+			if (command->action.new_entry != NULL) {
+				mc_action_cancel(&command->action);
+				command->action.new_entry = NULL;
+			}
+			if (command->action.own_alter_value)
+				mm_private_free((char *) command->action.alter_value);
+			mc_command_cleanup(&command->base);
+
+			command->base.type = &mc_command_ascii_error;
+			state = S_ERROR_1;
+			/* no break */
+		case S_ERROR_1:
+			if (c == '\n') {
+				mm_netbuf_rset(&parser->sock, s + 1);
+				return true;
+			} else {
+				// Skip char.
+				break;
+			}
+		}
+	}
+}
+
+static bool
+mc_parser_other_command(struct mc_state *parser, const struct mc_command_type *type,
+			char *s, char *e, int state, int shift, char *match)
+{
+	// Temporary storage for numeric parameters.
+	uint32_t num32 = 0;
+
+	// Parse the rest of the command.
+	struct mc_command_simple *command = mc_command_create_simple(parser, type);
+	command->action.ascii_noreply = false;
+	command->action.ascii_stats = 0;
+
+	for (;; s++) {
+		if (unlikely(s == e)) {
+			if ((e - mm_netbuf_rget(&parser->sock)) >= 1024)
+				parser->trash = true;
+			return false;
+		}
+
+		int c = *s;
+again:
+		switch (state) {
+		case S_MATCH:
+			if (c == *match) {
+				// So far so good.
+				if (unlikely(c == 0)) {
+					// Hmm, a zero byte in the input.
+					state = S_ERROR;
+					break;
+				}
+				match++;
+				break;
+			} else if (unlikely(*match)) {
+				DEBUG("unexpected char before the end");
+				state = S_ERROR;
+				goto again;
+			} else if (c == ' ') {
+				DEBUG("match");
+				state = S_SPACE;
+				break;
+			} else if (c == '\r' || c == '\n') {
+				DEBUG("match");
+				state = shift;
+				goto again;
+			} else {
+				DEBUG("unexpected char after the end");
+				state = S_ERROR;
+				break;
+			}
+
+		case S_SPACE:
+			if (c == ' ') {
+				// Skip space.
+				break;
+			} else {
+				state = shift;
+				goto again;
+			}
+
+		case S_KEY:
+			ASSERT(c != ' ');
+			if ((unlikely(c == '\r') && mc_parser_scan_lf(parser, s, e)) || unlikely(c == '\n')) {
+				DEBUG("missing key");
+				state = S_ERROR;
+				goto again;
+			} else {
+				state = S_KEY_N;
+				command->action.key = s;
+				break;
+			}
+
+		case S_KEY_N:
+			if (c == ' ') {
+				size_t len = s - command->action.key;
+				if (unlikely(len > MC_KEY_LEN_MAX)) {
+					DEBUG("too long key");
+					state = S_ERROR;
+				} else {
+					state = S_SPACE;
+					command->action.key_len = len;
+				}
+				break;
+			} else if ((c == '\r' && mc_parser_scan_lf(parser, s, e)) || c == '\n') {
+				size_t len = s - command->action.key;
+				if (len > MC_KEY_LEN_MAX) {
+					DEBUG("too long key");
+					state = S_ERROR;
+				} else {
+					state = shift;
+					command->action.key_len = len;
+				}
+				goto again;
+			} else {
+				// Move over to the next char.
+				break;
+			}
+
+		case S_NUM32:
+			ASSERT(c != ' ');
+			if (likely(c >= '0') && likely(c <= '9')) {
+				state = S_NUM32_N;
+				num32 = c - '0';
+				break;
+			} else {
+				state = S_ERROR;
+				goto again;
+			}
+
+		case S_NUM32_N:
+			if (c >= '0' && c <= '9') {
+				// TODO: overflow check?
+				num32 = num32 * 10 + (c - '0');
+				break;
+			} else if (c == ' ') {
+				state = S_SPACE;
+				break;
+			} else if (c == '\r' || c == '\n') {
+				state = shift;
+				goto again;
+			} else {
+				state = S_ERROR;
+				break;
 			}
 
 		case S_DELETE_1:
@@ -646,7 +855,7 @@ again:
 			goto again;
 
 		case S_TOUCH_3:
-			command->exp_time = mc_entry_fix_exptime(num32);
+			command->action.ascii_exp_time = mc_entry_fix_exptime(num32);
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -678,7 +887,7 @@ again:
 			}
 
 		case S_FLUSH_ALL_2:
-			command->exp_time = num32;
+			command->action.ascii_exp_time = num32;
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -702,7 +911,7 @@ again:
 			}
 
 		case S_VERBOSITY_2:
-			command->value = num32;
+			command->action.ascii_level = num32;
 			ASSERT(c != ' ');
 			if (c == 'n') {
 				state = S_MATCH;
@@ -715,7 +924,7 @@ again:
 			}
 
 		case S_NOREPLY:
-			command->ascii.noreply = true;
+			command->action.ascii_noreply = true;
 			state = S_EOL;
 			goto again;
 
@@ -745,34 +954,6 @@ again:
 				break;
 			}
 
-		case S_VALUE:
-			ASSERT(c != ' ');
-			if (likely(c == '\r')) {
-				state = S_VALUE_1;
-				break;
-			}
-			/* no break */
-		case S_VALUE_1:
-			if (likely(c == '\n')) {
-				state = S_VALUE_2;
-				break;
-			} else {
-				state = S_ERROR;
-				break;
-			}
-
-		case S_VALUE_2:
-			mm_netbuf_rset(&parser->sock, s);
-			rc = mc_parser_scan_value(parser);
-			if (unlikely(!rc))
-				goto leave;
-			s = mm_netbuf_rget(&parser->sock);
-			e = mm_netbuf_rend(&parser->sock);
-			state = S_EOL;
-			ASSERT(s < e);
-			c = *s;
-			goto again;
-
 		case S_EOL:
 			ASSERT(c != ' ');
 			if (likely(c == '\r')) {
@@ -783,7 +964,7 @@ again:
 		case S_EOL_1:
 			if (likely(c == '\n')) {
 				mm_netbuf_rset(&parser->sock, s + 1);
-				goto leave;
+				return true;
 			} else {
 				DEBUG("no eol");
 				state = S_ERROR;
@@ -791,37 +972,102 @@ again:
 			}
 
 		case S_ERROR:
-			if (parser->command != NULL) {
-				// If it was a SET command then it is required
-				// to free a newly created entry.
-				if ((command->type->kind == MC_COMMAND_STORAGE
-				     || command->type->kind == MC_COMMAND_CONCAT
-				     || command->type->kind == MC_COMMAND_DELTA)
-				    && command->storage.new_entry != NULL) {
-					mc_action_cancel(&command->storage);
-					command->storage.new_entry = NULL;
-				}
+			mc_command_cleanup(&command->base);
 
-				command = parser->command;
-				do {
-					struct mc_command *tmp = command;
-					command = command->next;
-					mc_command_cleanup(tmp);
-				} while (command != NULL);
-			}
-			parser->command = mc_command_create_simple(parser, &mc_command_ascii_error);
+			command->base.type = &mc_command_ascii_error;
 			state = S_ERROR_1;
 			/* no break */
 		case S_ERROR_1:
 			if (c == '\n') {
 				mm_netbuf_rset(&parser->sock, s + 1);
-				goto leave;
+				return true;
 			} else {
 				// Skip char.
 				break;
 			}
 		}
 	}
+}
+
+bool NONNULL(1)
+mc_parser_parse(struct mc_state *parser)
+{
+	ENTER();
+
+	// Initialize the result.
+	bool rc = true;
+
+	// Have enough contiguous space to identify any command.
+	if (!mm_netbuf_span(&parser->sock, 1024))
+		ABORT();
+
+	// Get the input buffer position.
+	char *s = mm_netbuf_rget(&parser->sock);
+	char *e = mm_netbuf_rend(&parser->sock);
+	DEBUG("%d %.*s", (int) (e - s), (int) (e - s), s);
+
+	// Skip any leading whitespace.
+	while (s < e && *s == ' ')
+		s++;
+
+	// Check if the input is sane.
+	if ((e - s) < 4) {
+		if ((e - mm_netbuf_rget(&parser->sock)) >= 1024)
+			parser->trash = true;
+		rc = false;
+		goto leave;
+	}
+
+#define Cx4(a, b, c, d) ((a) | ((b) << 8) | ((c) << 16) | ((d) << 24))
+
+	// Identify the command by its first 4 chars.
+	uint32_t start = Cx4(s[0], s[1], s[2], s[3]);
+	s += 4;
+	if (start == Cx4('g', 'e', 't', ' ')) {
+		rc = mc_parser_lookup_command(parser, &mc_command_ascii_get, s, e, S_SPACE, S_GET_1, "");
+	} else if (start == Cx4('s', 'e', 't', ' ')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_set, s, e, S_SPACE, S_SET_1, "");
+	} else if (start == Cx4('r', 'e', 'p', 'l')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_replace, s, e, S_MATCH, S_SET_1, "ace");
+	} else if (start == Cx4('d', 'e', 'l', 'e')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_delete, s, e, S_MATCH, S_DELETE_1, "te");
+	} else if (start == Cx4('a', 'd', 'd', ' ')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_add, s, e, S_SPACE, S_SET_1, "");
+	} else if (start == Cx4('i', 'n', 'c', 'r')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_incr, s, e, S_MATCH, S_DELTA_1, "");
+	} else if (start == Cx4('d', 'e', 'c', 'r')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_decr, s, e, S_MATCH, S_DELTA_1, "");
+	} else if (start == Cx4('g', 'e', 't', 's')) {
+		rc = mc_parser_lookup_command(parser, &mc_command_ascii_gets, s, e, S_MATCH, S_GET_1, "");
+	} else if (start == Cx4('c', 'a', 's', ' ')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_cas, s, e, S_SPACE, S_SET_1, "");
+	} else if (start == Cx4('a', 'p', 'p', 'e')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_append, s, e, S_MATCH, S_SET_1, "nd");
+	} else if (start == Cx4('p', 'r', 'e', 'p')) {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_prepend, s, e, S_MATCH, S_SET_1, "end");
+	} else if (start == Cx4('t', 'o', 'u', 'c')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_touch, s, e, S_MATCH, S_TOUCH_1, "h");
+	} else if (start == Cx4('s', 'l', 'a', 'b')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_slabs, s, e, S_MATCH, S_OPT, "s");
+	} else if (start == Cx4('s', 't', 'a', 't')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_stats, s, e, S_MATCH, S_OPT, "s");
+	} else if (start == Cx4('f', 'l', 'u', 's')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_flush_all, s, e, S_MATCH, S_FLUSH_ALL_1, "h_all");
+	} else if (start == Cx4('v', 'e', 'r', 's')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_version, s, e, S_MATCH, S_EOL, "ion");
+	} else if (start == Cx4('v', 'e', 'r', 'b')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_verbosity, s, e, S_MATCH, S_VERBOSITY_1, "osity");
+	} else if (start == Cx4('q', 'u', 'i', 't')) {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s, e, S_SPACE, S_EOL, "");
+	} else {
+		DEBUG("unrecognized command");
+		// Need to check the first 4 chars one by one again for a
+		// possible '\n' among them.
+		s -= 4;
+		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s, e, S_ERROR, S_ERROR, "");
+	}
+
+#undef Cx4
 
 leave:
 	LEAVE();

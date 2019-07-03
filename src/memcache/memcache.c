@@ -43,17 +43,20 @@ struct mm_memcache_config mc_config;
 #define MC_READ_TIMEOUT		10000
 
 static void
-mc_process_command(struct mc_state *state, struct mc_command *command)
+mc_process_command(struct mc_state *state, struct mc_command_base *command)
 {
 	ENTER();
 
 	do {
-		struct mc_command *next = command->next;
+		struct mc_command_base *next = command->next;
 		mc_command_execute(state, command);
 		mc_command_cleanup(command);
 		command = next;
 
 	} while (command != NULL);
+
+	state->command_first = NULL;
+	state->command_last = NULL;
 
 	LEAVE();
 }
@@ -79,8 +82,9 @@ retry:
 
 		// If the socket is closed queue a quit command.
 		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			struct mc_command *command = mc_command_create_simple(state, &mc_command_ascii_quit);
-			mc_process_command(state, command);
+			// In this case there is no difference between ascii and binary protocols.
+			struct mc_command_simple *command = mc_command_create_simple(state, &mc_command_ascii_quit);
+			mc_process_command(state, &command->base);
 		}
 		goto leave;
 	}
@@ -90,7 +94,8 @@ retry:
 	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
 	mc_protocol_t protocol = mc_getprotocol(state);
 
-	state->command = NULL;
+	state->command_first = NULL;
+	state->command_last = NULL;
 
 	// Try to parse the received input.
 	bool rc;
@@ -101,9 +106,10 @@ parse:
 		rc = mc_parser_parse(state);
 
 	if (!rc) {
-		if (state->command != NULL) {
-			mc_command_cleanup(state->command);
-			state->command = NULL;
+		if (state->command_first != NULL) {
+			mc_command_cleanup(state->command_first);
+			state->command_first = NULL;
+			state->command_last = NULL;
 		}
 		if (state->trash) {
 			mm_netbuf_reset(&state->sock);
@@ -118,12 +124,11 @@ parse:
 	}
 
 	// Process the parsed command.
-	mc_process_command(state, state->command);
+	mc_process_command(state, state->command_first);
 
 	// If there is more input in the buffer then try to parse
 	// the next command.
 	if (!mm_netbuf_empty(&state->sock)) {
-		state->command = NULL;
 		// Update the safe consumed input position.
 		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
 		goto parse;
@@ -174,6 +179,8 @@ void
 mm_memcache_init(const struct mm_memcache_config *config)
 {
 	ENTER();
+
+	mm_brief("command sizes: %zu %zu\n", sizeof(struct mc_command_simple), sizeof(struct mc_command_storage));
 
 	static struct mm_net_proto proto = {
 		.options = MM_NET_NODELAY | MM_NET_KEEPALIVE,

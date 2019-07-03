@@ -177,7 +177,7 @@ mc_table_stride_routine(mm_value_t arg)
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->striding);
 
-	struct mc_action_simple action;
+	struct mc_action action;
 	action.part = part;
 	mc_action_stride(&action);
 
@@ -225,7 +225,7 @@ mc_table_evict_routine(mm_value_t arg)
 	struct mc_tpart *part = (struct mc_tpart *) arg;
 	//ASSERT(part->evicting);
 
-	struct mc_action_simple action;
+	struct mc_action action;
 	action.part = part;
 
 	size_t reserve = MC_TABLE_VOLUME_RESERVE / mc_table.nparts;

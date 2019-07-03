@@ -60,14 +60,16 @@ static char mc_result_version[] = "VERSION " VERSION "\r\n";
  * Define command handling info.
  */
 
-#define MC_COMMAND_TYPE(cmd, value)			\
-	static void					\
-	mc_command_execute_##cmd(struct mc_state *,	\
-				 struct mc_command *);	\
-	struct mc_command_type mc_command_##cmd = {	\
-		.exec = mc_command_execute_##cmd,	\
-		.kind = value,				\
-		.name = #cmd				\
+#define MC_COMMAND_TYPE(proto, cmd, actn_kind, cmd_kind)	\
+	static void						\
+	mc_command_execute_##proto##_##cmd(			\
+		struct mc_state *,				\
+		struct mc_command_##actn_kind *);		\
+	struct mc_command_type mc_command_##proto##_##cmd = {	\
+		.exec = (mc_command_execute_t)			\
+			mc_command_execute_##proto##_##cmd,	\
+		.kind = cmd_kind,				\
+		.name = stringify_expanded(proto##cmd)		\
 	};
 
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
@@ -75,30 +77,71 @@ MC_COMMAND_LIST(MC_COMMAND_TYPE)
 #undef MC_COMMAND_TYPE
 
 /**********************************************************************
- * Memcache command creation and destruction.
+ * Memcache command creation.
  **********************************************************************/
 
-struct mc_command * NONNULL(1)
+static void
+mc_command_prepare_base(struct mc_command_base *base, const struct mc_command_type *type, struct mc_state *state)
+{
+	base->type = type;
+	base->next = NULL;
+
+	if (state->command_last == NULL) {
+		state->command_first = base;
+		state->command_last = base;
+	} else {
+		state->command_last->next = base;
+		state->command_last = base;
+	}
+}
+
+struct mc_command_simple * NONNULL(1, 2)
 mc_command_create_simple(struct mc_state *state, const struct mc_command_type *type)
 {
 	ENTER();
 
-	struct mc_command *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command));
-	command->next = NULL;
-	command->type = type;
+	struct mc_command_simple *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command_simple));
+	mc_command_prepare_base(&command->base, type, state);
 
 	LEAVE();
 	return command;
 }
 
-struct mc_command * NONNULL(1)
-mc_command_create_storage(struct mc_state *state, const struct mc_command_type *type)
+struct mc_command_storage * NONNULL(1, 2)
+mc_command_create_ascii_storage(struct mc_state *state, const struct mc_command_type *type)
 {
 	ENTER();
 
-	struct mc_command *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command));
-	memset(command, 0, sizeof(struct mc_command));
-	command->type = type;
+	struct mc_command_storage *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command_storage));
+	mc_command_prepare_base(&command->base, type, state);
+
+	LEAVE();
+	return command;
+}
+
+struct mc_command_simple * NONNULL(1, 2, 3)
+mc_command_create_binary_simple(struct mc_state *state, const struct mc_command_type *type, const struct mc_binary_header *header)
+{
+	ENTER();
+
+	struct mc_command_simple *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command_simple));
+	mc_command_prepare_base(&command->base, type, state);
+	command->action.binary_opcode = header->opcode;
+	command->action.binary_opaque = mm_load_hl(&header->opaque);
+
+	LEAVE();
+	return command;
+}
+
+struct mc_command_storage * NONNULL(1, 2, 3)
+mc_command_create_binary_storage(struct mc_state *state, const struct mc_command_type *type, const struct mc_binary_header *header)
+{
+	ENTER();
+
+	struct mc_command_storage *command = mm_buffer_embed(&state->sock.txbuf, sizeof(struct mc_command_storage));
+	mc_command_prepare_base(&command->base, type, state);
+	command->action.base.binary_opcode = header->opcode;
+	command->action.base.binary_opaque = mm_load_hl(&header->opaque);
 
 	LEAVE();
 	return command;
@@ -124,7 +167,7 @@ mc_command_flush(uint32_t exptime)
 	mc_exptime = real_time / 1000000 + exptime;
 
 	for (mm_thread_t i = 0; i < mc_table.nparts; i++) {
-		struct mc_action_simple action;
+		struct mc_action action;
 		action.part = &mc_table.parts[i];
 		mc_action_flush(&action);
 	}
@@ -138,7 +181,7 @@ mc_command_transmit_unref(uintptr_t data)
 
 	struct mc_entry *entry = (struct mc_entry *) data;
 
-	struct mc_action_simple action;
+	struct mc_action action;
 	action.part = mc_table_part(entry->hash);
 	action.old_entry = entry;
 	mc_action_finish(&action);
@@ -147,9 +190,7 @@ mc_command_transmit_unref(uintptr_t data)
 }
 
 static void
-mc_command_transmit_entry(struct mc_state *state,
-			  struct mc_command *command,
-			  bool cas)
+mc_command_transmit_entry(struct mc_state *state, struct mc_command_simple *command, bool cas)
 {
 	ENTER();
 
@@ -177,7 +218,7 @@ mc_command_transmit_entry(struct mc_state *state,
 	mm_netbuf_splice(&state->sock, value, value_len,
 			 mc_command_transmit_unref, (uintptr_t) entry);
 
-	if (command->ascii.last)
+	if (command->action.ascii_get_last)
 		WRITE(&state->sock, mc_result_end2);
 	else
 		WRITE(&state->sock, mc_result_nl);
@@ -198,17 +239,15 @@ mc_command_transmit_delta(struct mc_state *state, const char *value)
 }
 
 static void
-mc_command_transmit_binary_status(struct mc_state *state,
-				  struct mc_command *command,
-				  uint16_t status)
+mc_command_transmit_binary_status(struct mc_state *state, struct mc_action *action, uint16_t status)
 {
 	ENTER();
 
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = mm_htons(status);
-	header.opcode = command->binary.opcode;
-	header.opaque = command->binary.opaque;
+	header.opcode = action->binary_opcode;
+	header.opaque = action->binary_opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -221,19 +260,15 @@ mc_command_transmit_binary_status(struct mc_state *state,
 }
 
 static void
-mc_command_transmit_binary_string(struct mc_state *state,
-				  struct mc_command *command,
-				  uint16_t status,
-				  const char *string,
-				  uint32_t length)
+mc_command_transmit_binary_string(struct mc_state *state, struct mc_action *action, uint16_t status, const char *string, uint32_t length)
 {
 	ENTER();
 
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = mm_htons(status);
-	header.opcode = command->binary.opcode;
-	header.opaque = command->binary.opaque;
+	header.opcode = action->binary_opcode;
+	header.opaque = action->binary_opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -247,17 +282,15 @@ mc_command_transmit_binary_string(struct mc_state *state,
 }
 
 static void
-mc_command_transmit_binary_stamp(struct mc_state *state,
-				 struct mc_command *command,
-				 uint64_t stamp)
+mc_command_transmit_binary_stamp(struct mc_state *state, struct mc_action *action, uint64_t stamp)
 {
 	ENTER();
 
 	struct mc_binary_header header;
 	header.magic = MC_BINARY_RESPONSE;
 	header.status = MC_BINARY_STATUS_NO_ERROR;
-	header.opcode = command->binary.opcode;
-	header.opaque = command->binary.opaque;
+	header.opcode = action->binary_opcode;
+	header.opaque = action->binary_opaque;
 	header.key_len = 0;
 	header.ext_len = 0;
 	header.data_type = 0;
@@ -270,13 +303,11 @@ mc_command_transmit_binary_stamp(struct mc_state *state,
 }
 
 static void
-mc_command_transmit_binary_entry(struct mc_state *state,
-				 struct mc_command *command,
-				 bool with_key)
+mc_command_transmit_binary_entry(struct mc_state *state, struct mc_action *action, bool with_key)
 {
 	ENTER();
 
-	struct mc_entry *entry = command->action.old_entry;
+	struct mc_entry *entry = action->old_entry;
 	uint16_t key_len = with_key ? entry->key_len : 0;
 	char *value = mc_entry_getvalue(entry);
 	uint32_t value_len = entry->value_len;
@@ -289,8 +320,8 @@ mc_command_transmit_binary_entry(struct mc_state *state,
 
 	packet.header.magic = MC_BINARY_RESPONSE;
 	packet.header.status = MC_BINARY_STATUS_NO_ERROR;
-	packet.header.opcode = command->binary.opcode;
-	packet.header.opaque = command->binary.opaque;
+	packet.header.opcode = action->binary_opcode;
+	packet.header.opaque = action->binary_opaque;
 	packet.header.key_len = mm_htons(key_len);
 	packet.header.ext_len = 4;
 	packet.header.data_type = 0;
@@ -303,20 +334,17 @@ mc_command_transmit_binary_entry(struct mc_state *state,
 		char *key = mc_entry_getkey(entry);
 		mm_netbuf_splice(&state->sock, key, key_len, NULL, 0);
 	}
-	mm_netbuf_splice(&state->sock, value, value_len,
-			 mc_command_transmit_unref, (uintptr_t) entry);
+	mm_netbuf_splice(&state->sock, value, value_len, mc_command_transmit_unref, (uintptr_t) entry);
 
 	LEAVE();
 }
 
 static void
-mc_command_transmit_binary_value(struct mc_state *state,
-				 struct mc_command *command,
-				 uint64_t value)
+mc_command_transmit_binary_value(struct mc_state *state, struct mc_action_storage *action, uint64_t value)
 {
 	ENTER();
 
-	struct mc_entry *entry = command->storage.new_entry;
+	struct mc_entry *entry = action->new_entry;
 	struct
 	{
 		struct mc_binary_header header;
@@ -325,8 +353,8 @@ mc_command_transmit_binary_value(struct mc_state *state,
 
 	packet.header.magic = MC_BINARY_RESPONSE;
 	packet.header.status = MC_BINARY_STATUS_NO_ERROR;
-	packet.header.opcode = command->binary.opcode;
-	packet.header.opaque = command->binary.opaque;
+	packet.header.opcode = action->base.binary_opcode;
+	packet.header.opaque = action->base.binary_opaque;
 	packet.header.key_len = 0;
 	packet.header.ext_len = 0;
 	packet.header.data_type = 0;
@@ -351,12 +379,12 @@ mm_command_store_value(char *buffer, struct mc_entry *entry)
 }
 
 static void
-mc_command_append(struct mc_command *command)
+mc_command_append(struct mc_action_storage *action)
 {
 	ENTER();
-	struct mc_action_storage *action = &command->storage;
 	const char *alter_value = action->alter_value;
 	uint32_t alter_value_len = action->value_len;
+	action->new_entry = NULL;
 
 	mc_action_lookup(&action->base);
 
@@ -383,19 +411,20 @@ mc_command_append(struct mc_command *command)
 			break;
 	}
 
-	if (command->own_alter_value)
+	if (action->own_alter_value)
 		mm_private_free((char *) alter_value);
 
 	LEAVE();
 }
 
 static void
-mc_command_prepend(struct mc_command *command)
+mc_command_prepend(struct mc_action_storage *action)
 {
 	ENTER();
-	struct mc_action_storage *action = &command->storage;
+
 	const char *alter_value = action->alter_value;
 	uint32_t alter_value_len = action->value_len;
+	action->new_entry = NULL;
 
 	mc_action_lookup(&action->base);
 
@@ -422,18 +451,19 @@ mc_command_prepend(struct mc_command *command)
 			break;
 	}
 
-	if (command->own_alter_value)
+	if (action->own_alter_value)
 		mm_private_free((char *) alter_value);
 
 	LEAVE();
 }
 
 static uint64_t
-mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
+mc_command_increment(struct mc_command_storage *command, bool ascii, char *buffer)
 {
 	ENTER();
 	uint64_t value = 0;
-	struct mc_action_storage *action = &command->storage;
+	struct mc_action_storage *action = &command->action;
+	action->new_entry = NULL;
 
 	mc_action_lookup(&action->base);
 
@@ -443,7 +473,7 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 			if (ascii)
 				break;
 
-			value = command->value;
+			value = command->binary_value;
 			action->stamp = 0;
 		} else {
 			if (!mc_entry_getnum(old_entry, &value)) {
@@ -452,7 +482,7 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 					mc_action_cancel(action);
 				break;
 			}
-			value += command->delta;
+			value += command->binary_delta;
 			action->stamp = old_entry->stamp;
 		}
 
@@ -479,11 +509,12 @@ mc_command_increment(struct mc_command *command, bool ascii, char *buffer)
 }
 
 static uint64_t
-mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
+mc_command_decrement(struct mc_command_storage *command, bool ascii, char *buffer)
 {
 	ENTER();
 	uint64_t value = 0;
-	struct mc_action_storage *action = &command->storage;
+	struct mc_action_storage *action = &command->action;
+	action->new_entry = NULL;
 
 	mc_action_lookup(&action->base);
 
@@ -493,7 +524,7 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 			if (ascii)
 				break;
 
-			value = command->value;
+			value = command->binary_value;
 			action->stamp = 0;
 		} else {
 			if (!mc_entry_getnum(old_entry, &value)) {
@@ -502,8 +533,8 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
 					mc_action_cancel(action);
 				break;
 			}
-			if (value > command->delta)
-				value -= command->delta;
+			if (value > command->binary_delta)
+				value -= command->binary_delta;
 			else
 				value = 0;
 			action->stamp = old_entry->stamp;
@@ -536,40 +567,40 @@ mc_command_decrement(struct mc_command *command, bool ascii, char *buffer)
  **********************************************************************/
 
 static void
-mc_command_execute_ascii_get(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_get(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
 		mc_command_transmit_entry(state, command, false);
-	else if (command->ascii.last)
+	else if (command->action.ascii_get_last)
 		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_ascii_gets(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_gets(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
 		mc_command_transmit_entry(state, command, true);
-	else if (command->ascii.last)
+	else if (command->action.ascii_get_last)
 		WRITE(&state->sock, mc_result_end);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_ascii_set(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_set(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_action_upsert(&command->storage);
-	if (command->ascii.noreply)
+	mc_action_upsert(&command->action);
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_stored);
@@ -578,30 +609,14 @@ mc_command_execute_ascii_set(struct mc_state *state, struct mc_command *command)
 }
 
 static void
-mc_command_execute_ascii_add(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_add(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_action_insert(&command->storage);
-	if (command->ascii.noreply)
+	mc_action_insert(&command->action);
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.base.old_entry == NULL)
-		WRITE(&state->sock, mc_result_stored);
-	else
-		WRITE(&state->sock, mc_result_not_stored);
-
-	LEAVE();
-}
-
-static void
-mc_command_execute_ascii_replace(struct mc_state *state, struct mc_command *command)
-{
-	ENTER();
-
-	mc_action_update(&command->storage);
-	if (command->ascii.noreply)
-		/* Be quiet. */;
-	else if (command->storage.base.old_entry != NULL)
+	else if (command->action.base.old_entry == NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
@@ -610,16 +625,32 @@ mc_command_execute_ascii_replace(struct mc_state *state, struct mc_command *comm
 }
 
 static void
-mc_command_execute_ascii_cas(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_replace(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_action_update(&command->storage);
-	if (command->ascii.noreply)
+	mc_action_update(&command->action);
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.entry_match)
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
-	else if (command->storage.base.old_entry != NULL)
+	else
+		WRITE(&state->sock, mc_result_not_stored);
+
+	LEAVE();
+}
+
+static void
+mc_command_execute_ascii_cas(struct mc_state *state, struct mc_command_storage *command)
+{
+	ENTER();
+
+	mc_action_update(&command->action);
+	if (command->action.base.ascii_noreply)
+		/* Be quiet. */;
+	else if (command->action.entry_match)
+		WRITE(&state->sock, mc_result_stored);
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_exists);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
@@ -628,14 +659,14 @@ mc_command_execute_ascii_cas(struct mc_state *state, struct mc_command *command)
 }
 
 static void
-mc_command_execute_ascii_append(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_append(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_append(command);
-	if (command->ascii.noreply)
+	mc_command_append(&command->action);
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.base.old_entry != NULL)
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
@@ -644,14 +675,14 @@ mc_command_execute_ascii_append(struct mc_state *state, struct mc_command *comma
 }
 
 static void
-mc_command_execute_ascii_prepend(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_prepend(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_prepend(command);
-	if (command->ascii.noreply)
+	mc_command_prepend(&command->action);
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.base.old_entry != NULL)
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
@@ -660,17 +691,17 @@ mc_command_execute_ascii_prepend(struct mc_state *state, struct mc_command *comm
 }
 
 static void
-mc_command_execute_ascii_incr(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_incr(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
 	mc_command_increment(command, true, buffer);
-	if (command->ascii.noreply)
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.new_entry != NULL)
+	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, buffer);
-	else if (command->storage.base.old_entry != NULL)
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_delta_non_num);
 	else
 		WRITE(&state->sock, mc_result_not_found);
@@ -679,17 +710,17 @@ mc_command_execute_ascii_incr(struct mc_state *state, struct mc_command *command
 }
 
 static void
-mc_command_execute_ascii_decr(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_decr(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
 	mc_command_decrement(command, true, buffer);
-	if (command->ascii.noreply)
+	if (command->action.base.ascii_noreply)
 		/* Be quiet. */;
-	else if (command->storage.new_entry != NULL)
+	else if (command->action.new_entry != NULL)
 		mc_command_transmit_delta(state, buffer);
-	else if (command->storage.base.old_entry != NULL)
+	else if (command->action.base.old_entry != NULL)
 		WRITE(&state->sock, mc_result_delta_non_num);
 	else
 		WRITE(&state->sock, mc_result_not_found);
@@ -698,12 +729,12 @@ mc_command_execute_ascii_decr(struct mc_state *state, struct mc_command *command
 }
 
 static void
-mc_command_execute_ascii_delete(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_delete(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_delete(&command->action);
-	if (command->ascii.noreply)
+	if (command->action.ascii_noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_deleted);
@@ -714,7 +745,7 @@ mc_command_execute_ascii_delete(struct mc_state *state, struct mc_command *comma
 }
 
 static void
-mc_command_execute_ascii_touch(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_touch(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
@@ -733,11 +764,11 @@ mc_command_execute_ascii_touch(struct mc_state *state, struct mc_command *comman
 		// or decremented then admittedly we might loose the exptime
 		// update. But after all who is going to ever sensibly use
 		// exptime and incr/decr together?
-		command->action.old_entry->exp_time = command->exp_time;
+		command->action.old_entry->exp_time = command->action.ascii_exp_time;
 		mc_action_finish(&command->action);
 	}
 
-	if (command->ascii.noreply)
+	if (command->action.ascii_noreply)
 		/* Be quiet. */;
 	else if (command->action.old_entry != NULL)
 		WRITE(&state->sock, mc_result_touched);
@@ -748,17 +779,17 @@ mc_command_execute_ascii_touch(struct mc_state *state, struct mc_command *comman
 }
 
 static void
-mc_command_execute_ascii_slabs(struct mc_state *state, struct mc_command *command UNUSED)
+mc_command_execute_ascii_slabs(struct mc_state *state, struct mc_command_simple *command UNUSED)
 {
 	WRITE(&state->sock, mc_result_not_implemented);
 }
 
 static void
-mc_command_execute_ascii_stats(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_stats(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	if (command->nopts)
+	if (command->action.ascii_stats)
 		WRITE(&state->sock, mc_result_not_implemented);
 	else
 		WRITE(&state->sock, mc_result_end);
@@ -767,12 +798,12 @@ mc_command_execute_ascii_stats(struct mc_state *state, struct mc_command *comman
 }
 
 static void
-mc_command_execute_ascii_flush_all(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_flush_all(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_flush(command->exp_time);
-	if (command->ascii.noreply)
+	mc_command_flush(command->action.ascii_exp_time);
+	if (command->action.ascii_noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
@@ -781,7 +812,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state, struct mc_command *co
 }
 
 static void
-mc_command_execute_ascii_version(struct mc_state *state, struct mc_command *command UNUSED)
+mc_command_execute_ascii_version(struct mc_state *state, struct mc_command_simple *command UNUSED)
 {
 	ENTER();
 
@@ -791,13 +822,13 @@ mc_command_execute_ascii_version(struct mc_state *state, struct mc_command *comm
 }
 
 static void
-mc_command_execute_ascii_verbosity(struct mc_state *state, struct mc_command *command)
+mc_command_execute_ascii_verbosity(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_verbose = min(command->value, 2u);
+	mc_verbose = min(command->action.ascii_level, 2u);
 	DEBUG("set verbosity %d", mc_verbose);
-	if (command->ascii.noreply)
+	if (command->action.ascii_noreply)
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
@@ -806,7 +837,7 @@ mc_command_execute_ascii_verbosity(struct mc_state *state, struct mc_command *co
 }
 
 static void
-mc_command_execute_ascii_quit(struct mc_state *state, struct mc_command *command UNUSED)
+mc_command_execute_ascii_quit(struct mc_state *state, struct mc_command_simple *command UNUSED)
 {
 	ENTER();
 
@@ -816,7 +847,7 @@ mc_command_execute_ascii_quit(struct mc_state *state, struct mc_command *command
 }
 
 static void
-mc_command_execute_ascii_error(struct mc_state *state, struct mc_command *command UNUSED)
+mc_command_execute_ascii_error(struct mc_state *state, struct mc_command_simple *command UNUSED)
 {
 	ENTER();
 
@@ -830,311 +861,310 @@ mc_command_execute_ascii_error(struct mc_state *state, struct mc_command *comman
  **********************************************************************/
 
 static void
-mc_command_execute_binary_get(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_get(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
-		mc_command_transmit_binary_entry(state, command, false);
+		mc_command_transmit_binary_entry(state, &command->action, false);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_getq(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
-		mc_command_transmit_binary_entry(state, command, false);
+		mc_command_transmit_binary_entry(state, &command->action, false);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getk(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_getk(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
-		mc_command_transmit_binary_entry(state, command, true);
+		mc_command_transmit_binary_entry(state, &command->action, true);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_getkq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_getkq(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_lookup(&command->action);
 	if (command->action.old_entry != NULL)
-		mc_command_transmit_binary_entry(state, command, true);
+		mc_command_transmit_binary_entry(state, &command->action, true);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_set(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_set(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	if (command->storage.stamp) {
-		mc_action_update(&command->storage);
-		if (command->storage.entry_match)
-			mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
-		else if (command->action.old_entry != NULL)
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+	if (command->action.stamp) {
+		mc_action_update(&command->action);
+		if (command->action.entry_match)
+			mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
+		else if (command->action.base.old_entry != NULL)
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_ITEM_NOT_STORED);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_ITEM_NOT_STORED);
 	} else {
-		mc_action_upsert(&command->storage);
-		mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
+		mc_action_upsert(&command->action);
+		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	}
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_setq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_setq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	if (command->storage.stamp) {
-		mc_action_update(&command->storage);
-		if (command->storage.entry_match)
+	if (command->action.stamp) {
+		mc_action_update(&command->action);
+		if (command->action.entry_match)
 			/* Be quiet. */;
-		else if (command->action.old_entry != NULL)
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+		else if (command->action.base.old_entry != NULL)
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_ITEM_NOT_STORED);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_ITEM_NOT_STORED);
 	} else {
-		mc_action_upsert(&command->storage);
+		mc_action_upsert(&command->action);
 	}
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_add(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_add(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_action_insert(&command->storage);
-	if (command->storage.base.old_entry == NULL)
-		mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
+	mc_action_insert(&command->action);
+	if (command->action.base.old_entry == NULL)
+		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_addq(struct mc_state *state,
-			       struct mc_command *command)
+mc_command_execute_binary_addq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_action_insert(&command->storage);
-	if (command->storage.base.old_entry == NULL)
+	mc_action_insert(&command->action);
+	if (command->action.base.old_entry == NULL)
 		/* Be quiet. */;
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_replace(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_replace(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	if (command->storage.stamp) {
-		mc_action_update(&command->storage);
-		if (command->storage.entry_match)
-			mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
-		else if (command->storage.base.old_entry != NULL)
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+	if (command->action.stamp) {
+		mc_action_update(&command->action);
+		if (command->action.entry_match)
+			mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
+		else if (command->action.base.old_entry != NULL)
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	} else {
-		mc_action_update(&command->storage);
-		if (command->storage.base.old_entry != NULL)
-			mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
+		mc_action_update(&command->action);
+		if (command->action.base.old_entry != NULL)
+			mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	}
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_replaceq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_replaceq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	if (command->storage.stamp) {
-		mc_action_update(&command->storage);
-		if (command->storage.entry_match)
+	if (command->action.stamp) {
+		mc_action_update(&command->action);
+		if (command->action.entry_match)
 			/* Be quiet. */;
-		else if (command->storage.base.old_entry != NULL)
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_EXISTS);
+		else if (command->action.base.old_entry != NULL)
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	} else {
-		mc_action_update(&command->storage);
-		if (command->storage.base.old_entry != NULL)
+		mc_action_update(&command->action);
+		if (command->action.base.old_entry != NULL)
 			/* Be quiet. */;
 		else
-			mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	}
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_append(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_append(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_append(command);
-	if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
+	mc_command_append(&command->action);
+	if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_appendq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_appendq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_append(command);
-	if (command->storage.base.old_entry != NULL)
+	mc_command_append(&command->action);
+	if (command->action.base.old_entry != NULL)
 		/* Be quiet. */;
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prepend(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_prepend(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_prepend(command);
-	if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_stamp(state, command, command->storage.stamp);
+	mc_command_prepend(&command->action);
+	if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_prependq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_prependq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
-	mc_command_prepend(command);
-	if (command->storage.base.old_entry != NULL)
+	mc_command_prepend(&command->action);
+	if (command->action.base.old_entry != NULL)
 		/* Be quiet. */;
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_increment(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_increment(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	uint64_t value = mc_command_increment(command, false, NULL);
-	if (command->storage.new_entry != NULL)
-		mc_command_transmit_binary_value(state, command, value);
-	else if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	if (command->action.new_entry != NULL)
+		mc_command_transmit_binary_value(state, &command->action, value);
+	else if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_incrementq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_incrementq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	mc_command_increment(command, false, NULL);
-	if (command->storage.new_entry != NULL)
+	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
-	else if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_decrement(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_decrement(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	uint64_t value = mc_command_decrement(command, false, NULL);
-	if (command->storage.new_entry != NULL)
-		mc_command_transmit_binary_value(state, command, value);
-	else if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	if (command->action.new_entry != NULL)
+		mc_command_transmit_binary_value(state, &command->action, value);
+	else if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_decrementq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_decrementq(struct mc_state *state, struct mc_command_storage *command)
 {
 	ENTER();
 
 	mc_command_decrement(command, false, NULL);
-	if (command->storage.new_entry != NULL)
+	if (command->action.new_entry != NULL)
 		/* Be quiet. */;
-	else if (command->storage.base.old_entry != NULL)
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
+	else if (command->action.base.old_entry != NULL)
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_delete(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_delete(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
 	mc_action_delete(&command->action);
 	if (command->action.old_entry != NULL)
-		mc_command_transmit_binary_stamp(state, command, 0);
+		mc_command_transmit_binary_stamp(state, &command->action, 0);
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_deleteq(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_deleteq(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
@@ -1142,34 +1172,34 @@ mc_command_execute_binary_deleteq(struct mc_state *state, struct mc_command *com
 	if (command->action.old_entry != NULL)
 		;
 	else
-		mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_noop(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_noop(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+	mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_NO_ERROR);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_quit(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_quit(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+	mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_NO_ERROR);
 	mc_command_quit(state);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_quitq(struct mc_state *state, struct mc_command *command UNUSED)
+mc_command_execute_binary_quitq(struct mc_state *state, struct mc_command_simple *command UNUSED)
 {
 	ENTER();
 
@@ -1179,54 +1209,52 @@ mc_command_execute_binary_quitq(struct mc_state *state, struct mc_command *comma
 }
 
 static void
-mc_command_execute_binary_flush(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_flush(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_flush(command->exp_time);
-	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+	mc_command_flush(command->action.binary_exp_time);
+	mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_NO_ERROR);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_flushq(struct mc_state *state UNUSED, struct mc_command *command)
+mc_command_execute_binary_flushq(struct mc_state *state UNUSED, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_flush(command->exp_time);
+	mc_command_flush(command->action.binary_exp_time);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_version(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_version(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_transmit_binary_string(state, command,
-					  MC_BINARY_STATUS_NO_ERROR,
-					  VERSION, RES_N(VERSION));
+	mc_command_transmit_binary_string(state, &command->action, MC_BINARY_STATUS_NO_ERROR, VERSION, RES_N(VERSION));
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_stat(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_stat(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_transmit_binary_status(state, command, MC_BINARY_STATUS_NO_ERROR);
+	mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_NO_ERROR);
 
 	LEAVE();
 }
 
 static void
-mc_command_execute_binary_error(struct mc_state *state, struct mc_command *command)
+mc_command_execute_binary_error(struct mc_state *state, struct mc_command_simple *command)
 {
 	ENTER();
 
-	mc_command_transmit_binary_status(state, command, command->value);
+	mc_command_transmit_binary_status(state, &command->action, command->action.binary_status);
 
 	LEAVE();
 }

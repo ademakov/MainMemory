@@ -258,7 +258,7 @@ mc_action_find_victims(struct mc_tpart *part,
 }
 
 static bool
-mc_action_match_entry(struct mc_action_simple *action, struct mc_entry *entry)
+mc_action_match_entry(struct mc_action *action, struct mc_entry *entry)
 {
 	if (action->hash != entry->hash)
 		return false;
@@ -285,7 +285,7 @@ mc_action_bucket_insert(struct mc_action_storage *action,
 }
 
 static void
-mc_action_bucket_lookup(struct mc_action_simple *action,
+mc_action_bucket_lookup(struct mc_action *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
@@ -314,7 +314,7 @@ mc_action_bucket_lookup(struct mc_action_simple *action,
 }
 
 static void
-mc_action_bucket_delete(struct mc_action_simple *action,
+mc_action_bucket_delete(struct mc_action *action,
 			struct mm_stack *bucket,
 			struct mm_stack *freelist)
 {
@@ -379,7 +379,7 @@ mc_action_bucket_update(struct mc_action_storage *action,
 }
 
 static struct mm_stack *
-mm_action_bucket_start(struct mc_action_simple *action, struct mm_stack *freelist)
+mm_action_bucket_start(struct mc_action *action, struct mm_stack *freelist)
 {
 	mm_stack_prepare(freelist);
 
@@ -390,7 +390,7 @@ mm_action_bucket_start(struct mc_action_simple *action, struct mm_stack *freelis
 }
 
 static void
-mc_action_bucket_finish(struct mc_action_simple *action, struct mm_stack *freelist)
+mc_action_bucket_finish(struct mc_action *action, struct mm_stack *freelist)
 {
 	mc_table_lookup_unlock(action->part);
 
@@ -402,7 +402,7 @@ mc_action_bucket_finish(struct mc_action_simple *action, struct mm_stack *freeli
 }
 
 static void
-mc_action_complete(struct mc_action_simple *action UNUSED)
+mc_action_complete(struct mc_action *action UNUSED)
 {
 #if ENABLE_MEMCACHE_COMBINER
 	mm_memory_store_fence();
@@ -415,7 +415,7 @@ mc_action_complete(struct mc_action_simple *action UNUSED)
  **********************************************************************/
 
 void
-mc_action_lookup_low(struct mc_action_simple *action)
+mc_action_lookup_low(struct mc_action *action)
 {
 	ENTER();
 
@@ -436,7 +436,7 @@ mc_action_lookup_low(struct mc_action_simple *action)
 }
 
 void
-mc_action_finish_low(struct mc_action_simple *action)
+mc_action_finish_low(struct mc_action *action)
 {
 	ENTER();
 
@@ -453,7 +453,7 @@ mc_action_finish_low(struct mc_action_simple *action)
 }
 
 void
-mc_action_delete_low(struct mc_action_simple *action)
+mc_action_delete_low(struct mc_action *action)
 {
 	ENTER();
 
@@ -662,7 +662,7 @@ mc_action_alter_low(struct mc_action_storage *action)
 }
 
 void
-mc_action_stride_low(struct mc_action_simple *action)
+mc_action_stride_low(struct mc_action *action)
 {
 	ENTER();
 
@@ -713,7 +713,7 @@ mc_action_stride_low(struct mc_action_simple *action)
 }
 
 void
-mc_action_evict_low(struct mc_action_simple *action)
+mc_action_evict_low(struct mc_action *action)
 {
 	ENTER();
 
@@ -734,7 +734,7 @@ mc_action_evict_low(struct mc_action_simple *action)
 }
 
 void
-mc_action_flush_low(struct mc_action_simple *action)
+mc_action_flush_low(struct mc_action *action)
 {
 	ENTER();
 
