@@ -180,8 +180,6 @@ mm_memcache_init(const struct mm_memcache_config *config)
 {
 	ENTER();
 
-	mm_brief("command sizes: %zu %zu\n", sizeof(struct mc_command_simple), sizeof(struct mc_command_storage));
-
 	static struct mm_net_proto proto = {
 		.options = MM_NET_NODELAY | MM_NET_KEEPALIVE,
 		.create = mc_state_create,

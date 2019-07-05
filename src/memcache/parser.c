@@ -171,7 +171,7 @@ mc_parser_handle_option(struct mc_command_simple *command)
 
 static bool
 mc_parser_lookup_command(struct mc_state *parser, const struct mc_command_type *type,
-			 char *s, char *e, int state, int shift, char *match)
+			 char *s, char *e, int state, int shift)
 {
 	// The count of scanned chars. Used to check if the client sends too much junk data.
 	int count = 0;
@@ -217,34 +217,6 @@ mc_parser_lookup_command(struct mc_state *parser, const struct mc_command_type *
 		int c = *s;
 again:
 		switch (state) {
-		case S_MATCH:
-			if (c == *match) {
-				// So far so good.
-				if (unlikely(c == 0)) {
-					// Hmm, a zero byte in the input.
-					state = S_ERROR;
-					break;
-				}
-				match++;
-				break;
-			} else if (unlikely(*match)) {
-				DEBUG("unexpected char before the end");
-				state = S_ERROR;
-				goto again;
-			} else if (c == ' ') {
-				DEBUG("match");
-				state = S_SPACE;
-				break;
-			} else if (c == '\r' || c == '\n') {
-				DEBUG("match");
-				state = shift;
-				goto again;
-			} else {
-				DEBUG("unexpected char after the end");
-				state = S_ERROR;
-				break;
-			}
-
 		case S_SPACE:
 			if (c == ' ') {
 				// Skip space.
@@ -1011,10 +983,13 @@ mc_parser_parse(struct mc_state *parser)
 		s++;
 
 	// Check if the input is sane.
-	if ((e - s) < 4) {
-		if ((e - mm_netbuf_rget(&parser->sock)) >= 1024)
+	if ((e - s) < 5) {
+		if ((e - mm_netbuf_rget(&parser->sock)) >= 1024) {
 			parser->trash = true;
-		rc = false;
+			rc = false;
+		} else if ((rc = memchr(s, '\n', e - s) != NULL)) {
+			mc_parser_other_command(parser, &mc_command_ascii_error, s, e, S_ERROR, S_ERROR, "");
+		}
 		goto leave;
 	}
 
@@ -1022,49 +997,45 @@ mc_parser_parse(struct mc_state *parser)
 
 	// Identify the command by its first 4 chars.
 	uint32_t start = Cx4(s[0], s[1], s[2], s[3]);
-	s += 4;
 	if (start == Cx4('g', 'e', 't', ' ')) {
-		rc = mc_parser_lookup_command(parser, &mc_command_ascii_get, s, e, S_SPACE, S_GET_1, "");
+		rc = mc_parser_lookup_command(parser, &mc_command_ascii_get, s + 4, e, S_SPACE, S_GET_1);
 	} else if (start == Cx4('s', 'e', 't', ' ')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_set, s, e, S_SPACE, S_SET_1, "");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_set, s + 4, e, S_SPACE, S_SET_1, "");
 	} else if (start == Cx4('r', 'e', 'p', 'l')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_replace, s, e, S_MATCH, S_SET_1, "ace");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_replace, s + 4, e, S_MATCH, S_SET_1, "ace");
 	} else if (start == Cx4('d', 'e', 'l', 'e')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_delete, s, e, S_MATCH, S_DELETE_1, "te");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_delete, s + 4, e, S_MATCH, S_DELETE_1, "te");
 	} else if (start == Cx4('a', 'd', 'd', ' ')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_add, s, e, S_SPACE, S_SET_1, "");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_add, s + 4, e, S_SPACE, S_SET_1, "");
 	} else if (start == Cx4('i', 'n', 'c', 'r')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_incr, s, e, S_MATCH, S_DELTA_1, "");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_incr, s + 4, e, S_MATCH, S_DELTA_1, "");
 	} else if (start == Cx4('d', 'e', 'c', 'r')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_decr, s, e, S_MATCH, S_DELTA_1, "");
-	} else if (start == Cx4('g', 'e', 't', 's')) {
-		rc = mc_parser_lookup_command(parser, &mc_command_ascii_gets, s, e, S_MATCH, S_GET_1, "");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_decr, s + 4, e, S_MATCH, S_DELTA_1, "");
+	} else if (start == Cx4('g', 'e', 't', 's') && s[4] == ' ') {
+		rc = mc_parser_lookup_command(parser, &mc_command_ascii_gets, s + 5, e, S_SPACE, S_GET_1);
 	} else if (start == Cx4('c', 'a', 's', ' ')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_cas, s, e, S_SPACE, S_SET_1, "");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_cas, s + 4, e, S_SPACE, S_SET_1, "");
 	} else if (start == Cx4('a', 'p', 'p', 'e')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_append, s, e, S_MATCH, S_SET_1, "nd");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_append, s + 4, e, S_MATCH, S_SET_1, "nd");
 	} else if (start == Cx4('p', 'r', 'e', 'p')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_prepend, s, e, S_MATCH, S_SET_1, "end");
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_prepend, s + 4, e, S_MATCH, S_SET_1, "end");
 	} else if (start == Cx4('t', 'o', 'u', 'c')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_touch, s, e, S_MATCH, S_TOUCH_1, "h");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_touch, s + 4, e, S_MATCH, S_TOUCH_1, "h");
 	} else if (start == Cx4('s', 'l', 'a', 'b')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_slabs, s, e, S_MATCH, S_OPT, "s");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_slabs, s + 4, e, S_MATCH, S_OPT, "s");
 	} else if (start == Cx4('s', 't', 'a', 't')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_stats, s, e, S_MATCH, S_OPT, "s");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_stats, s + 4, e, S_MATCH, S_OPT, "s");
 	} else if (start == Cx4('f', 'l', 'u', 's')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_flush_all, s, e, S_MATCH, S_FLUSH_ALL_1, "h_all");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_flush_all, s + 4, e, S_MATCH, S_FLUSH_ALL_1, "h_all");
 	} else if (start == Cx4('v', 'e', 'r', 's')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_version, s, e, S_MATCH, S_EOL, "ion");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_version, s + 4, e, S_MATCH, S_EOL, "ion");
 	} else if (start == Cx4('v', 'e', 'r', 'b')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_verbosity, s, e, S_MATCH, S_VERBOSITY_1, "osity");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_verbosity, s + 4, e, S_MATCH, S_VERBOSITY_1, "osity");
 	} else if (start == Cx4('q', 'u', 'i', 't')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s, e, S_SPACE, S_EOL, "");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s + 4, e, S_SPACE, S_EOL, "");
 	} else {
 		DEBUG("unrecognized command");
-		// Need to check the first 4 chars one by one again for a
-		// possible '\n' among them.
-		s -= 4;
-		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s, e, S_ERROR, S_ERROR, "");
+		rc = mc_parser_other_command(parser, &mc_command_ascii_error, s, e, S_ERROR, S_ERROR, "");
 	}
 
 #undef Cx4
