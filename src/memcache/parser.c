@@ -1001,36 +1001,36 @@ mc_parser_parse(struct mc_state *parser)
 		rc = mc_parser_lookup_command(parser, &mc_command_ascii_get, s + 4, e, S_SPACE, S_GET_1);
 	} else if (start == Cx4('s', 'e', 't', ' ')) {
 		rc = mc_parser_storage_command(parser, &mc_command_ascii_set, s + 4, e, S_SPACE, S_SET_1, "");
-	} else if (start == Cx4('r', 'e', 'p', 'l')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_replace, s + 4, e, S_MATCH, S_SET_1, "ace");
-	} else if (start == Cx4('d', 'e', 'l', 'e')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_delete, s + 4, e, S_MATCH, S_DELETE_1, "te");
+	} else if (start == Cx4('r', 'e', 'p', 'l') && s[4] == 'a') {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_replace, s + 5, e, S_MATCH, S_SET_1, "ce");
+	} else if (start == Cx4('d', 'e', 'l', 'e') && s[4] == 't') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_delete, s + 5, e, S_MATCH, S_DELETE_1, "e");
 	} else if (start == Cx4('a', 'd', 'd', ' ')) {
 		rc = mc_parser_storage_command(parser, &mc_command_ascii_add, s + 4, e, S_SPACE, S_SET_1, "");
-	} else if (start == Cx4('i', 'n', 'c', 'r')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_incr, s + 4, e, S_MATCH, S_DELTA_1, "");
-	} else if (start == Cx4('d', 'e', 'c', 'r')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_decr, s + 4, e, S_MATCH, S_DELTA_1, "");
+	} else if (start == Cx4('i', 'n', 'c', 'r') && s[4] == ' ') {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_incr, s + 5, e, S_SPACE, S_DELTA_1, "");
+	} else if (start == Cx4('d', 'e', 'c', 'r') && s[4] == ' ') {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_decr, s + 5, e, S_SPACE, S_DELTA_1, "");
 	} else if (start == Cx4('g', 'e', 't', 's') && s[4] == ' ') {
 		rc = mc_parser_lookup_command(parser, &mc_command_ascii_gets, s + 5, e, S_SPACE, S_GET_1);
 	} else if (start == Cx4('c', 'a', 's', ' ')) {
 		rc = mc_parser_storage_command(parser, &mc_command_ascii_cas, s + 4, e, S_SPACE, S_SET_1, "");
-	} else if (start == Cx4('a', 'p', 'p', 'e')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_append, s + 4, e, S_MATCH, S_SET_1, "nd");
-	} else if (start == Cx4('p', 'r', 'e', 'p')) {
-		rc = mc_parser_storage_command(parser, &mc_command_ascii_prepend, s + 4, e, S_MATCH, S_SET_1, "end");
-	} else if (start == Cx4('t', 'o', 'u', 'c')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_touch, s + 4, e, S_MATCH, S_TOUCH_1, "h");
-	} else if (start == Cx4('s', 'l', 'a', 'b')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_slabs, s + 4, e, S_MATCH, S_OPT, "s");
-	} else if (start == Cx4('s', 't', 'a', 't')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_stats, s + 4, e, S_MATCH, S_OPT, "s");
-	} else if (start == Cx4('f', 'l', 'u', 's')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_flush_all, s + 4, e, S_MATCH, S_FLUSH_ALL_1, "h_all");
-	} else if (start == Cx4('v', 'e', 'r', 's')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_version, s + 4, e, S_MATCH, S_EOL, "ion");
-	} else if (start == Cx4('v', 'e', 'r', 'b')) {
-		rc = mc_parser_other_command(parser, &mc_command_ascii_verbosity, s + 4, e, S_MATCH, S_VERBOSITY_1, "osity");
+	} else if (start == Cx4('a', 'p', 'p', 'e') && s[4] == 'n') {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_append, s + 5, e, S_MATCH, S_SET_1, "d");
+	} else if (start == Cx4('p', 'r', 'e', 'p') && s[4] == 'e') {
+		rc = mc_parser_storage_command(parser, &mc_command_ascii_prepend, s + 5, e, S_MATCH, S_SET_1, "nd");
+	} else if (start == Cx4('t', 'o', 'u', 'c') && s[4] == 'h') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_touch, s + 5, e, S_MATCH, S_TOUCH_1, "");
+	} else if (start == Cx4('s', 'l', 'a', 'b') && s[4] == 's') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_slabs, s + 5, e, S_MATCH, S_OPT, "");
+	} else if (start == Cx4('s', 't', 'a', 't') && s[4] == 's') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_stats, s + 5, e, S_MATCH, S_OPT, "");
+	} else if (start == Cx4('f', 'l', 'u', 's') && s[4] == 'h') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_flush_all, s + 5, e, S_MATCH, S_FLUSH_ALL_1, "_all");
+	} else if (start == Cx4('v', 'e', 'r', 's') && s[4] == 'i') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_version, s + 5, e, S_MATCH, S_EOL, "on");
+	} else if (start == Cx4('v', 'e', 'r', 'b') && s[4] == 'o') {
+		rc = mc_parser_other_command(parser, &mc_command_ascii_verbosity, s + 5, e, S_MATCH, S_VERBOSITY_1, "sity");
 	} else if (start == Cx4('q', 'u', 'i', 't')) {
 		rc = mc_parser_other_command(parser, &mc_command_ascii_quit, s + 4, e, S_SPACE, S_EOL, "");
 	} else {
