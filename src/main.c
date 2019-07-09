@@ -81,7 +81,7 @@ mm_server_init(void)
 	uint32_t port = mm_settings_get_uint32("memcache-port", 11211);
 	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", 64);
 	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", 8);
-	uint32_t batch_size = mm_settings_get_uint32("memcache-batch-size", 10);
+	uint32_t batch_size = mm_settings_get_uint32("memcache-batch-size", 100);
 
 	struct mm_memcache_config memcache_config;
 	memcache_config.addr = addr;

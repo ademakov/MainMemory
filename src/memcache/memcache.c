@@ -132,7 +132,7 @@ parse:
 	if (!mm_netbuf_empty(&state->sock)) {
 		// Update the safe consumed input position.
 		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
-		if (++batch_size >= mc_config.batch_size)
+		if (mc_config.batch_size && ++batch_size >= mc_config.batch_size)
 		{
 			// Transmit buffered results and compact the output buffer storage.
 			mm_netbuf_flush(&state->sock);
@@ -217,6 +217,9 @@ mm_memcache_init(const struct mm_memcache_config *config)
 		mc_config.volume = config->volume;
 	else
 		mc_config.volume = MC_TABLE_VOLUME_DEFAULT;
+
+	if (config != NULL)
+		mc_config.batch_size = config->batch_size;
 
 	// Determine the required memcache table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
