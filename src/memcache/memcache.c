@@ -29,6 +29,7 @@
 #include "base/list.h"
 #include "base/report.h"
 #include "base/runtime.h"
+#include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
 #include "base/fiber/strand.h"
 #include "base/memory/chunk.h"
@@ -68,6 +69,7 @@ mc_reader_routine(mm_value_t arg)
 
 	struct mm_net_socket *sock = mm_net_arg_to_socket(arg);
 	struct mc_state *state = containerof(sock, struct mc_state, sock.sock);
+	size_t batch_size = 0;
 
 	// Try to get some input w/o blocking.
 	mm_net_set_read_timeout(&state->sock.sock, 0);
@@ -126,11 +128,20 @@ parse:
 	// Process the parsed command.
 	mc_process_command(state, state->command_first);
 
-	// If there is more input in the buffer then try to parse
-	// the next command.
+	// If there is more input in the buffer then try to parse the next command.
 	if (!mm_netbuf_empty(&state->sock)) {
 		// Update the safe consumed input position.
 		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
+		if (++batch_size >= mc_config.batch_size)
+		{
+			// Transmit buffered results and compact the output buffer storage.
+			mm_netbuf_flush(&state->sock);
+			mm_netbuf_compact_write_buf(&state->sock);
+			// Compact the input buffer storage.
+			mm_netbuf_compact_read_buf(&state->sock);
+			// Let serve other sockets.
+			mm_fiber_yield();
+		}
 		goto parse;
 	}
 

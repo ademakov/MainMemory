@@ -81,12 +81,14 @@ mm_server_init(void)
 	uint32_t port = mm_settings_get_uint32("memcache-port", 11211);
 	uint32_t mbytes = mm_settings_get_uint32("memcache-memory", 64);
 	uint32_t nparts = mm_settings_get_uint32("memcache-partitions", 8);
+	uint32_t batch_size = mm_settings_get_uint32("memcache-batch-size", 10);
 
 	struct mm_memcache_config memcache_config;
 	memcache_config.addr = addr;
 	memcache_config.port = port;
 	memcache_config.volume = mbytes * 1024 * 1024;
 	memcache_config.nparts = nparts;
+	memcache_config.batch_size = batch_size;
 #if ENABLE_MEMCACHE_DELEGATE
 	mm_bitset_prepare(&memcache_config.affinity, &mm_common_space.xarena, 8);
 	mm_bitset_set(&memcache_config.affinity, 6);
@@ -123,6 +125,8 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	{ "memcache-memory", 'm', MM_ARGS_REQUIRED,
 	  "\n\t\tmemory for memcache items in megabytes" },
 	{ "memcache-partitions", 'M', MM_ARGS_REQUIRED,
+	  "\n\t\tnumber of memcache table partitions" },
+	{ "memcache-batch-size", 0, MM_ARGS_REQUIRED,
 	  "\n\t\tnumber of memcache table partitions" },
 };
 
