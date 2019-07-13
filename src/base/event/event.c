@@ -108,10 +108,10 @@ mm_event_direct_call_stat(struct mm_event_listener *listener UNUSED)
 #endif
 }
 
-#if ENABLE_SMP
 static struct mm_event_listener *
-mm_event_find_listener(struct mm_event_dispatch *dispatch)
+mm_event_find_listener(struct mm_event_dispatch *dispatch UNUSED)
 {
+#if ENABLE_SMP
 	mm_thread_t n = dispatch->nlisteners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &dispatch->listeners[i];
@@ -119,9 +119,9 @@ mm_event_find_listener(struct mm_event_dispatch *dispatch)
 		if (state != MM_EVENT_LISTENER_RUNNING)
 			return listener;
 	}
+#endif
 	return NULL;
 }
-#endif
 
 /**********************************************************************
  * Event sink activity.
