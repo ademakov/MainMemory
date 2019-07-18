@@ -343,6 +343,7 @@ again:
 			}
 
 			command_first->base.type = &mc_command_ascii_error;
+			command_first->base.next = NULL;
 			state = S_ERROR_1;
 			/* no break */
 		case S_ERROR_1:
