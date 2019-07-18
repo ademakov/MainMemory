@@ -237,12 +237,14 @@ mc_binary_delta_command(struct mc_state *state, const struct mc_command_type *ty
 		return false;
 
 	// Read the extras.
+#pragma pack(push, 4)
 	struct
 	{
 		uint64_t delta;
 		uint64_t value;
 		uint32_t exp_time;
 	} extras;
+#pragma pack(pop)
 	ASSERT(sizeof(extras) == MC_BINARY_DELTA_EXTRA_SIZE);
 	mm_netbuf_read(&state->sock, &extras, MC_BINARY_DELTA_EXTRA_SIZE);
 
