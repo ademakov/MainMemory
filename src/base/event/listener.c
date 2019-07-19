@@ -151,13 +151,19 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 		listener->events.forwarded++;
 	}
 #else
+	if ((sink->flags & MM_EVENT_NOTIFY_FD) != 0) {
+		sink->flags |= MM_EVENT_INPUT_READY;
+#if ENABLE_EVENT_STATS
+		listener->stats.stray_events++;
+#endif
+		goto leave;
+	}
+
 	mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_READY);
 	listener->events.direct++;
 #endif
 
-#if ENABLE_SMP
 leave:
-#endif
 	LEAVE();
 }
 
