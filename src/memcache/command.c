@@ -69,7 +69,7 @@ static char mc_result_version[] = "VERSION " VERSION "\r\n";
 		.exec = (mc_command_execute_t)			\
 			mc_command_execute_##proto##_##cmd,	\
 		.kind = cmd_kind,				\
-		.name = stringify_expanded(proto##cmd)		\
+		.name = stringify_expanded(proto##_##cmd)	\
 	};
 
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
