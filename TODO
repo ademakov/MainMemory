@@ -2,7 +2,6 @@
 v 0.2
 =====
 
-* optimize buffer usage for memtier with --pipeline=xx
 * optimize memcache entry expiration checks
 * parallel polling mechanism
 
