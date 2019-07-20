@@ -660,19 +660,23 @@ mm_net_input_wait(struct mm_strand *strand, struct mm_net_socket *sock, const mm
 			ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
 			mm_fiber_block();
 			sock->event.input_fiber = NULL;
-		} else if (mm_strand_gettime(strand) < deadline) {
-			const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-			sock->event.input_fiber = strand->fiber;
-			ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
-			mm_timer_block(timeout);
-			sock->event.input_fiber = NULL;
 		} else {
-			if (sock->read_timeout != 0)
-				errno = ETIMEDOUT;
-			else
-				errno = EAGAIN;
-			rc = -1;
-			break;
+			mm_timeval_t time = mm_strand_gettime(strand);
+			DEBUG("now: %lu, deadline: %lu", time, deadline);
+			if (time < deadline) {
+				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
+				sock->event.input_fiber = strand->fiber;
+				ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
+				mm_timer_block(timeout);
+				sock->event.input_fiber = NULL;
+			} else {
+				if (sock->read_timeout != 0)
+					errno = ETIMEDOUT;
+				else
+					errno = EAGAIN;
+				rc = -1;
+				break;
+			}
 		}
 
 		// Check if the fiber is canceled.
@@ -704,19 +708,23 @@ mm_net_output_wait(struct mm_strand *strand, struct mm_net_socket *sock, const m
 			ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
 			mm_fiber_block();
 			sock->event.output_fiber = NULL;
-		} else if (mm_strand_gettime(strand) < deadline) {
-			const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-			sock->event.output_fiber = strand->fiber;
-			ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
-			mm_timer_block(timeout);
-			sock->event.output_fiber = NULL;
 		} else {
-			if (sock->write_timeout != 0)
-				errno = ETIMEDOUT;
-			else
-				errno = EAGAIN;
-			rc = -1;
-			break;
+			mm_timeval_t time = mm_strand_gettime(strand);
+			DEBUG("now: %lu, deadline: %lu", time, deadline);
+			if (time < deadline) {
+				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
+				sock->event.output_fiber = strand->fiber;
+				ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
+				mm_timer_block(timeout);
+				sock->event.output_fiber = NULL;
+			} else {
+				if (sock->write_timeout != 0)
+					errno = ETIMEDOUT;
+				else
+					errno = EAGAIN;
+				rc = -1;
+				break;
+			}
 		}
 
 		// Check if the fiber is canceled.
