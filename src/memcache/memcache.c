@@ -56,9 +56,6 @@ mc_process_command(struct mc_state *state, struct mc_command_base *command)
 
 	} while (command != NULL);
 
-	state->command_first = NULL;
-	state->command_last = NULL;
-
 	LEAVE();
 }
 
@@ -67,52 +64,48 @@ mc_reader_routine(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_net_socket *sock = mm_net_arg_to_socket(arg);
-	struct mc_state *state = containerof(sock, struct mc_state, sock.sock);
-	size_t batch_size = 0;
-
-	// Try to get some input w/o blocking.
-	mm_net_set_read_timeout(&state->sock.sock, 0);
-	ssize_t n = mm_netbuf_fill(&state->sock, 1);
-	mm_net_set_read_timeout(&state->sock.sock, MC_READ_TIMEOUT);
-
-retry:
-	// Get out of here if there is no more input available.
-	if (n <= 0) {
-		if (n == 0 || (errno != EAGAIN && errno != ETIMEDOUT))
-			state->error = true;
-
-		// If the socket is closed queue a quit command.
-		if (state->error && !mm_net_is_reader_shutdown(sock)) {
-			// In this case there is no difference between ascii and binary protocols.
-			struct mc_command_simple *command = mc_command_create_simple(state, &mc_command_ascii_quit);
-			mc_process_command(state, &command->base);
-		}
-		goto leave;
-	}
-
-	// Initialize the parser.
-	struct mm_buffer_reader safepoint;
-	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
-	mc_protocol_t protocol = mc_getprotocol(state);
-
+	struct mm_net_socket *const sock = mm_net_arg_to_socket(arg);
+	struct mc_state *const state = containerof(sock, struct mc_state, sock.sock);
 	state->command_first = NULL;
 	state->command_last = NULL;
 
-	// Try to parse the received input.
-	bool rc;
-parse:
-	if (protocol == MC_PROTOCOL_BINARY)
-		rc = mc_binary_parse(state);
-	else
-		rc = mc_parser_parse(state);
-
-	if (!rc) {
-		if (state->command_first != NULL) {
-			mc_command_cleanup(state->command_first);
-			state->command_first = NULL;
-			state->command_last = NULL;
+	if (mm_netbuf_empty(&state->sock)) {
+		// Try to get some input w/o blocking.
+		mm_net_set_read_timeout(sock, 0);
+		ssize_t n = mm_netbuf_fill(&state->sock, 1);
+		// Get out of here if the connection is broken or there is no input yet.
+		if (n <= 0) {
+			if (n == 0 || errno != EAGAIN)
+				mm_netbuf_close(&state->sock);
+			goto leave;
 		}
+		mm_net_set_read_timeout(sock, MC_READ_TIMEOUT);
+	}
+
+	// Prepare for parsing.
+	struct mm_buffer_reader safepoint;
+	mm_netbuf_capture_read_pos(&state->sock, &safepoint);
+	const mc_protocol_t proto = mc_getprotocol(state);
+	size_t batch_size = mc_config.batch_size;
+	struct mc_command_base *command_last;
+
+	// Try to parse the received input.
+parse:
+	command_last = state->command_last;
+	if (!(proto == MC_PROTOCOL_BINARY ? mc_binary_parse(state) : mc_parser_parse(state))) {
+		// If the parser created a new command then clean it up.
+		if (state->command_last != command_last) {
+			mc_command_cleanup(state->command_last);
+			if (command_last != NULL) {
+				command_last->next = NULL;
+				state->command_last = command_last;
+			} else {
+				state->command_first = NULL;
+				state->command_last = NULL;
+			}
+		}
+
+		// If the input is beyond repair then silently drop the connection.
 		if (state->trash) {
 			mm_netbuf_reset(&state->sock);
 			mm_warning(0, "disconnect an odd client");
@@ -120,30 +113,38 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		mm_netbuf_restore_read_pos(&state->sock, &safepoint);
-		n = mm_netbuf_fill(&state->sock, 1);
-		goto retry;
-	}
-
-	// Process the parsed command.
-	mc_process_command(state, state->command_first);
-
-	// If there is more input in the buffer then try to parse the next command.
-	if (!mm_netbuf_empty(&state->sock)) {
-		// Update the safe consumed input position.
-		mm_netbuf_capture_read_pos(&state->sock, &safepoint);
-		if (mc_config.batch_size && ++batch_size >= mc_config.batch_size)
+		if (!state->error)
 		{
-			// Transmit buffered results and compact the output buffer storage.
-			mm_netbuf_flush(&state->sock);
-			mm_netbuf_compact_write_buf(&state->sock);
-			// Compact the input buffer storage.
-			mm_netbuf_compact_read_buf(&state->sock);
-			// Let serve other sockets.
-			mm_fiber_yield();
+			mm_netbuf_restore_read_pos(&state->sock, &safepoint);
+			ssize_t n = mm_netbuf_fill(&state->sock, 1);
+			if (n == 0 || (n < 0 && errno != ETIMEDOUT)) {
+				state->error = true;
+			} else {
+				goto parse;
+			}
 		}
-		goto parse;
 	}
+
+	if (state->error) {
+		// The last parsed command was incomplete because of the broken connection.
+		// But there may be already a few good ones parsed before. So add a quiet
+		// quit command now. Here there is no difference between ascii and binary
+		// protocols.
+		mc_command_create_simple(state, &mc_command_ascii_quit);
+	} else if (!mm_netbuf_empty(&state->sock)) {
+		// If there is more input in the buffer then try to parse the next command.
+		if (--batch_size) {
+			// Update the safe consumed input position.
+			mm_netbuf_capture_read_pos(&state->sock, &safepoint);
+			goto parse;
+		} else {
+			// Set up to resume after other queued tasks are handled.
+			mm_net_submit_input(sock);
+		}
+	}
+
+	// Process the parsed commands.
+	mc_process_command(state, state->command_first);
 
 	// Transmit buffered results and compact the output buffer storage.
 	mm_netbuf_flush(&state->sock);
