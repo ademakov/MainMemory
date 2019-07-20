@@ -58,16 +58,11 @@ Low priority enhancements:
 * non-blocking log
 * backoff and/or wait queue on ring full
 * non-blocking pool growth
-* Brodnik-style pool growth
 * shrink pools on low demand
 * shrink memcache table on low demand
 * generic work stealing
 * proper future cancellation
 ** let tasks to be canceled across cores
 ** let catch task termination with setjmp/longjmp or libunwind mechanism
-* improve ports:
-** non-blocking
-** allow sending other types
-** function call marshal/dispatch mechanism on top of that
 * try to detect clock adjustments and reset realtime timers accordingly
 * failure trace records
