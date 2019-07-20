@@ -18,9 +18,12 @@
  */
 
 #include "memcache/state.h"
+#include "memcache/memcache.h"
 
 #include "base/event/event.h"
 #include "base/memory/memory.h"
+
+extern struct mm_memcache_config mc_config;
 
 struct mm_net_socket *
 mc_state_create(void)
@@ -35,10 +38,7 @@ mc_state_create(void)
 	state->error = false;
 	state->trash = false;
 
-	// The ascii parser wants 1024 bytes of look-ahead space for each
-	// command. Make the initial size more than that to parse a series
-	// of pipelined short commands without buffer reallocation.
-	mm_netbuf_prepare(&state->sock, 2000, 0);
+	mm_netbuf_prepare(&state->sock, mc_config.rx_chunk_size, mc_config.tx_chunk_size);
 
 	LEAVE();
 	return &state->sock.sock;

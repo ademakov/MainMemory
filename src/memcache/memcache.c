@@ -222,6 +222,19 @@ mm_memcache_init(const struct mm_memcache_config *config)
 	if (config != NULL)
 		mc_config.batch_size = config->batch_size;
 
+	uint32_t rx_chunk_size = 0, tx_chunk_size = 0;
+	if (config != NULL) {
+		rx_chunk_size = config->rx_chunk_size;
+		tx_chunk_size = config->tx_chunk_size;
+	}
+	// The ascii parser wants 1024 bytes of look-ahead space for each
+	// command. Make the initial size more than that to parse a series
+	// of pipelined short commands without buffer reallocation.
+	if (rx_chunk_size < 2000)
+		rx_chunk_size = 2000;
+	mc_config.rx_chunk_size = rx_chunk_size;
+	mc_config.tx_chunk_size = tx_chunk_size;
+
 	// Determine the required memcache table partitions.
 #if ENABLE_MEMCACHE_DELEGATE
 	size_t nbits = 1;

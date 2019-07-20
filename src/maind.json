@@ -10,5 +10,8 @@
 	"memcache-ip" : "127.0.0.1",
 	"memcache-port" : 11211,
 	"memcache-memory" : 64,
-	"memcache-partitions" : 8
+	"memcache-partitions" : 8,
+	"memcache-batch-size" : 100,
+	"memcache-rx-chunk-size" : 2000,
+	"memcache-tx-chunk-size" : 0
 }

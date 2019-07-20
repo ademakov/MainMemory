@@ -66,6 +66,8 @@ struct mm_memcache_config
 	mm_thread_t nparts;
 
 	uint32_t batch_size;
+	uint32_t rx_chunk_size;
+	uint32_t tx_chunk_size;
 
 #if ENABLE_MEMCACHE_DELEGATE
 	struct mm_bitset affinity;
