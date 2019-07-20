@@ -739,6 +739,7 @@ ssize_t NONNULL(1, 2)
 mm_net_read(struct mm_net_socket *sock, void *buffer, const size_t nbytes)
 {
 	ENTER();
+	DEBUG("nbytes: %zu", nbytes);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Check if the socket is closed.
@@ -788,8 +789,10 @@ retry:
 
 check:
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
-	if (n != 0 && (size_t) n < nbytes)
+	if (n != 0 && (size_t) n < nbytes) {
+		DEBUG("reset input ready flag");
 		mm_event_reset_input_ready(&sock->event);
+	}
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -801,6 +804,7 @@ ssize_t NONNULL(1, 2)
 mm_net_write(struct mm_net_socket *sock, const void *buffer, const size_t nbytes)
 {
 	ENTER();
+	DEBUG("nbytes: %zu", nbytes);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Check if the socket is closed.
@@ -850,8 +854,10 @@ retry:
 
 check:
 	// Check for incomplete write.
-	if ((size_t) n < nbytes)
+	if ((size_t) n < nbytes) {
+		DEBUG("reset output ready flag");
 		mm_event_reset_output_ready(&sock->event);
+	}
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -863,6 +869,7 @@ ssize_t NONNULL(1, 2)
 mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, const int iovcnt, const size_t nbytes)
 {
 	ENTER();
+	DEBUG("nbytes: %zu", nbytes);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Check if the socket is closed.
@@ -913,8 +920,10 @@ retry:
 
 check:
 	// Check for incomplete read. But if n is equal to zero then it's closed for reading.
-	if (n != 0 && (size_t) n < nbytes)
+	if (n != 0 && (size_t) n < nbytes) {
+		DEBUG("reset input ready flag");
 		mm_event_reset_input_ready(&sock->event);
+	}
 
 leave:
 	DEBUG("n: %ld", (long) n);
@@ -926,6 +935,7 @@ ssize_t NONNULL(1, 2)
 mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, const int iovcnt, const size_t nbytes)
 {
 	ENTER();
+	DEBUG("nbytes: %zu", nbytes);
 	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
 
 	// Check if the socket is closed.
@@ -976,8 +986,10 @@ retry:
 
 check:
 	// Check for incomplete write.
-	if ((size_t) n < nbytes)
+	if ((size_t) n < nbytes) {
+		DEBUG("reset output ready flag");
 		mm_event_reset_output_ready(&sock->event);
+	}
 
 leave:
 	DEBUG("n: %ld", (long) n);
