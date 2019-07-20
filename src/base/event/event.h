@@ -80,19 +80,21 @@ typedef enum {
 /* Fiber activity flags. */
 #define MM_EVENT_INPUT_STARTED	0x000100
 #define MM_EVENT_OUTPUT_STARTED	0x000200
+#define MM_EVENT_INPUT_RESTART	0x000400
+#define MM_EVENT_OUTPUT_RESTART	0x000800
 
 /* Polling mode for I/O events. */
-#define MM_EVENT_INPUT_TRIGGER	0x000400
-#define MM_EVENT_OUTPUT_TRIGGER	0x000800
 #define MM_EVENT_REGULAR_INPUT	0x001000
 #define MM_EVENT_REGULAR_OUTPUT	0x002000
 #define MM_EVENT_ONESHOT_INPUT	0x004000
 #define MM_EVENT_ONESHOT_OUTPUT	0x008000
+#define MM_EVENT_INPUT_TRIGGER	0x010000
+#define MM_EVENT_OUTPUT_TRIGGER	0x020000
 
 /* Internal notification fd (selfpipe or eventfd). */
-#define MM_EVENT_NOTIFY_FD	0x010000
+#define MM_EVENT_NOTIFY_FD	0x040000
 /* Event dispatch is bound to a single listener. */
-#define MM_EVENT_FIXED_LISTENER	0x020000
+#define MM_EVENT_FIXED_LISTENER	0x080000
 
 /* A sink has a pending I/O event change. */
 #define MM_EVENT_CHANGE		0x100000
@@ -184,6 +186,18 @@ mm_event_output_ready(struct mm_event_fd *sink)
 	return (sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0;
 }
 
+static inline bool NONNULL(1)
+mm_event_input_in_progress(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_INPUT_RESTART | MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_output_in_progress(struct mm_event_fd *sink)
+{
+	return (sink->flags & (MM_EVENT_OUTPUT_RESTART | MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0;
+}
+
 static inline void NONNULL(1)
 mm_event_set_closed(struct mm_event_fd *sink)
 {
@@ -264,10 +278,10 @@ void NONNULL(1)
 mm_event_trigger_output(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_start_input_work(struct mm_event_fd *sink);
+mm_event_submit_input(struct mm_event_fd *sink);
 
 void NONNULL(1)
-mm_event_start_output_work(struct mm_event_fd *sink);
+mm_event_submit_output(struct mm_event_fd *sink);
 
 /**********************************************************************
  * Event listening and notification.

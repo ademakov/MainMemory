@@ -195,10 +195,10 @@ mm_event_complete(struct mm_event_fd *sink)
 		/* Close the sink on error. */
 		if ((flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0)
 			mm_event_close_fd(sink);
+#if ENABLE_SMP
 	} else {
 		/* Mark the sink as having completed the processing of all
 		   the events delivered to the target thread so far. */
-#if ENABLE_SMP
 		/* TODO: release memory fence */
 		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
 #endif
@@ -245,10 +245,9 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
 
 	// Check to see if another input work should be started.
-	if ((sink->flags & (MM_EVENT_INPUT_READY | MM_EVENT_INPUT_ERROR)) != 0
-	    && (sink->flags & MM_EVENT_REGULAR_INPUT) != 0
-	    && !mm_event_input_closed(sink)) {
+	if (mm_event_input_in_progress(sink) && !mm_event_input_closed(sink)) {
 		// Submit an input task for execution again.
+		sink->flags &= ~MM_EVENT_INPUT_RESTART;
 		mm_event_add_task(sink->listener, &sink->io->input, arg);
 	} else {
 		// Done with input for now.
@@ -269,10 +268,9 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
 
 	// Check to see if another output work should be started.
-	if ((sink->flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) != 0
-	    && (sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0
-	    && !mm_event_output_closed(sink)) {
+	if (mm_event_output_in_progress(sink) && !mm_event_output_closed(sink)) {
 		// Submit an output task for execution again.
+		sink->flags &= ~MM_EVENT_OUTPUT_RESTART;
 		mm_event_add_task(sink->listener, &sink->io->output, arg);
 	} else {
 		// Done with output for now.
@@ -475,30 +473,38 @@ mm_event_trigger_output(struct mm_event_fd *sink)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_start_input_work(struct mm_event_fd *sink)
+mm_event_submit_input(struct mm_event_fd *sink)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	// Submit an input work for execution if possible.
-	if (!mm_event_input_closed(sink) && (sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
-		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_event_add_task(sink->listener, &sink->io->input, (mm_value_t) sink);
+	// Ask an input task to run.
+	if (!mm_event_input_closed(sink)) {
+		if ((sink->flags & MM_EVENT_INPUT_STARTED) != 0) {
+			sink->flags |= MM_EVENT_INPUT_RESTART;
+		} else {
+			sink->flags |= MM_EVENT_INPUT_STARTED;
+			mm_event_add_task(sink->listener, &sink->io->input, (mm_value_t) sink);
+		}
 	}
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_start_output_work(struct mm_event_fd *sink)
+mm_event_submit_output(struct mm_event_fd *sink)
 {
 	ENTER();
 	ASSERT(sink->listener->strand == mm_strand_selfptr());
 
-	// Submit an output work for execution if possible.
-	if (!mm_event_output_closed(sink) && (sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
-		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_event_add_task(sink->listener, &sink->io->output, (mm_value_t) sink);
+	// Ask an output task to run.
+	if (!mm_event_output_closed(sink)) {
+		if ((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0) {
+			sink->flags |= MM_EVENT_OUTPUT_RESTART;
+		} else {
+			sink->flags |= MM_EVENT_OUTPUT_STARTED;
+			mm_event_add_task(sink->listener, &sink->io->output, (mm_value_t) sink);
+		}
 	}
 
 	LEAVE();
@@ -567,6 +573,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
+#if ENABLE_SMP
 static void NONNULL(1)
 mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_event_listener *const listener)
 {
@@ -594,6 +601,7 @@ mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_ev
 
 	LEAVE();
 }
+#endif
 
 void NONNULL(1)
 mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)

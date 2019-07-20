@@ -195,6 +195,18 @@ mm_net_is_writer_shutdown(struct mm_net_socket *sock)
 }
 
 static inline void NONNULL(1)
+mm_net_submit_input(struct mm_net_socket *sock)
+{
+	mm_event_submit_input(&sock->event);
+}
+
+static inline void NONNULL(1)
+mm_net_submit_output(struct mm_net_socket *sock)
+{
+	mm_event_submit_output(&sock->event);
+}
+
+static inline void NONNULL(1)
 mm_net_set_read_timeout(struct mm_net_socket *sock, mm_timeout_t timeout)
 {
 	sock->read_timeout = timeout;
