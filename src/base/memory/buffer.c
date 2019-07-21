@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.c - MainMemory data buffers.
  *
- * Copyright (C) 2013-2018  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -271,17 +271,28 @@ mm_buffer_compact(struct mm_buffer *buf)
 	} else {
 		// Release an external segment.
 		mm_buffer_segment_release(buf->head.seg);
-		// Merge the last read segment with preceding ones.
-		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
-		first->meta = area + ((char *) buf->head.seg - (char *) first);
-		first->size = 0;
 		// Account the last read segment size.
+		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
 		consumed += area;
-		// Fix up the tail iterator if needed.
-		if (buf->tail.seg == buf->head.seg)
-			buf->tail.seg = first;
-		// Fix up the head iterator.
-		mm_buffer_reader_set(&buf->head, first);
+		// Check if the last chunk is completely consumed.
+		if (buf->tail.seg != buf->head.seg) {
+			// No, merge the last read segment with preceding ones.
+			first->meta = area + ((char *) buf->head.seg - (char *) first);
+			first->size = 0;
+			// And fix up the head iterator.
+			mm_buffer_reader_set(&buf->head, first);
+		} else {
+			// Yes, release the chunk(s).
+			mm_chunk_destroy_queue(&buf->chunks);
+			// Re-initialize the chunk list.
+			mm_queue_prepare(&buf->chunks);
+			// Re-initialize the stub segment.
+			buf->stub.next = NULL;
+			// Re-initialize the read iterator.
+			mm_buffer_reader_set(&buf->head, &buf->stub.base);
+			// Re-initialize the write iterator.
+			buf->tail.seg = &buf->stub.base;
+		}
 	}
 
 	// Remember the maximum consumed data size to optimize later
