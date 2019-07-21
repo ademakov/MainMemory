@@ -130,6 +130,7 @@ void NONNULL(1)
 mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size)
 {
 	ENTER();
+	DEBUG("chunk size %zu\n", chunk_size);
 
 	// Initialize the chunk list.
 	mm_queue_prepare(&buf->chunks);
@@ -273,7 +274,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		mm_buffer_segment_release(buf->head.seg);
 		// Account the last read segment size.
 		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
-		consumed += area;
+		consumed += area - MM_BUFFER_SEGMENT_SIZE;
 		// Check if the last chunk is completely consumed.
 		if (buf->tail.seg != buf->head.seg) {
 			// No, merge the last read segment with preceding ones.
@@ -300,6 +301,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 	if (buf->chunk_size < consumed) {
 		if (consumed > MM_BUFFER_MAX_CHUNK_SIZE)
 			consumed = MM_BUFFER_MAX_CHUNK_SIZE;
+		DEBUG("next chunk size: %zu\n", consumed);
 		buf->chunk_size = consumed;
 	}
 
