@@ -130,7 +130,7 @@ void NONNULL(1)
 mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size)
 {
 	ENTER();
-	DEBUG("chunk size %zu\n", chunk_size);
+	DEBUG("chunk size %zu", chunk_size);
 
 	// Initialize the chunk list.
 	mm_queue_prepare(&buf->chunks);
@@ -247,6 +247,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		if (mm_buffer_segment_terminal(seg)) {
 			struct mm_chunk *next = mm_chunk_queue_next(chunk);
 			seg = first = mm_buffer_segment_first(next);
+			consumed -= MM_BUFFER_SEGMENT_SIZE;
 
 			// Destroy the previous chunk.
 			mm_queue_remove(&buf->chunks);
@@ -301,8 +302,8 @@ mm_buffer_compact(struct mm_buffer *buf)
 	if (buf->chunk_size < consumed) {
 		if (consumed > MM_BUFFER_MAX_CHUNK_SIZE)
 			consumed = MM_BUFFER_MAX_CHUNK_SIZE;
-		DEBUG("next chunk size: %zu\n", consumed);
 		buf->chunk_size = consumed;
+		DEBUG("next chunk size: %u", buf->chunk_size);
 	}
 
 	LEAVE();
