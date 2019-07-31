@@ -113,8 +113,7 @@ parse:
 		}
 
 		// The input is incomplete, try to get some more.
-		if (!state->error)
-		{
+		if (!state->error) {
 			mm_netbuf_restore_read_pos(&state->sock, &safepoint);
 			ssize_t n = mm_netbuf_fill(&state->sock, 1);
 			if (n == 0 || (n < 0 && errno != ETIMEDOUT)) {
