@@ -1,7 +1,7 @@
 /*
  * base/args.c - Command line argument handling.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,6 +29,8 @@
 static uint32_t mm_args_ec;
 static uint32_t mm_args_ac;
 static char **mm_args_av;
+
+static uint32_t mm_args_verbosity_level;
 
 /**********************************************************************
  * Argument parsing.
@@ -96,9 +98,11 @@ mm_args_parse_name(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 	if (arginfo == NULL)
 		mm_args_error(ninfo, info);
 
-	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_COMMAND) {
+	if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_VERBOSE || arginfo->param == MM_ARGS_COMMAND) {
 		if (sep != NULL)
 			mm_args_error(ninfo, info);
+		if (arginfo->param == MM_ARGS_VERBOSE)
+			mm_args_verbosity_level++;
 		mm_settings_set(arginfo->name, "true", true);
 		return 1;
 	}
@@ -131,7 +135,9 @@ mm_args_parse_flags(uint32_t idx, size_t ninfo, const struct mm_args_info *info)
 		if (arginfo == NULL)
 			mm_args_error(ninfo, info);
 
-		if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_COMMAND) {
+		if (arginfo->param == MM_ARGS_TRIVIAL || arginfo->param == MM_ARGS_VERBOSE || arginfo->param == MM_ARGS_COMMAND) {
+			if (arginfo->param == MM_ARGS_VERBOSE)
+				mm_args_verbosity_level++;
 			mm_settings_set(arginfo->name, "", true);
 			continue;
 		}
@@ -195,7 +201,7 @@ mm_args_init(int ac, char *av[], size_t ninfo, const struct mm_args_info *info)
 	for (size_t i = 0; i < ninfo; i++) {
 		const struct mm_args_info *p = &info[i];
 		if (p->name != NULL && p->param != MM_ARGS_COMMAND) {
-			if (p->param == MM_ARGS_TRIVIAL)
+			if (p->param == MM_ARGS_TRIVIAL || p->param == MM_ARGS_VERBOSE)
 				mm_settings_set_info(p->name, MM_SETTINGS_BOOLEAN);
 			else
 				mm_settings_set_info(p->name, MM_SETTINGS_REGULAR);
@@ -226,6 +232,13 @@ mm_args_argv(void)
 {
 	VERIFY(mm_args_ac != 0 && mm_args_av != NULL);
 	return mm_args_av + mm_args_ac - mm_args_ec;
+}
+
+int
+mm_args_get_verbosity_level(void)
+{
+	VERIFY(mm_args_ac != 0 && mm_args_av != NULL);
+	return mm_args_verbosity_level;
 }
 
 /**********************************************************************

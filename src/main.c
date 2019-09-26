@@ -1,7 +1,7 @@
 /*
  * main.c - MainMemory main routine.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -104,7 +104,7 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	  "\n\t\tdisplay this help text and exit" },
 	{ "version", 'V', MM_ARGS_COMMAND,
 	   "\n\t\tdisplay version information and exit" },
-	{ "verbose", 'v', MM_ARGS_TRIVIAL,
+	{ "verbose", 'v', MM_ARGS_VERBOSE,
 	  "\n\t\tenable verbose messages" },
 	{ "warning", 'w', MM_ARGS_TRIVIAL,
 	  "\n\t\tenable warning messages" },
@@ -160,7 +160,8 @@ main(int argc, char *argv[])
 
 	// Load the configuration file.
 	mm_conf_load(mm_settings_get("config-file", NULL));
-	mm_set_verbose_enabled(mm_settings_get("verbose", NULL) != NULL);
+	if (mm_args_get_verbosity_level() == 0)
+		mm_set_verbose_enabled(mm_settings_get("verbose", NULL) != NULL);
 	mm_set_warning_enabled(mm_settings_get("warning", NULL) != NULL);
 	if (mm_settings_get("daemon", NULL) != NULL)
 		mm_set_daemon_mode("mmd.log");

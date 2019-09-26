@@ -419,6 +419,9 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 
 	// Parse the command line arguments.
 	mm_args_init(argc, argv, ninfo, info);
+	int verbosity = mm_args_get_verbosity_level();
+	if (verbosity)
+		mm_set_verbosity_level(verbosity);
 
 	// Initialize the most basic facilities that do not have any
 	// dependencies.

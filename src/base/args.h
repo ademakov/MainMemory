@@ -1,7 +1,7 @@
 /*
  * base/args.h - Command line argument handling.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,6 +53,8 @@
 typedef enum {
 	/* An option without parameter. */
 	MM_ARGS_TRIVIAL = 0,
+	/* Special option that enables verbose logging. */
+	MM_ARGS_VERBOSE,
 	/* An option without parameter and without a configuration file
 	   counterpart. */
 	MM_ARGS_COMMAND,
@@ -88,6 +90,9 @@ mm_args_argc(void);
 
 char **
 mm_args_argv(void);
+
+int
+mm_args_get_verbosity_level(void);
 
 void
 mm_args_usage(size_t ninfo, const struct mm_args_info *info);
