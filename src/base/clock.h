@@ -32,9 +32,9 @@
 # if defined(CLOCK_REALTIME_COARSE) && defined(CLOCK_MONOTONIC_COARSE)
 #  define MM_CLOCK_REALTIME_COARSE	((mm_clock_t) CLOCK_REALTIME_COARSE)
 #  define MM_CLOCK_MONOTONIC_COARSE	((mm_clock_t) CLOCK_MONOTONIC_COARSE)
-#  ifndef ENABLE_COARSE_CLOCK
-#   define ENABLE_COARSE_CLOCK		1
-#  endif
+# elif defined(CLOCK_REALTIME_FAST) && defined(CLOCK_MONOTONIC_FAST)
+#  define MM_CLOCK_REALTIME_COARSE	((mm_clock_t) CLOCK_REALTIME_FAST)
+#  define MM_CLOCK_MONOTONIC_COARSE	((mm_clock_t) CLOCK_MONOTONIC_FAST)
 # endif
 #else
 # define MM_CLOCK_REALTIME		((mm_clock_t) 0)
@@ -42,7 +42,11 @@
 #endif
 
 #ifndef ENABLE_COARSE_CLOCK
-#define ENABLE_COARSE_CLOCK		0
+# ifdef MM_CLOCK_MONOTONIC_COARSE
+#  define ENABLE_COARSE_CLOCK		1
+# else
+#  define ENABLE_COARSE_CLOCK		0
+# endif
 #endif
 
 typedef int mm_clock_t;
@@ -54,11 +58,14 @@ mm_timeval_t
 mm_clock_gettime_realtime(void);
 mm_timeval_t
 mm_clock_gettime_monotonic(void);
+
 #if ENABLE_COARSE_CLOCK
+
 mm_timeval_t
 mm_clock_gettime_realtime_coarse(void);
 mm_timeval_t
 mm_clock_gettime_monotonic_coarse(void);
+
 #endif
 
 mm_timeval_t
