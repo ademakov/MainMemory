@@ -1,7 +1,7 @@
 /*
  * base/report.c - MainMemory message logging.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -28,7 +28,9 @@
 
 #include <stdarg.h>
 
-static bool mm_verbose_enabled = false;
+static int mm_verbosity_level = 0;
+static bool mm_verbosity_level_is_set = false;
+
 static bool mm_warning_enabled = false;
 
 #if ENABLE_TRACE
@@ -43,9 +45,20 @@ mm_trace_prefix(void);
  **********************************************************************/
 
 void
+mm_set_verbosity_level(int level)
+{
+	if (mm_verbosity_level_is_set)
+		mm_error(0, "overwriting verbosity level");
+	else
+		mm_verbosity_level_is_set = true;
+
+	mm_verbosity_level = level;
+}
+
+void
 mm_set_verbose_enabled(bool value)
 {
-	mm_verbose_enabled = value;
+	mm_set_verbosity_level(value != false);
 }
 
 void
@@ -57,7 +70,7 @@ mm_set_warning_enabled(bool value)
 bool
 mm_get_verbose_enabled(void)
 {
-	return mm_verbose_enabled;
+	return mm_verbosity_level > 0;
 }
 
 bool
@@ -71,9 +84,22 @@ mm_get_warning_enabled(void)
  **********************************************************************/
 
 void NONNULL(1) FORMAT(1, 2)
+mm_brief(const char *restrict msg, ...)
+{
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+}
+
+void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...)
 {
-	if (!mm_verbose_enabled)
+	if (mm_verbosity_level < 1)
 		return;
 
 	mm_trace_prefix();
@@ -87,8 +113,27 @@ mm_verbose(const char *restrict msg, ...)
 }
 
 void NONNULL(1) FORMAT(1, 2)
-mm_brief(const char *restrict msg, ...)
+mm_verbose2(const char *restrict msg, ...)
 {
+	if (mm_verbosity_level < 2)
+		return;
+
+	mm_trace_prefix();
+
+	va_list va;
+	va_start(va, msg);
+	mm_log_vfmt(msg, va);
+	va_end(va);
+
+	mm_log_str("\n");
+}
+
+void NONNULL(1) FORMAT(1, 2)
+mm_verbose3(const char *restrict msg, ...)
+{
+	if (mm_verbosity_level < 3)
+		return;
+
 	mm_trace_prefix();
 
 	va_list va;

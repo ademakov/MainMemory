@@ -1,7 +1,7 @@
 /*
  * base/report.h - MainMemory message logging.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -27,10 +27,16 @@
  **********************************************************************/
 
 void
+mm_set_verbosity_level(int level);
+
+void
 mm_set_verbose_enabled(bool value);
 
 void
 mm_set_warning_enabled(bool value);
+
+int
+mm_get_verbosity_level(void);
 
 bool
 mm_get_verbose_enabled(void);
@@ -43,10 +49,16 @@ mm_get_warning_enabled(void);
  **********************************************************************/
 
 void NONNULL(1) FORMAT(1, 2)
+mm_brief(const char *restrict msg, ...);
+
+void NONNULL(1) FORMAT(1, 2)
 mm_verbose(const char *restrict msg, ...);
 
 void NONNULL(1) FORMAT(1, 2)
-mm_brief(const char *restrict msg, ...);
+mm_verbose2(const char *restrict msg, ...);
+
+void NONNULL(1) FORMAT(1, 2)
+mm_verbose3(const char *restrict msg, ...);
 
 /**********************************************************************
  * Error messages.
