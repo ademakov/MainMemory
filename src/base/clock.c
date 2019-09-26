@@ -1,7 +1,7 @@
 /*
  * base/clock.c - MainMemory time routines.
  *
- * Copyright (C) 2013  Aleksey Demakov
+ * Copyright (C) 2013,2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,9 +25,6 @@
 #endif
 #ifdef HAVE_SYS_TIME_H
 # include <sys/time.h>
-#endif
-#ifdef HAVE_TIME_H
-# include <time.h>
 #endif
 
 #if defined(HAVE_MACH_MACH_TIME_H)
@@ -61,16 +58,46 @@ mm_clock_gettime_monotonic(void)
 	return at * mm_abstime_numer / mm_abstime_denom;
 }
 
+mm_timeval_t
+mm_clock_gettime(mm_clock_t clock)
+{
+	if (clock == MM_CLOCK_REALTIME)
+		return mm_clock_gettime_realtime();
+	else
+		return mm_clock_gettime_monotonic();
+}
+
 #elif defined(CLOCK_REALTIME) && defined(CLOCK_MONOTONIC)
+
+static void
+mm_clock_probe(mm_clock_t clock, const char *name)
+{
+	struct timespec ts;
+
+	if (clock_getres(clock, &ts) < 0)
+		mm_fatal(0, "clock_getres(%s, ...) does not seem to work", name);
+	unsigned long long res = ts.tv_sec * 1000000000ull + ts.tv_nsec;
+
+	if (clock_gettime(clock, &ts) < 0)
+		mm_fatal(0, "clock_gettime(%s, ...) does not seem to work", name);
+	unsigned long long time = ts.tv_sec * 1000000000ull + ts.tv_nsec;
+
+	mm_verbose2("clock %s has resolution %llu ns and time %llu ns -> %llu us", name, res, time, time / 1000);
+}
 
 void
 mm_clock_init(void)
 {
-	struct timespec ts;
-	if (clock_gettime(CLOCK_REALTIME, &ts) < 0)
-		mm_fatal(0, "clock_gettime(CLOCK_REALTIME, ...) does not seem to work");
-	if (clock_gettime(CLOCK_MONOTONIC, &ts) < 0)
-		mm_fatal(0, "clock_gettime(CLOCK_MONOTONIC, ...) does not seem to work");
+#define PROBE(x) mm_clock_probe(x, #x)
+
+	PROBE(CLOCK_REALTIME);
+	PROBE(CLOCK_MONOTONIC);
+#if ENABLE_COARSE_CLOCK
+	PROBE(CLOCK_REALTIME_COARSE);
+	PROBE(CLOCK_MONOTONIC_COARSE);
+#endif
+
+#undef PROBE
 }
 
 mm_timeval_t
@@ -89,17 +116,35 @@ mm_clock_gettime_monotonic(void)
 	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
 
-#else
+#if ENABLE_COARSE_CLOCK
+mm_timeval_t
+mm_clock_gettime_realtime_coarse(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_REALTIME_COARSE, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
+#endif
 
-#error "Unsupported platform"
-
+#if ENABLE_COARSE_CLOCK
+mm_timeval_t mm_clock_gettime_monotonic_coarse(void)
+{
+	struct timespec ts;
+	(void) clock_gettime(CLOCK_MONOTONIC_COARSE, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
+}
 #endif
 
 mm_timeval_t
 mm_clock_gettime(mm_clock_t clock)
 {
-	if (clock == MM_CLOCK_REALTIME)
-		return mm_clock_gettime_realtime();
-	else
-		return mm_clock_gettime_monotonic();
+	struct timespec ts;
+	(void) clock_gettime(clock, &ts);
+	return ts.tv_sec * 1000000 + ts.tv_nsec / 1000;
 }
+
+#else
+
+#error "Unsupported platform"
+
+#endif
