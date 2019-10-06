@@ -1,7 +1,7 @@
 /*
  * base/timeq.c - MainMemory time queue.
  *
- * Copyright (C) 2013-2015  Ivan Demakov, Aleksey Demakov
+ * Copyright (C) 2013-2015,2019  Ivan Demakov, Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,48 +24,25 @@
 #define MM_TIMEQ_T1_WIDTH_MIN	1
 #define MM_TIMEQ_T1_COUNT_MIN	4
 
-/*
- * The algorithm here is similar to the one described in the following paper:
- *
- * Rick SM Goh and I L-J Thng,
- * “MList: An Efficient Pending Event Set Structure For Discrete Event Simulation”
- *
- * The first intent was to implement the Ladder Queue algorithm, but so far it
- * seems an overkill. If the current algorithm does not work well then either
- * the Ladder Queue or some alternative like implicit heap should be tried.
- */
-
-struct mm_timeq
-{
-    struct mm_list fe;		/* front end entries */
-    int fe_num;			/* number of entries in the front end */
-
-    struct mm_list *t1;		/* tier 1 entries */
-    mm_timeval_t t1_start;	/* T1 buckets base */
-    mm_timeval_t t1_width;	/* T1 bucket width */
-    int t1_count;		/* number of all T1 buckets */
-    int t1_index;		/* index of the first used T1 bucket */
-
-    struct mm_list t2;		/* tier 2 entries */
-    mm_timeval_t t2_start;	/* t2 buckets base */
-    mm_timeval_t t2_min;	/* minimum timestamp of all events in T2 */
-    mm_timeval_t t2_max;	/* maximum timestamp of all events in T2 */
-    int t2_num;			/* number of entries in the tier 2 */
-
-    mm_timeval_t t1_width_min;
-    mm_timeval_t t1_width_max;
-    int t1_count_min;
-    int t1_count_max;
-
-    mm_arena_t arena;
-};
-
-
-struct mm_timeq *
+struct mm_timeq * NONNULL(1)
 mm_timeq_create(mm_arena_t arena)
 {
-	struct mm_timeq *timeq = mm_arena_alloc(arena, sizeof(struct mm_timeq));
+	struct mm_timeq* timeq = mm_arena_alloc(arena, sizeof(struct mm_timeq));
+	mm_timeq_prepare(timeq, arena);
+	return timeq;
+}
 
+void NONNULL(1)
+mm_timeq_destroy(struct mm_timeq *timeq)
+{
+	mm_arena_t arena = timeq->arena;
+	mm_timeq_cleanup(timeq);
+	mm_arena_free(arena, timeq);
+}
+
+void NONNULL(1)
+mm_timeq_prepare(struct mm_timeq *timeq, mm_arena_t arena)
+{
 	mm_list_prepare(&timeq->fe);
 
 	timeq->t1 = NULL;
@@ -86,40 +63,33 @@ mm_timeq_create(mm_arena_t arena)
 	timeq->t1_count_max = 0;
 
 	timeq->arena = arena;
-
-	return timeq;
 }
 
-void
-mm_timeq_destroy(struct mm_timeq *timeq)
+void NONNULL(1)
+mm_timeq_cleanup(struct mm_timeq *timeq)
 {
-//	ASSERT(mm_list_empty(&timeq->fe));
-//	ASSERT(timeq->t1_index <= timeq->t1_count);
-//	ASSERT(mm_list_empty(&timeq->t2));
-
 	mm_arena_free(timeq->arena, timeq->t1);
-	mm_arena_free(timeq->arena, timeq);
 }
 
-void
+void NONNULL(1)
 mm_timeq_set_min_bucket_width(struct mm_timeq *timeq, mm_timeval_t n)
 {
 	timeq->t1_width_min = max(MM_TIMEQ_T1_WIDTH_MIN, n);
 }
 
-void
+void NONNULL(1)
 mm_timeq_set_max_bucket_width(struct mm_timeq *timeq, mm_timeval_t n)
 {
 	timeq->t1_width_max = n;
 }
 
-void
+void NONNULL(1)
 mm_timeq_set_min_bucket_count(struct mm_timeq *timeq, int n)
 {
 	timeq->t1_count_min = max(MM_TIMEQ_T1_COUNT_MIN, n);
 }
 
-void
+void NONNULL(1)
 mm_timeq_set_max_bucket_count(struct mm_timeq *timeq, int n)
 {
 	timeq->t1_count_max = n;
@@ -174,7 +144,7 @@ mm_timeq_insert_t2(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	DEBUG("entry: %p, t2 num: %d", entry, timeq->t2_num);
 }
 
-void
+void NONNULL(1)
 mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	ASSERT(entry->index == MM_TIMEQ_INDEX_NO);
@@ -188,7 +158,7 @@ mm_timeq_insert(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	}
 }
 
-void
+void NONNULL(1)
 mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 {
 	DEBUG("entry: %p", entry);
@@ -206,7 +176,7 @@ mm_timeq_delete(struct mm_timeq *timeq, struct mm_timeq_entry *entry)
 	entry->index = MM_TIMEQ_INDEX_NO;
 }
 
-struct mm_timeq_entry *
+struct mm_timeq_entry * NONNULL(1)
 mm_timeq_getmin(struct mm_timeq *timeq)
 {
 	struct mm_timeq_entry *entry;
