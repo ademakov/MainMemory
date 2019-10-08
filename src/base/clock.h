@@ -49,6 +49,11 @@
 # endif
 #endif
 
+#ifndef MM_CLOCK_MONOTONIC_COARSE
+# define MM_CLOCK_REALTIME_COARSE	MM_CLOCK_REALTIME
+# define MM_CLOCK_MONOTONIC_COARSE	MM_CLOCK_MONOTONIC
+#endif
+
 typedef int mm_clock_t;
 
 void
@@ -65,6 +70,11 @@ mm_timeval_t
 mm_clock_gettime_realtime_coarse(void);
 mm_timeval_t
 mm_clock_gettime_monotonic_coarse(void);
+
+#else
+
+#define mm_clock_gettime_realtime_coarse mm_clock_gettime_realtime
+#define mm_clock_gettime_monotonic_coarse mm_clock_gettime_monotonic
 
 #endif
 
