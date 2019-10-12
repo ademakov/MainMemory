@@ -239,35 +239,11 @@ mm_strand_halt(struct mm_strand *strand)
 {
 	ENTER();
 
-	// Get the closest expiring timer if any.
-	mm_timeval_t wake_time = mm_timer_next(&strand->time_manager);
-	if (wake_time != MM_TIMEVAL_MAX) {
-		// Calculate the timeout.
-		mm_timeout_t timeout = MM_STRAND_HALT_TIMEOUT;
-		mm_timeval_t time = mm_strand_gettime(strand);
-		if (wake_time < (time + timeout)) {
-			if (wake_time > time)
-				timeout = wake_time - time;
-			else
-				timeout = 0;
-		}
+	// Halt the strand waiting for incoming events.
+	mm_event_listen(strand->listener, MM_STRAND_HALT_TIMEOUT);
 
-		// Halt the strand waiting for incoming events.
-		mm_event_listen(strand->listener, timeout);
-
-		// Indicate that clocks need to be updated.
-		mm_timer_resetclocks(&strand->time_manager);
-
-		// Fire reached timers.
-		mm_timer_tick(&strand->time_manager);
-
-	} else {
-		// Halt the strand waiting for incoming events.
-		mm_event_listen(strand->listener, MM_STRAND_HALT_TIMEOUT);
-
-		// Indicate that clocks need to be updated.
-		mm_timer_resetclocks(&strand->time_manager);
-	}
+	// Indicate that clocks need to be updated.
+	mm_timer_resetclocks(&strand->time_manager);
 
 	LEAVE();
 }
