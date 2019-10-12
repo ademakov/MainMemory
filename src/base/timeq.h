@@ -105,13 +105,23 @@ struct mm_timeq_entry
 };
 
 static inline void NONNULL(1)
-mm_timeq_entry_init(struct mm_timeq_entry *entry,
-		    mm_timeval_t value,
-		    mm_timeq_ident_t ident)
+mm_timeq_entry_prepare(struct mm_timeq_entry *entry, mm_timeq_ident_t ident)
 {
-	entry->value = value;
+	entry->value = MM_TIMEVAL_MAX;
 	entry->index = MM_TIMEQ_INDEX_NO;
 	entry->ident = ident;
+}
+
+static inline void NONNULL(1)
+mm_timeq_entry_settime(struct mm_timeq_entry *entry, mm_timeval_t value)
+{
+	entry->value = value;
+}
+
+static inline bool NONNULL(1)
+mm_timeq_entry_queued(struct mm_timeq_entry *entry)
+{
+	return (entry->index != MM_TIMEQ_INDEX_NO);
 }
 
 void NONNULL(1)

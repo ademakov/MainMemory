@@ -87,12 +87,6 @@ MM_EVENT_TASK(mm_timer_task, mm_timer_execute, mm_timer_complete, mm_event_reass
  * Timer handling.
  **********************************************************************/
 
-static bool
-mm_timer_is_armed(struct mm_timeq_entry *entry)
-{
-	return (entry->index != MM_TIMEQ_INDEX_NO);
-}
-
 static void
 mm_timer_fire(struct mm_time_manager *manager, struct mm_timeq_entry *entry)
 {
@@ -213,7 +207,7 @@ mm_timer_create(mm_clock_t clock, mm_routine_t start, mm_value_t start_arg)
 		goto leave;
 	}
 
-	mm_timeq_entry_init(&timer->entry, MM_TIMEVAL_MAX, timer_id);
+	mm_timeq_entry_prepare(&timer->entry, timer_id);
 	timer->clock = clock;
 	timer->active = false;
 	timer->start = start;
@@ -236,7 +230,7 @@ mm_timer_destroy(mm_timer_t timer_id)
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
-	if (mm_timer_is_armed(&timer->entry))
+	if (mm_timeq_entry_queued(&timer->entry))
 		mm_timeq_delete(manager->time_queue, &timer->entry);
 
 	// TODO: Check if the timer is still active and delay its
@@ -256,7 +250,7 @@ mm_timer_settime(mm_timer_t timer_id, bool abstime, mm_timeval_t value, mm_timev
 	struct mm_timer *timer = mm_pool_idx2ptr(&manager->timer_pool, timer_id);
 	ASSERT(timer != NULL);
 
-	if (mm_timer_is_armed(&timer->entry)) {
+	if (mm_timeq_entry_queued(&timer->entry)) {
 		// TODO: Check if the timer is still active and delay its
 		// re-arming in this case.
 		mm_timeq_delete(manager->time_queue, &timer->entry);
@@ -313,7 +307,8 @@ mm_timer_block(mm_timeout_t timeout)
 
 	struct mm_timer_resume timer = { .manager = manager,
 					 .task = mm_fiber_selfptr() };
-	mm_timeq_entry_init(&timer.entry, time, MM_TIMER_BLOCK);
+	mm_timeq_entry_prepare(&timer.entry, MM_TIMER_BLOCK);
+	mm_timeq_entry_settime(&timer.entry, time);
 
 	mm_fiber_cleanup_push(mm_timer_block_cleanup, &timer);
 
@@ -324,7 +319,7 @@ mm_timer_block(mm_timeout_t timeout)
 	mm_fiber_block();
 #endif
 
-	mm_fiber_cleanup_pop(mm_timer_is_armed(&timer.entry));
+	mm_fiber_cleanup_pop(mm_timeq_entry_queued(&timer.entry));
 
 	LEAVE();
 }
