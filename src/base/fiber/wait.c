@@ -23,7 +23,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/timer.h"
 #include "base/memory/pool.h"
 
 // An entry for a waiting fiber.
@@ -241,7 +240,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	mm_regular_unlock(lock);
 
 	// Wait for a wakeup signal.
-	mm_timer_block(timeout);
+	mm_fiber_pause(timeout);
 
 	// Reset the fiber reference.
 	mm_memory_store(wait->fiber, NULL);
@@ -329,7 +328,7 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 
 	if (!mm_memory_load(waitset->signal)) {
 		// Wait for a wakeup signal.
-		mm_timer_block(timeout);
+		mm_fiber_pause(timeout);
 	}
 
 	// Reset the fiber reference.

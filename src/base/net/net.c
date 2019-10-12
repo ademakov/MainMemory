@@ -26,7 +26,6 @@
 #include "base/stdcall.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/timer.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/memory/pool.h"
@@ -667,7 +666,7 @@ mm_net_input_wait(struct mm_strand *strand, struct mm_net_socket *sock, const mm
 				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
 				sock->event.input_fiber = strand->fiber;
 				ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
-				mm_timer_block(timeout);
+				mm_fiber_pause(timeout);
 				sock->event.input_fiber = NULL;
 			} else {
 				if (sock->read_timeout != 0)
@@ -715,7 +714,7 @@ mm_net_output_wait(struct mm_strand *strand, struct mm_net_socket *sock, const m
 				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
 				sock->event.output_fiber = strand->fiber;
 				ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
-				mm_timer_block(timeout);
+				mm_fiber_pause(timeout);
 				sock->event.output_fiber = NULL;
 			} else {
 				if (sock->write_timeout != 0)
