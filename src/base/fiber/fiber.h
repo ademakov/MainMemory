@@ -228,12 +228,16 @@ mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority);
 
 # define mm_fiber_yield() mm_fiber_yield_at(__LOCATION__, __FUNCTION__)
 # define mm_fiber_block() mm_fiber_block_at(__LOCATION__, __FUNCTION__)
+# define mm_fiber_timed_block(t) mm_fiber_timed_block_at(t, __LOCATION__, __FUNCTION__)
 
 void NONNULL(1, 2)
 mm_fiber_yield_at(const char *location, const char *function);
 
 void NONNULL(1, 2)
 mm_fiber_block_at(const char *location, const char *function);
+
+void NONNULL(2, 3)
+mm_fiber_timed_block_at(mm_timeout_t timeout, const char *location, const char *function);
 
 #else /* !ENABLE_FIBER_LOCATION */
 
@@ -242,6 +246,9 @@ mm_fiber_yield(void);
 
 void
 mm_fiber_block(void);
+
+void
+mm_fiber_timed_block(mm_timeout_t timeout);
 
 #endif /* !ENABLE_FIBER_LOCATION */
 
