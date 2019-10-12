@@ -485,7 +485,7 @@ mm_fiber_block(void)
 #endif
 
 static void
-mm_fiber_timed_block_cleanup(struct mm_event_timer *timer)
+mm_fiber_pause_cleanup(struct mm_event_timer *timer)
 {
 	struct mm_strand *const strand = mm_strand_selfptr();
 	struct mm_event_listener *const listener = strand->listener;
@@ -494,10 +494,10 @@ mm_fiber_timed_block_cleanup(struct mm_event_timer *timer)
 
 #if ENABLE_FIBER_LOCATION
 void NONNULL(2, 3)
-mm_fiber_timed_block_at(mm_timeout_t timeout, const char *location, const char *function)
+mm_fiber_pause_at(mm_timeout_t timeout, const char *location, const char *function)
 #else
 void
-mm_fiber_timed_block(mm_timeout_t timeout)
+mm_fiber_pause(mm_timeout_t timeout)
 #endif
 {
 	ENTER();
@@ -515,7 +515,7 @@ mm_fiber_timed_block(mm_timeout_t timeout)
 	fiber->function = function;
 #endif
 
-	mm_fiber_cleanup_push(mm_fiber_timed_block_cleanup, &timer);
+	mm_fiber_cleanup_push(mm_fiber_pause_cleanup, &timer);
 	mm_fiber_switch(MM_FIBER_BLOCKED);
 	mm_fiber_cleanup_pop(false);
 
