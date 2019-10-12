@@ -511,6 +511,68 @@ mm_event_submit_output(struct mm_event_fd *sink)
 }
 
 /**********************************************************************
+ * Timer event sink control.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_event_task *task)
+{
+	mm_timeq_entry_prepare(&sink->entry, 0);
+	sink->fiber = NULL;
+	sink->task = task;
+}
+
+void NONNULL(1, 2)
+mm_event_prepare_fiber_timer(struct mm_event_timer *sink, struct mm_fiber *fiber)
+{
+	mm_timeq_entry_prepare(&sink->entry, 0);
+	sink->fiber = fiber;
+	sink->task = NULL;
+}
+
+void NONNULL(1, 2)
+mm_event_arm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (mm_event_timer_armed(sink))
+		mm_timeq_delete(&listener->timer_queue, &sink->entry);
+	mm_timeq_insert(&listener->timer_queue, &sink->entry);
+
+	mm_timeval_t time = mm_clock_gettime_monotonic_coarse() + timeout;
+	mm_timeq_entry_settime(&sink->entry, time);
+	DEBUG("armed timer: %lld", (long long) time);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_disarm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink)
+{
+	ENTER();
+
+	if (mm_event_timer_armed(sink))
+		mm_timeq_delete(&listener->timer_queue, &sink->entry);
+
+	LEAVE();
+}
+
+static void
+mm_event_timer_fire(struct mm_event_listener *listener, struct mm_timeq_entry *entry)
+{
+	ENTER();
+
+	struct mm_event_timer *sink = containerof(entry, struct mm_event_timer, entry);
+	if (sink->fiber != NULL) {
+		mm_fiber_run(sink->fiber);
+	} else {
+		mm_event_add_task(listener, sink->task, (mm_value_t) sink);
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Event listening and notification.
  **********************************************************************/
 
@@ -609,6 +671,8 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 	ENTER();
 
 	struct mm_event_dispatch *const dispatch = listener->dispatch;
+	struct mm_timeq_entry *timer = mm_timeq_getmin(&listener->timer_queue);
+
 	if (listener->spin_count) {
 		// If previously received some events then speculate that some
 		// more are coming so keep spinning for a while to avoid extra
@@ -619,6 +683,16 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 		// There are event poll changes that need to be immediately
 		// acknowledged.
 		timeout = 0;
+	} else if (timer != NULL) {
+		mm_timeval_t timer_time = timer->value;
+		mm_timeval_t clock_time = mm_clock_gettime_monotonic_coarse();
+		if (timer_time <= clock_time) {
+			timeout = 0;
+		} else {
+			mm_timeval_t timer_timeout = timer_time - clock_time;
+			if (timeout > timer_timeout)
+				timeout = timer_timeout;
+		}
 	}
 
 #if ENABLE_SMP
@@ -672,10 +746,23 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 	}
 #endif // !ENABLE_SMP
 
+	// Execute the timers which time has come.
+	if (timer != NULL) {
+		mm_timeval_t clock_time = mm_clock_gettime_monotonic_coarse();
+		while (timer != NULL && timer->value <= clock_time) {
+			// Remove the timer from the queue.
+			mm_timeq_delete(&listener->timer_queue, timer);
+			// Execute the timer action.
+			mm_event_timer_fire(listener, timer);
+			// Get the next timer.
+			timer = mm_timeq_getmin(&listener->timer_queue);
+		}
+	}
+
 	LEAVE();
 }
 
-void NONNULL(1)
+static void NONNULL(1)
 mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
 	ENTER();

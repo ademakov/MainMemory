@@ -314,6 +314,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 		sz = MM_EVENT_LISTINER_QUEUE_MIN_SIZE;
 	listener->async_queue = mm_ring_mpmc_create(sz);
 
+	// Prepare the timer queue.
+	mm_timeq_prepare(&listener->timer_queue, &mm_regular_space.xarena);
+
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
 #elif ENABLE_MACH_SEMAPHORE

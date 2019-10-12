@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/ring.h"
+#include "base/timeq.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
@@ -126,6 +127,9 @@ struct mm_event_listener
 
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc *async_queue;
+
+	/* Queue of delayed tasks. */
+	struct mm_timeq timer_queue;
 
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;

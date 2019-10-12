@@ -22,13 +22,14 @@
 
 #include "common.h"
 #include "base/list.h"
+#include "base/timeq.h"
 #include "base/event/task.h"
 
 /* Forward declarations. */
 struct mm_event_dispatch;
 struct mm_event_listener;
 
-/* Event types. */
+/* I/O event IDs. */
 typedef enum {
 	MM_EVENT_INDEX_INPUT = 0,
 	MM_EVENT_INDEX_INPUT_ERROR = 1,
@@ -118,7 +119,8 @@ struct mm_event_fd
 {
 	/* Task entries to perform I/O. */
 	struct mm_event_io *io;
-	/* Listener (along with associated thread) that owns the sink. */
+
+	/* The listener that owns the sink. */
 	struct mm_event_listener *listener;
 
 	/* File descriptor to watch. */
@@ -153,7 +155,31 @@ struct mm_event_fd
 };
 
 /**********************************************************************
- * Event sink status.
+ * Timer event sink.
+ **********************************************************************/
+
+/* Timer event sink. */
+struct mm_event_timer
+{
+	/* A timer queue node. */
+	struct mm_timeq_entry entry;
+
+	/* A fiber to wake up. */
+	struct mm_fiber *fiber;
+
+	/* A task entry to fire. */
+	struct mm_event_task *task;
+};
+
+/**********************************************************************
+ * Event handling entry point.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout);
+
+/**********************************************************************
+ * I/O event sink status.
  **********************************************************************/
 
 static inline bool NONNULL(1)
@@ -235,18 +261,7 @@ mm_event_reset_output_ready(struct mm_event_fd *sink)
 }
 
 /**********************************************************************
- * Event sink activity.
- **********************************************************************/
-
-/* Start asynchronous processing of an event as it is delivered to
-   the target thread. */
-void NONNULL(1)
-mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags);
-void NONNULL(1)
-mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
-
-/**********************************************************************
- * Event sink I/O control.
+ * I/O event sink control.
  **********************************************************************/
 
 /* Prepare I/O tasks for an I/O event sink. */
@@ -284,14 +299,37 @@ void NONNULL(1)
 mm_event_submit_output(struct mm_event_fd *sink);
 
 /**********************************************************************
- * Event listening and notification.
+ * Timer event sink control.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_event_task *task);
+
+void NONNULL(1, 2)
+mm_event_prepare_fiber_timer(struct mm_event_timer *sink, struct mm_fiber *fiber);
+
+static inline bool NONNULL(1)
+mm_event_timer_armed(struct mm_event_timer *sink)
+{
+	return mm_timeq_entry_queued(&sink->entry);
+}
+
+void NONNULL(1, 2)
+mm_event_arm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink, mm_timeout_t timeout);
+
+void NONNULL(1, 2)
+mm_event_disarm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink);
+
+/**********************************************************************
+ * Internal event processing for I/O event sinks: start asynchronous
+   handling of an event as it is delivered to the target thread.
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout);
+mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags);
 
 void NONNULL(1)
-mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp);
+mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
 
 /**********************************************************************
  * Asynchronous procedure call basic declarations.
