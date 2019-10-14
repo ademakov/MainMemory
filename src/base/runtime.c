@@ -261,10 +261,7 @@ mm_regular_call_thread_stop_hooks(void)
 static void
 mm_regular_boot_call_start_hooks(struct mm_strand *strand)
 {
-	struct mm_private_space *space = mm_private_space_get();
 	if (MM_STRAND_IS_PRIMARY(strand)) {
-		mm_timer_prepare(&strand->time_manager, &space->xarena);
-
 		// Call the start hooks on the primary strand.
 		mm_regular_call_start_hooks();
 		mm_thread_local_summary(mm_domain_selfptr());
@@ -276,7 +273,6 @@ mm_regular_boot_call_start_hooks(struct mm_strand *strand)
 		// the start hooks that initialize shared resources.
 		mm_domain_barrier();
 
-		mm_timer_prepare(&strand->time_manager, &space->xarena);
 		mm_regular_call_thread_start_hooks();
 	}
 }
@@ -291,7 +287,6 @@ mm_regular_boot_call_stop_hooks(struct mm_strand *strand)
 		mm_regular_call_stop_hooks();
 
 	mm_regular_call_thread_stop_hooks();
-	mm_timer_cleanup(&strand->time_manager);
 }
 
 /* A per-strand thread entry point. */

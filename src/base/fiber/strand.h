@@ -25,7 +25,6 @@
 #include "base/list.h"
 #include "base/event/task.h"
 #include "base/fiber/runq.h"
-#include "base/fiber/timer.h"
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
@@ -79,9 +78,6 @@ struct mm_strand
 	/* Cache of free wait entries. */
 	struct mm_wait_cache wait_cache;
 
-	/* Time-related data. */
-	struct mm_time_manager time_manager;
-
 	/* The underlying thread. */
 	struct mm_thread *thread;
 
@@ -133,18 +129,6 @@ static inline struct mm_strand *
 mm_strand_selfptr(void)
 {
 	return __mm_strand_self;
-}
-
-static inline mm_timeval_t
-mm_strand_gettime(struct mm_strand *strand)
-{
-	return mm_timer_getclocktime(&strand->time_manager);
-}
-
-static inline mm_timeval_t
-mm_strand_getrealtime(struct mm_strand *strand)
-{
-	return mm_timer_getrealclocktime(&strand->time_manager);
 }
 
 /**********************************************************************

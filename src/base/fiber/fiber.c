@@ -22,7 +22,6 @@
 #include "base/bitops.h"
 #include "base/logger.h"
 #include "base/report.h"
-#include "base/fiber/timer.h"
 #include "base/memory/memory.h"
 #include "base/thread/thread.h"
 

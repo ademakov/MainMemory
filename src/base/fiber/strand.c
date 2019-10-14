@@ -234,35 +234,22 @@ mm_strand_trim(struct mm_strand *strand)
 	LEAVE();
 }
 
-static void
-mm_strand_halt(struct mm_strand *strand)
-{
-	ENTER();
-
-	// Halt the strand waiting for incoming events.
-	mm_event_listen(strand->listener, MM_STRAND_HALT_TIMEOUT);
-
-	// Indicate that clocks need to be updated.
-	mm_timer_resetclocks(&strand->time_manager);
-
-	LEAVE();
-}
-
 static mm_value_t
 mm_strand_master(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_strand *strand = (struct mm_strand *) arg;
+	struct mm_strand *const strand = (struct mm_strand *) arg;
+	struct mm_event_listener *const listener = strand->listener;
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
 		// Check to see if there are pending tasks.
-		if (mm_event_task_list_empty(&strand->listener->tasks)) {
+		if (mm_event_task_list_empty(&listener->tasks)) {
 			// Release excessive resources allocated by fibers.
 			mm_strand_trim(strand);
 			// Halt waiting for any incoming events.
-			mm_strand_halt(strand);
+			mm_event_listen(listener, MM_STRAND_HALT_TIMEOUT);
 		}
 
 		// Activate a worker fiber to handle pending tasks.
@@ -274,7 +261,7 @@ mm_strand_master(mm_value_t arg)
 			if (mm_get_verbose_enabled())
 				mm_strand_print_fibers(strand);
 			// Create a new worker if feasible.
-			if (!mm_event_task_list_empty(&strand->listener->tasks)
+			if (!mm_event_task_list_empty(&listener->tasks)
 			    && strand->nworkers < strand->nworkers_max)
 				mm_strand_worker_create(strand);
 		}
