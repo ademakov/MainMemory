@@ -27,6 +27,7 @@
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
 #include "base/event/task.h"
+#include "base/event/timesource.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -130,6 +131,9 @@ struct mm_event_listener
 
 	/* Queue of delayed tasks. */
 	struct mm_timeq timer_queue;
+
+	/* Fast but coarse clock. */
+	struct mm_event_timesource timesource;
 
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;

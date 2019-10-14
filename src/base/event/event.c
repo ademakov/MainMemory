@@ -511,6 +511,22 @@ mm_event_submit_output(struct mm_event_fd *sink)
 }
 
 /**********************************************************************
+ * Event time.
+ **********************************************************************/
+
+mm_timeval_t NONNULL(1)
+mm_event_gettime(struct mm_event_listener *listener)
+{
+	return mm_event_timesource_gettime(&listener->timesource);
+}
+
+mm_timeval_t NONNULL(1)
+mm_event_getrealtime(struct mm_event_listener *listener)
+{
+	return mm_event_timesource_getrealtime(&listener->timesource);
+}
+
+/**********************************************************************
  * Timer event sink control.
  **********************************************************************/
 
@@ -539,7 +555,7 @@ mm_event_arm_timer(struct mm_event_listener *listener, struct mm_event_timer *si
 		mm_timeq_delete(&listener->timer_queue, &sink->entry);
 	mm_timeq_insert(&listener->timer_queue, &sink->entry);
 
-	mm_timeval_t time = mm_clock_gettime_monotonic_coarse() + timeout;
+	mm_timeval_t time = mm_event_gettime(listener) + timeout;
 	mm_timeq_entry_settime(&sink->entry, time);
 	DEBUG("armed timer: %lld", (long long) time);
 
@@ -685,7 +701,7 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 		timeout = 0;
 	} else if (timer != NULL) {
 		mm_timeval_t timer_time = timer->value;
-		mm_timeval_t clock_time = mm_clock_gettime_monotonic_coarse();
+		mm_timeval_t clock_time = mm_event_gettime(listener);
 		if (timer_time <= clock_time) {
 			timeout = 0;
 		} else {
@@ -746,9 +762,13 @@ mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
 	}
 #endif // !ENABLE_SMP
 
+	// Indicate that clocks need to be updated.
+	if (timeout)
+		mm_event_timesource_refresh(&listener->timesource);
+
 	// Execute the timers which time has come.
 	if (timer != NULL) {
-		mm_timeval_t clock_time = mm_clock_gettime_monotonic_coarse();
+		mm_timeval_t clock_time = mm_event_gettime(listener);
 		while (timer != NULL && timer->value <= clock_time) {
 			// Remove the timer from the queue.
 			mm_timeq_delete(&listener->timer_queue, timer);
