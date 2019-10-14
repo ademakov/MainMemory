@@ -291,8 +291,9 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_timeval_t deadline = mm_strand_gettime(strand) + timeout;
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_listener *const listener = strand->listener;
+	mm_timeval_t deadline = mm_event_gettime(listener) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
@@ -306,7 +307,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_strand_gettime(strand)) {
+		if (deadline <= mm_event_gettime(listener)) {
 			DEBUG("future timed out");
 			break;
 		}
@@ -433,8 +434,9 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_timeval_t deadline = mm_strand_gettime(strand) + timeout;
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_listener *const listener = strand->listener;
+	mm_timeval_t deadline = mm_event_gettime(listener) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_future_unique_start(future, NULL);
@@ -446,7 +448,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_strand_gettime(strand)) {
+		if (deadline <= mm_event_gettime(listener)) {
 			DEBUG("future timed out");
 			break;
 		}

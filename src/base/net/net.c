@@ -648,25 +648,24 @@ mm_net_output_closed(struct mm_net_socket *sock)
 
 // Block the fiber waiting for the socket to become read ready.
 static ssize_t
-mm_net_input_wait(struct mm_strand *strand, struct mm_net_socket *sock, const mm_timeval_t deadline)
+mm_net_input_wait(struct mm_net_socket *sock, const mm_timeval_t deadline)
 {
 	ENTER();
 	int rc = 0;
 
 	do {
 		if (deadline == MM_TIMEVAL_MAX) {
-			sock->event.input_fiber = strand->fiber;
+			sock->event.input_fiber = sock->event.listener->strand->fiber;
 			ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
 			mm_fiber_block();
 			sock->event.input_fiber = NULL;
 		} else {
-			mm_timeval_t time = mm_strand_gettime(strand);
+			mm_timeval_t time = mm_event_gettime(sock->event.listener);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-				sock->event.input_fiber = strand->fiber;
+				sock->event.input_fiber = sock->event.listener->strand->fiber;
 				ASSERT(sock->event.input_fiber == mm_fiber_selfptr());
-				mm_fiber_pause(timeout);
+				mm_fiber_pause(deadline - time);
 				sock->event.input_fiber = NULL;
 			} else {
 				if (sock->read_timeout != 0)
@@ -696,25 +695,24 @@ mm_net_input_wait(struct mm_strand *strand, struct mm_net_socket *sock, const mm
 
 // Block the fiber waiting for the socket to become write ready.
 static ssize_t
-mm_net_output_wait(struct mm_strand *strand, struct mm_net_socket *sock, const mm_timeval_t deadline)
+mm_net_output_wait(struct mm_net_socket *sock, const mm_timeval_t deadline)
 {
 	ENTER();
 	int rc = 0;
 
 	do {
 		if (deadline == MM_TIMEVAL_MAX) {
-			sock->event.output_fiber = strand->fiber;
+			sock->event.output_fiber = sock->event.listener->strand->fiber;
 			ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
 			mm_fiber_block();
 			sock->event.output_fiber = NULL;
 		} else {
-			mm_timeval_t time = mm_strand_gettime(strand);
+			mm_timeval_t time = mm_event_gettime(sock->event.listener);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				const mm_timeout_t timeout = deadline - mm_strand_gettime(strand);
-				sock->event.output_fiber = strand->fiber;
+				sock->event.output_fiber = sock->event.listener->strand->fiber;
 				ASSERT(sock->event.output_fiber == mm_fiber_selfptr());
-				mm_fiber_pause(timeout);
+				mm_fiber_pause(deadline - time);
 				sock->event.output_fiber = NULL;
 			} else {
 				if (sock->write_timeout != 0)
@@ -768,12 +766,9 @@ retry:
 	}
 
 	// Remember the wait time.
-	struct mm_strand *strand = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		strand = mm_net_get_socket_strand(sock);
-		deadline = mm_strand_gettime(strand) + sock->read_timeout;
-	}
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_event_gettime(sock->event.listener) + sock->read_timeout;
 
 	for (;;) {
 		// Turn on the input event notification if needed.
@@ -790,7 +785,7 @@ retry:
 		}
 
 		// Wait for input readiness.
-		if ((n = mm_net_input_wait(strand, sock, deadline)) < 0)
+		if ((n = mm_net_input_wait(sock, deadline)) < 0)
 			goto leave;
 	}
 
@@ -833,12 +828,9 @@ retry:
 	}
 
 	// Remember the wait time.
-	struct mm_strand *strand = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		strand = mm_net_get_socket_strand(sock);
-		deadline = mm_strand_gettime(strand) + sock->write_timeout;
-	}
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_event_gettime(sock->event.listener) + sock->write_timeout;
 
 	for (;;) {
 		// Turn on the output event notification if needed.
@@ -855,7 +847,7 @@ retry:
 		}
 
 		// Wait for output readiness.
-		if ((n = mm_net_output_wait(strand, sock, deadline)) < 0)
+		if ((n = mm_net_output_wait(sock, deadline)) < 0)
 			goto leave;
 	}
 
@@ -898,12 +890,9 @@ retry:
 	}
 
 	// Remember the start time.
-	struct mm_strand *strand = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		strand = mm_net_get_socket_strand(sock);
-		deadline = mm_strand_gettime(strand) + sock->read_timeout;
-	}
+	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_event_gettime(sock->event.listener) + sock->read_timeout;
 
 	for (;;) {
 		// Turn on the input event notification if needed.
@@ -921,7 +910,7 @@ retry:
 		}
 
 		// Wait for input readiness.
-		if ((n = mm_net_input_wait(strand, sock, deadline)) < 0)
+		if ((n = mm_net_input_wait(sock, deadline)) < 0)
 			goto leave;
 	}
 
@@ -964,12 +953,9 @@ retry:
 	}
 
 	// Remember the start time.
-	struct mm_strand *strand = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
-	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		strand = mm_net_get_socket_strand(sock);
-		deadline = mm_strand_gettime(strand) + sock->write_timeout;
-	}
+	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
+		deadline = mm_event_gettime(sock->event.listener) + sock->write_timeout;
 
 	for (;;) {
 		// Turn on the output event notification if needed.
@@ -987,7 +973,7 @@ retry:
 		}
 
 		// Wait for output readiness.
-		if ((n = mm_net_output_wait(strand, sock, deadline)) < 0)
+		if ((n = mm_net_output_wait(sock, deadline)) < 0)
 			goto leave;
 	}
 

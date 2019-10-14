@@ -45,8 +45,9 @@ mc_action_exp_time_handler(mm_value_t value UNUSED)
 {
 	ENTER();
 
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_timeval_t real_time = mm_strand_getrealtime(strand);
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_listener *const listener = strand->listener;
+	mm_timeval_t real_time = mm_event_getrealtime(listener);
 	mc_action_exp_time = real_time / 1000000; // useconds -> seconds.
 
 	LEAVE();
@@ -73,8 +74,9 @@ mc_action_exp_time_stop(void)
 static uint32_t
 mc_action_get_exp_time(void)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_timeval_t real_time = mm_strand_getrealtime(strand);
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_listener *const listener = strand->listener;
+	mm_timeval_t real_time = mm_event_getrealtime(listener);
 	return real_time / 1000000; // useconds -> seconds.
 }
 
@@ -222,8 +224,9 @@ mc_action_find_victims(struct mc_tpart *part,
 	uint32_t nvictims = 0;
 	mm_stack_prepare(victims);
 
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_timeval_t real_time = mm_strand_getrealtime(strand);
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_listener *const listener = strand->listener;
+	mm_timeval_t real_time = mm_event_getrealtime(listener);
 	uint32_t time = real_time / 1000000; // useconds -> seconds.
 
 	bool end = false;
