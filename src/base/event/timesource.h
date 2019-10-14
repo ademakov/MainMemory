@@ -91,7 +91,7 @@ mm_event_timesource_gettime(struct mm_event_timesource *ts)
 	}
 #else
 	if (ts->clock_count) {
-		ts->clock_clock--;
+		ts->clock_count--;
 	} else {
 		ts->clock_count = MM_EVENT_CLOCK_COUNT;
 		ts->clock_value = mm_clock_gettime_monotonic_coarse();
