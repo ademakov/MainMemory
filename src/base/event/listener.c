@@ -370,6 +370,9 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 	// Destroy storage for tasks.
 	mm_event_task_list_cleanup(&listener->tasks);
 
+	// Destroy the timer queue.
+	mm_timeq_destroy(&listener->timer_queue);
+
 	// Destroy the associated request queue.
 	mm_ring_mpmc_destroy(listener->async_queue);
 
