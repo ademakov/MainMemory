@@ -315,7 +315,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->async_queue = mm_ring_mpmc_create(sz);
 
 	// Prepare the timer queue.
-	mm_timeq_prepare(&listener->timer_queue, &mm_regular_space.xarena);
+	mm_timeq_prepare(&listener->timer_queue, &mm_common_space.xarena);
 	// Prepare the event clock.
 	mm_event_timesource_prepare(&listener->timesource);
 
