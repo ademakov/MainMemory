@@ -276,6 +276,16 @@ mm_buffer_compact(struct mm_buffer *buf)
 		// Account the last read segment size.
 		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
 		consumed += area - MM_BUFFER_SEGMENT_SIZE;
+#if KEEP_LAST_CHUNK
+		// Merge the last read segment with preceding ones.
+		first->meta = area + ((char *) buf->head.seg - (char *) first);
+		first->size = 0;
+		// Fix up the tail iterator if needed.
+		if (buf->tail.seg == buf->head.seg)
+			buf->tail.seg = first;
+		// And fix up the head iterator.
+		mm_buffer_reader_set(&buf->head, first);
+#else
 		// Check if the last chunk is completely consumed.
 		if (buf->tail.seg != buf->head.seg) {
 			// No, merge the last read segment with preceding ones.
@@ -295,6 +305,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 			// Re-initialize the write iterator.
 			buf->tail.seg = &buf->stub.base;
 		}
+#endif
 	}
 
 	// Remember the maximum consumed data size to optimize later
