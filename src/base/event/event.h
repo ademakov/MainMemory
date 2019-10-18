@@ -421,32 +421,26 @@ mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t 
  * Asynchronous procedure calls targeting any listener of a dispatcher.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_event_post_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r);
+void NONNULL(1)
+mm_event_post_0(mm_event_async_routine_t r);
 
-void NONNULL(1, 2)
-mm_event_post_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1);
+void NONNULL(1)
+mm_event_post_1(mm_event_async_routine_t r, uintptr_t a1);
 
-void NONNULL(1, 2)
-mm_event_post_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2);
+void NONNULL(1)
+mm_event_post_2(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2);
 
-void NONNULL(1, 2)
-mm_event_post_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3);
+void NONNULL(1)
+mm_event_post_3(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
-void NONNULL(1, 2)
-mm_event_post_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+void NONNULL(1)
+mm_event_post_4(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
-void NONNULL(1, 2)
-mm_event_post_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
+void NONNULL(1)
+mm_event_post_5(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
 
-void NONNULL(1, 2)
-mm_event_post_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
+void NONNULL(1)
+mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 /**********************************************************************
  * Asynchronous task scheduling.

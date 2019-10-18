@@ -109,9 +109,12 @@ mm_event_direct_call_stat(struct mm_event_listener *listener UNUSED)
 }
 
 static struct mm_event_listener *
-mm_event_find_listener(struct mm_event_dispatch *dispatch UNUSED)
+mm_event_find_listener(void)
 {
 #if ENABLE_SMP
+	struct mm_strand *const strand = mm_strand_selfptr();
+	struct mm_event_dispatch *const dispatch = strand->listener->dispatch;
+
 	mm_thread_t n = dispatch->nlisteners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &dispatch->listeners[i];
@@ -984,10 +987,10 @@ mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t 
  * Asynchronous procedure calls targeting any listener of a dispatcher.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_event_post_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r)
+void NONNULL(1)
+mm_event_post_0(mm_event_async_routine_t r)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL_0(r);
 		return;
@@ -996,11 +999,10 @@ mm_event_post_0(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r)
 		r);
 }
 
-void NONNULL(1, 2)
-mm_event_post_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1)
+void NONNULL(1)
+mm_event_post_1(mm_event_async_routine_t r, uintptr_t a1)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1);
 		return;
@@ -1009,11 +1011,10 @@ mm_event_post_1(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		r, a1);
 }
 
-void NONNULL(1, 2)
-mm_event_post_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2)
+void NONNULL(1)
+mm_event_post_2(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1, a2);
 		return;
@@ -1022,11 +1023,10 @@ mm_event_post_2(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		r, a1, a2);
 }
 
-void NONNULL(1, 2)
-mm_event_post_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3)
+void NONNULL(1)
+mm_event_post_3(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3);
 		return;
@@ -1035,11 +1035,10 @@ mm_event_post_3(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		r, a1, a2, a3);
 }
 
-void NONNULL(1, 2)
-mm_event_post_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+void NONNULL(1)
+mm_event_post_4(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4);
 		return;
@@ -1048,11 +1047,10 @@ mm_event_post_4(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		r, a1, a2, a3, a4);
 }
 
-void NONNULL(1, 2)
-mm_event_post_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+void NONNULL(1)
+mm_event_post_5(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4, a5);
 		return;
@@ -1061,11 +1059,10 @@ mm_event_post_5(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
 		r, a1, a2, a3, a4, a5);
 }
 
-void NONNULL(1, 2)
-mm_event_post_6(struct mm_event_dispatch *dispatch, mm_event_async_routine_t r,
-		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+void NONNULL(1)
+mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
-	struct mm_event_listener *listener = mm_event_find_listener(dispatch);
+	struct mm_event_listener *listener = mm_event_find_listener();
 	if (listener == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4, a5, a6);
 		return;
@@ -1131,11 +1128,11 @@ mm_event_post_task(mm_event_task_t task, mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_strand *strand = mm_strand_selfptr();
 #if ENABLE_SMP
 	// Dispatch the task.
-	mm_event_post_2(strand->listener->dispatch, mm_event_add_task_req, (mm_value_t) task, arg);
+	mm_event_post_2(mm_event_add_task_req, (mm_value_t) task, arg);
 #else
+	struct mm_strand *strand = mm_strand_selfptr();
 	mm_event_add_task(strand->listener, task, arg);
 #endif
 

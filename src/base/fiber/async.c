@@ -185,9 +185,8 @@ mm_async_wait(struct mm_async_node *node)
  * Asynchronous system call requests.
  **********************************************************************/
 
-static intptr_t NONNULL(1, 2)
-mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
-		   uintptr_t a1)
+static intptr_t NONNULL(1)
+mm_async_syscall_1(const char *name, int n, uintptr_t a1)
 {
 	ENTER();
 
@@ -196,7 +195,7 @@ mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_3(dispatch, mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
+	mm_event_post_3(mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -206,9 +205,8 @@ mm_async_syscall_1(struct mm_event_dispatch *dispatch, const char *name, int n,
 }
 
 #if 0
-static intptr_t NONNULL(1, 2)
-mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
-		   uintptr_t a1, uintptr_t a2)
+static intptr_t NONNULL(1)
+mm_async_syscall_2(const char *name, int n, uintptr_t a1, uintptr_t a2)
 {
 	ENTER();
 
@@ -217,7 +215,7 @@ mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_4(dispatch, mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
+	mm_event_post_4(mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -227,9 +225,8 @@ mm_async_syscall_2(struct mm_event_dispatch *dispatch, const char *name, int n,
 }
 #endif
 
-static intptr_t NONNULL(1, 2)
-mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
+static intptr_t NONNULL(1)
+mm_async_syscall_3(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
 	ENTER();
 
@@ -238,7 +235,7 @@ mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_5(dispatch, mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
+	mm_event_post_5(mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -248,9 +245,8 @@ mm_async_syscall_3(struct mm_event_dispatch *dispatch, const char *name, int n,
 }
 
 #if 0
-static intptr_t NONNULL(1, 2)
-mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
-		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+static intptr_t NONNULL(1)
+mm_async_syscall_4(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
 	ENTER();
 
@@ -259,7 +255,7 @@ mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_6(dispatch, mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
+	mm_event_post_6(mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -276,38 +272,29 @@ mm_async_syscall_4(struct mm_event_dispatch *dispatch, const char *name, int n,
 inline ssize_t
 mm_async_read(int fd, void *buffer, size_t nbytes)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	return mm_async_syscall_3(strand->listener->dispatch, "read", MM_SYSCALL_N(SYS_read),
-				  fd, (uintptr_t) buffer, nbytes);
+	return mm_async_syscall_3("read", MM_SYSCALL_N(SYS_read), fd, (uintptr_t) buffer, nbytes);
 }
 
 inline ssize_t
 mm_async_readv(int fd, const struct iovec *iov, int iovcnt)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	return mm_async_syscall_3(strand->listener->dispatch, "readv", MM_SYSCALL_N(SYS_readv),
-				  fd, (uintptr_t) iov, iovcnt);
+	return mm_async_syscall_3("readv", MM_SYSCALL_N(SYS_readv), fd, (uintptr_t) iov, iovcnt);
 }
 
 inline ssize_t
 mm_async_write(int fd, const void *buffer, size_t nbytes)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	return mm_async_syscall_3(strand->listener->dispatch, "write", MM_SYSCALL_N(SYS_write),
-				  fd, (uintptr_t) buffer, nbytes);
+	return mm_async_syscall_3("write", MM_SYSCALL_N(SYS_write), fd, (uintptr_t) buffer, nbytes);
 }
 
 inline ssize_t
 mm_async_writev(int fd, const struct iovec *iov, int iovcnt)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	return mm_async_syscall_3(strand->listener->dispatch, "writev", MM_SYSCALL_N(SYS_writev),
-				  fd, (uintptr_t) iov, iovcnt);
+	return mm_async_syscall_3("writev", MM_SYSCALL_N(SYS_writev), fd, (uintptr_t) iov, iovcnt);
 }
 
 inline ssize_t
 mm_async_close(int fd)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	return mm_async_syscall_1(strand->listener->dispatch, "close", MM_SYSCALL_N(SYS_close), fd);
+	return mm_async_syscall_1("close", MM_SYSCALL_N(SYS_close), fd);
 }

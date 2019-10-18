@@ -28,7 +28,6 @@
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
-struct mm_event_dispatch;
 struct mm_event_listener;
 struct mm_fiber;
 
