@@ -36,7 +36,7 @@ struct mm_event_epoch_local
 	mm_event_epoch_snapshot_t epoch;
 
 	/* Number of event sinks put aside for reclamation. */
-	uint16_t count;
+	uint32_t count;
 
 	/* The next listener to check while advancing the epoch. */
 	mm_thread_t index;
