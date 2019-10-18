@@ -155,7 +155,7 @@ typedef uint32_t		mm_timeout_t;
 typedef uint32_t		mm_stamp_t;
 
 /* Thread ID. */
-typedef uint16_t 		mm_thread_t;
+typedef uint32_t 		mm_thread_t;
 
 /* Fiber ID. */
 typedef uint32_t		mm_fiber_t;
