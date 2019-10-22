@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.c - MainMemory thread domain.
  *
- * Copyright (C) 2014-2017  Aleksey Demakov
+ * Copyright (C) 2014-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,11 +31,35 @@
 /* Individual thread creation attributes for domain. */
 struct mm_domain_thread_attr
 {
+	/* The argument of the thread routine. */
+	mm_value_t arg;
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 };
 
 __thread struct mm_domain *__mm_domain_self = NULL;
+
+
+/**********************************************************************
+ * Thread creation attributes.
+ **********************************************************************/
+
+static void
+mm_domain_attr_ensure_threads_attr(struct mm_domain_attr *attr, mm_thread_t n)
+{
+	if (unlikely(attr->nthreads == 0))
+		mm_fatal(0, "the number of threads is not set");
+	if (unlikely(n >= attr->nthreads))
+		mm_fatal(0, "invalid thread number: %d (max is %d)", n, attr->nthreads - 1);
+
+	if (attr->threads_attr == NULL) {
+		attr->threads_attr = mm_global_calloc(attr->nthreads, sizeof(struct mm_domain_thread_attr));
+		for (mm_thread_t i = 0; i < attr->nthreads; i++) {
+			attr->threads_attr[i].arg = 0;
+			attr->threads_attr[i].cpu_tag = MM_THREAD_CPU_ANY;
+		}
+	}
+}
 
 /**********************************************************************
  * Domain creation attributes.
@@ -67,6 +91,20 @@ mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size)
 }
 
 void NONNULL(1)
+mm_domain_attr_setarg(struct mm_domain_attr *attr, mm_thread_t n, mm_value_t arg)
+{
+	mm_domain_attr_ensure_threads_attr(attr, n);
+	attr->threads_attr[n].arg = arg;
+}
+
+void NONNULL(1)
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag)
+{
+	mm_domain_attr_ensure_threads_attr(attr, n);
+	attr->threads_attr[n].cpu_tag = cpu_tag;
+}
+
+void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
 {
 	attr->private_space = enable;
@@ -95,24 +133,6 @@ mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name)
 		memcpy(attr->name, name, len);
 	}
 	attr->name[len] = 0;
-}
-
-void NONNULL(1)
-mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag)
-{
-	if (unlikely(attr->nthreads == 0))
-		mm_fatal(0, "the number of threads is not set");
-	if (unlikely(n >= attr->nthreads))
-		mm_fatal(0, "invalid thread number: %d (max is %d)", n, attr->nthreads - 1);
-
-	if (attr->threads_attr == NULL) {
-		attr->threads_attr = mm_global_calloc(attr->nthreads, sizeof(struct mm_domain_thread_attr));
-		for (mm_thread_t i = 0; i < attr->nthreads; i++) {
-			attr->threads_attr[i].cpu_tag = MM_THREAD_CPU_ANY;
-		}
-	}
-
-	attr->threads_attr[n].cpu_tag = cpu_tag;
 }
 
 /**********************************************************************
@@ -199,7 +219,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 #pragma GCC diagnostic pop
 #endif
 
-		domain->threads[i] = mm_thread_create(&thread_attr, start, i);
+		domain->threads[i] = mm_thread_create(&thread_attr, start, attr->threads_attr[i].arg);
 	}
 
 	LEAVE();

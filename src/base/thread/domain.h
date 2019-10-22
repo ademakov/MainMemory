@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.h - MainMemory thread domain.
  *
- * Copyright (C) 2014-2018  Aleksey Demakov
+ * Copyright (C) 2014-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -93,6 +93,12 @@ void NONNULL(1)
 mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size);
 
 void NONNULL(1)
+mm_domain_attr_setarg(struct mm_domain_attr *attr, mm_thread_t n, mm_value_t arg);
+
+void NONNULL(1)
+mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag);
+
+void NONNULL(1)
 mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 
 void NONNULL(1)
@@ -103,9 +109,6 @@ mm_domain_attr_setguardsize(struct mm_domain_attr *attr, uint32_t size);
 
 void NONNULL(1)
 mm_domain_attr_setname(struct mm_domain_attr *attr, const char *name);
-
-void NONNULL(1)
-mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag);
 
 struct mm_domain * NONNULL(2)
 mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start);
