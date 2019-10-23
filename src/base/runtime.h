@@ -1,7 +1,7 @@
 /*
  * base/runtime.h - Base library runtime.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -32,6 +32,9 @@ mm_number_of_regular_domains(void);
 
 mm_thread_t
 mm_number_of_regular_threads(void);
+
+struct mm_context *
+mm_thread_ident_to_context(mm_thread_t ident);
 
 struct mm_domain *
 mm_domain_ident_to_domain(mm_thread_t ident);

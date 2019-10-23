@@ -1,7 +1,7 @@
 /*
  * base/runtime.c - Base library runtime.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,9 +20,10 @@
 #include "base/runtime.h"
 #include "base/cksum.h"
 #include "base/clock.h"
+#include "base/context.h"
+#include "base/daemon.h"
 #include "base/exit.h"
 #include "base/list.h"
-#include "base/daemon.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/settings.h"
@@ -43,6 +44,10 @@
 
 // The number of regular threads.
 static mm_thread_t mm_regular_nthreads = 0;
+
+// The set of thread execution contexts.
+static struct mm_context **mm_context_table = NULL;
+
 // The domain of regular threads.
 static struct mm_domain *mm_regular_domain = NULL;
 
@@ -89,6 +94,14 @@ mm_thread_ident_to_thread(mm_thread_t ident)
 	if (ident >= mm_regular_nthreads)
 		return NULL;
 	return mm_domain_getthread(mm_regular_domain, ident);
+}
+
+struct mm_context *
+mm_thread_ident_to_context(mm_thread_t ident)
+{
+	if (ident >= mm_regular_nthreads)
+		return NULL;
+	return mm_context_table[ident];
 }
 
 struct mm_strand *
@@ -295,7 +308,14 @@ mm_regular_boot(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_strand *strand = &mm_regular_strands[arg];
+	// Allocate and setup the execution context.
+	struct mm_context *const context = mm_regular_alloc(sizeof(struct mm_context));
+	context->strand = mm_thread_ident_to_strand(arg);
+	context->listener = mm_thread_ident_to_event_listener(arg);
+	mm_context_table[arg] = context;
+	__mm_context_self = context;
+
+	struct mm_strand *const strand = context->strand;
 	strand->thread = mm_thread_selfptr();
 
 	// Set the thread-specific data.
@@ -325,6 +345,11 @@ mm_regular_boot(mm_value_t arg)
 	// Abandon the strand.
 	__mm_strand_self = NULL;
 
+	// Release the execution context.
+	__mm_context_self = NULL;
+	mm_context_table[arg] = NULL;
+	mm_regular_free(context);
+
 	LEAVE();
 	return 0;
 }
@@ -347,6 +372,9 @@ static void
 mm_common_start(void)
 {
 	ENTER();
+
+	// Allocate the storage for thread execution contexts.
+	mm_context_table = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context *));
 
 	// Allocate a fiber strand for each regular thread.
 	mm_regular_strands = mm_common_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
@@ -386,6 +414,9 @@ mm_common_stop(void)
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_cleanup(&mm_regular_strands[i]);
 	mm_common_free(mm_regular_strands);
+
+	// Release the storage for thread execution contexts.
+	mm_common_free(mm_context_table);
 
 	LEAVE();
 }
