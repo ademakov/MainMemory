@@ -22,9 +22,9 @@
 
 #include "memcache/memcache.h"
 
+#include "base/context.h"
 #include "base/list.h"
 #include "base/event/event.h"
-#include "base/fiber/strand.h"
 #include "base/memory/alloc.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
@@ -67,8 +67,7 @@ static inline uint32_t
 mc_entry_fix_exptime(uint32_t exptime)
 {
 	if (exptime != 0 && exptime <= (60 * 60 * 24 * 30)) {
-		struct mm_strand *const strand = mm_strand_selfptr();
-		struct mm_event_listener *const listener = strand->listener;
+		struct mm_event_listener *const listener = mm_context_listener();
 		exptime += mm_event_getrealtime(listener) / 1000000;
 	}
 	return exptime;

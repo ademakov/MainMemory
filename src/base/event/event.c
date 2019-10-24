@@ -19,12 +19,12 @@
 
 #include "base/event/event.h"
 
+#include "base/context.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/strand.h"
 
 /**********************************************************************
  * Asynchronous procedure call construction.
@@ -62,16 +62,16 @@
 // Make a direct call instead of async one
 #define MM_DIRECTCALL_0(r)						\
 	do {								\
-		struct mm_strand *strand = mm_strand_selfptr();		\
-		struct mm_event_listener *listener = strand->listener;	\
+		struct mm_context *context = mm_context_selfptr();	\
+		struct mm_event_listener *listener = context->listener;	\
 		MM_SEND_ARGV(v, 0);					\
 		r(listener, v);						\
 		mm_event_direct_call_stat(listener);			\
 	} while (0)
 #define MM_DIRECTCALL(r, ...)						\
 	do {								\
-		struct mm_strand *strand = mm_strand_selfptr();		\
-		struct mm_event_listener *listener = strand->listener;	\
+		struct mm_context *context = mm_context_selfptr();	\
+		struct mm_event_listener *listener = context->listener;	\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
 		r(listener, v);						\
 		mm_event_direct_call_stat(listener);			\
@@ -82,9 +82,9 @@ mm_event_call_stat(void)
 {
 #if ENABLE_EVENT_STATS
 	// Update statistics.
-	struct mm_strand *strand = mm_strand_selfptr();
-	if (likely(strand != NULL))
-		strand->listener->stats.enqueued_async_calls++;
+	struct mm_context *context = mm_context_selfptr();
+	if (likely(context != NULL))
+		context->listener->stats.enqueued_async_calls++;
 #endif
 }
 
@@ -93,9 +93,9 @@ mm_event_post_stat(void)
 {
 #if ENABLE_EVENT_STATS
 	// Update statistics.
-	struct mm_strand *strand = mm_strand_selfptr();
-	if (likely(strand != NULL))
-		strand->listener->stats.enqueued_async_posts++;
+	struct mm_context *context = mm_context_selfptr();
+	if (likely(context != NULL))
+		context->listener->stats.enqueued_async_posts++;
 #endif
 }
 
@@ -112,8 +112,8 @@ static struct mm_event_listener *
 mm_event_find_listener(void)
 {
 #if ENABLE_SMP
-	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_dispatch *const dispatch = strand->listener->dispatch;
+	struct mm_context *context = mm_context_selfptr();
+	struct mm_event_dispatch *const dispatch = context->listener->dispatch;
 
 	mm_thread_t n = dispatch->nlisteners;
 	for (mm_thread_t i = 0; i < n; i++) {
@@ -134,7 +134,7 @@ void NONNULL(1)
 mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	// Update the read readiness flags.
 	sink->flags |= flags;
@@ -160,7 +160,7 @@ void NONNULL(1)
 mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	// Update the write readiness flags.
 	sink->flags |= flags;
@@ -214,7 +214,7 @@ static mm_value_t
 mm_event_unexpected_input(mm_value_t arg)
 {
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	mm_error(0, "unexpected input handler on fd %d", sink->fd);
 
@@ -228,7 +228,7 @@ static mm_value_t
 mm_event_unexpected_output(mm_value_t arg)
 {
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	mm_error(0, "unexpected output handler on fd %d", sink->fd);
 
@@ -244,7 +244,7 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
 
 	// Check to see if another input work should be started.
@@ -267,7 +267,7 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
 
 	// Check to see if another output work should be started.
@@ -291,7 +291,7 @@ mm_event_reassign_io(mm_value_t arg, struct mm_event_listener *listener)
 	bool reassigned = false;
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0) {
 		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
 		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
@@ -379,8 +379,7 @@ mm_event_register_fd(struct mm_event_fd *sink)
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
 
 	// Bind the sink to this thread's event listener.
-	struct mm_strand *strand = mm_strand_selfptr();
-	struct mm_event_listener *listener = strand->listener;
+	struct mm_event_listener *listener = mm_context_listener();
 	if (sink->listener != NULL) {
 		VERIFY(sink->listener == listener);
 	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0) {
@@ -404,7 +403,7 @@ mm_event_close_fd(struct mm_event_fd *sink)
 
 	// Unregister it.
 	struct mm_event_listener *listener = sink->listener;
-	ASSERT(listener->strand == mm_strand_selfptr());
+	ASSERT(listener == mm_context_listener());
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 
 	LEAVE();
@@ -422,7 +421,7 @@ mm_event_close_broken_fd(struct mm_event_fd *sink)
 
 	// Unregister it immediately.
 	struct mm_event_listener *listener = sink->listener;
-	ASSERT(listener->strand == mm_strand_selfptr());
+	ASSERT(listener == mm_context_listener());
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 	mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
 
@@ -442,7 +441,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->strand == mm_strand_selfptr());
+		ASSERT(listener == mm_context_listener());
 
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -463,7 +462,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
 
 		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener->strand == mm_strand_selfptr());
+		ASSERT(listener == mm_context_listener());
 
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -479,7 +478,7 @@ void NONNULL(1)
 mm_event_submit_input(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	// Ask an input task to run.
 	if (!mm_event_input_closed(sink)) {
@@ -498,7 +497,7 @@ void NONNULL(1)
 mm_event_submit_output(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	// Ask an output task to run.
 	if (!mm_event_output_closed(sink)) {
@@ -1079,7 +1078,7 @@ void NONNULL(1, 2)
 mm_event_add_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg)
 {
 	ENTER();
-	ASSERT(listener->strand == mm_strand_selfptr());
+	ASSERT(listener == mm_context_listener());
 
 	mm_event_task_list_add(&listener->tasks, task, arg);
 
@@ -1109,7 +1108,7 @@ mm_event_send_task(struct mm_event_listener *listener, mm_event_task_t task, mm_
 	ENTER();
 
 #if ENABLE_SMP
-	if (listener->strand == mm_strand_selfptr()) {
+	if (listener == mm_context_listener()) {
 		// Enqueue it directly if on the same strand.
 		mm_event_add_task(listener, task, arg);
 	} else {
@@ -1132,8 +1131,7 @@ mm_event_post_task(mm_event_task_t task, mm_value_t arg)
 	// Dispatch the task.
 	mm_event_post_2(mm_event_add_task_req, (mm_value_t) task, arg);
 #else
-	struct mm_strand *strand = mm_strand_selfptr();
-	mm_event_add_task(strand->listener, task, arg);
+	mm_event_add_task(mm_context_listener(), task, arg);
 #endif
 
 	LEAVE();

@@ -162,8 +162,7 @@ static void
 mc_command_flush(uint32_t exptime)
 {
 	// TODO: really use the exptime.
-	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_listener *const listener = strand->listener;
+	struct mm_event_listener *const listener = mm_context_listener();
 	mm_timeval_t real_time = mm_event_getrealtime(listener);
 	mc_exptime = real_time / 1000000 + exptime;
 

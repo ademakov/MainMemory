@@ -19,10 +19,10 @@
 
 #include "base/event/epoch.h"
 
+#include "base/context.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/strand.h"
 
 #define MM_EVENT_EPOCH_POST_COUNT	(8)
 
@@ -43,7 +43,7 @@ mm_event_epoch_reclaim_execute(mm_value_t arg)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener->strand == mm_strand_selfptr());
+	ASSERT(sink->listener == mm_context_listener());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed sinks

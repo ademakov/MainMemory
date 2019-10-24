@@ -22,6 +22,7 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/chunk.h"
 #include "base/memory/global.h"

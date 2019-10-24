@@ -19,11 +19,13 @@
 
 #include "net/net.h"
 
+#include "base/context.h"
 #include "base/exit.h"
 #include "base/format.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/stdcall.h"
+#include "base/event/listener.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/global.h"
@@ -380,7 +382,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
-	ASSERT(mm_net_get_server_strand(srv) == mm_strand_selfptr());
+	ASSERT(mm_net_get_server_listener(srv) == mm_context_listener());
 
 	mm_brief("stop server: %s", srv->name);
 
@@ -745,7 +747,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, const size_t nbytes)
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_input_closed(sock);
@@ -807,7 +809,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, const size_t nbytes
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_output_closed(sock);
@@ -869,7 +871,7 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, const int iovc
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_input_closed(sock);
@@ -932,7 +934,7 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, const int iov
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_output_closed(sock);
@@ -994,7 +996,7 @@ void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1010,7 +1012,7 @@ void NONNULL(1)
 mm_net_reset(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1031,7 +1033,7 @@ void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -1051,7 +1053,7 @@ void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_strand(sock) == mm_strand_selfptr());
+	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;

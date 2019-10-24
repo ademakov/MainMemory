@@ -36,4 +36,16 @@ mm_context_selfptr(void)
 	return __mm_context_self;
 }
 
+static inline struct mm_strand *
+mm_context_strand(void)
+{
+	return mm_context_selfptr()->strand;
+}
+
+static inline struct mm_event_listener *
+mm_context_listener(void)
+{
+	return mm_context_selfptr()->listener;
+}
+
 #endif /* BASE_CONTEXT_H */
