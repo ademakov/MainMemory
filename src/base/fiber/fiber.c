@@ -486,9 +486,7 @@ mm_fiber_block(void)
 static void
 mm_fiber_pause_cleanup(struct mm_event_timer *timer)
 {
-	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_listener *const listener = strand->listener;
-	mm_event_disarm_timer(listener, timer);
+	mm_event_disarm_timer(mm_context_listener(), timer);
 }
 
 #if ENABLE_FIBER_LOCATION

@@ -371,8 +371,8 @@ mm_net_start_server(struct mm_net_server *srv)
 			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_FIXED_LISTENER);
 
 	MM_EVENT_TASK(register_task, mm_net_register_server, mm_event_complete_noop, mm_event_reassign_off);
-	struct mm_strand *strand = mm_thread_ident_to_strand(target);
-	mm_event_send_task(strand->listener, &register_task, (mm_value_t) srv);
+	struct mm_event_listener *listener = mm_thread_ident_to_event_listener(target);
+	mm_event_send_task(listener, &register_task, (mm_value_t) srv);
 
 	LEAVE();
 }

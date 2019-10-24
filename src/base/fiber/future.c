@@ -236,8 +236,7 @@ mm_future_start(struct mm_future *future, struct mm_strand *strand)
 	// Initiate execution of the future routine.
 	if (result == MM_RESULT_DEFERRED) {
 		if (strand == NULL) {
-			strand = mm_strand_selfptr();
-			mm_event_add_task(strand->listener, &mm_future_task, (mm_value_t) future);
+			mm_event_add_task(mm_context_listener(), &mm_future_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
 			mm_event_add_task(strand->listener, &mm_future_fixed_task, (mm_value_t) future);
@@ -291,8 +290,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_listener *const listener = strand->listener;
+	struct mm_event_listener *const listener = mm_context_listener();
 	mm_timeval_t deadline = mm_event_gettime(listener) + timeout;
 
 	// Start the future if it has not been started already.
@@ -391,8 +389,7 @@ mm_future_unique_start(struct mm_future *future, struct mm_strand *strand)
 	if (result == MM_RESULT_DEFERRED) {
 		future->result = result = MM_RESULT_NOTREADY;
 		if (strand == NULL) {
-			strand = mm_strand_selfptr();
-			mm_event_add_task(strand->listener, &mm_future_unique_task, (mm_value_t) future);
+			mm_event_add_task(mm_context_listener(), &mm_future_unique_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
 			mm_event_add_task(strand->listener, &mm_future_unique_fixed_task, (mm_value_t) future);
@@ -434,8 +431,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 	ENTER();
 
 	// Remember the wait time.
-	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_listener *const listener = strand->listener;
+	struct mm_event_listener *const listener = mm_context_listener();
 	mm_timeval_t deadline = mm_event_gettime(listener) + timeout;
 
 	// Start the future if it has not been started already.

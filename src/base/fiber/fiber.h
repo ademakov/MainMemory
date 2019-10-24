@@ -21,6 +21,7 @@
 #define BASE_FIBER_FIBER_H
 
 #include "common.h"
+#include "base/context.h"
 #include "base/cstack.h"
 #include "base/list.h"
 #include "base/fiber/strand.h"
