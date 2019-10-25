@@ -24,7 +24,6 @@
 #include "memcache/table.h"
 #include "base/hash.h"
 #include "base/cksum.h"
-#include "base/fiber/strand.h"
 
 #if ENABLE_MEMCACHE_COMBINER
 # include "base/combiner.h"
