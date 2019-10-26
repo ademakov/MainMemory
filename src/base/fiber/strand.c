@@ -240,8 +240,9 @@ mm_strand_master(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_strand *const strand = (struct mm_strand *) arg;
-	struct mm_event_listener *const listener = strand->listener;
+	struct mm_context *const context = (struct mm_context *) arg;
+	struct mm_strand *const strand = context->strand;
+	struct mm_event_listener *const listener = context->listener;
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
@@ -250,7 +251,7 @@ mm_strand_master(mm_value_t arg)
 			// Release excessive resources allocated by fibers.
 			mm_strand_trim(strand);
 			// Halt waiting for any incoming events.
-			mm_event_listen(listener, MM_STRAND_HALT_TIMEOUT);
+			mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
 		}
 
 		// Activate a worker fiber to handle pending tasks.
@@ -389,8 +390,8 @@ mm_strand_cleanup(struct mm_strand *strand)
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_strand_start(struct mm_strand *strand)
+void NONNULL(1, 2)
+mm_strand_loop(struct mm_strand *strand, struct mm_context *context)
 {
 	struct mm_fiber_attr attr;
 
@@ -398,7 +399,7 @@ mm_strand_start(struct mm_strand *strand)
 	mm_fiber_attr_init(&attr);
 	mm_fiber_attr_setpriority(&attr, MM_PRIO_MASTER);
 	mm_fiber_attr_setname(&attr, "master");
-	strand->master = mm_fiber_create(&attr, mm_strand_master, (mm_value_t) strand);
+	strand->master = mm_fiber_create(&attr, mm_strand_master, (mm_value_t) context);
 
 	// Force creation of the minimal number of worker fibers.
 	while (strand->nworkers < strand->nworkers_min)

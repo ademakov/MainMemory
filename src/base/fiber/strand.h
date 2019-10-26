@@ -28,6 +28,7 @@
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
+struct mm_context;
 struct mm_event_listener;
 struct mm_fiber;
 
@@ -105,8 +106,8 @@ mm_strand_prepare(struct mm_strand *strand);
 void NONNULL(1)
 mm_strand_cleanup(struct mm_strand *strand);
 
-void NONNULL(1)
-mm_strand_start(struct mm_strand *strand);
+void NONNULL(1, 2)
+mm_strand_loop(struct mm_strand *strand, struct mm_context *context);
 
 void NONNULL(1)
 mm_strand_stop(struct mm_strand *strand);

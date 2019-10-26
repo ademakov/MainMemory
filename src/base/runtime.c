@@ -333,8 +333,8 @@ mm_regular_boot(mm_value_t arg)
 	// Initialize per-strand resources.
 	mm_regular_boot_call_start_hooks(strand);
 
-	// Start fibers machinery.
-	mm_strand_start(strand);
+	// Run fibers machinery for a while.
+	mm_strand_loop(strand, context);
 
 	// Destroy per-strand resources.
 	mm_regular_boot_call_stop_hooks(strand);

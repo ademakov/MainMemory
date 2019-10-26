@@ -26,6 +26,7 @@
 #include "base/event/task.h"
 
 /* Forward declarations. */
+struct mm_context;
 struct mm_event_dispatch;
 struct mm_event_listener;
 
@@ -176,7 +177,7 @@ struct mm_event_timer
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_listener *listener, mm_timeout_t timeout);
+mm_event_listen(struct mm_context *context, mm_timeout_t timeout);
 
 /**********************************************************************
  * I/O event sink status.

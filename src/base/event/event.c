@@ -684,10 +684,11 @@ mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_ev
 #endif
 
 void NONNULL(1)
-mm_event_listen(struct mm_event_listener *const listener, mm_timeout_t timeout)
+mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 {
 	ENTER();
 
+	struct mm_event_listener *const listener = context->listener;
 	struct mm_event_dispatch *const dispatch = listener->dispatch;
 	struct mm_timeq_entry *timer = mm_timeq_getmin(&listener->timer_queue);
 
