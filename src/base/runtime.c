@@ -310,8 +310,7 @@ mm_regular_boot(mm_value_t arg)
 
 	// Allocate and setup the execution context.
 	struct mm_context *const context = mm_regular_alloc(sizeof(struct mm_context));
-	context->strand = mm_thread_ident_to_strand(arg);
-	context->listener = mm_thread_ident_to_event_listener(arg);
+	mm_context_prepare(context, arg);
 	mm_context_table[arg] = context;
 	__mm_context_self = context;
 
@@ -348,6 +347,7 @@ mm_regular_boot(mm_value_t arg)
 	// Release the execution context.
 	__mm_context_self = NULL;
 	mm_context_table[arg] = NULL;
+	mm_context_cleanup(context);
 	mm_regular_free(context);
 
 	LEAVE();

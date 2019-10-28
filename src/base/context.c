@@ -18,6 +18,23 @@
  */
 
 #include "base/context.h"
+#include "base/runtime.h"
 
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
+
+void NONNULL(1)
+mm_context_prepare(struct mm_context *context, mm_thread_t ident)
+{
+	// Gather pointers to main runtime components.
+	context->strand = mm_thread_ident_to_strand(ident);
+	context->listener = mm_thread_ident_to_event_listener(ident);
+
+	// Prepare the event clock.
+	mm_timesource_prepare(&context->timesource);
+}
+
+void NONNULL(1)
+mm_context_cleanup(struct mm_context *context UNUSED)
+{
+}

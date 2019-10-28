@@ -304,10 +304,10 @@ mm_event_submit_output(struct mm_event_fd *sink);
  **********************************************************************/
 
 mm_timeval_t NONNULL(1)
-mm_event_gettime(struct mm_event_listener *listener);
+mm_event_gettime(struct mm_context *context);
 
 mm_timeval_t NONNULL(1)
-mm_event_getrealtime(struct mm_event_listener *listener);
+mm_event_getrealtime(struct mm_context *context);
 
 /**********************************************************************
  * Timer event sink control.
@@ -326,10 +326,10 @@ mm_event_timer_armed(struct mm_event_timer *sink)
 }
 
 void NONNULL(1, 2)
-mm_event_arm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink, mm_timeout_t timeout);
+mm_event_arm_timer(struct mm_context *context, struct mm_event_timer *sink, mm_timeout_t timeout);
 
 void NONNULL(1, 2)
-mm_event_disarm_timer(struct mm_event_listener *listener, struct mm_event_timer *sink);
+mm_event_disarm_timer(struct mm_context *context, struct mm_event_timer *sink);
 
 /**********************************************************************
  * Internal event processing for I/O event sinks: start asynchronous

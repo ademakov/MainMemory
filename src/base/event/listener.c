@@ -316,8 +316,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Prepare the timer queue.
 	mm_timeq_prepare(&listener->timer_queue, &mm_common_space.xarena);
-	// Prepare the event clock.
-	mm_event_timesource_prepare(&listener->timesource);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

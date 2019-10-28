@@ -486,7 +486,7 @@ mm_fiber_block(void)
 static void
 mm_fiber_pause_cleanup(struct mm_event_timer *timer)
 {
-	mm_event_disarm_timer(mm_context_listener(), timer);
+	mm_event_disarm_timer(mm_context_selfptr(), timer);
 }
 
 #if ENABLE_FIBER_LOCATION
@@ -499,13 +499,13 @@ mm_fiber_pause(mm_timeout_t timeout)
 {
 	ENTER();
 
+	struct mm_context *const context = mm_context_selfptr();
 	struct mm_strand *const strand = mm_strand_selfptr();
-	struct mm_event_listener *const listener = strand->listener;
 	struct mm_fiber *const fiber = strand->fiber;
 
 	struct mm_event_timer timer;
 	mm_event_prepare_fiber_timer(&timer, fiber);
-	mm_event_arm_timer(listener, &timer, timeout);
+	mm_event_arm_timer(context, &timer, timeout);
 
 #if ENABLE_FIBER_LOCATION
 	fiber->location = location;
@@ -517,7 +517,7 @@ mm_fiber_pause(mm_timeout_t timeout)
 	mm_fiber_cleanup_pop(false);
 
 	if (mm_event_timer_armed(&timer))
-		mm_event_disarm_timer(listener, &timer);
+		mm_event_disarm_timer(context, &timer);
 
 	LEAVE();
 }

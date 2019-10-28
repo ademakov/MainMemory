@@ -21,11 +21,15 @@
 #define BASE_CONTEXT_H
 
 #include "common.h"
+#include "base/timesource.h"
 
 struct mm_context
 {
 	struct mm_strand *strand;
 	struct mm_event_listener *listener;
+
+	/* Fast but coarse clock. */
+	struct mm_timesource timesource;
 };
 
 extern __thread struct mm_context *__mm_context_self;
@@ -47,5 +51,11 @@ mm_context_listener(void)
 {
 	return mm_context_selfptr()->listener;
 }
+
+void NONNULL(1)
+mm_context_prepare(struct mm_context *context, mm_thread_t ident);
+
+void NONNULL(1)
+mm_context_cleanup(struct mm_context *context);
 
 #endif /* BASE_CONTEXT_H */
