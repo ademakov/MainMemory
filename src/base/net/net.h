@@ -83,8 +83,8 @@ struct mm_net_proto
 	struct mm_net_socket * (*create)(void);
 	void (*destroy)(struct mm_event_fd *);
 
-	mm_event_execute_t reader;
-	mm_event_execute_t writer;
+	mm_task_execute_t reader;
+	mm_task_execute_t writer;
 };
 
 /**********************************************************************

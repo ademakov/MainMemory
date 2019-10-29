@@ -22,11 +22,11 @@
 
 #include "common.h"
 #include "base/ring.h"
+#include "base/task.h"
 #include "base/timeq.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 #include "base/event/forward.h"
-#include "base/event/task.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -123,7 +123,7 @@ struct mm_event_listener
 	struct mm_event_dispatch *dispatch;
 
 	/* Tasks to execute locally. */
-	struct mm_event_task_list tasks;
+	struct mm_task_list tasks;
 
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc *async_queue;

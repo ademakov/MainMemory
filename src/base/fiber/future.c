@@ -132,10 +132,10 @@ mm_future_unique_complete(mm_value_t arg, mm_value_t result)
 	LEAVE();
 }
 
-MM_EVENT_TASK(mm_future_task, mm_future_execute, mm_future_complete, mm_event_reassign_on);
-MM_EVENT_TASK(mm_future_fixed_task, mm_future_execute, mm_future_complete, mm_event_reassign_off);
-MM_EVENT_TASK(mm_future_unique_task, mm_future_execute, mm_future_unique_complete, mm_event_reassign_on);
-MM_EVENT_TASK(mm_future_unique_fixed_task, mm_future_execute, mm_future_unique_complete, mm_event_reassign_off);
+MM_TASK(mm_future_task, mm_future_execute, mm_future_complete, mm_task_reassign_on);
+MM_TASK(mm_future_fixed_task, mm_future_execute, mm_future_complete, mm_task_reassign_off);
+MM_TASK(mm_future_unique_task, mm_future_execute, mm_future_unique_complete, mm_task_reassign_on);
+MM_TASK(mm_future_unique_fixed_task, mm_future_execute, mm_future_unique_complete, mm_task_reassign_off);
 
 /**********************************************************************
  * Futures global data initialization and cleanup.

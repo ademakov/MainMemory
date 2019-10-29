@@ -306,15 +306,15 @@ mm_event_reassign_io(mm_value_t arg, struct mm_event_listener *listener)
 }
 
 void NONNULL(1)
-mm_event_prepare_io(struct mm_event_io *io, mm_event_execute_t input, mm_event_execute_t output)
+mm_event_prepare_io(struct mm_event_io *io, mm_task_execute_t input, mm_task_execute_t output)
 {
 	if (input == NULL)
 		input = mm_event_unexpected_input;
 	if (output == NULL)
 		output = mm_event_unexpected_output;
 
-	mm_event_task_prepare(&io->input, input, mm_event_input_complete, mm_event_reassign_io);
-	mm_event_task_prepare(&io->output, output, mm_event_output_complete, mm_event_reassign_io);
+	mm_task_prepare(&io->input, input, mm_event_input_complete, mm_event_reassign_io);
+	mm_task_prepare(&io->output, output, mm_event_output_complete, mm_event_reassign_io);
 }
 
 struct mm_event_io *
@@ -323,13 +323,13 @@ mm_event_instant_io(void)
 	static struct mm_event_io instant_io = {
 		.input = {
 			.execute = mm_event_unexpected_input,
-			.complete = mm_event_complete_noop,
-			.reassign = mm_event_reassign_off
+			.complete = mm_task_complete_noop,
+			.reassign = mm_task_reassign_off
 		},
 		.output = {
 			.execute = mm_event_unexpected_output,
-			.complete = mm_event_complete_noop,
-			.reassign = mm_event_reassign_off
+			.complete = mm_task_complete_noop,
+			.reassign = mm_task_reassign_off
 		}
 	};
 	return &instant_io;
@@ -533,7 +533,7 @@ mm_event_getrealtime(struct mm_context *context)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_event_task *task)
+mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_task *task)
 {
 	mm_timeq_entry_prepare(&sink->entry, 0);
 	sink->fiber = NULL;
@@ -659,11 +659,11 @@ mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_ev
 {
 	ENTER();
 
-	size_t ntasks = mm_event_task_list_size(&listener->tasks);
-	if (ntasks > (10 * MM_EVENT_TASK_SEND_MAX)) {
+	size_t ntasks = mm_task_list_size(&listener->tasks);
+	if (ntasks > (10 * MM_TASK_SEND_MAX)) {
 		const uint32_t nlisteners = dispatch->nlisteners;
 		const uint32_t self_index = listener - dispatch->listeners;
-		static const uint32_t limit = 2 * MM_EVENT_TASK_SEND_MAX;
+		static const uint32_t limit = 2 * MM_TASK_SEND_MAX;
 
 		uint32_t count = 0;
 		for (uint32_t index = 0; index < nlisteners && count < 2; index++) {
@@ -671,10 +671,10 @@ mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_ev
 				continue;
 
 			struct mm_event_listener *peer = &dispatch->listeners[index];
-			uint64_t n = mm_event_task_peer_list_size(&peer->tasks);
-			n += mm_ring_mpmc_size(peer->async_queue) * MM_EVENT_TASK_SEND_MAX;
-			while (n < limit && mm_event_task_list_reassign(&listener->tasks, peer))
-				n += MM_EVENT_TASK_SEND_MAX;
+			uint64_t n = mm_task_peer_list_size(&peer->tasks);
+			n += mm_ring_mpmc_size(peer->async_queue) * MM_TASK_SEND_MAX;
+			while (n < limit && mm_task_list_reassign(&listener->tasks, peer))
+				n += MM_TASK_SEND_MAX;
 			count++;
 		}
 	}
@@ -1076,12 +1076,12 @@ mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_add_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg)
+mm_event_add_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg)
 {
 	ENTER();
 	ASSERT(listener == mm_context_listener());
 
-	mm_event_task_list_add(&listener->tasks, task, arg);
+	mm_task_list_add(&listener->tasks, task, arg);
 
 	LEAVE();
 }
@@ -1093,7 +1093,7 @@ mm_event_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
-	struct mm_event_task *task = (struct mm_event_task *) arguments[0];
+	struct mm_task *task = (struct mm_task *) arguments[0];
 	mm_value_t arg = arguments[1];
 
 	mm_event_add_task(listener, task, arg);
@@ -1104,7 +1104,7 @@ mm_event_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
 #endif
 
 void NONNULL(1, 2)
-mm_event_send_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg)
+mm_event_send_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg)
 {
 	ENTER();
 
@@ -1124,7 +1124,7 @@ mm_event_send_task(struct mm_event_listener *listener, mm_event_task_t task, mm_
 }
 
 void NONNULL(1)
-mm_event_post_task(mm_event_task_t task, mm_value_t arg)
+mm_event_post_task(mm_task_t task, mm_value_t arg)
 {
 	ENTER();
 

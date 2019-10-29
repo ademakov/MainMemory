@@ -141,7 +141,7 @@ static void
 mm_strand_worker_cleanup(uintptr_t arg)
 {
 	struct mm_strand *strand = mm_strand_selfptr();
-	struct mm_event_task_slot *slot = (struct mm_event_task_slot *) arg;
+	struct mm_task_slot *slot = (struct mm_task_slot *) arg;
 
 	// Notify that the current work has been canceled.
 	if (slot->task != NULL)
@@ -157,7 +157,7 @@ mm_strand_worker(mm_value_t arg)
 	ENTER();
 
 	// The task to execute and possibly cancel.
-	struct mm_event_task_slot slot;
+	struct mm_task_slot slot;
 	slot.task = NULL;
 
 	// Ensure cleanup on exit.
@@ -167,14 +167,14 @@ mm_strand_worker(mm_value_t arg)
 	struct mm_strand *const strand = (struct mm_strand *) arg;
 	for (;;) {
 		// Try to get a task.
-		if (!mm_event_task_list_get(&strand->listener->tasks, &slot)) {
+		if (!mm_task_list_get(&strand->listener->tasks, &slot)) {
 			// Wait for a task standing at the front of the idle queue.
 			mm_strand_idle(strand);
 			continue;
 		}
 
 		// Execute the task.
-		const struct mm_event_task *const task = slot.task;
+		const struct mm_task *const task = slot.task;
 		const mm_value_t result = (task->execute)(slot.task_arg);
 		// Protect against a spurious cancel call from the completion routine.
 		mm_memory_store(slot.task, NULL);
@@ -247,7 +247,7 @@ mm_strand_master(mm_value_t arg)
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
 		// Check to see if there are pending tasks.
-		if (mm_event_task_list_empty(&listener->tasks)) {
+		if (mm_task_list_empty(&listener->tasks)) {
 			// Release excessive resources allocated by fibers.
 			mm_strand_trim(strand);
 			// Halt waiting for any incoming events.
@@ -263,7 +263,7 @@ mm_strand_master(mm_value_t arg)
 			if (mm_get_verbose_enabled())
 				mm_strand_print_fibers(strand);
 			// Create a new worker if feasible.
-			if (!mm_event_task_list_empty(&listener->tasks)
+			if (!mm_task_list_empty(&listener->tasks)
 			    && strand->nworkers < strand->nworkers_max)
 				mm_strand_worker_create(strand);
 		}
@@ -296,7 +296,7 @@ mm_strand_print_fibers(struct mm_strand *strand)
 {
 	mm_brief("fibers on thread %d (#idle=%u, #task=%lu):",
 		 mm_thread_getnumber(strand->thread), strand->nidle,
-		 (unsigned long) mm_event_task_list_size(&strand->listener->tasks));
+		 (unsigned long) mm_task_list_size(&strand->listener->tasks));
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_strand_print_fiber_list(&strand->runq.bins[i]);
 	mm_strand_print_fiber_list(&strand->block);

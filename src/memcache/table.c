@@ -25,7 +25,7 @@
 #include "base/hash.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/event/task.h"
+#include "base/task.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/memory.h"
 
@@ -207,7 +207,7 @@ mc_table_start_striding(struct mc_tpart *part)
 {
 	ENTER();
 
-	MM_EVENT_TASK(stride_task, mc_table_stride_routine, mc_table_stride_complete, mm_event_reassign_on);
+	MM_TASK(stride_task, mc_table_stride_routine, mc_table_stride_complete, mm_task_reassign_on);
 	mm_event_post_task(&stride_task, (mm_value_t) part);
 
 	LEAVE();
@@ -260,7 +260,7 @@ mc_table_start_evicting(struct mc_tpart *part)
 {
 	ENTER();
 
-	MM_EVENT_TASK(evict_task, mc_table_evict_routine, mc_table_evict_complete, mm_event_reassign_on);
+	MM_TASK(evict_task, mc_table_evict_routine, mc_table_evict_complete, mm_task_reassign_on);
 	mm_event_post_task(&evict_task, (mm_value_t) part);
 
 	LEAVE();

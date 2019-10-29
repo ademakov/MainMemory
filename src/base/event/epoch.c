@@ -75,10 +75,10 @@ mm_event_epoch_reclaim(struct mm_event_fd *sink)
 	// or queued past work items for it. So relying on the FIFO order
 	// of the work queue submit a work item that might safely cleanup
 	// the socket being the last one that refers to it.
-	MM_EVENT_TASK(reclaim_task,
+	MM_TASK(reclaim_task,
 		      mm_event_epoch_reclaim_execute,
-		      mm_event_complete_noop,
-		      mm_event_reassign_off);
+		      mm_task_complete_noop,
+		      mm_task_reassign_off);
 	mm_event_add_task(sink->listener, &reclaim_task, (mm_value_t) sink);
 
 	LEAVE();

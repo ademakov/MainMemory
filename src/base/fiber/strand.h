@@ -23,7 +23,6 @@
 #include "common.h"
 
 #include "base/list.h"
-#include "base/event/task.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/wait.h"
 

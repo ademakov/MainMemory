@@ -22,8 +22,8 @@
 
 #include "common.h"
 #include "base/list.h"
+#include "base/task.h"
 #include "base/timeq.h"
-#include "base/event/task.h"
 
 /* Forward declarations. */
 struct mm_context;
@@ -111,8 +111,8 @@ typedef uint16_t mm_event_stamp_t;
 /* Task entries to perform I/O on a sink. */
 struct mm_event_io
 {
-	struct mm_event_task input;
-	struct mm_event_task output;
+	struct mm_task input;
+	struct mm_task output;
 };
 
 /* I/O event sink. */
@@ -169,7 +169,7 @@ struct mm_event_timer
 	struct mm_fiber *fiber;
 
 	/* A task entry to fire. */
-	struct mm_event_task *task;
+	struct mm_task *task;
 };
 
 /**********************************************************************
@@ -267,7 +267,7 @@ mm_event_reset_output_ready(struct mm_event_fd *sink)
 
 /* Prepare I/O tasks for an I/O event sink. */
 void NONNULL(1)
-mm_event_prepare_io(struct mm_event_io *tasks, mm_event_execute_t input, mm_event_execute_t output);
+mm_event_prepare_io(struct mm_event_io *tasks, mm_task_execute_t input, mm_task_execute_t output);
 
 /* Get a stub for I/O tasks that is used in some special cases. */
 struct mm_event_io *
@@ -314,7 +314,7 @@ mm_event_getrealtime(struct mm_context *context);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_event_task *task);
+mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_task *task);
 
 void NONNULL(1, 2)
 mm_event_prepare_fiber_timer(struct mm_event_timer *sink, struct mm_fiber *fiber);
@@ -448,12 +448,12 @@ mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_add_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg);
+mm_event_add_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg);
 
 void NONNULL(1, 2)
-mm_event_send_task(struct mm_event_listener *listener, mm_event_task_t task, mm_value_t arg);
+mm_event_send_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg);
 
 void NONNULL(1)
-mm_event_post_task(mm_event_task_t task, mm_value_t arg);
+mm_event_post_task(mm_task_t task, mm_value_t arg);
 
 #endif /* BASE_EVENT_EVENT_H */
