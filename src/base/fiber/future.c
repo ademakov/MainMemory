@@ -240,7 +240,7 @@ mm_future_start(struct mm_future *future, struct mm_strand *strand)
 			mm_context_add_task(mm_context_selfptr(), &mm_future_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
-			mm_context_add_task(strand->listener->context, &mm_future_fixed_task, (mm_value_t) future);
+			mm_context_add_task(strand->context, &mm_future_fixed_task, (mm_value_t) future);
 		}
 		result = MM_RESULT_NOTREADY;
 	}
@@ -393,7 +393,7 @@ mm_future_unique_start(struct mm_future *future, struct mm_strand *strand)
 			mm_context_add_task(mm_context_selfptr(), &mm_future_unique_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
-			mm_context_add_task(strand->listener->context, &mm_future_unique_fixed_task, (mm_value_t) future);
+			mm_context_add_task(strand->context, &mm_future_unique_fixed_task, (mm_value_t) future);
 		}
 	}
 

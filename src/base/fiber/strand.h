@@ -28,7 +28,6 @@
 
 /* Forward declarations. */
 struct mm_context;
-struct mm_event_listener;
 struct mm_fiber;
 
 typedef enum
@@ -50,8 +49,8 @@ struct mm_strand
 	/* The strand status. */
 	mm_strand_state_t state;
 
-	/* Event dispatch support. */
-	struct mm_event_listener *listener;
+	/* Associated context. */
+	struct mm_context *context;
 
 	/* Queue of blocked fibers. */
 	struct mm_list block;

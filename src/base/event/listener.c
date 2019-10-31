@@ -301,7 +301,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->context = NULL;
 	listener->strand = strand;
 	listener->dispatch = dispatch;
-	strand->listener = listener;
 
 	// Prepare the timer queue.
 	mm_timeq_prepare(&listener->timer_queue, &mm_common_space.xarena);

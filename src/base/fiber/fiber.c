@@ -361,7 +361,7 @@ mm_fiber_switch(mm_fiber_state_t state)
 	// run queue after just being blocked. So at this point the fiber
 	// must already be in completely consistent state. That is no
 	// manipulation with old_fiber is allowed below this point.
-	mm_event_handle_calls(strand->listener->context);
+	mm_event_handle_calls(strand->context);
 
 	// Get the next fiber from the run queue.  As long as this function
 	// is called there is at least a boot fiber in the run queue.  So

@@ -23,7 +23,6 @@
 #include "base/report.h"
 #include "base/syscall.h"
 #include "base/event/event.h"
-#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 

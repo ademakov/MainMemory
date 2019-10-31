@@ -23,6 +23,7 @@
 #include "base/logger.h"
 #include "base/runtime.h"
 #include "base/event/listener.h"
+#include "base/fiber/strand.h"
 
 #define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
@@ -35,6 +36,7 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 	// Gather pointers to main runtime components.
 	context->strand = mm_thread_ident_to_strand(ident);
 	context->listener = mm_thread_ident_to_event_listener(ident);
+	context->strand->context = context;
 	context->listener->context = context;
 
 	// Prepare the event clock.
@@ -59,6 +61,7 @@ mm_context_cleanup(struct mm_context *context UNUSED)
 	// Destroy storage for tasks.
 	mm_task_list_cleanup(&context->tasks);
 
+	context->strand->context = NULL;
 	context->listener->context = NULL;
 }
 

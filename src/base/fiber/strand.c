@@ -123,7 +123,7 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 		mm_fiber_run(fiber);
 	} else {
 		// Submit the fiber to the thread request queue.
-		struct mm_context *context = fiber->strand->listener->context;
+		struct mm_context *context = fiber->strand->context;
 		mm_event_call_1(context, mm_strand_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
@@ -165,7 +165,7 @@ mm_strand_worker(mm_value_t arg)
 
 	// Run in a loop forever getting and executing tasks.
 	struct mm_strand *const strand = (struct mm_strand *) arg;
-	struct mm_context *const context = strand->listener->context;
+	struct mm_context *const context = strand->context;
 	for (;;) {
 		// Try to get a task.
 		if (!mm_task_list_get(&context->tasks, &slot)) {
@@ -296,7 +296,7 @@ mm_strand_print_fibers(struct mm_strand *strand)
 {
 	mm_brief("fibers on thread %d (#idle=%u, #task=%lu):",
 		 mm_thread_getnumber(strand->thread), strand->nidle,
-		 (unsigned long) mm_task_list_size(&strand->listener->context->tasks));
+		 (unsigned long) mm_task_list_size(&strand->context->tasks));
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_strand_print_fiber_list(&strand->runq.bins[i]);
 	mm_strand_print_fiber_list(&strand->block);
@@ -417,7 +417,7 @@ mm_strand_stop(struct mm_strand *strand)
 {
 	ENTER();
 
-	mm_event_call_0(strand->listener->context, mm_strand_stop_req);
+	mm_event_call_0(strand->context, mm_strand_stop_req);
 
 	LEAVE();
 }
