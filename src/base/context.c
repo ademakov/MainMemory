@@ -32,6 +32,7 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident)
 	// Gather pointers to main runtime components.
 	context->strand = mm_thread_ident_to_strand(ident);
 	context->listener = mm_thread_ident_to_event_listener(ident);
+	context->listener->context = context;
 
 	// Prepare the event clock.
 	mm_timesource_prepare(&context->timesource);
@@ -40,6 +41,75 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident)
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
+	context->listener->context = NULL;
+}
+
+/**********************************************************************
+ * Asynchronous task scheduling.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_context_add_task(struct mm_context *self, mm_task_t task, mm_value_t arg)
+{
+	ENTER();
+	ASSERT(self == mm_context_selfptr());
+
+	mm_task_list_add(&self->listener->tasks, task, arg);
+
+	LEAVE();
+}
+
+#if ENABLE_SMP
+
+static void
+mm_context_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_task *task = (struct mm_task *) arguments[0];
+	mm_value_t arg = arguments[1];
+
+	mm_context_add_task(listener->context, task, arg);
+
+	LEAVE();
+}
+
+#endif
+
+void NONNULL(1, 2)
+mm_context_send_task(struct mm_context *context, mm_task_t task, mm_value_t arg)
+{
+	ENTER();
+
+#if ENABLE_SMP
+	if (context == mm_context_selfptr()) {
+		// Enqueue it directly if on the same strand.
+		mm_context_add_task(context, task, arg);
+	} else {
+		// Submit the work item to the thread request queue.
+		struct mm_event_listener *listener = context->listener;
+		mm_event_call_2(listener, mm_context_add_task_req, (uintptr_t) task, arg);
+	}
+#else
+	mm_context_add_task(context, task, arg);
+#endif
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_context_post_task(mm_task_t task, mm_value_t arg)
+{
+	ENTER();
+
+#if ENABLE_SMP
+	// Dispatch the task.
+	mm_event_post_2(mm_context_add_task_req, (mm_value_t) task, arg);
+#else
+	mm_context_add_task(mm_context_selfptr(), task, arg);
+#endif
+
+	LEAVE();
 }
 
 #if ENABLE_SMP

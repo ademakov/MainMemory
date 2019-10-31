@@ -59,6 +59,19 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident);
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context);
 
+/**********************************************************************
+ * Asynchronous task scheduling.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_context_add_task(struct mm_context *self, mm_task_t task, mm_value_t arg);
+
+void NONNULL(1, 2)
+mm_context_send_task(struct mm_context *peer, mm_task_t task, mm_value_t arg);
+
+void NONNULL(1)
+mm_context_post_task(mm_task_t task, mm_value_t arg);
+
 #if ENABLE_SMP
 void NONNULL(1)
 mm_context_distribute_tasks(struct mm_context *self);

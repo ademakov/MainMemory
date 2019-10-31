@@ -22,6 +22,7 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/pool.h"
 
@@ -236,10 +237,10 @@ mm_future_start(struct mm_future *future, struct mm_strand *strand)
 	// Initiate execution of the future routine.
 	if (result == MM_RESULT_DEFERRED) {
 		if (strand == NULL) {
-			mm_event_add_task(mm_context_listener(), &mm_future_task, (mm_value_t) future);
+			mm_context_add_task(mm_context_selfptr(), &mm_future_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
-			mm_event_add_task(strand->listener, &mm_future_fixed_task, (mm_value_t) future);
+			mm_context_add_task(strand->listener->context, &mm_future_fixed_task, (mm_value_t) future);
 		}
 		result = MM_RESULT_NOTREADY;
 	}
@@ -389,10 +390,10 @@ mm_future_unique_start(struct mm_future *future, struct mm_strand *strand)
 	if (result == MM_RESULT_DEFERRED) {
 		future->result = result = MM_RESULT_NOTREADY;
 		if (strand == NULL) {
-			mm_event_add_task(mm_context_listener(), &mm_future_unique_task, (mm_value_t) future);
+			mm_context_add_task(mm_context_selfptr(), &mm_future_unique_task, (mm_value_t) future);
 		} else {
 			ASSERT(strand == mm_strand_selfptr());
-			mm_event_add_task(strand->listener, &mm_future_unique_fixed_task, (mm_value_t) future);
+			mm_context_add_task(strand->listener->context, &mm_future_unique_fixed_task, (mm_value_t) future);
 		}
 	}
 

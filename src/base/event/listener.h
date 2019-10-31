@@ -116,6 +116,8 @@ struct mm_event_listener
 	/* Counter for poller busy waiting. */
 	uint32_t spin_count;
 
+	/* Associated context. */
+	struct mm_context *context;
 	/* Associated strand. */
 	struct mm_strand *strand;
 

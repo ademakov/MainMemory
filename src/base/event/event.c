@@ -150,7 +150,7 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
 		// Start a new input work.
 		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_event_add_task(sink->listener, &sink->io->input, (mm_value_t) sink);
+		mm_context_add_task(sink->listener->context, &sink->io->input, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -176,7 +176,7 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
 		// Start a new output work.
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_event_add_task(sink->listener, &sink->io->output, (mm_value_t) sink);
+		mm_context_add_task(sink->listener->context, &sink->io->output, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -251,7 +251,7 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if (mm_event_input_in_progress(sink) && !mm_event_input_closed(sink)) {
 		// Submit an input task for execution again.
 		sink->flags &= ~MM_EVENT_INPUT_RESTART;
-		mm_event_add_task(sink->listener, &sink->io->input, arg);
+		mm_context_add_task(sink->listener->context, &sink->io->input, arg);
 	} else {
 		// Done with input for now.
 		sink->flags &= ~MM_EVENT_INPUT_STARTED;
@@ -274,7 +274,7 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if (mm_event_output_in_progress(sink) && !mm_event_output_closed(sink)) {
 		// Submit an output task for execution again.
 		sink->flags &= ~MM_EVENT_OUTPUT_RESTART;
-		mm_event_add_task(sink->listener, &sink->io->output, arg);
+		mm_context_add_task(sink->listener->context, &sink->io->output, arg);
 	} else {
 		// Done with output for now.
 		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
@@ -486,7 +486,7 @@ mm_event_submit_input(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_INPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_INPUT_STARTED;
-			mm_event_add_task(sink->listener, &sink->io->input, (mm_value_t) sink);
+			mm_context_add_task(sink->listener->context, &sink->io->input, (mm_value_t) sink);
 		}
 	}
 
@@ -505,7 +505,7 @@ mm_event_submit_output(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_OUTPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_OUTPUT_STARTED;
-			mm_event_add_task(sink->listener, &sink->io->output, (mm_value_t) sink);
+			mm_context_add_task(sink->listener->context, &sink->io->output, (mm_value_t) sink);
 		}
 	}
 
@@ -584,7 +584,7 @@ mm_event_timer_fire(struct mm_event_listener *listener, struct mm_timeq_entry *e
 	if (sink->fiber != NULL) {
 		mm_fiber_run(sink->fiber);
 	} else {
-		mm_event_add_task(listener, sink->task, (mm_value_t) sink);
+		mm_context_add_task(listener->context, sink->task, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -1039,71 +1039,4 @@ mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_
 	}
 	MM_SEND(6, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
 		r, a1, a2, a3, a4, a5, a6);
-}
-
-/**********************************************************************
- * Asynchronous task scheduling.
- **********************************************************************/
-
-void NONNULL(1, 2)
-mm_event_add_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg)
-{
-	ENTER();
-	ASSERT(listener == mm_context_listener());
-
-	mm_task_list_add(&listener->tasks, task, arg);
-
-	LEAVE();
-}
-
-#if ENABLE_SMP
-
-static void
-mm_event_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
-{
-	ENTER();
-
-	struct mm_task *task = (struct mm_task *) arguments[0];
-	mm_value_t arg = arguments[1];
-
-	mm_event_add_task(listener, task, arg);
-
-	LEAVE();
-}
-
-#endif
-
-void NONNULL(1, 2)
-mm_event_send_task(struct mm_event_listener *listener, mm_task_t task, mm_value_t arg)
-{
-	ENTER();
-
-#if ENABLE_SMP
-	if (listener == mm_context_listener()) {
-		// Enqueue it directly if on the same strand.
-		mm_event_add_task(listener, task, arg);
-	} else {
-		// Submit the work item to the thread request queue.
-		mm_event_call_2(listener, mm_event_add_task_req, (uintptr_t) task, arg);
-	}
-#else
-	mm_event_add_task(listener, task, arg);
-#endif
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_post_task(mm_task_t task, mm_value_t arg)
-{
-	ENTER();
-
-#if ENABLE_SMP
-	// Dispatch the task.
-	mm_event_post_2(mm_event_add_task_req, (mm_value_t) task, arg);
-#else
-	mm_event_add_task(mm_context_listener(), task, arg);
-#endif
-
-	LEAVE();
 }
