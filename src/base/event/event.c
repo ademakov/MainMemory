@@ -36,24 +36,26 @@
 #define MM_SEND_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) __VA_ARGS__ }
 
 // Send a request to a cross-thread request ring.
-#define MM_SEND(n, ring, stat, notify, target, ...)			\
+#define MM_SEND(n, stat, target, ...)					\
 	do {								\
 		mm_stamp_t s;						\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		struct mm_ring_mpmc *ring = target->listener->async_queue; \
 		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_SEND_ARGC(n));	\
-		mm_event_notify(target, s);				\
+		mm_event_notify(target->listener, s);			\
 		stat();							\
 	} while (0)
 
 // Try to send a request to a cross-thread request ring.
-#define MM_TRYSEND(n, ring, stat, notify, target, ...)			\
+#define MM_TRYSEND(n, stat, target, ...)				\
 	do {								\
 		bool rc;						\
 		mm_stamp_t s;						\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		struct mm_ring_mpmc *ring = target->listener->async_queue; \
 		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_SEND_ARGC(n));	\
 		if (rc) {						\
-			mm_event_notify(target, s);			\
+			mm_event_notify(target->listener, s);		\
 			stat();						\
 		}							\
 		return rc;						\
@@ -63,18 +65,16 @@
 #define MM_DIRECTCALL_0(r)						\
 	do {								\
 		struct mm_context *context = mm_context_selfptr();	\
-		struct mm_event_listener *listener = context->listener;	\
 		MM_SEND_ARGV(v, 0);					\
-		r(listener, v);						\
-		mm_event_direct_call_stat(listener);			\
+		r(context, v);						\
+		mm_event_direct_call_stat(context->listener);		\
 	} while (0)
 #define MM_DIRECTCALL(r, ...)						\
 	do {								\
 		struct mm_context *context = mm_context_selfptr();	\
-		struct mm_event_listener *listener = context->listener;	\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		r(listener, v);						\
-		mm_event_direct_call_stat(listener);			\
+		r(context, v);						\
+		mm_event_direct_call_stat(context->listener);		\
 	} while (0)
 
 static inline void
@@ -108,8 +108,8 @@ mm_event_direct_call_stat(struct mm_event_listener *listener UNUSED)
 #endif
 }
 
-static struct mm_event_listener *
-mm_event_find_listener(void)
+static struct mm_context *
+mm_event_find_context(void)
 {
 #if ENABLE_SMP
 	struct mm_context *context = mm_context_selfptr();
@@ -120,7 +120,7 @@ mm_event_find_listener(void)
 		struct mm_event_listener *listener = &dispatch->listeners[i];
 		uintptr_t state = mm_memory_load(listener->state);
 		if (state != MM_EVENT_LISTENER_RUNNING)
-			return listener;
+			return listener->context;
 	}
 #endif
 	return NULL;
@@ -285,18 +285,17 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 }
 
 static bool
-mm_event_reassign_io(mm_value_t arg, struct mm_event_listener *listener)
+mm_event_reassign_io(mm_value_t arg, struct mm_context *context)
 {
 	ENTER();
 	bool reassigned = false;
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
 	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0) {
 		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
 		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
 		if (input_started != output_started) {
-			sink->listener = listener;
+			sink->listener = context->listener;
 			reassigned = true;
 		}
 	}
@@ -787,50 +786,50 @@ mm_event_notify(struct mm_event_listener *listener, mm_stamp_t stamp)
  * Asynchronous procedure call execution.
  **********************************************************************/
 
-struct mm_event_async
+struct mm_async_pack
 {
 	union
 	{
 		uintptr_t data[MM_EVENT_ASYNC_MAX + 1];
 		struct
 		{
-			mm_event_async_routine_t routine;
+			mm_async_routine_t routine;
 			uintptr_t arguments[MM_EVENT_ASYNC_MAX];
 		};
 	};
 };
 
 static inline void
-mm_event_async_execute(struct mm_event_listener *listener, struct mm_event_async *post)
+mm_async_execute(struct mm_context *context, struct mm_async_pack *pack)
 {
-	(*post->routine)(listener, post->arguments);
+	(*pack->routine)(context, pack->arguments);
 }
 
 static inline bool NONNULL(1, 2)
-mm_event_receive_call(struct mm_event_listener *listener, struct mm_event_async *post)
+mm_async_receive(struct mm_context *context, struct mm_async_pack *pack)
 {
-	return mm_ring_mpsc_get_n(listener->async_queue, post->data, (MM_EVENT_ASYNC_MAX + 1));
+	return mm_ring_mpsc_get_n(context->listener->async_queue, pack->data, (MM_EVENT_ASYNC_MAX + 1));
 }
 
 void NONNULL(1)
-mm_event_handle_calls(struct mm_event_listener *listener)
+mm_event_handle_calls(struct mm_context *context)
 {
 	ENTER();
 
 	// Execute requests.
-	struct mm_event_async async;
-	if (mm_event_receive_call(listener, &async)) {
+	struct mm_async_pack pack;
+	if (mm_async_receive(context, &pack)) {
 		// Enter the state that forbids a recursive fiber switch.
-		struct mm_strand *strand = listener->strand;
+		struct mm_strand *strand = context->strand;
 		mm_strand_state_t state = strand->state;
 		strand->state = MM_STRAND_CSWITCH;
 
 		do {
-			mm_event_async_execute(listener, &async);
+			mm_async_execute(context, &pack);
 #if ENABLE_EVENT_STATS
 			listener->stats.dequeued_async_calls++;
 #endif
-		} while (mm_event_receive_call(listener, &async));
+		} while (mm_async_receive(context, &pack));
 
 		// Restore normal running state.
 		strand->state = state;
@@ -844,113 +843,99 @@ mm_event_handle_calls(struct mm_event_listener *listener)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_call_0(struct mm_event_listener *listener, mm_event_async_routine_t r)
+mm_event_call_0(struct mm_context *context, mm_async_routine_t r)
 {
-	MM_SEND(0, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r);
+	MM_SEND(0, mm_event_call_stat, context, r);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_0(struct mm_event_listener *listener, mm_event_async_routine_t r)
+mm_event_trycall_0(struct mm_context *context, mm_async_routine_t r)
 {
-	MM_TRYSEND(0, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r);
+	MM_TRYSEND(0, mm_event_call_stat, context, r);
 }
 
 void NONNULL(1, 2)
-mm_event_call_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_1(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1)
 {
-	MM_SEND(1, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1);
+	MM_SEND(1, mm_event_call_stat, context, r, a1);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_1(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1)
 {
-	MM_TRYSEND(1, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1);
+	MM_TRYSEND(1, mm_event_call_stat, context, r, a1);
 }
 
 void NONNULL(1, 2)
-mm_event_call_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_2(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2)
 {
-	MM_SEND(2, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1, a2);
+	MM_SEND(2, mm_event_call_stat, context, r, a1, a2);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_2(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2)
 {
-	MM_TRYSEND(2, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1, a2);
+	MM_TRYSEND(2, mm_event_call_stat, context, r, a1, a2);
 }
 
 void NONNULL(1, 2)
-mm_event_call_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_3(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
-	MM_SEND(3, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1, a2, a3);
+	MM_SEND(3, mm_event_call_stat, context, r, a1, a2, a3);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_3(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
-	MM_TRYSEND(3, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1, a2, a3);
+	MM_TRYSEND(3, mm_event_call_stat, context, r, a1, a2, a3);
 }
 
 void NONNULL(1, 2)
-mm_event_call_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_4(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
-	MM_SEND(4, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1, a2, a3, a4);
+	MM_SEND(4, mm_event_call_stat, context,	r, a1, a2, a3, a4);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_4(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
-	MM_TRYSEND(4, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1, a2, a3, a4);
+	MM_TRYSEND(4, mm_event_call_stat, context, r, a1, a2, a3, a4);
 }
 
 void NONNULL(1, 2)
-mm_event_call_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_5(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
 {
-	MM_SEND(5, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1, a2, a3, a4, a5);
+	MM_SEND(5, mm_event_call_stat, context, r, a1, a2, a3, a4, a5);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_5(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
 {
-	MM_TRYSEND(5, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1, a2, a3, a4, a5);
+	MM_TRYSEND(5, mm_event_call_stat, context, r, a1, a2, a3, a4, a5);
 }
 
 void NONNULL(1, 2)
-mm_event_call_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_6(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
-	MM_SEND(6, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		r, a1, a2, a3, a4, a5, a6);
+	MM_SEND(6, mm_event_call_stat, context, r, a1, a2, a3, a4, a5, a6);
 }
 
 bool NONNULL(1, 2)
-mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_6(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
-	MM_TRYSEND(6, listener->async_queue, mm_event_call_stat, mm_event_notify, listener,
-		   r, a1, a2, a3, a4, a5, a6);
+	MM_TRYSEND(6, mm_event_call_stat, context, r, a1, a2, a3, a4, a5, a6);
 }
 
 /**********************************************************************
@@ -958,85 +943,78 @@ mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t 
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_post_0(mm_event_async_routine_t r)
+mm_event_post_0(mm_async_routine_t r)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL_0(r);
 		return;
 	}
-	MM_SEND(0, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r);
+	MM_SEND(0, mm_event_post_stat, context,	r);
 }
 
 void NONNULL(1)
-mm_event_post_1(mm_event_async_routine_t r, uintptr_t a1)
+mm_event_post_1(mm_async_routine_t r, uintptr_t a1)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1);
 		return;
 	}
-	MM_SEND(1, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1);
+	MM_SEND(1, mm_event_post_stat, context,	r, a1);
 }
 
 void NONNULL(1)
-mm_event_post_2(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2)
+mm_event_post_2(mm_async_routine_t r, uintptr_t a1, uintptr_t a2)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1, a2);
 		return;
 	}
-	MM_SEND(2, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1, a2);
+	MM_SEND(2, mm_event_post_stat, context, r, a1, a2);
 }
 
 void NONNULL(1)
-mm_event_post_3(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3)
+mm_event_post_3(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3);
 		return;
 	}
-	MM_SEND(3, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1, a2, a3);
+	MM_SEND(3, mm_event_post_stat, context, r, a1, a2, a3);
 }
 
 void NONNULL(1)
-mm_event_post_4(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+mm_event_post_4(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4);
 		return;
 	}
-	MM_SEND(4, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1, a2, a3, a4);
+	MM_SEND(4, mm_event_post_stat, context, r, a1, a2, a3, a4);
 }
 
 void NONNULL(1)
-mm_event_post_5(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+mm_event_post_5(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4, a5);
 		return;
 	}
-	MM_SEND(5, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1, a2, a3, a4, a5);
+	MM_SEND(5, mm_event_post_stat, context, r, a1, a2, a3, a4, a5);
 }
 
 void NONNULL(1)
-mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+mm_event_post_6(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
 {
-	struct mm_event_listener *listener = mm_event_find_listener();
-	if (listener == NULL) {
+	struct mm_context *context = mm_event_find_context();
+	if (context == NULL) {
 		MM_DIRECTCALL(r, a1, a2, a3, a4, a5, a6);
 		return;
 	}
-	MM_SEND(6, listener->async_queue, mm_event_post_stat, mm_event_post_notify, listener,
-		r, a1, a2, a3, a4, a5, a6);
+	MM_SEND(6, mm_event_post_stat, context, r, a1, a2, a3, a4, a5, a6);
 }

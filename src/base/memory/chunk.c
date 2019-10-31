@@ -21,7 +21,6 @@
 
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/event/event.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/backoff.h"
@@ -169,7 +168,7 @@ mm_chunk_destroy_queue(struct mm_queue *queue)
 }
 
 static void
-mm_chunk_free_req(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_chunk_free_req(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	struct mm_chunk *chunk = (struct mm_chunk *) arguments[0];
 	mm_private_free(chunk);
@@ -192,9 +191,9 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 
 #if ENABLE_SMP
 		mm_chunk_t tag = mm_chunk_gettag(chunk);
-		struct mm_event_listener *origin = mm_thread_ident_to_event_listener(tag);
+		struct mm_context *origin = mm_thread_ident_to_context(tag);
 #else
-		struct mm_event_listener *origin = mm_thread_ident_to_event_listener(0);
+		struct mm_context *origin = mm_thread_ident_to_context(0);
 #endif
 		uint32_t backoff = 0;
 		while (!mm_event_trycall_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {

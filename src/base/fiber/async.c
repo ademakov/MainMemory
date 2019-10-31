@@ -73,7 +73,7 @@ mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
 }
 
 static void
-mm_async_syscall_1_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_async_syscall_1_handler(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	// Make the system call.
 	uintptr_t num = arguments[1];
@@ -87,7 +87,7 @@ mm_async_syscall_1_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 
 #if 0
 static void
-mm_async_syscall_2_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_async_syscall_2_handler(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	// Make the system call.
 	uintptr_t num = arguments[1];
@@ -102,7 +102,7 @@ mm_async_syscall_2_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 #endif
 
 static void
-mm_async_syscall_3_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_async_syscall_3_handler(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	// Make the system call.
 	uintptr_t num = arguments[1];
@@ -118,7 +118,7 @@ mm_async_syscall_3_handler(struct mm_event_listener *listener UNUSED, uintptr_t 
 
 #if 0
 static void
-mm_async_syscall_4_handler(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_async_syscall_4_handler(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	// Make the system call.
 	uintptr_t num = arguments[1];

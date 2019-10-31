@@ -68,14 +68,14 @@ mm_context_add_task(struct mm_context *self, mm_task_t task, mm_value_t arg)
 #if ENABLE_SMP
 
 static void
-mm_context_add_task_req(struct mm_event_listener *listener, uintptr_t *arguments)
+mm_context_add_task_req(struct mm_context *context, uintptr_t *arguments)
 {
 	ENTER();
 
 	struct mm_task *task = (struct mm_task *) arguments[0];
 	mm_value_t arg = arguments[1];
 
-	mm_context_add_task(listener->context, task, arg);
+	mm_context_add_task(context, task, arg);
 
 	LEAVE();
 }
@@ -93,8 +93,7 @@ mm_context_send_task(struct mm_context *context, mm_task_t task, mm_value_t arg)
 		mm_context_add_task(context, task, arg);
 	} else {
 		// Submit the work item to the thread request queue.
-		struct mm_event_listener *listener = context->listener;
-		mm_event_call_2(listener, mm_context_add_task_req, (uintptr_t) task, arg);
+		mm_event_call_2(context, mm_context_add_task_req, (uintptr_t) task, arg);
 	}
 #else
 	mm_context_add_task(context, task, arg);
@@ -137,7 +136,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 
 			uint64_t n = mm_task_peer_list_size(&peer->tasks);
 			n += mm_ring_mpmc_size(peer->listener->async_queue) * MM_TASK_SEND_MAX;
-			while (n < limit && mm_task_list_reassign(&self->tasks, peer->listener))
+			while (n < limit && mm_task_list_reassign(&self->tasks, peer))
 				n += MM_TASK_SEND_MAX;
 			count++;
 		}

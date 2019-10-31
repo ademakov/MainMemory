@@ -351,71 +351,71 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
 #define MM_EVENT_ASYNC_MAX	(6)
 
 /* Request routines. */
-typedef void (*mm_event_async_routine_t)(struct mm_event_listener *listener, uintptr_t arguments[MM_EVENT_ASYNC_MAX]);
+typedef void (*mm_async_routine_t)(struct mm_context *context, uintptr_t arguments[MM_EVENT_ASYNC_MAX]);
 
 /**********************************************************************
  * Asynchronous procedure call execution.
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_handle_calls(struct mm_event_listener *listener);
+mm_event_handle_calls(struct mm_context *context);
 
 /**********************************************************************
  * Asynchronous procedure calls targeting a single listener.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_call_0(struct mm_event_listener *listener, mm_event_async_routine_t r);
+mm_event_call_0(struct mm_context *context, mm_async_routine_t r);
 
 bool NONNULL(1, 2)
-mm_event_trycall_0(struct mm_event_listener *listener, mm_event_async_routine_t r);
+mm_event_trycall_0(struct mm_context *context, mm_async_routine_t r);
 
 void NONNULL(1, 2)
-mm_event_call_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_1(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1);
 
 bool NONNULL(1, 2)
-mm_event_trycall_1(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_1(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1);
 
 void NONNULL(1, 2)
-mm_event_call_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_2(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2);
 
 bool NONNULL(1, 2)
-mm_event_trycall_2(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_2(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2);
 
 void NONNULL(1, 2)
-mm_event_call_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_3(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
 bool NONNULL(1, 2)
-mm_event_trycall_3(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_3(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
 void NONNULL(1, 2)
-mm_event_call_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_4(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
 bool NONNULL(1, 2)
-mm_event_trycall_4(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_4(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
 void NONNULL(1, 2)
-mm_event_call_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_5(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
 
 bool NONNULL(1, 2)
-mm_event_trycall_5(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_5(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
 
 void NONNULL(1, 2)
-mm_event_call_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_call_6(struct mm_context *context, mm_async_routine_t r,
 		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 bool NONNULL(1, 2)
-mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t r,
+mm_event_trycall_6(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 /**********************************************************************
@@ -423,24 +423,24 @@ mm_event_trycall_6(struct mm_event_listener *listener, mm_event_async_routine_t 
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_post_0(mm_event_async_routine_t r);
+mm_event_post_0(mm_async_routine_t r);
 
 void NONNULL(1)
-mm_event_post_1(mm_event_async_routine_t r, uintptr_t a1);
+mm_event_post_1(mm_async_routine_t r, uintptr_t a1);
 
 void NONNULL(1)
-mm_event_post_2(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2);
+mm_event_post_2(mm_async_routine_t r, uintptr_t a1, uintptr_t a2);
 
 void NONNULL(1)
-mm_event_post_3(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3);
+mm_event_post_3(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3);
 
 void NONNULL(1)
-mm_event_post_4(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
+mm_event_post_4(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4);
 
 void NONNULL(1)
-mm_event_post_5(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
+mm_event_post_5(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5);
 
 void NONNULL(1)
-mm_event_post_6(mm_event_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
+mm_event_post_6(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 #endif /* BASE_EVENT_EVENT_H */

@@ -101,7 +101,7 @@ mm_strand_poke(struct mm_strand *strand)
 
 #if ENABLE_SMP
 static void
-mm_strand_run_fiber_req(struct mm_event_listener *listener UNUSED, uintptr_t *arguments)
+mm_strand_run_fiber_req(struct mm_context *context UNUSED, uintptr_t *arguments)
 {
 	ENTER();
 
@@ -123,8 +123,8 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 		mm_fiber_run(fiber);
 	} else {
 		// Submit the fiber to the thread request queue.
-		struct mm_event_listener *listener = fiber->strand->listener;
-		mm_event_call_1(listener, mm_strand_run_fiber_req, (uintptr_t) fiber);
+		struct mm_context *context = fiber->strand->listener->context;
+		mm_event_call_1(context, mm_strand_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
 	mm_fiber_run(fiber);
@@ -316,11 +316,11 @@ mm_strand_stats(struct mm_strand *strand)
  **********************************************************************/
 
 static void
-mm_strand_stop_req(struct mm_event_listener *listener, uintptr_t *arguments UNUSED)
+mm_strand_stop_req(struct mm_context *context, uintptr_t *arguments UNUSED)
 {
 	ENTER();
 
-	listener->strand->stop = true;
+	context->strand->stop = true;
 
 	LEAVE();
 }
@@ -417,7 +417,7 @@ mm_strand_stop(struct mm_strand *strand)
 {
 	ENTER();
 
-	mm_event_call_0(strand->listener, mm_strand_stop_req);
+	mm_event_call_0(strand->listener->context, mm_strand_stop_req);
 
 	LEAVE();
 }

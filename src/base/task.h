@@ -25,7 +25,7 @@
 #include "base/list.h"
 
 /* Forward declarations. */
-struct mm_event_listener;
+struct mm_context;
 
 /**********************************************************************
  * Abstract asynchronous task.
@@ -38,7 +38,7 @@ typedef mm_value_t (*mm_task_execute_t)(mm_value_t arg);
 typedef void (*mm_task_complete_t)(mm_value_t arg, mm_value_t result);
 
 /* A task reassignment routine. */
-typedef bool (*mm_task_reassign_t)(mm_value_t arg, struct mm_event_listener *listener);
+typedef bool (*mm_task_reassign_t)(mm_value_t arg, struct mm_context *context);
 
 /* A set of routines for a task. */
 struct mm_task
@@ -165,7 +165,7 @@ mm_task_list_get(struct mm_task_list *list, struct mm_task_slot *slot)
 }
 
 bool NONNULL(1, 2)
-mm_task_list_reassign(struct mm_task_list *list, struct mm_event_listener *target);
+mm_task_list_reassign(struct mm_task_list *list, struct mm_context *target);
 
 /**********************************************************************
  * Task initialization.
@@ -179,8 +179,8 @@ mm_task_list_reassign(struct mm_task_list *list, struct mm_event_listener *targe
 	}
 
 void mm_task_complete_noop(mm_value_t arg, mm_value_t result);
-bool mm_task_reassign_on(mm_value_t arg, struct mm_event_listener* listener);
-bool mm_task_reassign_off(mm_value_t arg, struct mm_event_listener* listener);
+bool mm_task_reassign_on(mm_value_t arg, struct mm_context *context);
+bool mm_task_reassign_off(mm_value_t arg, struct mm_context *context);
 
 static inline void NONNULL(1, 2, 3, 4)
 mm_task_prepare(struct mm_task *task, mm_task_execute_t execute,
