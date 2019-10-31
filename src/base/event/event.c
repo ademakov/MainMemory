@@ -653,36 +653,6 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
-#if ENABLE_SMP
-static void NONNULL(1)
-mm_event_distribute_tasks(struct mm_event_dispatch *const dispatch, struct mm_event_listener *const listener)
-{
-	ENTER();
-
-	size_t ntasks = mm_task_list_size(&listener->tasks);
-	if (ntasks > (10 * MM_TASK_SEND_MAX)) {
-		const uint32_t nlisteners = dispatch->nlisteners;
-		const uint32_t self_index = listener - dispatch->listeners;
-		static const uint32_t limit = 2 * MM_TASK_SEND_MAX;
-
-		uint32_t count = 0;
-		for (uint32_t index = 0; index < nlisteners && count < 2; index++) {
-			if (index == self_index)
-				continue;
-
-			struct mm_event_listener *peer = &dispatch->listeners[index];
-			uint64_t n = mm_task_peer_list_size(&peer->tasks);
-			n += mm_ring_mpmc_size(peer->async_queue) * MM_TASK_SEND_MAX;
-			while (n < limit && mm_task_list_reassign(&listener->tasks, peer))
-				n += MM_TASK_SEND_MAX;
-			count++;
-		}
-	}
-
-	LEAVE();
-}
-#endif
-
 void NONNULL(1)
 mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 {
@@ -737,7 +707,7 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 		mm_regular_unlock(&dispatch->poller_lock);
 
 		// Share event tasks with other listeners if feasible.
-		mm_event_distribute_tasks(dispatch, listener);
+		mm_context_distribute_tasks(context);
 	} else {
 		// Flush event poll changes if any.
 		if (mm_event_backend_has_changes(&listener->storage)) {

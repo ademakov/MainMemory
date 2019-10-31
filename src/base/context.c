@@ -18,7 +18,10 @@
  */
 
 #include "base/context.h"
+
+#include "base/logger.h"
 #include "base/runtime.h"
+#include "base/event/listener.h"
 
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
@@ -38,3 +41,33 @@ void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
 }
+
+#if ENABLE_SMP
+void NONNULL(1)
+mm_context_distribute_tasks(struct mm_context *const self)
+{
+	ENTER();
+
+	struct mm_event_listener *const listener = self->listener;
+	const size_t ntasks = mm_task_list_size(&listener->tasks);
+	if (ntasks > (10 * MM_TASK_SEND_MAX)) {
+		static const uint32_t limit = 2 * MM_TASK_SEND_MAX;
+		const mm_thread_t ncontexts = mm_number_of_regular_threads();
+
+		uint32_t count = 0;
+		for (uint32_t index = 0; index < ncontexts && count < 2; index++) {
+			struct mm_context *const peer = mm_thread_ident_to_context(index);
+			if (peer == self)
+				continue;
+
+			uint64_t n = mm_task_peer_list_size(&peer->listener->tasks);
+			n += mm_ring_mpmc_size(peer->listener->async_queue) * MM_TASK_SEND_MAX;
+			while (n < limit && mm_task_list_reassign(&listener->tasks, peer->listener))
+				n += MM_TASK_SEND_MAX;
+			count++;
+		}
+	}
+
+	LEAVE();
+}
+#endif
