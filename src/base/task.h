@@ -77,7 +77,7 @@ struct mm_task_ring
  * Task queue.
  **********************************************************************/
 
-/* The maximum number of tasks that could be sent to another listener at once. */
+/* The maximum number of tasks that could be sent to another context at once. */
 #define MM_TASK_SEND_MAX	(3)
 
 /* Flexible task storage that normally contains one ring buffer but might add more on demand. */

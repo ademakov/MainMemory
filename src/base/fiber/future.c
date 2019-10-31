@@ -22,7 +22,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/event/event.h"
-#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/pool.h"
 
