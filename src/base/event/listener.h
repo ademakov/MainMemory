@@ -124,9 +124,6 @@ struct mm_event_listener
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
-	/* Tasks to execute locally. */
-	struct mm_task_list tasks;
-
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc *async_queue;
 

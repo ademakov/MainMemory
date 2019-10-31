@@ -165,9 +165,10 @@ mm_strand_worker(mm_value_t arg)
 
 	// Run in a loop forever getting and executing tasks.
 	struct mm_strand *const strand = (struct mm_strand *) arg;
+	struct mm_context *const context = strand->listener->context;
 	for (;;) {
 		// Try to get a task.
-		if (!mm_task_list_get(&strand->listener->tasks, &slot)) {
+		if (!mm_task_list_get(&context->tasks, &slot)) {
 			// Wait for a task standing at the front of the idle queue.
 			mm_strand_idle(strand);
 			continue;
@@ -242,12 +243,11 @@ mm_strand_master(mm_value_t arg)
 
 	struct mm_context *const context = (struct mm_context *) arg;
 	struct mm_strand *const strand = context->strand;
-	struct mm_event_listener *const listener = context->listener;
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
 		// Check to see if there are pending tasks.
-		if (mm_task_list_empty(&listener->tasks)) {
+		if (mm_task_list_empty(&context->tasks)) {
 			// Release excessive resources allocated by fibers.
 			mm_strand_trim(strand);
 			// Halt waiting for any incoming events.
@@ -263,7 +263,7 @@ mm_strand_master(mm_value_t arg)
 			if (mm_get_verbose_enabled())
 				mm_strand_print_fibers(strand);
 			// Create a new worker if feasible.
-			if (!mm_task_list_empty(&listener->tasks)
+			if (!mm_task_list_empty(&context->tasks)
 			    && strand->nworkers < strand->nworkers_max)
 				mm_strand_worker_create(strand);
 		}
@@ -296,7 +296,7 @@ mm_strand_print_fibers(struct mm_strand *strand)
 {
 	mm_brief("fibers on thread %d (#idle=%u, #task=%lu):",
 		 mm_thread_getnumber(strand->thread), strand->nidle,
-		 (unsigned long) mm_task_list_size(&strand->listener->tasks));
+		 (unsigned long) mm_task_list_size(&strand->listener->context->tasks));
 	for (int i = 0; i < MM_RUNQ_BINS; i++)
 		mm_strand_print_fiber_list(&strand->runq.bins[i]);
 	mm_strand_print_fiber_list(&strand->block);

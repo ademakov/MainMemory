@@ -36,11 +36,17 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident)
 
 	// Prepare the event clock.
 	mm_timesource_prepare(&context->timesource);
+
+	// Prepare storage for tasks.
+	mm_task_list_prepare(&context->tasks);
 }
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
+	// Destroy storage for tasks.
+	mm_task_list_cleanup(&context->tasks);
+
 	context->listener->context = NULL;
 }
 
@@ -54,7 +60,7 @@ mm_context_add_task(struct mm_context *self, mm_task_t task, mm_value_t arg)
 	ENTER();
 	ASSERT(self == mm_context_selfptr());
 
-	mm_task_list_add(&self->listener->tasks, task, arg);
+	mm_task_list_add(&self->tasks, task, arg);
 
 	LEAVE();
 }
@@ -118,8 +124,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 {
 	ENTER();
 
-	struct mm_event_listener *const listener = self->listener;
-	const size_t ntasks = mm_task_list_size(&listener->tasks);
+	const size_t ntasks = mm_task_list_size(&self->tasks);
 	if (ntasks > (10 * MM_TASK_SEND_MAX)) {
 		static const uint32_t limit = 2 * MM_TASK_SEND_MAX;
 		const mm_thread_t ncontexts = mm_number_of_regular_threads();
@@ -130,9 +135,9 @@ mm_context_distribute_tasks(struct mm_context *const self)
 			if (peer == self)
 				continue;
 
-			uint64_t n = mm_task_peer_list_size(&peer->listener->tasks);
+			uint64_t n = mm_task_peer_list_size(&peer->tasks);
 			n += mm_ring_mpmc_size(peer->listener->async_queue) * MM_TASK_SEND_MAX;
-			while (n < limit && mm_task_list_reassign(&listener->tasks, peer->listener))
+			while (n < limit && mm_task_list_reassign(&self->tasks, peer->listener))
 				n += MM_TASK_SEND_MAX;
 			count++;
 		}

@@ -306,9 +306,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->dispatch = dispatch;
 	strand->listener = listener;
 
-	// Prepare storage for tasks.
-	mm_task_list_prepare(&listener->tasks);
-
 	// Create the private request queue.
 	uint32_t sz = mm_upper_pow2(listener_queue_size);
 	if (sz < MM_EVENT_LISTINER_QUEUE_MIN_SIZE)
@@ -365,9 +362,6 @@ void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
-
-	// Destroy storage for tasks.
-	mm_task_list_cleanup(&listener->tasks);
 
 	// Destroy the timer queue.
 	mm_timeq_destroy(&listener->timer_queue);

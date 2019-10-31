@@ -20,6 +20,7 @@
 #include "base/task.h"
 
 #include "base/report.h"
+#include "base/context.h"
 #include "base/event/listener.h"
 #include "base/memory/memory.h"
 
@@ -28,40 +29,40 @@
  **********************************************************************/
 
 static void
-mm_event_task_add_1(struct mm_event_listener *listener, uintptr_t *arguments)
+mm_task_add_1(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[0], arguments[1]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[0], arguments[1]);
 
 	LEAVE();
 }
 
 static void
-mm_event_task_add_2(struct mm_event_listener *listener, uintptr_t *arguments)
+mm_task_add_2(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[0], arguments[1]);
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[2], arguments[3]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[0], arguments[1]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[2], arguments[3]);
 
 	LEAVE();
 }
 
 static void
-mm_event_task_add_3(struct mm_event_listener *listener, uintptr_t *arguments)
+mm_task_add_3(struct mm_event_listener *listener, uintptr_t *arguments)
 {
 	ENTER();
 
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[0], arguments[1]);
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[2], arguments[3]);
-	mm_task_list_add(&listener->tasks, (mm_task_t) arguments[4], arguments[5]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[0], arguments[1]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[2], arguments[3]);
+	mm_task_list_add(&listener->context->tasks, (mm_task_t) arguments[4], arguments[5]);
 
 	LEAVE();
 }
 
 static void
-mm_event_task_submit(struct mm_event_listener *listener, struct mm_task_slot* tasks, uint32_t count)
+mm_task_submit(struct mm_event_listener *listener, struct mm_task_slot* tasks, uint32_t count)
 {
 	ENTER();
 	DEBUG("count: %d", count);
@@ -69,19 +70,19 @@ mm_event_task_submit(struct mm_event_listener *listener, struct mm_task_slot* ta
 	switch (count)
 	{
 	case 1:
-		mm_event_call_2(listener, mm_event_task_add_1,
+		mm_event_call_2(listener, mm_task_add_1,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg);
 		break;
 	case 2:
-		mm_event_call_4(listener, mm_event_task_add_2,
+		mm_event_call_4(listener, mm_task_add_2,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg,
 				(uintptr_t) tasks[1].task,
 				tasks[1].task_arg);
 		break;
 	case 3:
-		mm_event_call_6(listener, mm_event_task_add_3,
+		mm_event_call_6(listener, mm_task_add_3,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg,
 				(uintptr_t) tasks[1].task,
@@ -171,7 +172,7 @@ mm_task_list_reassign(struct mm_task_list *list, struct mm_event_listener *targe
 
 	mm_counter_local_add(&list->head_count, count);
 	mm_counter_local_inc(&list->send_count[count]);
-	mm_event_task_submit(target, tasks, count);
+	mm_task_submit(target, tasks, count);
 
 	LEAVE();
 	return count == MM_TASK_SEND_MAX;

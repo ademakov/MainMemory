@@ -31,6 +31,9 @@ struct mm_context
 
 	/* Fast but coarse clock. */
 	struct mm_timesource timesource;
+
+	/* Tasks to execute locally. */
+	struct mm_task_list tasks;
 };
 
 extern __thread struct mm_context *__mm_context_self;
