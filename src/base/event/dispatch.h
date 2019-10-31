@@ -36,8 +36,6 @@ struct mm_event_dispatch_attr
 	/* The number of event listeners. */
 	mm_thread_t nlisteners;
 
-	/* Queue parameters. */
-	uint32_t listener_queue_size;
 	/* Spinning parameters. */
 	uint32_t lock_spin_limit;
 	uint32_t poll_spin_limit;
@@ -90,9 +88,6 @@ mm_event_dispatch_attr_cleanup(struct mm_event_dispatch_attr *attr);
 
 void NONNULL(1)
 mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thread_t n);
-
-void NONNULL(1)
-mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size);
 
 void NONNULL(1)
 mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value);

@@ -40,7 +40,7 @@
 	do {								\
 		mm_stamp_t s;						\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		struct mm_ring_mpmc *ring = target->listener->async_queue; \
+		struct mm_ring_mpmc *ring = target->async_queue;	\
 		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_SEND_ARGC(n));	\
 		mm_event_notify(target->listener, s);			\
 		stat();							\
@@ -52,7 +52,7 @@
 		bool rc;						\
 		mm_stamp_t s;						\
 		MM_SEND_ARGV(v, __VA_ARGS__);				\
-		struct mm_ring_mpmc *ring = target->listener->async_queue; \
+		struct mm_ring_mpmc *ring = target->async_queue;	\
 		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_SEND_ARGC(n));	\
 		if (rc) {						\
 			mm_event_notify(target->listener, s);		\
@@ -808,7 +808,7 @@ mm_async_execute(struct mm_context *context, struct mm_async_pack *pack)
 static inline bool NONNULL(1, 2)
 mm_async_receive(struct mm_context *context, struct mm_async_pack *pack)
 {
-	return mm_ring_mpsc_get_n(context->listener->async_queue, pack->data, (MM_EVENT_ASYNC_MAX + 1));
+	return mm_ring_mpsc_get_n(context->async_queue, pack->data, (MM_EVENT_ASYNC_MAX + 1));
 }
 
 void NONNULL(1)

@@ -19,15 +19,18 @@
 
 #include "base/context.h"
 
+#include "base/bitops.h"
 #include "base/logger.h"
 #include "base/runtime.h"
 #include "base/event/listener.h"
+
+#define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
 
 void NONNULL(1)
-mm_context_prepare(struct mm_context *context, mm_thread_t ident)
+mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async_queue_size)
 {
 	// Gather pointers to main runtime components.
 	context->strand = mm_thread_ident_to_strand(ident);
@@ -39,11 +42,20 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident)
 
 	// Prepare storage for tasks.
 	mm_task_list_prepare(&context->tasks);
+
+	// Create the async call queue.
+	uint32_t sz = mm_upper_pow2(async_queue_size);
+	if (sz < MM_ASYNC_QUEUE_MIN_SIZE)
+		sz = MM_ASYNC_QUEUE_MIN_SIZE;
+	context->async_queue = mm_ring_mpmc_create(sz);
 }
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
+	// Destroy the associated async call queue.
+	mm_ring_mpmc_destroy(context->async_queue);
+
 	// Destroy storage for tasks.
 	mm_task_list_cleanup(&context->tasks);
 
@@ -135,7 +147,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 				continue;
 
 			uint64_t n = mm_task_peer_list_size(&peer->tasks);
-			n += mm_ring_mpmc_size(peer->listener->async_queue) * MM_TASK_SEND_MAX;
+			n += mm_ring_mpmc_size(peer->async_queue) * MM_TASK_SEND_MAX;
 			while (n < limit && mm_task_list_reassign(&self->tasks, peer))
 				n += MM_TASK_SEND_MAX;
 			count++;

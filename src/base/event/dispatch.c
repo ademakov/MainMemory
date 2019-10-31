@@ -19,7 +19,6 @@
 
 #include "base/event/dispatch.h"
 
-#include "base/bitops.h"
 #include "base/logger.h"
 #include "base/event/listener.h"
 #include "base/fiber/strand.h"
@@ -61,12 +60,6 @@ mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thre
 		mm_global_free(attr->listeners_attr);
 		attr->listeners_attr = NULL;
 	}
-}
-
-void NONNULL(1)
-mm_event_dispatch_attr_setlistenerqueuesize(struct mm_event_dispatch_attr *attr, uint32_t size)
-{
-	attr->listener_queue_size = size;
 }
 
 void NONNULL(1)
@@ -114,7 +107,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 		struct mm_strand *strand = attr->listeners_attr[i].strand;
 		if (strand == NULL)
 			mm_fatal(0, "the fiber strand is not set for event listener: %d", i);
-		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, strand, attr->listener_queue_size);
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, strand);
 	}
 
 	// Initialize spinning parameters.

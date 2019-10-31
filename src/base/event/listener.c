@@ -19,7 +19,6 @@
 
 #include "base/event/listener.h"
 
-#include "base/bitops.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
@@ -30,8 +29,6 @@
 # include <mach/mach_init.h>
 # include <mach/task.h>
 #endif
-
-#define MM_EVENT_LISTINER_QUEUE_MIN_SIZE	(16)
 
 #if ENABLE_SMP
 
@@ -293,7 +290,7 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
 
 void NONNULL(1, 2, 3)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_strand *strand, uint32_t listener_queue_size)
+			  struct mm_strand *strand)
 {
 	ENTER();
 
@@ -305,12 +302,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->strand = strand;
 	listener->dispatch = dispatch;
 	strand->listener = listener;
-
-	// Create the private request queue.
-	uint32_t sz = mm_upper_pow2(listener_queue_size);
-	if (sz < MM_EVENT_LISTINER_QUEUE_MIN_SIZE)
-		sz = MM_EVENT_LISTINER_QUEUE_MIN_SIZE;
-	listener->async_queue = mm_ring_mpmc_create(sz);
 
 	// Prepare the timer queue.
 	mm_timeq_prepare(&listener->timer_queue, &mm_common_space.xarena);
@@ -365,9 +356,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 
 	// Destroy the timer queue.
 	mm_timeq_destroy(&listener->timer_queue);
-
-	// Destroy the associated request queue.
-	mm_ring_mpmc_destroy(listener->async_queue);
 
 #if ENABLE_SMP
 	// Release event forwarding data.

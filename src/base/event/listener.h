@@ -21,7 +21,7 @@
 #define BASE_EVENT_LISTENER_H
 
 #include "common.h"
-#include "base/ring.h"
+#include "base/context.h"
 #include "base/task.h"
 #include "base/timeq.h"
 #include "base/event/backend.h"
@@ -124,9 +124,6 @@ struct mm_event_listener
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
 
-	/* Asynchronous call queue. */
-	struct mm_ring_mpmc *async_queue;
-
 	/* Queue of delayed tasks. */
 	struct mm_timeq timer_queue;
 
@@ -154,7 +151,7 @@ struct mm_event_listener
 
 void NONNULL(1, 2, 3)
 mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_strand *strand, uint32_t listener_queue_size);
+			  struct mm_strand *strand);
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);
@@ -174,7 +171,7 @@ mm_event_listener_running(struct mm_event_listener *listener)
 static inline mm_stamp_t NONNULL(1)
 mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_status_t status)
 {
-	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->async_queue);
+	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->context->async_queue);
 	mm_atomic_uintptr_fetch_and_set(&listener->state, (((uintptr_t) stamp) << 2) | status);
 	return stamp;
 }
@@ -183,7 +180,7 @@ mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_
 static inline bool NONNULL(1)
 mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
-	return stamp == mm_ring_mpmc_enqueue_stamp(listener->async_queue);
+	return stamp == mm_ring_mpmc_enqueue_stamp(listener->context->async_queue);
 }
 
 /* Prepare the event listener for polling. */
@@ -197,7 +194,7 @@ mm_event_listener_polling(struct mm_event_listener *listener)
 static inline uintptr_t NONNULL(1)
 mm_event_listener_futex(struct mm_event_listener *listener)
 {
-	return (uintptr_t) &listener->async_queue->base.tail;
+	return (uintptr_t) &listener->context->async_queue->base.tail;
 }
 #endif
 

@@ -21,6 +21,7 @@
 #define BASE_CONTEXT_H
 
 #include "common.h"
+#include "base/ring.h"
 #include "base/task.h"
 #include "base/timesource.h"
 
@@ -34,6 +35,9 @@ struct mm_context
 
 	/* Tasks to execute locally. */
 	struct mm_task_list tasks;
+
+	/* Asynchronous call queue. */
+	struct mm_ring_mpmc *async_queue;
 };
 
 extern __thread struct mm_context *__mm_context_self;
@@ -57,7 +61,7 @@ mm_context_listener(void)
 }
 
 void NONNULL(1)
-mm_context_prepare(struct mm_context *context, mm_thread_t ident);
+mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async_queue_size);
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context);
