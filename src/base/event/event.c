@@ -134,7 +134,7 @@ void NONNULL(1)
 mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	// Update the read readiness flags.
 	sink->flags |= flags;
@@ -150,7 +150,7 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
 		// Start a new input work.
 		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_context_add_task(sink->listener->context, &sink->io->input, (mm_value_t) sink);
+		mm_context_add_task(sink->context, &sink->io->input, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -160,7 +160,7 @@ void NONNULL(1)
 mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	// Update the write readiness flags.
 	sink->flags |= flags;
@@ -176,7 +176,7 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
 		// Start a new output work.
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_context_add_task(sink->listener->context, &sink->io->output, (mm_value_t) sink);
+		mm_context_add_task(sink->context, &sink->io->output, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -214,7 +214,7 @@ static mm_value_t
 mm_event_unexpected_input(mm_value_t arg)
 {
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	mm_error(0, "unexpected input handler on fd %d", sink->fd);
 
@@ -228,7 +228,7 @@ static mm_value_t
 mm_event_unexpected_output(mm_value_t arg)
 {
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	mm_error(0, "unexpected output handler on fd %d", sink->fd);
 
@@ -244,14 +244,14 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 	ASSERT((sink->flags & MM_EVENT_INPUT_STARTED) != 0);
 
 	// Check to see if another input work should be started.
 	if (mm_event_input_in_progress(sink) && !mm_event_input_closed(sink)) {
 		// Submit an input task for execution again.
 		sink->flags &= ~MM_EVENT_INPUT_RESTART;
-		mm_context_add_task(sink->listener->context, &sink->io->input, arg);
+		mm_context_add_task(sink->context, &sink->io->input, arg);
 	} else {
 		// Done with input for now.
 		sink->flags &= ~MM_EVENT_INPUT_STARTED;
@@ -267,14 +267,14 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 	ASSERT((sink->flags & MM_EVENT_OUTPUT_STARTED) != 0);
 
 	// Check to see if another output work should be started.
 	if (mm_event_output_in_progress(sink) && !mm_event_output_closed(sink)) {
 		// Submit an output task for execution again.
 		sink->flags &= ~MM_EVENT_OUTPUT_RESTART;
-		mm_context_add_task(sink->listener->context, &sink->io->output, arg);
+		mm_context_add_task(sink->context, &sink->io->output, arg);
 	} else {
 		// Done with output for now.
 		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
@@ -295,7 +295,7 @@ mm_event_reassign_io(mm_value_t arg, struct mm_context *context)
 		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
 		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
 		if (input_started != output_started) {
-			sink->listener = context->listener;
+			sink->context = context;
 			reassigned = true;
 		}
 	}
@@ -348,7 +348,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
 
 	sink->fd = fd;
 	sink->io = io;
-	sink->listener = NULL;
+	sink->context = NULL;
 	sink->input_fiber = NULL;
 	sink->output_fiber = NULL;
 
@@ -371,22 +371,21 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_event_register_fd(struct mm_event_fd *sink)
+void NONNULL(1, 2)
+mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink)
 {
 	ENTER();
 	DEBUG("fd %d, status %d", sink->fd, sink->flags);
+	VERIFY(context == mm_context_selfptr());
 
 	// Bind the sink to this thread's event listener.
-	struct mm_event_listener *listener = mm_context_listener();
-	if (sink->listener != NULL) {
-		VERIFY(sink->listener == listener);
-	} else if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0) {
-		sink->listener = listener;
-	}
+	if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0)
+		sink->context = context;
 
 	// Register with the event backend.
+	struct mm_event_listener *listener = context->listener;
 	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
+
 	LEAVE();
 }
 
@@ -401,8 +400,9 @@ mm_event_close_fd(struct mm_event_fd *sink)
 	mm_event_set_closed(sink);
 
 	// Unregister it.
-	struct mm_event_listener *listener = sink->listener;
-	ASSERT(listener == mm_context_listener());
+	struct mm_context *context = sink->context;
+	ASSERT(context == mm_context_selfptr());
+	struct mm_event_listener *listener = context->listener;
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 
 	LEAVE();
@@ -419,8 +419,9 @@ mm_event_close_broken_fd(struct mm_event_fd *sink)
 	mm_event_set_broken(sink);
 
 	// Unregister it immediately.
-	struct mm_event_listener *listener = sink->listener;
-	ASSERT(listener == mm_context_listener());
+	struct mm_context *context = sink->context;
+	ASSERT(context == mm_context_selfptr());
+	struct mm_event_listener *listener = context->listener;
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
 	mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
 
@@ -439,8 +440,9 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 	if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER)) == MM_EVENT_ONESHOT_INPUT) {
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
 
-		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener == mm_context_listener());
+		struct mm_context *context = sink->context;
+		ASSERT(context == mm_context_selfptr());
+		struct mm_event_listener *listener = context->listener;
 
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -460,8 +462,9 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 	if ((sink->flags & (MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) == MM_EVENT_ONESHOT_OUTPUT) {
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
 
-		struct mm_event_listener *listener = sink->listener;
-		ASSERT(listener == mm_context_listener());
+		struct mm_context *context = sink->context;
+		ASSERT(context == mm_context_selfptr());
+		struct mm_event_listener *listener = context->listener;
 
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
 	}
@@ -477,7 +480,7 @@ void NONNULL(1)
 mm_event_submit_input(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	// Ask an input task to run.
 	if (!mm_event_input_closed(sink)) {
@@ -485,7 +488,7 @@ mm_event_submit_input(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_INPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_INPUT_STARTED;
-			mm_context_add_task(sink->listener->context, &sink->io->input, (mm_value_t) sink);
+			mm_context_add_task(sink->context, &sink->io->input, (mm_value_t) sink);
 		}
 	}
 
@@ -496,7 +499,7 @@ void NONNULL(1)
 mm_event_submit_output(struct mm_event_fd *sink)
 {
 	ENTER();
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	// Ask an output task to run.
 	if (!mm_event_output_closed(sink)) {
@@ -504,7 +507,7 @@ mm_event_submit_output(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_OUTPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_OUTPUT_STARTED;
-			mm_context_add_task(sink->listener->context, &sink->io->output, (mm_value_t) sink);
+			mm_context_add_task(sink->context, &sink->io->output, (mm_value_t) sink);
 		}
 	}
 
@@ -827,7 +830,7 @@ mm_event_handle_calls(struct mm_context *context)
 		do {
 			mm_async_execute(context, &pack);
 #if ENABLE_EVENT_STATS
-			listener->stats.dequeued_async_calls++;
+			context->listener->stats.dequeued_async_calls++;
 #endif
 		} while (mm_async_receive(context, &pack));
 

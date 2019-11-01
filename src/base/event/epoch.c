@@ -44,12 +44,12 @@ mm_event_epoch_reclaim_execute(mm_value_t arg)
 	ENTER();
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->listener == mm_context_listener());
+	ASSERT(sink->context == mm_context_selfptr());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed sinks
 	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
-		struct mm_fiber *fiber = sink->listener->strand->fiber;
+		struct mm_fiber *fiber = sink->context->strand->fiber;
 		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
 		if (sink->input_fiber != NULL)
 			mm_fiber_hoist(sink->input_fiber, priority);
@@ -80,7 +80,7 @@ mm_event_epoch_reclaim(struct mm_event_fd *sink)
 		      mm_event_epoch_reclaim_execute,
 		      mm_task_complete_noop,
 		      mm_task_reassign_off);
-	mm_context_add_task(sink->listener->context, &reclaim_task, (mm_value_t) sink);
+	mm_context_add_task(sink->context, &reclaim_task, (mm_value_t) sink);
 
 	LEAVE();
 }

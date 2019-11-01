@@ -106,10 +106,10 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask);
 void NONNULL(1)
 mm_net_setup_server(struct mm_net_server *srv);
 
-static inline struct mm_event_listener * NONNULL(1)
-mm_net_get_server_listener(struct mm_net_server *srv)
+static inline struct mm_context * NONNULL(1)
+mm_net_get_server_context(struct mm_net_server *srv)
 {
-	return srv->event.listener;
+	return srv->event.context;
 }
 
 /**********************************************************************
@@ -169,10 +169,10 @@ mm_net_shutdown_reader(struct mm_net_socket *sock);
 void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock);
 
-static inline struct mm_event_listener * NONNULL(1)
-mm_net_get_socket_listener(struct mm_net_socket *sock)
+static inline struct mm_context * NONNULL(1)
+mm_net_get_socket_context(struct mm_net_socket *sock)
 {
-	return sock->event.listener;
+	return sock->event.context;
 }
 
 static inline bool NONNULL(1)

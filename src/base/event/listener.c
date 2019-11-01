@@ -56,12 +56,12 @@ mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *si
 		return false;
 
 	// Cannot unbind if there is some event handling activity.
-	ASSERT(sink->listener != NULL);
+	ASSERT(sink->context != NULL);
 	if (mm_event_active(sink))
 		return true;
 
 	// Attach the sink to the poller.
-	sink->listener = listener;
+	sink->context = listener->context;
 	return true;
 }
 
@@ -140,7 +140,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
-	if (sink->listener == listener) {
+	if (sink->context == listener->context) {
 		mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_READY);
 		listener->events.direct++;
 	} else {
@@ -181,7 +181,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
-	if (sink->listener == listener) {
+	if (sink->context == listener->context) {
 		mm_event_backend_poller_input(&listener->storage, sink, MM_EVENT_INPUT_ERROR);
 		listener->events.direct++;
 	} else {
@@ -213,7 +213,7 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
-	if (sink->listener == listener) {
+	if (sink->context == listener->context) {
 		mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_READY);
 		listener->events.direct++;
 	} else {
@@ -245,7 +245,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to he target thread.
-	if (sink->listener == listener) {
+	if (sink->context == listener->context) {
 		mm_event_backend_poller_output(&listener->storage, sink, MM_EVENT_OUTPUT_ERROR);
 		listener->events.direct++;
 	} else {

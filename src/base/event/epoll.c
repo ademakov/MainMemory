@@ -268,8 +268,7 @@ mm_event_epoll_reset_input(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = sink->listener;
-	struct mm_event_dispatch *dispatch = listener->dispatch;
+	struct mm_event_dispatch *dispatch = sink->context->listener->dispatch;
 	struct mm_event_epoll *backend = &dispatch->backend.backend;
 
 	mm_event_epoll_disable_input(backend, sink);
@@ -282,8 +281,7 @@ mm_event_epoll_reset_output(struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = sink->listener;
-	struct mm_event_dispatch *dispatch = listener->dispatch;
+	struct mm_event_dispatch *dispatch = sink->context->listener->dispatch;
 	struct mm_event_epoll *backend = &dispatch->backend.backend;
 
 	mm_event_epoll_disable_output(backend, sink);

@@ -27,8 +27,6 @@
 
 /* Forward declarations. */
 struct mm_context;
-struct mm_event_dispatch;
-struct mm_event_listener;
 
 /* I/O event IDs. */
 typedef enum {
@@ -121,8 +119,8 @@ struct mm_event_fd
 	/* Task entries to perform I/O. */
 	struct mm_event_io *io;
 
-	/* The listener that owns the sink. */
-	struct mm_event_listener *listener;
+	/* The context that owns the sink. */
+	struct mm_context *context;
 
 	/* File descriptor to watch. */
 	int fd;
@@ -278,8 +276,8 @@ void NONNULL(1, 3)
 mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
 		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags);
 
-void NONNULL(1)
-mm_event_register_fd(struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_close_fd(struct mm_event_fd *sink);

@@ -228,7 +228,7 @@ retry:
 		sock->peer.addr.sa_family = sa.ss_family;
 
 	// Register the socket for event dispatch.
-	mm_event_register_fd(&sock->event);
+	mm_event_register_fd(mm_net_get_server_context(srv), &sock->event);
 
 leave:
 	LEAVE();
@@ -306,7 +306,7 @@ mm_net_register_server(mm_value_t arg)
 	// Register a server for events.
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
 	ASSERT(srv->event.fd >= 0);
-	mm_event_register_fd(&srv->event);
+	mm_event_register_fd(mm_context_selfptr(), &srv->event);
 
 	LEAVE();
 	return 0;
@@ -382,7 +382,7 @@ mm_net_stop_server(struct mm_net_server *srv)
 {
 	ENTER();
 	ASSERT(srv->event.fd != -1);
-	ASSERT(mm_net_get_server_listener(srv) == mm_context_listener());
+	ASSERT(mm_net_get_server_context(srv) == mm_context_selfptr());
 
 	mm_brief("stop server: %s", srv->name);
 
@@ -548,12 +548,12 @@ retry:
 	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, flags);
 
 	// Register the socket in the event loop.
-	mm_event_register_fd(&sock->event);
+	mm_event_register_fd(mm_context_selfptr(), &sock->event);
 
 	// Handle the EINPROGRESS case.
 	if (rc < 0) {
 		// Block the fiber waiting for connection completion.
-		sock->event.output_fiber = sock->event.listener->strand->fiber;
+		sock->event.output_fiber = sock->event.context->strand->fiber;
 		while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
 			mm_fiber_block();
 			// TODO: mm_fiber_testcancel();
@@ -657,14 +657,14 @@ mm_net_input_wait(struct mm_net_socket *sock, struct mm_context *context, const 
 
 	do {
 		if (context == NULL) {
-			sock->event.input_fiber = sock->event.listener->strand->fiber;
+			sock->event.input_fiber = sock->event.context->strand->fiber;
 			mm_fiber_block();
 			sock->event.input_fiber = NULL;
 		} else {
 			mm_timeval_t time = mm_event_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				sock->event.input_fiber = sock->event.listener->strand->fiber;
+				sock->event.input_fiber = context->strand->fiber;
 				mm_fiber_pause(deadline - time);
 				sock->event.input_fiber = NULL;
 			} else {
@@ -702,14 +702,14 @@ mm_net_output_wait(struct mm_net_socket *sock, struct mm_context *context, const
 
 	do {
 		if (context == NULL) {
-			sock->event.output_fiber = sock->event.listener->strand->fiber;
+			sock->event.output_fiber = sock->event.context->strand->fiber;
 			mm_fiber_block();
 			sock->event.output_fiber = NULL;
 		} else {
 			mm_timeval_t time = mm_event_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				sock->event.output_fiber = sock->event.listener->strand->fiber;
+				sock->event.output_fiber = context->strand->fiber;
 				mm_fiber_pause(deadline - time);
 				sock->event.output_fiber = NULL;
 			} else {
@@ -743,7 +743,7 @@ mm_net_read(struct mm_net_socket *sock, void *buffer, const size_t nbytes)
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_input_closed(sock);
@@ -808,7 +808,7 @@ mm_net_write(struct mm_net_socket *sock, const void *buffer, const size_t nbytes
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_output_closed(sock);
@@ -873,7 +873,7 @@ mm_net_readv(struct mm_net_socket *sock, const struct iovec *iov, const int iovc
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_input_closed(sock);
@@ -939,7 +939,7 @@ mm_net_writev(struct mm_net_socket *sock, const struct iovec *iov, const int iov
 {
 	ENTER();
 	DEBUG("nbytes: %zu", nbytes);
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	// Check if the socket is closed.
 	ssize_t n = mm_net_output_closed(sock);
@@ -1004,7 +1004,7 @@ void NONNULL(1)
 mm_net_close(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1020,7 +1020,7 @@ void NONNULL(1)
 mm_net_reset(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	if (mm_net_is_closed(sock))
 		goto leave;
@@ -1041,7 +1041,7 @@ void NONNULL(1)
 mm_net_shutdown_reader(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	if (mm_net_is_reader_shutdown(sock))
 		goto leave;
@@ -1061,7 +1061,7 @@ void NONNULL(1)
 mm_net_shutdown_writer(struct mm_net_socket *sock)
 {
 	ENTER();
-	ASSERT(mm_net_get_socket_listener(sock) == mm_context_listener());
+	ASSERT(mm_net_get_socket_context(sock) == mm_context_selfptr());
 
 	if (mm_net_is_writer_shutdown(sock))
 		goto leave;
