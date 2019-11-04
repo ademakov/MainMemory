@@ -329,12 +329,14 @@ mm_lock_print_stat(const struct mm_thread *thread,
 	const char *name = mm_thread_getname(thread);
 	if (stat_set->moreinfo != NULL)
 		mm_verbose("lock %s (%s), %s, locked %llu, failed %llu",
-			stat_set->location, stat_set->moreinfo, name,
-			stat->lock_count, stat->fail_count);
+			   stat_set->location, stat_set->moreinfo, name,
+			   (unsigned long long) stat->lock_count,
+			   (unsigned long long) stat->fail_count);
 	else
 		mm_verbose("lock %s, %s, locked %llu, failed %llu",
-			stat_set->location, name,
-			stat->lock_count, stat->fail_count);
+			   stat_set->location, name,
+			   (unsigned long long) stat->lock_count,
+			   (unsigned long long) stat->fail_count);
 }
 
 #endif
