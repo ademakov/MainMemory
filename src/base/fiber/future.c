@@ -23,6 +23,7 @@
 #include "base/runtime.h"
 #include "base/event/event.h"
 #include "base/fiber/fiber.h"
+#include "base/fiber/strand.h"
 #include "base/memory/pool.h"
 
 // The memory pool for futures.
@@ -238,7 +239,7 @@ mm_future_start(struct mm_future *future, struct mm_strand *strand)
 		if (strand == NULL) {
 			mm_context_add_task(mm_context_selfptr(), &mm_future_task, (mm_value_t) future);
 		} else {
-			ASSERT(strand == mm_strand_selfptr());
+			ASSERT(strand == mm_context_strand());
 			mm_context_add_task(strand->context, &mm_future_fixed_task, (mm_value_t) future);
 		}
 		result = MM_RESULT_NOTREADY;
@@ -391,7 +392,7 @@ mm_future_unique_start(struct mm_future *future, struct mm_strand *strand)
 		if (strand == NULL) {
 			mm_context_add_task(mm_context_selfptr(), &mm_future_unique_task, (mm_value_t) future);
 		} else {
-			ASSERT(strand == mm_strand_selfptr());
+			ASSERT(strand == mm_context_strand());
 			mm_context_add_task(strand->context, &mm_future_unique_fixed_task, (mm_value_t) future);
 		}
 	}

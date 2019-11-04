@@ -145,10 +145,10 @@ mm_async_setup(struct mm_async_node *node, const char *desc)
 	node->description = desc;
 
 	// Register as a waiting fiber.
-	struct mm_strand *strand = mm_strand_selfptr();
-	node->fiber = strand->fiber;
+	struct mm_context *context = mm_context_selfptr();
+	node->fiber = context->fiber;
 	node->fiber->flags |= MM_FIBER_WAITING;
-	mm_list_append(&strand->async, &node->link);
+	mm_list_append(&context->strand->async, &node->link);
 
 	// Initialize the result.
 	node->status = MM_RESULT_DEFERRED;

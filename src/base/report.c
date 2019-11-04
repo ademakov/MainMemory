@@ -20,6 +20,7 @@
 #include "base/report.h"
 
 #include "base/exit.h"
+#include "base/context.h"
 #include "base/format.h"
 #include "base/logger.h"
 #include "base/fiber/fiber.h"
@@ -262,9 +263,9 @@ mm_debug(const char *restrict location,
 static struct mm_trace_context *
 mm_trace_getcontext(void)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
-	if (strand != NULL)
-		return &strand->fiber->trace;
+	struct mm_context *context = mm_context_selfptr();
+	if (context != NULL)
+		return &context->fiber->trace;
 	struct mm_thread *thread = mm_thread_selfptr();
 	if (unlikely(thread == NULL))
 		ABORT();

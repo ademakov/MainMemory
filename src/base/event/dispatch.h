@@ -27,9 +27,6 @@
 
 #define ENABLE_EVENT_SINK_LOCK 0
 
-/* Forward declarations. */
-struct mm_strand;
-
 /* Event dispatch attributes. */
 struct mm_event_dispatch_attr
 {
@@ -94,8 +91,10 @@ mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uin
 void NONNULL(1)
 mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value);
 
+#if DISPATCH_ATTRS
 void NONNULL(1, 3)
-mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm_thread_t n, struct mm_strand *strand);
+mm_event_dispatch_attr_setxxx(struct mm_event_dispatch_attr *attr, mm_thread_t n, xxx_t xxx);
+#endif
 
 void NONNULL(1, 2)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_event_dispatch_attr *attr);

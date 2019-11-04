@@ -22,12 +22,12 @@
 
 #include "common.h"
 
+#include "base/context.h"
 #include "base/list.h"
 #include "base/fiber/runq.h"
 #include "base/fiber/wait.h"
 
 /* Forward declarations. */
-struct mm_context;
 struct mm_fiber;
 
 typedef enum
@@ -42,9 +42,6 @@ struct mm_strand
 {
 	/* The counter of fiber context switches. */
 	uint64_t cswitch_count;
-
-	/* Currently running fiber. */
-	struct mm_fiber *fiber;
 
 	/* The strand status. */
 	mm_strand_state_t state;
@@ -116,18 +113,6 @@ mm_strand_stop(struct mm_strand *strand);
 
 void NONNULL(1)
 mm_strand_run_fiber(struct mm_fiber *fiber);
-
-/**********************************************************************
- * Strand information.
- **********************************************************************/
-
-extern __thread struct mm_strand *__mm_strand_self;
-
-static inline struct mm_strand *
-mm_strand_selfptr(void)
-{
-	return __mm_strand_self;
-}
 
 /**********************************************************************
  * Strand diagnostics and statistics.

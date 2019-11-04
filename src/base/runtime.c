@@ -47,6 +47,8 @@ static mm_thread_t mm_regular_nthreads = 0;
 
 // The set of thread execution contexts.
 static struct mm_context **mm_context_table = NULL;
+// Temporary storage for task statistics.
+static struct mm_task_stats *mm_task_stats_store = NULL;
 
 // The domain of regular threads.
 static struct mm_domain *mm_regular_domain = NULL;
@@ -317,16 +319,14 @@ mm_regular_boot(mm_value_t arg)
 	struct mm_strand *const strand = context->strand;
 	strand->thread = mm_thread_selfptr();
 
-	// Set the thread-specific data.
-	__mm_strand_self = strand;
 	// Set pointer to the running fiber.
-	strand->fiber = strand->boot;
-	strand->fiber->state = MM_FIBER_RUNNING;
+	context->fiber = strand->boot;
+	context->fiber->state = MM_FIBER_RUNNING;
 
 #if ENABLE_TRACE
-	mm_trace_context_prepare(&strand->fiber->trace, "[%s %s]",
+	mm_trace_context_prepare(&context->fiber->trace, "[%s %s]",
 				 mm_thread_getname(strand->thread),
-				 mm_fiber_getname(strand->fiber));
+				 mm_fiber_getname(context->fiber));
 #endif
 
 	// Initialize per-strand resources.
@@ -339,14 +339,13 @@ mm_regular_boot(mm_value_t arg)
 	mm_regular_boot_call_stop_hooks(strand);
 
 	// Invalidate the boot fiber.
-	strand->fiber->state = MM_FIBER_INVALID;
-	strand->fiber = NULL;
-	// Abandon the strand.
-	__mm_strand_self = NULL;
+	context->fiber->state = MM_FIBER_INVALID;
+	context->fiber = NULL;
 
 	// Release the execution context.
 	__mm_context_self = NULL;
 	mm_context_table[arg] = NULL;
+	mm_task_stats_store[arg] = context->tasks.stats;
 	mm_context_cleanup(context);
 	mm_regular_free(context);
 
@@ -375,6 +374,7 @@ mm_common_start(void)
 
 	// Allocate the storage for thread execution contexts.
 	mm_context_table = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context *));
+	mm_task_stats_store = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_task_stats));
 
 	// Allocate a fiber strand for each regular thread.
 	mm_regular_strands = mm_common_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
@@ -387,8 +387,10 @@ mm_common_start(void)
 	mm_event_dispatch_attr_setlisteners(&attr, mm_regular_nthreads);
 	mm_event_dispatch_attr_setlockspinlimit(&attr, mm_settings_get_uint32("event-lock-spin-limit", 1));
 	mm_event_dispatch_attr_setpollspinlimit(&attr, mm_settings_get_uint32("event-poll-spin-limit", 4));
+#if DISPATCH_ATTRS
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
-		mm_event_dispatch_attr_setlistenerstrand(&attr, i, &mm_regular_strands[i]);
+		mm_event_dispatch_attr_setlistenerxxx(&attr, i, xxx);
+#endif
 	mm_event_dispatch_prepare(&mm_regular_dispatch, &attr);
 	mm_event_dispatch_attr_cleanup(&attr);
 
@@ -401,8 +403,10 @@ mm_common_stop(void)
 	ENTER();
 
 	// Print statistics.
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
 		mm_strand_stats(&mm_regular_strands[i]);
+		mm_task_stats(&mm_task_stats_store[i]);
+	}
 	mm_event_dispatch_stats(&mm_regular_dispatch);
 	mm_lock_stats();
 

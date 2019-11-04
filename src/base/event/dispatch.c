@@ -21,7 +21,6 @@
 
 #include "base/logger.h"
 #include "base/event/listener.h"
-#include "base/fiber/strand.h"
 #include "base/memory/global.h"
 #include "base/memory/memory.h"
 
@@ -30,7 +29,6 @@
 
 struct mm_event_dispatch_listener_attr
 {
-	struct mm_strand *strand;
 };
 
 /**********************************************************************
@@ -74,8 +72,9 @@ mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uin
 	attr->poll_spin_limit = value;
 }
 
+#if DISPATCH_ATTRS
 void NONNULL(1, 3)
-mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm_thread_t n, struct mm_strand *strand)
+mm_event_dispatch_attr_setxxx(struct mm_event_dispatch_attr *attr, mm_thread_t n, xxx_t xxx)
 {
 	if (unlikely(attr->nlisteners == 0))
 		mm_fatal(0, "the number of event listeners is not set");
@@ -86,8 +85,9 @@ mm_event_dispatch_attr_setlistenerstrand(struct mm_event_dispatch_attr *attr, mm
 		attr->listeners_attr = mm_global_calloc(attr->nlisteners, sizeof(struct mm_event_dispatch_listener_attr));
 	}
 
-	attr->listeners_attr[n].strand = strand;
+	attr->listeners_attr[n].xxx = xxx;
 }
+#endif
 
 void NONNULL(1, 2)
 mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_event_dispatch_attr *attr)
@@ -97,18 +97,16 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	// Validate the provided listener info.
 	if (unlikely(attr->nlisteners == 0))
 		mm_fatal(0, "the number of event listeners is not set");
+#if DISPATCH_ATTRS
 	if (unlikely(attr->listeners_attr == NULL))
 		mm_fatal(0, "event listener attributes are not set");
+#endif
 
 	// Prepare listener info.
 	dispatch->nlisteners = attr->nlisteners;
 	dispatch->listeners = mm_common_calloc(attr->nlisteners, sizeof(struct mm_event_listener));
-	for (mm_thread_t i = 0; i < attr->nlisteners; i++) {
-		struct mm_strand *strand = attr->listeners_attr[i].strand;
-		if (strand == NULL)
-			mm_fatal(0, "the fiber strand is not set for event listener: %d", i);
-		mm_event_listener_prepare(&dispatch->listeners[i], dispatch, strand);
-	}
+	for (mm_thread_t i = 0; i < attr->nlisteners; i++)
+		mm_event_listener_prepare(&dispatch->listeners[i], dispatch);
 
 	// Initialize spinning parameters.
 	dispatch->lock_spin_limit = attr->lock_spin_limit;
@@ -168,9 +166,6 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 		struct mm_event_listener_stats *stats = &listener->stats;
 
 		mm_log_fmt("listener %d:\n", i);
-		mm_log_fmt(" tasks=%llu task-rings=%llu\n",
-			   (unsigned long long) mm_counter_shared_load(&listener->context->tasks.tail_count),
-			   (unsigned long long) mm_counter_shared_load(&listener->context->tasks.ring_count));
 		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
 			   " stray=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n"
 			   " async-calls=%llu/%llu/%llu direct-calls=%llu\n",

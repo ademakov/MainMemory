@@ -47,7 +47,6 @@
 
 /* Forward declarations. */
 struct mm_event_dispatch;
-struct mm_strand;
 
 #define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
 
@@ -118,8 +117,6 @@ struct mm_event_listener
 
 	/* Associated context. */
 	struct mm_context *context;
-	/* Associated strand. */
-	struct mm_strand *strand;
 
 	/* The top-level event dispatch data. */
 	struct mm_event_dispatch *dispatch;
@@ -149,9 +146,8 @@ struct mm_event_listener
  * Event listener initialization and cleanup.
  **********************************************************************/
 
-void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_strand *strand);
+void NONNULL(1, 2)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch);
 
 void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener);

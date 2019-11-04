@@ -37,9 +37,6 @@
 #define MM_NWORKERS_MIN		2
 #define MM_NWORKERS_MAX		256
 
-// A strand associated with the running thread.
-__thread struct mm_strand *__mm_strand_self;
-
 /**********************************************************************
  * Idle queue.
  **********************************************************************/
@@ -50,7 +47,7 @@ mm_strand_idle(struct mm_strand *strand)
 	ENTER();
 
 	// Put the fiber into the wait queue.
-	struct mm_fiber *fiber = strand->fiber;
+	struct mm_fiber *fiber = strand->context->fiber;
 	mm_list_insert(&strand->idle, &fiber->wait_queue);
 
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
@@ -117,7 +114,7 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 	ENTER();
 
 #if ENABLE_SMP
-	if (fiber->strand == mm_strand_selfptr()) {
+	if (fiber->strand == mm_context_strand()) {
 		// Put the fiber to the run queue directly.
 		mm_fiber_run(fiber);
 	} else {
@@ -139,7 +136,7 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 static void
 mm_strand_worker_cleanup(uintptr_t arg)
 {
-	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_strand *strand = mm_context_strand();
 	struct mm_task_slot *slot = (struct mm_task_slot *) arg;
 
 	// Notify that the current work has been canceled.
@@ -351,7 +348,7 @@ mm_strand_prepare(struct mm_strand *strand)
 	strand->stop = false;
 
 	// Create the strand bootstrap fiber.
-	strand->boot = mm_fiber_create_boot();
+	strand->boot = mm_fiber_create_boot(strand);
 
 	LEAVE();
 }

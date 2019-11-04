@@ -23,6 +23,7 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/fiber/fiber.h"
+#include "base/fiber/strand.h"
 #include "base/memory/pool.h"
 
 // An entry for a waiting fiber.
@@ -208,7 +209,7 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_strand *strand = mm_context_strand();
 	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
 	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
@@ -231,7 +232,7 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_strand *strand = mm_strand_selfptr();
+	struct mm_strand *strand = mm_context_strand();
 	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
 	wait->fiber = mm_fiber_selfptr();
 	mm_stack_insert(&waitset->set, &wait->link);
@@ -265,7 +266,7 @@ mm_waitset_broadcast(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 		struct mm_slink *link = mm_stack_remove(&set);
 		struct mm_wait *wait = containerof(link, struct mm_wait, link);
 		struct mm_fiber *fiber = mm_memory_load(wait->fiber);
-		struct mm_strand *strand = mm_strand_selfptr();
+		struct mm_strand *strand = fiber->strand;
 
 		if (likely(fiber != NULL)) {
 			// Run the fiber if it has not been reset.

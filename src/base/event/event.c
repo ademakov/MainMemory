@@ -25,6 +25,7 @@
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/fiber/fiber.h"
+#include "base/fiber/strand.h"
 
 /**********************************************************************
  * Asynchronous procedure call construction.
@@ -823,8 +824,8 @@ mm_event_handle_calls(struct mm_context *context)
 	struct mm_async_pack pack;
 	if (mm_async_receive(context, &pack)) {
 		// Enter the state that forbids a recursive fiber switch.
-		struct mm_strand *strand = context->strand;
-		mm_strand_state_t state = strand->state;
+		struct mm_strand *const strand = context->strand;
+		const mm_strand_state_t state = strand->state;
 		strand->state = MM_STRAND_CSWITCH;
 
 		do {

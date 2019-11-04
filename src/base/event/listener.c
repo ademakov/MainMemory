@@ -22,7 +22,6 @@
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
-#include "base/fiber/strand.h"
 #include "base/memory/memory.h"
 
 #if ENABLE_MACH_SEMAPHORE
@@ -288,9 +287,8 @@ mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event
  * Event listener initialization and cleanup.
  **********************************************************************/
 
-void NONNULL(1, 2, 3)
-mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch,
-			  struct mm_strand *strand)
+void NONNULL(1, 2)
+mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
@@ -299,7 +297,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Set the pointers among associated entities.
 	listener->context = NULL;
-	listener->strand = strand;
 	listener->dispatch = dispatch;
 
 	// Prepare the timer queue.

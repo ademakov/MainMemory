@@ -19,6 +19,7 @@
 
 #include "base/task.h"
 
+#include "base/logger.h"
 #include "base/report.h"
 #include "base/context.h"
 #include "base/memory/memory.h"
@@ -99,15 +100,27 @@ mm_task_submit(struct mm_context *context, struct mm_task_slot* tasks, uint32_t 
  **********************************************************************/
 
 void NONNULL(1)
+mm_task_stats(struct mm_task_stats *stats)
+{
+	mm_log_fmt(" tasks=%llu task-rings=%llu reassign-send=[%llu %llu %llu %llu]\n",
+		   (unsigned long long) mm_counter_shared_load(&stats->tail_count),
+		   (unsigned long long) mm_counter_shared_load(&stats->ring_count),
+		   (unsigned long long) mm_counter_shared_load(&stats->send_count[0]),
+		   (unsigned long long) mm_counter_shared_load(&stats->send_count[1]),
+		   (unsigned long long) mm_counter_shared_load(&stats->send_count[2]),
+		   (unsigned long long) mm_counter_shared_load(&stats->send_count[3]));
+}
+
+void NONNULL(1)
 mm_task_list_prepare(struct mm_task_list *list)
 {
 	mm_queue_prepare(&list->list);
-	mm_counter_prepare(&list->head_count, 0);
-	mm_counter_prepare(&list->tail_count, 0);
-	mm_counter_prepare(&list->ring_count, 0);
+	mm_counter_prepare(&list->stats.head_count, 0);
+	mm_counter_prepare(&list->stats.tail_count, 0);
+	mm_counter_prepare(&list->stats.ring_count, 0);
 
 	for (int i = 0; i < MM_TASK_SEND_MAX; i++)
-		mm_counter_prepare(&list->send_count[i], 0);
+		mm_counter_prepare(&list->stats.send_count[i], 0);
 
 	mm_task_list_add_ring(list);
 }
@@ -129,7 +142,7 @@ mm_task_list_add_ring(struct mm_task_list *list)
 	ring->head = 0;
 	ring->tail = 0;
 	mm_queue_append(&list->list, &ring->link);
-	mm_counter_local_inc(&list->ring_count);
+	mm_counter_local_inc(&list->stats.ring_count);
 	return ring;
 }
 
@@ -169,8 +182,8 @@ mm_task_list_reassign(struct mm_task_list *list, struct mm_context *target)
 
 	} while (count < MM_TASK_SEND_MAX);
 
-	mm_counter_local_add(&list->head_count, count);
-	mm_counter_local_inc(&list->send_count[count]);
+	mm_counter_local_add(&list->stats.head_count, count);
+	mm_counter_local_inc(&list->stats.send_count[count]);
 	mm_task_submit(target, tasks, count);
 
 	LEAVE();

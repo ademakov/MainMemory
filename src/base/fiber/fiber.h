@@ -24,7 +24,6 @@
 #include "base/context.h"
 #include "base/cstack.h"
 #include "base/list.h"
-#include "base/fiber/strand.h"
 
 #define ENABLE_FIBER_LOCATION	0
 
@@ -194,7 +193,7 @@ mm_fiber_destroy(struct mm_fiber *fiber);
  **********************************************************************/
 
 struct mm_fiber *
-mm_fiber_create_boot(void);
+mm_fiber_create_boot(struct mm_strand *strand);
 
 /**********************************************************************
  * Fiber utilities.
@@ -203,7 +202,7 @@ mm_fiber_create_boot(void);
 static inline struct mm_fiber *
 mm_fiber_selfptr(void)
 {
-	return mm_strand_selfptr()->fiber;
+	return mm_context_selfptr()->fiber;
 }
 
 static inline const char * NONNULL(1)

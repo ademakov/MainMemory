@@ -27,7 +27,12 @@
 
 struct mm_context
 {
+	/* Currently running fiber. */
+	struct mm_fiber *fiber;
+
+	/* Associated fiber strand. */
 	struct mm_strand *strand;
+	/* Associated event listener. */
 	struct mm_event_listener *listener;
 
 	/* Fast but coarse clock. */

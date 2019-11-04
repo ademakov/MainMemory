@@ -25,7 +25,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/stdcall.h"
-#include "base/event/listener.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/global.h"
@@ -553,7 +552,7 @@ retry:
 	// Handle the EINPROGRESS case.
 	if (rc < 0) {
 		// Block the fiber waiting for connection completion.
-		sock->event.output_fiber = sock->event.context->strand->fiber;
+		sock->event.output_fiber = sock->event.context->fiber;
 		while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
 			mm_fiber_block();
 			// TODO: mm_fiber_testcancel();
@@ -657,14 +656,14 @@ mm_net_input_wait(struct mm_net_socket *sock, struct mm_context *context, const 
 
 	do {
 		if (context == NULL) {
-			sock->event.input_fiber = sock->event.context->strand->fiber;
+			sock->event.input_fiber = sock->event.context->fiber;
 			mm_fiber_block();
 			sock->event.input_fiber = NULL;
 		} else {
 			mm_timeval_t time = mm_event_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				sock->event.input_fiber = context->strand->fiber;
+				sock->event.input_fiber = context->fiber;
 				mm_fiber_pause(deadline - time);
 				sock->event.input_fiber = NULL;
 			} else {
@@ -702,14 +701,14 @@ mm_net_output_wait(struct mm_net_socket *sock, struct mm_context *context, const
 
 	do {
 		if (context == NULL) {
-			sock->event.output_fiber = sock->event.context->strand->fiber;
+			sock->event.output_fiber = sock->event.context->fiber;
 			mm_fiber_block();
 			sock->event.output_fiber = NULL;
 		} else {
 			mm_timeval_t time = mm_event_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
-				sock->event.output_fiber = context->strand->fiber;
+				sock->event.output_fiber = context->fiber;
 				mm_fiber_pause(deadline - time);
 				sock->event.output_fiber = NULL;
 			} else {

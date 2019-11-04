@@ -294,8 +294,8 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 
 	// Enter the state that forbids fiber yield to avoid possible
 	// problems with re-entering from another fiber.
-	struct mm_strand *strand = listener->strand;
-	mm_strand_state_t strand_state = strand->state;
+	struct mm_strand *const strand = listener->context->strand;
+	const mm_strand_state_t strand_state = strand->state;
 	strand->state = MM_STRAND_CSWITCH;
 
 	// If any event sinks are to be unregistered then start a reclamation epoch.

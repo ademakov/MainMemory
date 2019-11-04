@@ -80,17 +80,26 @@ struct mm_task_ring
 /* The maximum number of tasks that could be sent to another context at once. */
 #define MM_TASK_SEND_MAX	(3)
 
+/* Task statistics. */
+struct mm_task_stats
+{
+	mm_counter_t head_count;
+	mm_counter_t tail_count;
+	mm_counter_t ring_count;
+	mm_counter_t send_count[MM_TASK_SEND_MAX + 1];
+};
+
 /* Flexible task storage that normally contains one ring buffer but might add more on demand. */
 struct mm_task_list
 {
 	/* Task rings. */
 	struct mm_queue list;
 	/* Statistics. */
-	mm_counter_t head_count;
-	mm_counter_t tail_count;
-	mm_counter_t ring_count;
-	mm_counter_t send_count[MM_TASK_SEND_MAX + 1];
+	struct mm_task_stats stats;
 };
+
+void NONNULL(1)
+mm_task_stats(struct mm_task_stats *stats);
 
 void NONNULL(1)
 mm_task_list_prepare(struct mm_task_list *list);
@@ -107,24 +116,24 @@ mm_task_list_get_ring(struct mm_task_list *list);
 static inline size_t NONNULL(1)
 mm_task_list_size(struct mm_task_list *list)
 {
-	uint64_t head = mm_counter_local_load(&list->head_count);
-	uint64_t tail = mm_counter_local_load(&list->tail_count);
+	uint64_t head = mm_counter_local_load(&list->stats.head_count);
+	uint64_t tail = mm_counter_local_load(&list->stats.tail_count);
 	return tail - head;
 }
 
 static inline size_t NONNULL(1)
 mm_task_peer_list_size(struct mm_task_list *list)
 {
-	uint64_t head = mm_counter_shared_load(&list->head_count);
-	uint64_t tail = mm_counter_shared_load(&list->tail_count);
+	uint64_t head = mm_counter_shared_load(&list->stats.head_count);
+	uint64_t tail = mm_counter_shared_load(&list->stats.tail_count);
 	return tail - head;
 }
 
 static inline bool NONNULL(1)
 mm_task_list_empty(struct mm_task_list *list)
 {
-	uint64_t head = mm_counter_local_load(&list->head_count);
-	uint64_t tail = mm_counter_local_load(&list->tail_count);
+	uint64_t head = mm_counter_local_load(&list->stats.head_count);
+	uint64_t tail = mm_counter_local_load(&list->stats.tail_count);
 	return head == tail;
 }
 
@@ -141,7 +150,7 @@ mm_task_list_add(struct mm_task_list *list, mm_task_t task, mm_value_t arg)
 	ring->ring[index].task_arg = arg;
 
 	ring->tail++;
-	mm_counter_local_inc(&list->tail_count);
+	mm_counter_local_inc(&list->stats.tail_count);
 }
 
 static inline bool NONNULL(1, 2)
@@ -159,7 +168,7 @@ mm_task_list_get(struct mm_task_list *list, struct mm_task_slot *slot)
 	*slot = ring->ring[index];
 
 	ring->head++;
-	mm_counter_local_inc(&list->head_count);
+	mm_counter_local_inc(&list->stats.head_count);
 
 	return true;
 }

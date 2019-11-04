@@ -49,7 +49,7 @@ mm_event_epoch_reclaim_execute(mm_value_t arg)
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed sinks
 	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
-		struct mm_fiber *fiber = sink->context->strand->fiber;
+		struct mm_fiber *fiber = sink->context->fiber;
 		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
 		if (sink->input_fiber != NULL)
 			mm_fiber_hoist(sink->input_fiber, priority);

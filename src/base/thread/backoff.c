@@ -22,6 +22,7 @@
 #include "base/context.h"
 #include "base/event/event.h"
 #include "base/fiber/fiber.h"
+#include "base/fiber/strand.h"
 #include "base/thread/thread.h"
 
 uint32_t
@@ -34,7 +35,7 @@ mm_thread_backoff_slow(uint32_t count)
 		// If there are any waiting working fibers and this is a
 		// working fiber too then yield to let them make progress.
 		struct mm_strand *const strand = context->strand;
-		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_MASTER) && strand->fiber->priority < MM_PRIO_MASTER) {
+		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_MASTER) && context->fiber->priority < MM_PRIO_MASTER) {
 			mm_fiber_yield();
 			return count + count + 1;
 		}
