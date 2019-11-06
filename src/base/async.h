@@ -1,5 +1,5 @@
 /*
- * base/fiber/async.h - MainMemory asynchronous operations.
+ * base/async.h - MainMemory asynchronous operations.
  *
  * Copyright (C) 2015-2019  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_FIBER_ASYNC_H
-#define BASE_FIBER_ASYNC_H
+#ifndef BASE_ASYNC_H
+#define BASE_ASYNC_H
 
 #include "common.h"
 #include <sys/types.h>
@@ -45,4 +45,4 @@ mm_async_writev(int fd, const struct iovec *iov, int iovcnt);
 ssize_t
 mm_async_close(int fd);
 
-#endif /* BASE_FIBER_ASYNC_H */
+#endif /* BASE_ASYNC_H */

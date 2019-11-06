@@ -11,6 +11,7 @@ libcksum_la_CFLAGS = @ARCH_CFLAGS@
 
 libmainbase_la_SOURCES = \
 	args.c args.h \
+	async.c async.h \
 	atomic.h \
 	bitops.h \
 	bitset.c bitset.h \
@@ -52,7 +53,6 @@ libmainbase_la_SOURCES = \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \
 	event/selfpipe.c event/selfpipe.h \
-	fiber/async.c fiber/async.h \
 	fiber/combiner.c fiber/combiner.h \
 	fiber/fiber.c fiber/fiber.h \
 	fiber/future.c fiber/future.h \

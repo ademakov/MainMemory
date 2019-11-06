@@ -1,5 +1,5 @@
 /*
- * base/fiber/async.c - MainMemory asynchronous operations.
+ * base/async.c - MainMemory asynchronous operations.
  *
  * Copyright (C) 2015-2019  Aleksey Demakov
  *
@@ -17,7 +17,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/fiber/async.h"
+#include "base/async.h"
 
 #include "base/list.h"
 #include "base/report.h"
