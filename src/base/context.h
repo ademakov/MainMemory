@@ -25,6 +25,15 @@
 #include "base/task.h"
 #include "base/timesource.h"
 
+struct mm_context_stats
+{
+	/* Asynchronous call statistics. */
+	uint64_t enqueued_async_calls;
+	uint64_t enqueued_async_posts;
+	uint64_t dequeued_async_calls;
+	uint64_t direct_calls;
+};
+
 struct mm_context
 {
 	/* Currently running fiber. */
@@ -43,6 +52,9 @@ struct mm_context
 
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc *async_queue;
+
+	/* Statistics. */
+	struct mm_context_stats stats;
 };
 
 extern __thread struct mm_context *__mm_context_self;
@@ -70,6 +82,9 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context);
+
+void NONNULL(1)
+mm_context_report_stats(struct mm_context_stats *stats);
 
 /**********************************************************************
  * Asynchronous task scheduling.

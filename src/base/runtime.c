@@ -48,6 +48,8 @@ static mm_thread_t mm_regular_nthreads = 0;
 // The set of thread execution contexts.
 static struct mm_context **mm_context_table = NULL;
 // Temporary storage for task statistics.
+static struct mm_context_stats *mm_context_stats_store = NULL;
+// Temporary storage for task statistics.
 static struct mm_task_stats *mm_task_stats_store = NULL;
 
 // The domain of regular threads.
@@ -345,6 +347,7 @@ mm_regular_boot(mm_value_t arg)
 	// Release the execution context.
 	__mm_context_self = NULL;
 	mm_context_table[arg] = NULL;
+	mm_context_stats_store[arg] = context->stats;
 	mm_task_stats_store[arg] = context->tasks.stats;
 	mm_context_cleanup(context);
 	mm_regular_free(context);
@@ -374,6 +377,7 @@ mm_common_start(void)
 
 	// Allocate the storage for thread execution contexts.
 	mm_context_table = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context *));
+	mm_context_stats_store = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context_stats));
 	mm_task_stats_store = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_task_stats));
 
 	// Allocate a fiber strand for each regular thread.
@@ -404,8 +408,9 @@ mm_common_stop(void)
 
 	// Print statistics.
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++) {
-		mm_strand_stats(&mm_regular_strands[i]);
-		mm_task_stats(&mm_task_stats_store[i]);
+		mm_strand_report_stats(&mm_regular_strands[i]);
+		mm_task_report_stats(&mm_task_stats_store[i]);
+		mm_context_report_stats(&mm_context_stats_store[i]);
 	}
 	mm_event_dispatch_stats(&mm_regular_dispatch);
 	mm_lock_stats();

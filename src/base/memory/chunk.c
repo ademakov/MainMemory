@@ -19,6 +19,7 @@
 
 #include "base/memory/chunk.h"
 
+#include "base/async.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/memory/global.h"
@@ -196,7 +197,7 @@ mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
 		struct mm_context *origin = mm_thread_ident_to_context(0);
 #endif
 		uint32_t backoff = 0;
-		while (!mm_event_trycall_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {
+		while (!mm_async_trycall_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {
 			if (backoff >= MM_BACKOFF_SMALL) {
 				// If failed to submit the chunk after a number
 				// of attempts then defer it again.

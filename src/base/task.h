@@ -99,7 +99,7 @@ struct mm_task_list
 };
 
 void NONNULL(1)
-mm_task_stats(struct mm_task_stats *stats);
+mm_task_report_stats(struct mm_task_stats *stats);
 
 void NONNULL(1)
 mm_task_list_prepare(struct mm_task_list *list);

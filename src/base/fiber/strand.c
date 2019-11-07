@@ -19,6 +19,7 @@
 
 #include "base/fiber/strand.h"
 
+#include "base/async.h"
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
@@ -120,7 +121,7 @@ mm_strand_run_fiber(struct mm_fiber *fiber)
 	} else {
 		// Submit the fiber to the thread request queue.
 		struct mm_context *context = fiber->strand->context;
-		mm_event_call_1(context, mm_strand_run_fiber_req, (uintptr_t) fiber);
+		mm_async_call_1(context, mm_strand_run_fiber_req, (uintptr_t) fiber);
 	}
 #else
 	mm_fiber_run(fiber);
@@ -299,7 +300,7 @@ mm_strand_print_fibers(struct mm_strand *strand)
 }
 
 void NONNULL(1)
-mm_strand_stats(struct mm_strand *strand)
+mm_strand_report_stats(struct mm_strand *strand)
 {
 	mm_verbose("thread %d: cswitches=%llu, workers=%lu",
 		   mm_thread_getnumber(strand->thread),
@@ -413,7 +414,7 @@ mm_strand_stop(struct mm_strand *strand)
 {
 	ENTER();
 
-	mm_event_call_0(strand->context, mm_strand_stop_req);
+	mm_async_call_0(strand->context, mm_strand_stop_req);
 
 	LEAVE();
 }

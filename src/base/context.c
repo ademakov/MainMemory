@@ -19,8 +19,9 @@
 
 #include "base/context.h"
 
+#include "base/async.h"
 #include "base/bitops.h"
-#include "base/logger.h"
+#include "base/report.h"
 #include "base/runtime.h"
 #include "base/event/listener.h"
 #include "base/fiber/strand.h"
@@ -63,6 +64,16 @@ mm_context_cleanup(struct mm_context *context UNUSED)
 
 	context->strand->context = NULL;
 	context->listener->context = NULL;
+}
+
+void NONNULL(1)
+mm_context_report_stats(struct mm_context_stats *stats)
+{
+	mm_verbose(" async-calls: enqueued=%llu, dequeued=%llu, enqueued-posts=%llu, direct-posts=%llu",
+		   (unsigned long long) stats->enqueued_async_calls,
+		   (unsigned long long) stats->dequeued_async_calls,
+		   (unsigned long long) stats->enqueued_async_posts,
+		   (unsigned long long) stats->direct_calls);
 }
 
 /**********************************************************************
@@ -108,7 +119,7 @@ mm_context_send_task(struct mm_context *context, mm_task_t task, mm_value_t arg)
 		mm_context_add_task(context, task, arg);
 	} else {
 		// Submit the work item to the thread request queue.
-		mm_event_call_2(context, mm_context_add_task_req, (uintptr_t) task, arg);
+		mm_async_call_2(context, mm_context_add_task_req, (uintptr_t) task, arg);
 	}
 #else
 	mm_context_add_task(context, task, arg);
@@ -124,7 +135,7 @@ mm_context_post_task(mm_task_t task, mm_value_t arg)
 
 #if ENABLE_SMP
 	// Dispatch the task.
-	mm_event_post_2(mm_context_add_task_req, (mm_value_t) task, arg);
+	mm_async_post_2(mm_context_add_task_req, (mm_value_t) task, arg);
 #else
 	mm_context_add_task(mm_context_selfptr(), task, arg);
 #endif
@@ -144,7 +155,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 		const mm_thread_t ncontexts = mm_number_of_regular_threads();
 
 		uint32_t count = 0;
-		for (uint32_t index = 0; index < ncontexts && count < 2; index++) {
+		for (mm_thread_t index = 0; index < ncontexts && count < 2; index++) {
 			struct mm_context *const peer = mm_thread_ident_to_context(index);
 			if (peer == self)
 				continue;

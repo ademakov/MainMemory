@@ -21,13 +21,352 @@
 
 #include "base/list.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/syscall.h"
 #include "base/event/event.h"
+#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 
 #include <sys/syscall.h>
 #include <sys/uio.h>
+
+/**********************************************************************
+ * Asynchronous procedure call execution.
+ **********************************************************************/
+
+struct mm_async_pack
+{
+	union
+	{
+		uintptr_t data[MM_ASYNC_MAX + 1];
+		struct
+		{
+			mm_async_routine_t routine;
+			uintptr_t arguments[MM_ASYNC_MAX];
+		};
+	};
+};
+
+static inline void
+mm_async_execute(struct mm_context *context, struct mm_async_pack *pack)
+{
+	(*pack->routine)(context, pack->arguments);
+}
+
+static inline bool NONNULL(1, 2)
+mm_async_receive(struct mm_context *context, struct mm_async_pack *pack)
+{
+	return mm_ring_mpsc_get_n(context->async_queue, pack->data, (MM_ASYNC_MAX + 1));
+}
+
+void NONNULL(1)
+mm_async_handle_calls(struct mm_context *context)
+{
+	ENTER();
+
+	// Execute requests.
+	struct mm_async_pack pack;
+	if (mm_async_receive(context, &pack)) {
+		// Enter the state that forbids a recursive fiber switch.
+		struct mm_strand *const strand = context->strand;
+		const mm_strand_state_t state = strand->state;
+		strand->state = MM_STRAND_CSWITCH;
+
+		do {
+			mm_async_execute(context, &pack);
+#if ENABLE_EVENT_STATS
+			context->stats.dequeued_async_calls++;
+#endif
+		} while (mm_async_receive(context, &pack));
+
+		// Restore normal running state.
+		strand->state = state;
+	}
+
+	LEAVE();
+}
+
+/**********************************************************************
+ * Asynchronous procedure call construction.
+ **********************************************************************/
+
+// The size of ring data for a given number of post arguments.
+#define MM_SEND_ARGC(c)		((c) + 1)
+// Define ring data for a post request together with its arguments.
+#define MM_SEND_ARGV(v, ...)	uintptr_t v[] = { (uintptr_t) __VA_ARGS__ }
+
+// Send a request to a cross-thread request ring.
+#define MM_SEND(n, stat, peer, ...)					\
+	do {								\
+		mm_stamp_t s;						\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		struct mm_ring_mpmc *ring = peer->async_queue;		\
+		mm_ring_mpmc_enqueue_sn(ring, &s, v, MM_SEND_ARGC(n));	\
+		mm_event_notify(peer, s);				\
+		stat(mm_context_selfptr());				\
+	} while (0)
+
+// Try to send a request to a cross-thread request ring.
+#define MM_TRYSEND(n, stat, peer, ...)					\
+	do {								\
+		bool rc;						\
+		mm_stamp_t s;						\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		struct mm_ring_mpmc *ring = peer->async_queue;		\
+		rc = mm_ring_mpmc_put_sn(ring, &s, v, MM_SEND_ARGC(n));	\
+		if (rc) {						\
+			mm_event_notify(peer, s);			\
+			stat(mm_context_selfptr());			\
+		}							\
+		return rc;						\
+	} while (0)
+
+// Make a direct call instead of async one
+#define MM_DIRECTCALL_0(r)						\
+	do {								\
+		struct mm_context *self = mm_context_selfptr();		\
+		MM_SEND_ARGV(v, 0);					\
+		r(self, v);						\
+		mm_async_direct_call_stat(self);			\
+	} while (0)
+#define MM_DIRECTCALL(r, ...)						\
+	do {								\
+		struct mm_context *self = mm_context_selfptr();		\
+		MM_SEND_ARGV(v, __VA_ARGS__);				\
+		r(self, v);						\
+		mm_async_direct_call_stat(self);			\
+	} while (0)
+
+static inline void
+mm_async_call_stat(struct mm_context *context UNUSED)
+{
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	if (likely(context != NULL))
+		context->stats.enqueued_async_calls++;
+#endif
+}
+
+static inline void
+mm_async_post_stat(struct mm_context *context UNUSED)
+{
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	if (likely(context != NULL))
+		context->stats.enqueued_async_posts++;
+#endif
+}
+
+static inline void
+mm_async_direct_call_stat(struct mm_context *context UNUSED)
+{
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	if (likely(context != NULL))
+		context->stats.direct_calls++;
+#endif
+}
+
+static struct mm_context *
+mm_async_find_peer(void)
+{
+#if ENABLE_SMP
+	const mm_thread_t n = mm_number_of_regular_threads();
+	for (mm_thread_t i = 0; i < n; i++) {
+		struct mm_event_listener *const listener =  mm_thread_ident_to_event_listener(i);
+		uintptr_t state = mm_memory_load(listener->state);
+		if (state != MM_EVENT_LISTENER_RUNNING)
+			return listener->context;
+	}
+#endif
+	return NULL;
+}
+
+/**********************************************************************
+ * Asynchronous procedure calls targeting a single listener.
+ **********************************************************************/
+
+void NONNULL(1, 2)
+mm_async_call_0(struct mm_context *const peer, mm_async_routine_t r)
+{
+	MM_SEND(0, mm_async_call_stat, peer, r);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_0(struct mm_context *const peer, mm_async_routine_t r)
+{
+	MM_TRYSEND(0, mm_async_call_stat, peer, r);
+}
+
+void NONNULL(1, 2)
+mm_async_call_1(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1)
+{
+	MM_SEND(1, mm_async_call_stat, peer, r, a1);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_1(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1)
+{
+	MM_TRYSEND(1, mm_async_call_stat, peer, r, a1);
+}
+
+void NONNULL(1, 2)
+mm_async_call_2(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1, uintptr_t a2)
+{
+	MM_SEND(2, mm_async_call_stat, peer, r, a1, a2);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_2(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2)
+{
+	MM_TRYSEND(2, mm_async_call_stat, peer, r, a1, a2);
+}
+
+void NONNULL(1, 2)
+mm_async_call_3(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_SEND(3, mm_async_call_stat, peer, r, a1, a2, a3);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_3(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	MM_TRYSEND(3, mm_async_call_stat, peer, r, a1, a2, a3);
+}
+
+void NONNULL(1, 2)
+mm_async_call_4(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_SEND(4, mm_async_call_stat, peer, r, a1, a2, a3, a4);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_4(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	MM_TRYSEND(4, mm_async_call_stat, peer, r, a1, a2, a3, a4);
+}
+
+void NONNULL(1, 2)
+mm_async_call_5(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_SEND(5, mm_async_call_stat, peer, r, a1, a2, a3, a4, a5);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_5(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	MM_TRYSEND(5, mm_async_call_stat, peer, r, a1, a2, a3, a4, a5);
+}
+
+void NONNULL(1, 2)
+mm_async_call_6(struct mm_context *const peer, mm_async_routine_t r,
+		uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_SEND(6, mm_async_call_stat, peer, r, a1, a2, a3, a4, a5, a6);
+}
+
+bool NONNULL(1, 2)
+mm_async_trycall_6(struct mm_context *const peer, mm_async_routine_t r,
+		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	MM_TRYSEND(6, mm_async_call_stat, peer, r, a1, a2, a3, a4, a5, a6);
+}
+
+/**********************************************************************
+ * Asynchronous procedure calls targeting any listener of a dispatcher.
+ **********************************************************************/
+
+void NONNULL(1)
+mm_async_post_0(mm_async_routine_t r)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL_0(r);
+		return;
+	}
+	MM_SEND(0, mm_async_post_stat, peer, r);
+}
+
+void NONNULL(1)
+mm_async_post_1(mm_async_routine_t r, uintptr_t a1)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1);
+		return;
+	}
+	MM_SEND(1, mm_async_post_stat, peer, r, a1);
+}
+
+void NONNULL(1)
+mm_async_post_2(mm_async_routine_t r, uintptr_t a1, uintptr_t a2)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1, a2);
+		return;
+	}
+	MM_SEND(2, mm_async_post_stat, peer, r, a1, a2);
+}
+
+void NONNULL(1)
+mm_async_post_3(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1, a2, a3);
+		return;
+	}
+	MM_SEND(3, mm_async_post_stat, peer, r, a1, a2, a3);
+}
+
+void NONNULL(1)
+mm_async_post_4(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1, a2, a3, a4);
+		return;
+	}
+	MM_SEND(4, mm_async_post_stat, peer, r, a1, a2, a3, a4);
+}
+
+void NONNULL(1)
+mm_async_post_5(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1, a2, a3, a4, a5);
+		return;
+	}
+	MM_SEND(5, mm_async_post_stat, peer, r, a1, a2, a3, a4, a5);
+}
+
+void NONNULL(1)
+mm_async_post_6(mm_async_routine_t r, uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6)
+{
+	struct mm_context *const peer = mm_async_find_peer();
+	if (peer == NULL) {
+		MM_DIRECTCALL(r, a1, a2, a3, a4, a5, a6);
+		return;
+	}
+	MM_SEND(6, mm_async_post_stat, peer, r, a1, a2, a3, a4, a5, a6);
+}
+
+/**********************************************************************
+ * Asynchronous system call handlers.
+ **********************************************************************/
 
 /* Asynchronous operation information. */
 struct mm_async_node
@@ -48,10 +387,6 @@ struct mm_async_node
 	/* Human readable information for debugging. */
 	const char *description;
 };
-
-/**********************************************************************
- * Asynchronous system call handlers.
- **********************************************************************/
 
 static void
 mm_async_syscall_result(struct mm_async_node *node, intptr_t result)
@@ -193,7 +528,7 @@ mm_async_syscall_1(const char *name, int n, uintptr_t a1)
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_3(mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
+	mm_async_post_3(mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -213,7 +548,7 @@ mm_async_syscall_2(const char *name, int n, uintptr_t a1, uintptr_t a2)
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_4(mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
+	mm_async_post_4(mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -233,7 +568,7 @@ mm_async_syscall_3(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_5(mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
+	mm_async_post_5(mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);
@@ -253,7 +588,7 @@ mm_async_syscall_4(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_
 	mm_async_setup(&node, name);
 
 	// Make an asynchronous request to execute the call.
-	mm_event_post_6(mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
+	mm_async_post_6(mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
 	intptr_t result = mm_async_wait(&node);

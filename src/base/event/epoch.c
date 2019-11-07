@@ -19,6 +19,7 @@
 
 #include "base/event/epoch.h"
 
+#include "base/async.h"
 #include "base/context.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
@@ -149,7 +150,7 @@ mm_event_epoch_advance(struct mm_event_epoch_local *local, mm_event_epoch_t *glo
 		mm_event_epoch_snapshot_t listener_epoch = mm_memory_load(listener->epoch.epoch);
 		if (listener_epoch != epoch && listener_epoch != 0) {
 			if (local->count > MM_EVENT_EPOCH_POST_COUNT)
-				mm_event_call_0(listener->context, mm_event_epoch_observe_req);
+				mm_async_call_0(listener->context, mm_event_epoch_observe_req);
 			goto leave;
 		}
 		local->index++;

@@ -19,6 +19,7 @@
 
 #include "base/event/forward.h"
 
+#include "base/async.h"
 #include "base/context.h"
 #include "base/report.h"
 #include "base/event/dispatch.h"
@@ -203,13 +204,13 @@ mm_event_forward_post(struct mm_context *context, struct mm_event_forward_buffer
 		break;
 	case 1:
 		buffer->nsinks = 0;
-		mm_event_call_2(context, mm_event_forward_1,
+		mm_async_call_2(context, mm_event_forward_1,
 				(uintptr_t) buffer->sinks[0],
 				buffer->events[0]);
 		break;
 	case 2:
 		buffer->nsinks = 0;
-		mm_event_call_3(context, mm_event_forward_2,
+		mm_async_call_3(context, mm_event_forward_2,
 				(uintptr_t) buffer->sinks[0],
 				(uintptr_t) buffer->sinks[1],
 				buffer->events[0]
@@ -217,7 +218,7 @@ mm_event_forward_post(struct mm_context *context, struct mm_event_forward_buffer
 		break;
 	case 3:
 		buffer->nsinks = 0;
-		mm_event_call_4(context, mm_event_forward_3,
+		mm_async_call_4(context, mm_event_forward_3,
 				(uintptr_t) buffer->sinks[0],
 				(uintptr_t) buffer->sinks[1],
 				(uintptr_t) buffer->sinks[2],
@@ -227,7 +228,7 @@ mm_event_forward_post(struct mm_context *context, struct mm_event_forward_buffer
 		break;
 	case 4:
 		buffer->nsinks = 0;
-		mm_event_call_5(context, mm_event_forward_4,
+		mm_async_call_5(context, mm_event_forward_4,
 				(uintptr_t) buffer->sinks[0],
 				(uintptr_t) buffer->sinks[1],
 				(uintptr_t) buffer->sinks[2],
@@ -239,7 +240,7 @@ mm_event_forward_post(struct mm_context *context, struct mm_event_forward_buffer
 		break;
 	case 5:
 		buffer->nsinks = 0;
-		mm_event_call_6(context, mm_event_forward_5,
+		mm_async_call_6(context, mm_event_forward_5,
 				(uintptr_t) buffer->sinks[0],
 				(uintptr_t) buffer->sinks[1],
 				(uintptr_t) buffer->sinks[2],

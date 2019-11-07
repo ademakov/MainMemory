@@ -19,6 +19,7 @@
 
 #include "base/fiber/fiber.h"
 
+#include "base/async.h"
 #include "base/bitops.h"
 #include "base/logger.h"
 #include "base/report.h"
@@ -360,7 +361,7 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 	// run queue after just being blocked. So at this point the fiber
 	// must already be in completely consistent state. That is no
 	// manipulation with old_fiber is allowed below this point.
-	mm_event_handle_calls(context);
+	mm_async_handle_calls(context);
 
 	// Get the next fiber from the run queue.  As long as this function
 	// is called there is at least a boot fiber in the run queue.  So

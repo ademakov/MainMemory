@@ -122,6 +122,6 @@ void NONNULL(1)
 mm_strand_print_fibers(struct mm_strand *strand);
 
 void NONNULL(1)
-mm_strand_stats(struct mm_strand *strand);
+mm_strand_report_stats(struct mm_strand *strand);
 
 #endif /* BASE_FIBER_STRAND_H */

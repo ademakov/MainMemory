@@ -333,10 +333,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.forwarded_events = 0;
 	listener->stats.received_forwarded_events = 0;
 	listener->stats.retargeted_forwarded_events = 0;
-	listener->stats.enqueued_async_calls = 0;
-	listener->stats.enqueued_async_posts = 0;
-	listener->stats.dequeued_async_calls = 0;
-	listener->stats.direct_calls = 0;
 #endif
 
 	// Initialize private event storage.

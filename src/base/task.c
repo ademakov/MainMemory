@@ -19,6 +19,7 @@
 
 #include "base/task.h"
 
+#include "base/async.h"
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/context.h"
@@ -70,19 +71,19 @@ mm_task_submit(struct mm_context *context, struct mm_task_slot* tasks, uint32_t 
 	switch (count)
 	{
 	case 1:
-		mm_event_call_2(context, mm_task_add_1,
+		mm_async_call_2(context, mm_task_add_1,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg);
 		break;
 	case 2:
-		mm_event_call_4(context, mm_task_add_2,
+		mm_async_call_4(context, mm_task_add_2,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg,
 				(uintptr_t) tasks[1].task,
 				tasks[1].task_arg);
 		break;
 	case 3:
-		mm_event_call_6(context, mm_task_add_3,
+		mm_async_call_6(context, mm_task_add_3,
 				(uintptr_t) tasks[0].task,
 				tasks[0].task_arg,
 				(uintptr_t) tasks[1].task,
@@ -100,9 +101,9 @@ mm_task_submit(struct mm_context *context, struct mm_task_slot* tasks, uint32_t 
  **********************************************************************/
 
 void NONNULL(1)
-mm_task_stats(struct mm_task_stats *stats)
+mm_task_report_stats(struct mm_task_stats *stats)
 {
-	mm_log_fmt(" tasks=%llu task-rings=%llu reassign-send=[%llu %llu %llu %llu]\n",
+	mm_log_fmt(" tasks=%llu, task-rings=%llu, reassign-send-calls=[%llu %llu %llu %llu]\n",
 		   (unsigned long long) mm_counter_shared_load(&stats->tail_count),
 		   (unsigned long long) mm_counter_shared_load(&stats->ring_count),
 		   (unsigned long long) mm_counter_shared_load(&stats->send_count[0]),

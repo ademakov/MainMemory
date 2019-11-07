@@ -167,8 +167,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 
 		mm_log_fmt("listener %d:\n", i);
 		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
-			   " stray=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n"
-			   " async-calls=%llu/%llu/%llu direct-calls=%llu\n",
+			   " stray=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n",
 			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->spin_count),
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
@@ -178,11 +177,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 			   (unsigned long long) stats->direct_events,
 			   (unsigned long long) stats->forwarded_events,
 			   (unsigned long long) stats->received_forwarded_events,
-			   (unsigned long long) stats->retargeted_forwarded_events,
-			   (unsigned long long) stats->enqueued_async_calls,
-			   (unsigned long long) stats->dequeued_async_calls,
-			   (unsigned long long) stats->enqueued_async_posts,
-			   (unsigned long long) stats->direct_calls);
+			   (unsigned long long) stats->retargeted_forwarded_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->storage.nevents_stats[j];
