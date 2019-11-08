@@ -21,7 +21,6 @@
 
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/event/event.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 #include "base/memory/pool.h"
@@ -292,7 +291,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 	// Remember the wait time.
 	struct mm_context *const context = mm_context_selfptr();
-	mm_timeval_t deadline = mm_event_gettime(context) + timeout;
+	mm_timeval_t deadline = mm_context_gettime(context) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_memory_load(future->result);
@@ -306,7 +305,7 @@ mm_future_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_event_gettime(context)) {
+		if (deadline <= mm_context_gettime(context)) {
 			DEBUG("future timed out");
 			break;
 		}
@@ -433,7 +432,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 
 	// Remember the wait time.
 	struct mm_context *const context = mm_context_selfptr();
-	mm_timeval_t deadline = mm_event_gettime(context) + timeout;
+	mm_timeval_t deadline = mm_context_gettime(context) + timeout;
 
 	// Start the future if it has not been started already.
 	mm_value_t result = mm_future_unique_start(future, NULL);
@@ -445,7 +444,7 @@ mm_future_unique_timedwait(struct mm_future *future, mm_timeout_t timeout)
 		mm_fiber_testcancel();
 
 		// Check if timed out.
-		if (deadline <= mm_event_gettime(context)) {
+		if (deadline <= mm_context_gettime(context)) {
 			DEBUG("future timed out");
 			break;
 		}

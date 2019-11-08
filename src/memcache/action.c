@@ -45,7 +45,7 @@ mc_action_exp_time_handler(mm_value_t value UNUSED)
 {
 	ENTER();
 
-	mm_timeval_t real_time = mm_event_getrealtime(mm_context_selfptr());
+	mm_timeval_t real_time = mm_ontext_getrealtime(mm_context_selfptr());
 	mc_action_exp_time = real_time / 1000000; // useconds -> seconds.
 
 	LEAVE();
@@ -72,7 +72,7 @@ mc_action_exp_time_stop(void)
 static uint32_t
 mc_action_get_exp_time(void)
 {
-	mm_timeval_t real_time = mm_event_getrealtime(mm_context_selfptr());
+	mm_timeval_t real_time = mm_context_getrealtime(mm_context_selfptr());
 	return real_time / 1000000; // useconds -> seconds.
 }
 
@@ -220,7 +220,7 @@ mc_action_find_victims(struct mc_tpart *part,
 	uint32_t nvictims = 0;
 	mm_stack_prepare(victims);
 
-	mm_timeval_t real_time = mm_event_getrealtime(mm_context_selfptr());
+	mm_timeval_t real_time = mm_context_getrealtime(mm_context_selfptr());
 	uint32_t time = real_time / 1000000; // useconds -> seconds.
 
 	bool end = false;

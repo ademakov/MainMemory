@@ -301,16 +301,6 @@ void NONNULL(1)
 mm_event_submit_output(struct mm_event_fd *sink);
 
 /**********************************************************************
- * Event time.
- **********************************************************************/
-
-mm_timeval_t NONNULL(1)
-mm_event_gettime(struct mm_context *context);
-
-mm_timeval_t NONNULL(1)
-mm_event_getrealtime(struct mm_context *context);
-
-/**********************************************************************
  * Timer event sink control.
  **********************************************************************/
 

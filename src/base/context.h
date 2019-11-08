@@ -87,6 +87,22 @@ void NONNULL(1)
 mm_context_report_stats(struct mm_context_stats *stats);
 
 /**********************************************************************
+ * Time.
+ **********************************************************************/
+
+static inline mm_timeval_t NONNULL(1)
+mm_context_gettime(struct mm_context *context)
+{
+	return mm_timesource_gettime(&context->timesource);
+}
+
+static inline mm_timeval_t NONNULL(1)
+mm_context_getrealtime(struct mm_context *context)
+{
+	return mm_timesource_getrealtime(&context->timesource);
+}
+
+/**********************************************************************
  * Asynchronous task scheduling.
  **********************************************************************/
 

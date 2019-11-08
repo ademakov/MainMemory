@@ -660,7 +660,7 @@ mm_net_input_wait(struct mm_net_socket *sock, struct mm_context *context, const 
 			mm_fiber_block();
 			sock->event.input_fiber = NULL;
 		} else {
-			mm_timeval_t time = mm_event_gettime(context);
+			mm_timeval_t time = mm_context_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
 				sock->event.input_fiber = context->fiber;
@@ -705,7 +705,7 @@ mm_net_output_wait(struct mm_net_socket *sock, struct mm_context *context, const
 			mm_fiber_block();
 			sock->event.output_fiber = NULL;
 		} else {
-			mm_timeval_t time = mm_event_gettime(context);
+			mm_timeval_t time = mm_context_gettime(context);
 			DEBUG("now: %lu, deadline: %lu", time, deadline);
 			if (time < deadline) {
 				sock->event.output_fiber = context->fiber;
@@ -766,8 +766,8 @@ retry:
 	struct mm_context *context = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		context = mm_context_selfptr();
-		deadline = mm_event_gettime(context) + sock->read_timeout;
+		context = sock->event.context;
+		deadline = mm_context_gettime(context) + sock->read_timeout;
 	}
 
 	for (;;) {
@@ -831,8 +831,8 @@ retry:
 	struct mm_context *context = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		context = mm_context_selfptr();
-		deadline = mm_event_gettime(context) + sock->write_timeout;
+		context = sock->event.context;
+		deadline = mm_context_gettime(context) + sock->write_timeout;
 	}
 
 	for (;;) {
@@ -896,8 +896,8 @@ retry:
 	struct mm_context *context = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE) {
-		context = mm_context_selfptr();
-		deadline = mm_event_gettime(context) + sock->read_timeout;
+		context = sock->event.context;
+		deadline = mm_context_gettime(context) + sock->read_timeout;
 	}
 
 	for (;;) {
@@ -962,8 +962,8 @@ retry:
 	struct mm_context *context = NULL;
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE) {
-		context = mm_context_selfptr();
-		deadline = mm_event_gettime(context) + sock->write_timeout;
+		context = sock->event.context;
+		deadline = mm_context_gettime(context) + sock->write_timeout;
 	}
 
 	for (;;) {

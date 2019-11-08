@@ -162,7 +162,7 @@ static void
 mc_command_flush(uint32_t exptime)
 {
 	// TODO: really use the exptime.
-	mm_timeval_t real_time = mm_event_getrealtime(mm_context_selfptr());
+	mm_timeval_t real_time = mm_context_getrealtime(mm_context_selfptr());
 	mc_exptime = real_time / 1000000 + exptime;
 
 	for (mm_thread_t i = 0; i < mc_table.nparts; i++) {
