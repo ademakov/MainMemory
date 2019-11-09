@@ -22,8 +22,17 @@
 #include <sys/time.h>
 
 #if ENABLE_TIMEPIECE_TIMESTAMP
+# define MM_TIMEPIECE_COUNT		(25)
+#else
+# define MM_TIMEPIECE_COUNT		(250)
+#endif
+
+#if ENABLE_TIMEPIECE_TIMESTAMP
 
 #define MM_TIMEPIECE_DELTA_USEC		(2000)
+
+#define MM_TIMEPIECE_RETRY_LOG_STEP	(50)
+#define MM_TIMEPIECE_RETRY_LIMIT	(1000)
 
 static uint64_t mm_timepiece_delta;
 
@@ -70,10 +79,10 @@ mm_timepiece_init(void)
 	for (;;) {
 		uint64_t delta = mm_timepiece_gauge();
 		if (delta == 0) {
-			if ((++count % 50) == 0) {
-				if (count == 50)
+			if ((++count % MM_TIMEPIECE_RETRY_LOG_STEP) == 0) {
+				if (count == MM_TIMEPIECE_RETRY_LOG_STEP)
 					mm_warning(0, "hmm, it takes unusually long to calibrate TSC");
-				else if (count < 1000)
+				else if (count < MM_TIMEPIECE_RETRY_LIMIT)
 					mm_warning(0, "...still trying to calibrate TSC");
 				else
 					mm_fatal(0, "...failed to calibrate TSC");
@@ -96,12 +105,49 @@ mm_timepiece_init(void)
 void NONNULL(1)
 mm_timepiece_prepare(struct mm_timepiece *tp)
 {
-#if ENABLE_TIMEPIECE_TIMESTAMP
-	tp->stamp_delta = mm_timepiece_delta;
-	tp->clock_stamp = 0;
-	tp->real_clock_stamp = 0;
-#else
 	tp->clock_count = 0;
 	tp->real_clock_count = 0;
+
+#if ENABLE_TIMEPIECE_TIMESTAMP
+	tp->clock_stamp = 0;
+	tp->real_clock_stamp = 0;
+#endif
+}
+
+void NONNULL(1)
+mm_timepiece_gettime_slow(struct mm_timepiece *tp)
+{
+	tp->clock_count = MM_TIMEPIECE_COUNT;
+
+#if ENABLE_TIMEPIECE_TIMESTAMP
+	uint64_t stamp = mm_cpu_tsc();
+	if ((tp->clock_stamp + mm_timepiece_delta) <= stamp)
+	{
+		tp->clock_stamp = stamp;
+		tp->clock_value = mm_clock_gettime_monotonic_coarse();
+		TRACE("%lld", (long long) tp->clock_value);
+	}
+#else
+	tp->clock_value = mm_clock_gettime_monotonic_coarse();
+	TRACE("%lld", (long long) tp->clock_value);
+#endif
+}
+
+void NONNULL(1)
+mm_timepiece_getrealtime_slow(struct mm_timepiece *tp)
+{
+	tp->real_clock_count = MM_TIMEPIECE_COUNT;
+
+#if ENABLE_TIMEPIECE_TIMESTAMP
+	uint64_t stamp = mm_cpu_tsc();
+	if ((tp->real_clock_stamp + mm_timepiece_delta) <= stamp)
+	{
+		tp->real_clock_stamp = stamp;
+		tp->real_clock_value = mm_clock_gettime_realtime_coarse();
+		TRACE("%lld", (long long) tp->real_clock_value);
+	}
+#else
+	tp->real_clock_value = mm_clock_gettime_realtime_coarse();
+	TRACE("%lld", (long long) tp->real_clock_value);
 #endif
 }

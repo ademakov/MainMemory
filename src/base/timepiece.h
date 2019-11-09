@@ -31,28 +31,23 @@
 # endif
 #endif
 
-#define MM_TIMEPIECE_COUNT		(250)
-
 /* Internal clock that is very coarse but takes very little CPU time on average.
    It is good enough for many tasks where time precision is not so essential. */
 struct mm_timepiece
 {
 	/* The (almost) current monotonic time. */
 	mm_timeval_t clock_value;
-
 	/* The (almost) current real time. */
 	mm_timeval_t real_clock_value;
 
-#if ENABLE_TIMEPIECE_TIMESTAMP
-	/* The timestamp difference required to refer the system clock. */
-	uint32_t stamp_delta;
-	/* CPU timestamps for the moments when the corresponding time was asked. */
-	uint64_t clock_stamp;
-	uint64_t real_clock_stamp;
-#else
 	/* Repeat count until the corresponding time has to be asked. */
 	uint32_t clock_count;
 	uint32_t real_clock_count;
+
+#if ENABLE_TIMEPIECE_TIMESTAMP
+	/* CPU timestamps for the moments when the corresponding time was asked. */
+	uint64_t clock_stamp;
+	uint64_t real_clock_stamp;
 #endif
 };
 
@@ -62,60 +57,36 @@ mm_timepiece_init(void);
 void NONNULL(1)
 mm_timepiece_prepare(struct mm_timepiece *tp);
 
+void NONNULL(1)
+mm_timepiece_gettime_slow(struct mm_timepiece *tp);
+
+void NONNULL(1)
+mm_timepiece_getrealtime_slow(struct mm_timepiece *tp);
+
 static inline void NONNULL(1)
-mm_timepiece_reset(struct mm_timepiece *tp UNUSED)
+mm_timepiece_reset(struct mm_timepiece *tp)
 {
-#if ENABLE_TIMEPIECE_TIMESTAMP
-	// Nothing to do.
-#else
 	tp->clock_count = 0;
 	tp->real_clock_count = 0;
-#endif
 }
 
 static inline mm_timeval_t NONNULL(1)
 mm_timepiece_gettime(struct mm_timepiece *tp)
 {
-#if ENABLE_TIMEPIECE_TIMESTAMP
-	uint64_t stamp = mm_cpu_tsc();
-	if ((tp->clock_stamp + tp->stamp_delta) <= stamp)
-	{
-		tp->clock_stamp = stamp;
-		tp->clock_value = mm_clock_gettime_monotonic_coarse();
-		TRACE("%lld", (long long) tp->clock_value);
-	}
-#else
-	if (tp->clock_count) {
+	if (tp->clock_count)
 		tp->clock_count--;
-	} else {
-		tp->clock_count = MM_TIMEPIECE_COUNT;
-		tp->clock_value = mm_clock_gettime_monotonic_coarse();
-		TRACE("%lld", (long long) tp->clock_value);
-	}
-#endif
+	else
+		mm_timepiece_gettime_slow(tp);
 	return tp->clock_value;
 }
 
 static inline mm_timeval_t NONNULL(1)
 mm_timepiece_getrealtime(struct mm_timepiece *tp)
 {
-#if ENABLE_TIMEPIECE_TIMESTAMP
-	uint64_t stamp = mm_cpu_tsc();
-	if ((tp->real_clock_stamp + tp->stamp_delta) <= stamp)
-	{
-		tp->real_clock_stamp = stamp;
-		tp->real_clock_value = mm_clock_gettime_realtime_coarse();
-		TRACE("%lld", (long long) tp->real_clock_value);
-	}
-#else
-	if (tp->real_clock_count) {
+	if (tp->real_clock_count)
 		tp->real_clock_count--;
-	} else {
-		tp->real_clock_count = MM_TIMEPIECE_COUNT;
-		tp->real_clock_value = mm_clock_gettime_realtime_coarse();
-		TRACE("%lld", (long long) tp->real_clock_value);
-	}
-#endif
+	else
+		mm_timepiece_getrealtime_slow(tp);
 	return tp->real_clock_value;
 }
 
