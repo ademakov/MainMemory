@@ -97,6 +97,7 @@ void NONNULL(1)
 mm_timepiece_prepare(struct mm_timepiece *tp)
 {
 #if ENABLE_TIMEPIECE_TIMESTAMP
+	tp->stamp_delta = mm_timepiece_delta;
 	tp->clock_stamp = 0;
 	tp->real_clock_stamp = 0;
 #else
