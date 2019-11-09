@@ -73,7 +73,7 @@ mm_timepiece_init(void)
 			if ((++count % 50) == 0) {
 				if (count == 50)
 					mm_warning(0, "hmm, it takes unusually long to calibrate TSC");
-				else if (count >= 1000)
+				else if (count < 1000)
 					mm_warning(0, "...still trying to calibrate TSC");
 				else
 					mm_fatal(0, "...failed to calibrate TSC");
