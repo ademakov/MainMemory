@@ -41,10 +41,20 @@ mm_cpu_backoff(void)
  **********************************************************************/
 
 static inline uint64_t
-mm_cpu_timestamp(void)
+mm_cpu_tsc(void)
 {
 	uint64_t tsc;
 	asm volatile("rdtsc" : "=A"(tsc));
+	return tsc;
+}
+
+static inline uint64_t
+mm_cpu_tscp(uint32_t *cpu)
+{
+	uint64_t tsc;
+	uint32_t ecx;
+	asm volatile("rdtscp" : "=A"(tsc), "=c"(ecx));
+	*cpu = ecx;
 	return tsc;
 }
 

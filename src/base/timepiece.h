@@ -32,7 +32,6 @@
 #endif
 
 #define MM_TIMEPIECE_COUNT		(250)
-#define MM_TIMEPIECE_STAMP_DELTA	(1000 * 1000)
 
 /* Internal clock that is very coarse but takes very little CPU time on average.
    It is good enough for many tasks where time precision is not so essential. */
@@ -45,6 +44,8 @@ struct mm_timepiece
 	mm_timeval_t real_clock_value;
 
 #if ENABLE_TIMEPIECE_TIMESTAMP
+	/* The timestamp difference required to refer the system clock. */
+	uint32_t stamp_delta;
 	/* CPU timestamps for the moments when the corresponding time was asked. */
 	uint64_t clock_stamp;
 	uint64_t real_clock_stamp;
@@ -76,8 +77,8 @@ static inline mm_timeval_t NONNULL(1)
 mm_timepiece_gettime(struct mm_timepiece *tp)
 {
 #if ENABLE_TIMEPIECE_TIMESTAMP
-	uint64_t stamp = mm_cpu_timestamp();
-	if ((tp->clock_stamp + MM_TIMEPIECE_STAMP_DELTA) <= stamp)
+	uint64_t stamp = mm_cpu_tsc();
+	if ((tp->clock_stamp + tp->stamp_delta) <= stamp)
 	{
 		tp->clock_stamp = stamp;
 		tp->clock_value = mm_clock_gettime_monotonic_coarse();
@@ -99,8 +100,8 @@ static inline mm_timeval_t NONNULL(1)
 mm_timepiece_getrealtime(struct mm_timepiece *tp)
 {
 #if ENABLE_TIMEPIECE_TIMESTAMP
-	uint64_t stamp = mm_cpu_timestamp();
-	if ((tp->real_clock_stamp + MM_TIMEPIECE_STAMP_DELTA) <= stamp)
+	uint64_t stamp = mm_cpu_tsc();
+	if ((tp->real_clock_stamp + tp->stamp_delta) <= stamp)
 	{
 		tp->real_clock_stamp = stamp;
 		tp->real_clock_value = mm_clock_gettime_realtime_coarse();

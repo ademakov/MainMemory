@@ -460,7 +460,6 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	// Initialize the most basic facilities that do not have any
 	// dependencies.
 	mm_clock_init();
-	mm_timepiece_init();
 	mm_cksum_init();
 	mm_thread_init();
 
@@ -516,6 +515,9 @@ mm_start(void)
 		mm_brief("using 1 thread");
 	else
 		mm_brief("using %d threads", mm_regular_nthreads);
+
+	// Calibrate internal clock.
+	mm_timepiece_init();
 
 	// Daemonize if needed.
 	if (mm_daemonize) {
