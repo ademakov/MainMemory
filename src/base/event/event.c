@@ -624,7 +624,7 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 
 	// Indicate that clocks need to be updated.
 	if (timeout)
-		mm_timesource_refresh(&context->timesource);
+		mm_timepiece_reset(&context->clock);
 
 	// Execute the timers which time has come.
 	if (timer != NULL) {

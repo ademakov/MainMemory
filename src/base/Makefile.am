@@ -39,8 +39,8 @@ libmainbase_la_SOURCES = \
 	stdcall.h \
 	syscall.h \
 	task.c task.h \
+	timepiece.c timepiece.h \
 	timeq.c timeq.h \
-	timesource.h \
 	topology.c topology.h \
 	arch/intrinsic.h \
 	event/backend.c event/backend.h \

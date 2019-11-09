@@ -460,6 +460,7 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	// Initialize the most basic facilities that do not have any
 	// dependencies.
 	mm_clock_init();
+	mm_timepiece_init();
 	mm_cksum_init();
 	mm_thread_init();
 

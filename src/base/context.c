@@ -40,8 +40,8 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 	context->strand->context = context;
 	context->listener->context = context;
 
-	// Prepare the event clock.
-	mm_timesource_prepare(&context->timesource);
+	// Prepare the internal clock.
+	mm_timepiece_prepare(&context->clock);
 
 	// Prepare storage for tasks.
 	mm_task_list_prepare(&context->tasks);

@@ -23,7 +23,7 @@
 #include "common.h"
 #include "base/ring.h"
 #include "base/task.h"
-#include "base/timesource.h"
+#include "base/timepiece.h"
 
 struct mm_context_stats
 {
@@ -45,7 +45,7 @@ struct mm_context
 	struct mm_event_listener *listener;
 
 	/* Fast but coarse clock. */
-	struct mm_timesource timesource;
+	struct mm_timepiece clock;
 
 	/* Tasks to execute locally. */
 	struct mm_task_list tasks;
@@ -93,13 +93,13 @@ mm_context_report_stats(struct mm_context_stats *stats);
 static inline mm_timeval_t NONNULL(1)
 mm_context_gettime(struct mm_context *context)
 {
-	return mm_timesource_gettime(&context->timesource);
+	return mm_timepiece_gettime(&context->clock);
 }
 
 static inline mm_timeval_t NONNULL(1)
 mm_context_getrealtime(struct mm_context *context)
 {
-	return mm_timesource_getrealtime(&context->timesource);
+	return mm_timepiece_getrealtime(&context->clock);
 }
 
 /**********************************************************************
