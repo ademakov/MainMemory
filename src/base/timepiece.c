@@ -19,6 +19,9 @@
 
 #include "base/timepiece.h"
 
+#include "base/clock.h"
+#include "base/report.h"
+
 #include <sys/time.h>
 
 #if ENABLE_TIMEPIECE_TIMESTAMP

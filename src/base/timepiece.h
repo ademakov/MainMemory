@@ -22,8 +22,6 @@
 
 #include "common.h"
 #include "base/arch/intrinsic.h"
-#include "base/clock.h"
-#include "base/report.h"
 
 #ifndef ENABLE_TIMEPIECE_TIMESTAMP
 # if MM_CPU_TIMESTAMP
