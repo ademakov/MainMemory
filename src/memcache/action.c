@@ -29,64 +29,11 @@
  * Entry expiration timer.
  **********************************************************************/
 
-#if 0
-
-static uint32_t mc_action_exp_time;
-static mm_timer_t mc_action_exp_timer;
-
 static uint32_t
 mc_action_get_exp_time(void)
 {
-	return mm_memory_load(mc_action_exp_time);
+	return mm_memory_load(mc_table.time);
 }
-
-static mm_value_t
-mc_action_exp_time_handler(mm_value_t value UNUSED)
-{
-	ENTER();
-
-	mm_timeval_t real_time = mm_ontext_getrealtime(mm_context_selfptr());
-	mc_action_exp_time = real_time / 1000000; // useconds -> seconds.
-
-	LEAVE();
-	return 0;
-}
-
-static void
-mc_action_exp_time_start(void)
-{
-	mc_action_exp_timer = mm_timer_create(MM_CLOCK_REALTIME,
-					      mc_action_exp_time_handler,
-					      0);
-	mm_timer_settime(mc_action_exp_timer, false, 0, 1000000);
-}
-
-static void
-mc_action_exp_time_stop(void)
-{
-	mm_timer_destroy(mc_action_exp_timer);
-}
-
-#else
-
-static uint32_t
-mc_action_get_exp_time(void)
-{
-	mm_timeval_t real_time = mm_context_getrealtime(mm_context_selfptr());
-	return real_time / 1000000; // useconds -> seconds.
-}
-
-static void
-mc_action_exp_time_start(void)
-{
-}
-
-static void
-mc_action_exp_time_stop(void)
-{
-}
-
-#endif
 
 /**********************************************************************
  * Helper routines.
@@ -744,26 +691,3 @@ mc_action_flush_low(struct mc_action *action)
 	LEAVE();
 }
 
-/**********************************************************************
- * Memcache table action initialization and termination.
- **********************************************************************/
-
-void
-mc_action_start(void)
-{
-	ENTER();
-
-	mc_action_exp_time_start();
-
-	LEAVE();
-}
-
-void
-mc_action_stop(void)
-{
-	ENTER();
-
-	mc_action_exp_time_stop();
-
-	LEAVE();
-}

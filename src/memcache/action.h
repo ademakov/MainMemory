@@ -368,14 +368,4 @@ mc_action_flush(struct mc_action *action)
 void mc_action_perform(uintptr_t data);
 #endif
 
-/**********************************************************************
- * Memcache table action initialization and termination.
- **********************************************************************/
-
-void
-mc_action_start(void);
-
-void
-mc_action_stop(void);
-
 #endif /* MEMCACHE_ACTION_H */

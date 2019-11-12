@@ -77,6 +77,39 @@ mc_table_check_volume(struct mc_tpart *part, size_t reserve)
 }
 
 /**********************************************************************
+ * Entry expiration timer.
+ **********************************************************************/
+
+static mm_value_t
+mc_table_exp_timer_routine(mm_value_t arg UNUSED)
+{
+	ENTER();
+
+	struct mm_context *const context = mm_context_selfptr();
+	mm_event_arm_timer(context, &mc_table.exp_timer, 1000000);
+
+	uint32_t time = mm_context_getrealtime(context) / 1000000; // useconds -> seconds.
+	mm_memory_store(mc_table.time, time);
+	DEBUG("time: %u", time);
+
+	LEAVE();
+	return 0;
+}
+
+static void
+mc_table_prepare_exp_timer(void)
+{
+	ENTER();
+
+	MM_TASK(exp_timer_task, mc_table_exp_timer_routine, mm_task_complete_noop, mm_task_reassign_on);
+
+	mm_event_prepare_task_timer(&mc_table.exp_timer, &exp_timer_task);
+	mc_table_exp_timer_routine((mm_value_t) &mc_table.exp_timer);
+
+	LEAVE();
+}
+
+/**********************************************************************
  * Table resize.
  **********************************************************************/
 
@@ -431,6 +464,10 @@ mc_table_start(const struct mm_memcache_config *config)
 	mc_table.nentries_increment = nentries_increment;
 	mc_table.buckets_base = buckets_base;
 	mc_table.entries_base = entries_base;
+
+	// Initialize the entry expiration timer.
+	mc_table.time = 0;
+	mc_table_prepare_exp_timer();
 
 	// Initialize the table partitions.
 #if ENABLE_MEMCACHE_DELEGATE

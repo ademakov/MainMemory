@@ -169,7 +169,6 @@ mc_memcache_start(void)
 	ENTER();
 
 	mc_table_start(&mc_config);
-	mc_action_start();
 
 	LEAVE();
 }
@@ -179,7 +178,6 @@ mc_memcache_stop(void)
 {
 	ENTER();
 
-	mc_action_stop();
 	mc_table_stop();
 
 	LEAVE();

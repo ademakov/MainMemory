@@ -25,6 +25,7 @@
 
 #include "base/bitops.h"
 #include "base/list.h"
+#include "base/event/event.h"
 #include "base/memory/space.h"
 
 #if ENABLE_MEMCACHE_LOCKING
@@ -91,8 +92,11 @@ struct mc_table
 	/* The number of table partitions. */
 	mm_thread_t nparts;
 
+	/* Current time for entry expiration checks. */
+	mm_atomic_uint32_t time;
+
 	/* The hash value bits that identify partition. */
-	uint16_t part_bits;
+	uint32_t part_bits;
 	uint32_t part_mask;
 
 	/* The maximum number of buckets per partition. */
@@ -107,6 +111,9 @@ struct mc_table
 	/* Base table addresses. */
 	void *buckets_base;
 	void *entries_base;
+
+	/* Entry expiration timer. */
+	struct mm_event_timer exp_timer;
 };
 
 extern struct mc_table mc_table;
