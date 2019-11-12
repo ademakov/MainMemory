@@ -240,7 +240,7 @@ mm_event_instant_io(void)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io,
 		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags)
 {
 	ENTER();
@@ -420,7 +420,7 @@ mm_event_submit_output(struct mm_event_fd *sink)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_task *task)
+mm_event_prepare_task_timer(struct mm_event_timer *sink, const struct mm_task *task)
 {
 	mm_timeq_entry_prepare(&sink->entry, 0);
 	sink->fiber = NULL;

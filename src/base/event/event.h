@@ -117,7 +117,7 @@ struct mm_event_io
 struct mm_event_fd
 {
 	/* Task entries to perform I/O. */
-	struct mm_event_io *io;
+	const struct mm_event_io *io;
 
 	/* The context that owns the sink. */
 	struct mm_context *context;
@@ -167,7 +167,7 @@ struct mm_event_timer
 	struct mm_fiber *fiber;
 
 	/* A task entry to fire. */
-	struct mm_task *task;
+	const struct mm_task *task;
 };
 
 /**********************************************************************
@@ -276,7 +276,7 @@ mm_event_instant_io(void);
 
 /* Prepare an I/O event sink. */
 void NONNULL(1, 3)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, struct mm_event_io *io,
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io,
 		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags);
 
 void NONNULL(1, 2)
@@ -305,7 +305,7 @@ mm_event_submit_output(struct mm_event_fd *sink);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_prepare_task_timer(struct mm_event_timer *sink, struct mm_task *task);
+mm_event_prepare_task_timer(struct mm_event_timer *sink, const struct mm_task *task);
 
 void NONNULL(1, 2)
 mm_event_prepare_fiber_timer(struct mm_event_timer *sink, struct mm_fiber *fiber);
