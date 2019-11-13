@@ -6,6 +6,7 @@ v 0.3
 ** https://github.com/cksystemsgroup/scalloc
 ** slab allocator (to base object pools on)
 ** buddy allocator (for chunks and slabs)
+* split large memcache entries
 * minimize memcache locks or non-blocking memcache table
 
 ;;; At this point it becomes ready to challenge stock memcached
@@ -22,6 +23,10 @@ v 0.4
 * support custom signal events
 * cleanup net and netbuf interfaces
 * enhance statistics
+** net statistics
+** ring statistics
+** alloc statistics
+** global lock counters
 * UDP servers
 * refine memcache module:
 ** statistics
@@ -34,7 +39,6 @@ Essentials:
 * system call threads
 * disk I/O threads
 * syslog
-* global lock counters
 * utf8 support for scan, json
 * float/double support for format, scan, json
 * SSL servers
