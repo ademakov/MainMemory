@@ -2,7 +2,7 @@ dnl Process this file with autoconf to produce a configure script.
 
 dnl Initialize autoconf.
 AC_PREREQ(2.68)
-AC_INIT([MainMemory], [0.1], [ademakov@gmail.com])
+AC_INIT([MainMemory], [0.3], [ademakov@gmail.com])
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_AUX_DIR([config])
 AC_CONFIG_SRCDIR([src/base/bitops.h])
