@@ -1,7 +1,7 @@
 /*
- * base/arch/x86-64/cstack.c - Arch-specific call stack support.
+ * base/arch/generic/cstack.h - MainMemory arch-specific call stack support.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -17,15 +17,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include "base/cstack.h"
+#ifndef BASE_ARCH_GENERIC_CSTACK_H
+#define BASE_ARCH_GENERIC_CSTACK_H
 
-#include <stdint.h>
+#if HAVE_UCONTEXT_H
+#  include <ucontext.h>
+#else
+#  error "Unsupported architecture."
+#endif
 
-void
-mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
+typedef ucontext_t mm_cstack_t;
+
+static inline void
+mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx)
 {
-	intptr_t *sp = (intptr_t *) (stack + size);
-	ctx->store[0] = (intptr_t) sp;		// rsp
-	ctx->store[1] = (intptr_t) sp;		// rbp
-	ctx->store[2] = (intptr_t) entry;	// jmp address
+	swapcontext(old_ctx, new_ctx);
 }
+
+#endif /* BASE_ARCH_GENERIC_CSTACK_H */

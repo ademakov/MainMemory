@@ -24,21 +24,19 @@
 
 #include <stddef.h>
 
-/**********************************************************************
- * Architecture-specific call stack definitions.
- **********************************************************************/
-
-#if ARCH_X86
-# include "base/arch/x86/cstack.h"
-#elif ARCH_X86_64
-# include "base/arch/x86-64/cstack.h"
-#elif
-# include "base/arch/generic/cstack.h"
+#if ARCH_GENERIC
+# if HAVE_UCONTEXT_H
+#  include <ucontext.h>
+# else
+#  error "Unsupported architecture."
+# endif
 #endif
 
-/**********************************************************************
- * Common call stack routines.
- **********************************************************************/
+#if ARCH_GENERIC
+typedef ucontext_t mm_cstack_t;
+#else
+typedef void * mm_cstack_t;
+#endif
 
 void *
 mm_cstack_create(uint32_t stack_size, uint32_t guard_size);

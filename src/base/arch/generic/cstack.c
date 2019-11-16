@@ -31,9 +31,3 @@ mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t siz
 	ctx->uc_stack.ss_size = size;
 	makecontext(ctx, entry, 0);
 }
-
-void
-mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx)
-{
-	swapcontext(old_ctx, new_ctx);
-}
