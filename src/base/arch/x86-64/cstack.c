@@ -18,14 +18,26 @@
  */
 
 #include "base/cstack.h"
+#include "base/report.h"
 
 #include <stdint.h>
+
+static void
+mm_cstack_abort(void)
+{
+	ABORT();
+}
 
 void
 mm_cstack_prepare(mm_cstack_t *ctx, void (*entry)(void), char *stack, size_t size)
 {
-	intptr_t *sp = (intptr_t *) (stack + size);
-	ctx->store[0] = (intptr_t) sp;		// rsp
-	ctx->store[1] = (intptr_t) sp;		// rbp
-	ctx->store[2] = (intptr_t) entry;	// jmp address
+	uintptr_t *sp = (uintptr_t *) (stack + size);
+
+	// The top of the stack must contain an address of the caller.
+	// And it must be 8 bytes off from a 16-byte aligned address.
+	0[--sp] = (uintptr_t) mm_cstack_abort;
+
+	ctx->store[0] = (uintptr_t) sp;		// rsp
+	ctx->store[1] = (uintptr_t) sp;		// rbp
+	ctx->store[2] = (uintptr_t) entry;	// jmp address
 }

@@ -23,7 +23,7 @@
 typedef struct
 {
 	// Space for the RSP, RBP registers and for the jump address.
-	intptr_t store[3];
+	uintptr_t store[3];
 } mm_cstack_t;
 
 static inline void NONNULL(1, 2)
