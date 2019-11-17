@@ -87,7 +87,7 @@ libmainbase_la_SOURCES += \
 	arch/x86/asm.h \
 	arch/x86/atomic.h \
 	arch/x86/basic.h \
-	arch/x86/cstack.c arch/x86/cstack-switch.S \
+	arch/x86/cstack.c arch/x86/cstack.h arch/x86/cstack-switch.S \
 	arch/x86/intrinsic.h \
 	arch/x86/syscall.h arch/x86/syscall.c
 endif
@@ -97,7 +97,7 @@ libmainbase_la_SOURCES += \
 	arch/x86-64/asm.h \
 	arch/x86-64/atomic.h \
 	arch/x86-64/basic.h \
-	arch/x86-64/cstack.c arch/x86-64/cstack-switch.S \
+	arch/x86-64/cstack.c arch/x86-64/cstack.h \
 	arch/x86-64/intrinsic.h \
 	arch/x86-64/syscall.h arch/x86-64/syscall.c
 endif
@@ -106,7 +106,7 @@ if ARCH_GENERIC
 libmainbase_la_SOURCES += \
 	arch/generic/atomic.h \
 	arch/generic/basic.h \
-	arch/generic/cstack.c \
+	arch/generic/cstack.c arch/generic/cstack.h \
 	arch/generic/intrinsic.h \
 	arch/generic/syscall.h
 endif
