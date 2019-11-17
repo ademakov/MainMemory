@@ -179,6 +179,9 @@ mm_strand_worker(mm_value_t arg)
 		mm_memory_store(slot.task, NULL);
 		// Perform completion notification on return.
 		(task->complete)(slot.task_arg, result);
+
+		// Reset the priority that could have been temporary raised.
+		mm_fiber_restore_priority(context->fiber);
 	}
 
 	// Cleanup on return.

@@ -341,19 +341,15 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 
 	// Bring it to the requested state.
 	old_fiber->state = state;
-	if (unlikely(state == MM_FIBER_INVALID)) {
+	if (state > MM_FIBER_BLOCKED) {
+		// Add it to the run queue.
+		mm_runq_put(&strand->runq, old_fiber);
+	} else if (state == MM_FIBER_BLOCKED) {
+		// Add it to the blocked fiber list.
+		mm_list_append(&strand->block, &old_fiber->queue);
+	} else {
 		// Add it to the dead fiber list.
 		mm_list_append(&strand->dead, &old_fiber->queue);
-	} else {
-		// Reset the priority that could have been temporary raised.
-		old_fiber->priority = old_fiber->original_priority;
-		if (state == MM_FIBER_BLOCKED) {
-			// Add it to the blocked fiber list.
-			mm_list_append(&strand->block, &old_fiber->queue);
-		} else {
-			// Add it to the run queue.
-			mm_runq_put(&strand->runq, old_fiber);
-		}
 	}
 
 	// Handle any pending async calls. Sometimes this might touch the

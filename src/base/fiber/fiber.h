@@ -50,10 +50,10 @@ typedef int8_t			mm_priority_t;
 
 /* Fiber state values. */
 typedef enum {
+	MM_FIBER_INVALID = -1,
 	MM_FIBER_BLOCKED,
 	MM_FIBER_PENDING,
 	MM_FIBER_RUNNING,
-	MM_FIBER_INVALID,
 } mm_fiber_state_t;
 
 /*
@@ -223,6 +223,12 @@ mm_fiber_run(struct mm_fiber *fiber);
 
 void NONNULL(1)
 mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority);
+
+static inline void NONNULL(1)
+mm_fiber_restore_priority(struct mm_fiber *fiber)
+{
+	fiber->priority = fiber->original_priority;
+}
 
 #if ENABLE_FIBER_LOCATION
 
