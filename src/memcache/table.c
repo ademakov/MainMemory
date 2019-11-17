@@ -264,7 +264,7 @@ mc_table_evict_routine(mm_value_t arg)
 	size_t reserve = MC_TABLE_VOLUME_RESERVE / mc_table.nparts;
 	while (mc_table_check_volume(part, reserve)) {
 		mc_action_evict(&action);
-		mm_fiber_yield();
+		mm_fiber_yield(mm_context_selfptr());
 	}
 
 	LEAVE();

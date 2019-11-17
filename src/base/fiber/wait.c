@@ -209,16 +209,17 @@ mm_waitset_wait(struct mm_waitset *waitset, mm_regular_lock_t *lock)
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_strand *strand = mm_context_strand();
+	struct mm_context *const context = mm_context_selfptr();
+	struct mm_strand *const strand = context->strand;
 	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
-	wait->fiber = mm_fiber_selfptr();
+	wait->fiber = context->fiber;
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
 	mm_regular_unlock(lock);
 
 	// Wait for a wakeup signal.
-	mm_fiber_block();
+	mm_fiber_block(context);
 
 	// Reset the fiber reference.
 	mm_memory_store(wait->fiber, NULL);
@@ -232,16 +233,17 @@ mm_waitset_timedwait(struct mm_waitset *waitset, mm_regular_lock_t *lock, mm_tim
 	ENTER();
 
 	// Enqueue the fiber.
-	struct mm_strand *strand = mm_context_strand();
+	struct mm_context *const context = mm_context_selfptr();
+	struct mm_strand *const strand = context->strand;
 	struct mm_wait *wait = mm_wait_cache_get(&strand->wait_cache);
-	wait->fiber = mm_fiber_selfptr();
+	wait->fiber = context->fiber;
 	mm_stack_insert(&waitset->set, &wait->link);
 
 	// Release the waitset lock.
 	mm_regular_unlock(lock);
 
 	// Wait for a wakeup signal.
-	mm_fiber_pause(timeout);
+	mm_fiber_pause(context, timeout);
 
 	// Reset the fiber reference.
 	mm_memory_store(wait->fiber, NULL);
@@ -302,12 +304,13 @@ mm_waitset_unique_wait(struct mm_waitset *waitset)
 	ENTER();
 
 	// Advertise the waiting fiber.
-	mm_memory_store(waitset->fiber, mm_fiber_selfptr());
+	struct mm_context *const context = mm_context_selfptr();
+	mm_memory_store(waitset->fiber, context->fiber);
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {
 		// Wait for a wakeup signal.
-		mm_fiber_block();
+		mm_fiber_block(context);
 	}
 
 	// Reset the fiber reference.
@@ -324,12 +327,13 @@ mm_waitset_unique_timedwait(struct mm_waitset *waitset, mm_timeout_t timeout)
 	ENTER();
 
 	// Advertise the waiting fiber.
-	mm_memory_store(waitset->fiber, mm_fiber_selfptr());
+	struct mm_context *const context = mm_context_selfptr();
+	mm_memory_store(waitset->fiber, context->fiber);
 	mm_memory_strict_fence(); // TODO: store_load fence
 
 	if (!mm_memory_load(waitset->signal)) {
 		// Wait for a wakeup signal.
-		mm_fiber_pause(timeout);
+		mm_fiber_pause(context, timeout);
 	}
 
 	// Reset the fiber reference.

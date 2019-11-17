@@ -432,12 +432,11 @@ mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority)
 
 #if ENABLE_FIBER_LOCATION
 
-void NONNULL(1, 2)
-mm_fiber_yield_at(const char *location, const char *function)
+void NONNULL(1, 2, 3)
+mm_fiber_yield_at(struct mm_context *context, const char *location, const char *function)
 {
 	ENTER();
 
-	struct mm_context *const context = mm_context_selfptr();
 	struct mm_fiber *const fiber = context->fiber;
 	fiber->location = location;
 	fiber->function = function;
@@ -447,12 +446,11 @@ mm_fiber_yield_at(const char *location, const char *function)
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_fiber_block_at(const char *location, const char *function)
+void NONNULL(1, 2, 3)
+mm_fiber_block_at(struct mm_context *context, const char *location, const char *function)
 {
 	ENTER();
 
-	struct mm_context *const context = mm_context_selfptr();
 	struct mm_fiber *const fiber = context->fiber;
 	fiber->location = location;
 	fiber->function = function;
@@ -464,22 +462,22 @@ mm_fiber_block_at(const char *location, const char *function)
 
 #else
 
-void
-mm_fiber_yield(void)
+void NONNULL(1)
+mm_fiber_yield(struct mm_context *context)
 {
 	ENTER();
 
-	mm_fiber_switch(mm_context_selfptr(), MM_FIBER_PENDING);
+	mm_fiber_switch(context, MM_FIBER_PENDING);
 
 	LEAVE();
 }
 
-void
-mm_fiber_block(void)
+void NONNULL(1)
+mm_fiber_block(struct mm_context *context)
 {
 	ENTER();
 
-	mm_fiber_switch(mm_context_selfptr(), MM_FIBER_BLOCKED);
+	mm_fiber_switch(context, MM_FIBER_BLOCKED);
 
 	LEAVE();
 }
@@ -487,22 +485,22 @@ mm_fiber_block(void)
 #endif
 
 static void
-mm_fiber_pause_cleanup(struct mm_event_timer *timer)
+mm_fiber_pause_cleanup(uintptr_t arg)
 {
+	struct mm_event_timer *timer = (struct mm_event_timer *) arg;
 	mm_event_disarm_timer(mm_context_selfptr(), timer);
 }
 
 #if ENABLE_FIBER_LOCATION
-void NONNULL(2, 3)
-mm_fiber_pause_at(mm_timeout_t timeout, const char *location, const char *function)
+void NONNULL(1, 3, 4)
+mm_fiber_pause_at(struct mm_context *context, mm_timeout_t timeout, const char *location, const char *function)
 #else
-void
-mm_fiber_pause(mm_timeout_t timeout)
+void NONNULL(1)
+mm_fiber_pause(struct mm_context *context, mm_timeout_t timeout)
 #endif
 {
 	ENTER();
 
-	struct mm_context *const context = mm_context_selfptr();
 	struct mm_fiber *const fiber = context->fiber;
 
 	struct mm_event_timer timer;

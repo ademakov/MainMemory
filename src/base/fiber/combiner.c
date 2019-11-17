@@ -91,14 +91,15 @@ mm_fiber_combiner_execute(struct mm_fiber_combiner *combiner,
 	struct mm_list *wait_queue = MM_THREAD_LOCAL_DEREF(n, combiner->wait_queue);
 
 	// Add the current request to the per-thread queue.
-	struct mm_fiber *fiber = mm_fiber_selfptr();
+	struct mm_context *const context = mm_context_selfptr();
+	struct mm_fiber *fiber = context->fiber;
 	fiber->flags |= MM_FIBER_COMBINING;
 	mm_list_append(wait_queue, &fiber->wait_queue);
 
 	// Wait until the current request becomes the head of the
 	// per-thread queue.
 	while (mm_list_head(wait_queue) != &fiber->wait_queue)
-		mm_fiber_block();
+		mm_fiber_block(context);
 
 	mm_combiner_execute(&combiner->combiner, routine, data);
 

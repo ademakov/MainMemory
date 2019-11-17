@@ -44,19 +44,20 @@ mm_event_epoch_reclaim_execute(mm_value_t arg)
 {
 	ENTER();
 
-	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	ASSERT(sink->context == mm_context_selfptr());
+	struct mm_event_fd *const sink = (struct mm_event_fd *) arg;
+	struct mm_context *const context = sink->context;
+	ASSERT(context == mm_context_selfptr());
 
 	// Notify a reader/writer about closing.
 	// TODO: don't block here, have a queue of closed sinks
 	while (sink->input_fiber != NULL || sink->output_fiber != NULL) {
-		struct mm_fiber *fiber = sink->context->fiber;
+		struct mm_fiber *fiber = context->fiber;
 		mm_priority_t priority = MM_PRIO_UPPER(fiber->priority, 1);
 		if (sink->input_fiber != NULL)
 			mm_fiber_hoist(sink->input_fiber, priority);
 		if (sink->output_fiber != NULL)
 			mm_fiber_hoist(sink->output_fiber, priority);
-		mm_fiber_yield();
+		mm_fiber_yield(context);
 	}
 
 	// Destroy the sink.

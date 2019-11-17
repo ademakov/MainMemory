@@ -36,7 +36,7 @@ mm_thread_backoff_slow(uint32_t count)
 		// working fiber too then yield to let them make progress.
 		struct mm_strand *const strand = context->strand;
 		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_MASTER) && context->fiber->priority < MM_PRIO_MASTER) {
-			mm_fiber_yield();
+			mm_fiber_yield(context);
 			return count + count + 1;
 		}
 	}

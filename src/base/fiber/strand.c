@@ -48,7 +48,8 @@ mm_strand_idle(struct mm_strand *strand)
 	ENTER();
 
 	// Put the fiber into the wait queue.
-	struct mm_fiber *fiber = strand->context->fiber;
+	struct mm_context *const context = strand->context;
+	struct mm_fiber *const fiber = context->fiber;
 	mm_list_insert(&strand->idle, &fiber->wait_queue);
 
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
@@ -56,7 +57,7 @@ mm_strand_idle(struct mm_strand *strand)
 	strand->nidle++;
 
 	// Wait until poked.
-	mm_fiber_block();
+	mm_fiber_block(context);
 
 	// Normally an idle fiber starts after being poked and
 	// in this case it should already be removed from the
@@ -266,7 +267,7 @@ mm_strand_master(mm_value_t arg)
 		}
 
 		// Run active fibers if any.
-		mm_fiber_yield();
+		mm_fiber_yield(context);
 	}
 
 	LEAVE();
@@ -388,7 +389,7 @@ mm_strand_cleanup(struct mm_strand *strand)
 }
 
 void NONNULL(1, 2)
-mm_strand_loop(struct mm_strand *strand, struct mm_context *context)
+mm_strand_loop(struct mm_strand *const strand, struct mm_context *const context)
 {
 	struct mm_fiber_attr attr;
 
@@ -405,12 +406,12 @@ mm_strand_loop(struct mm_strand *strand, struct mm_context *context)
 	// Relinquish control to the created fibers. Once these fibers and
 	// any fibers created later exit the control returns here.
 	strand->state = MM_STRAND_RUNNING;
-	mm_fiber_yield();
+	mm_fiber_yield(context);
 	strand->state = MM_STRAND_INVALID;
 }
 
 void NONNULL(1)
-mm_strand_stop(struct mm_strand *strand)
+mm_strand_stop(struct mm_strand *const strand)
 {
 	ENTER();
 

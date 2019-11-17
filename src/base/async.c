@@ -472,7 +472,7 @@ mm_async_syscall_4_handler(struct mm_context *context UNUSED, uintptr_t *argumen
  **********************************************************************/
 
 static void
-mm_async_setup(struct mm_async_node *node, const char *desc)
+mm_async_setup(struct mm_async_node *node, struct mm_context *context, const char *desc)
 {
 	// TODO: disable async fiber cancel
 
@@ -480,7 +480,6 @@ mm_async_setup(struct mm_async_node *node, const char *desc)
 	node->description = desc;
 
 	// Register as a waiting fiber.
-	struct mm_context *context = mm_context_selfptr();
 	node->fiber = context->fiber;
 	node->fiber->flags |= MM_FIBER_WAITING;
 	mm_list_append(&context->strand->async, &node->link);
@@ -491,13 +490,13 @@ mm_async_setup(struct mm_async_node *node, const char *desc)
 }
 
 static intptr_t
-mm_async_wait(struct mm_async_node *node)
+mm_async_wait(struct mm_async_node *node, struct mm_context *context)
 {
 	// TODO: check for shutdown and handle it gracefully while in loop.
 
 	// Wait for the operation completion.
 	while (mm_memory_load(node->status) == MM_RESULT_DEFERRED)
-		mm_fiber_block();
+		mm_fiber_block(context);
 
 	// Ensure the result is visible.
 	mm_memory_load_fence();
@@ -523,15 +522,18 @@ mm_async_syscall_1(const char *name, int n, uintptr_t a1)
 {
 	ENTER();
 
+	// Get the execution context.
+	struct mm_context *context = mm_context_selfptr();
+
 	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, name);
+	mm_async_setup(&node, context, name);
 
 	// Make an asynchronous request to execute the call.
 	mm_async_post_3(mm_async_syscall_1_handler, (uintptr_t) &node, n, a1);
 
 	// Wait for its result.
-	intptr_t result = mm_async_wait(&node);
+	intptr_t result = mm_async_wait(&node, context);
 
 	LEAVE();
 	return result;
@@ -543,15 +545,18 @@ mm_async_syscall_2(const char *name, int n, uintptr_t a1, uintptr_t a2)
 {
 	ENTER();
 
+	// Get the execution context.
+	struct mm_context *context = mm_context_selfptr();
+
 	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, name);
+	mm_async_setup(&node, context, name);
 
 	// Make an asynchronous request to execute the call.
 	mm_async_post_4(mm_async_syscall_2_handler, (uintptr_t) &node, n, a1, a2);
 
 	// Wait for its result.
-	intptr_t result = mm_async_wait(&node);
+	intptr_t result = mm_async_wait(&node, context);
 
 	LEAVE();
 	return result;
@@ -563,15 +568,18 @@ mm_async_syscall_3(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_
 {
 	ENTER();
 
+	// Get the execution context.
+	struct mm_context *context = mm_context_selfptr();
+
 	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, name);
+	mm_async_setup(&node, context, name);
 
 	// Make an asynchronous request to execute the call.
 	mm_async_post_5(mm_async_syscall_3_handler, (uintptr_t) &node, n, a1, a2, a3);
 
 	// Wait for its result.
-	intptr_t result = mm_async_wait(&node);
+	intptr_t result = mm_async_wait(&node, context);
 
 	LEAVE();
 	return result;
@@ -583,15 +591,18 @@ mm_async_syscall_4(const char *name, int n, uintptr_t a1, uintptr_t a2, uintptr_
 {
 	ENTER();
 
+	// Get the execution context.
+	struct mm_context *context = mm_context_selfptr();
+
 	// Setup the call node.
 	struct mm_async_node node;
-	mm_async_setup(&node, name);
+	mm_async_setup(&node, context, name);
 
 	// Make an asynchronous request to execute the call.
 	mm_async_post_6(mm_async_syscall_4_handler, (uintptr_t) &node, n, a1, a2, a3, a4);
 
 	// Wait for its result.
-	intptr_t result = mm_async_wait(&node);
+	intptr_t result = mm_async_wait(&node, context);
 
 	LEAVE();
 	return result;

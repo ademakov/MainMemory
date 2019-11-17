@@ -226,29 +226,29 @@ mm_fiber_hoist(struct mm_fiber *fiber, mm_priority_t priority);
 
 #if ENABLE_FIBER_LOCATION
 
-# define mm_fiber_yield() mm_fiber_yield_at(__LOCATION__, __FUNCTION__)
-# define mm_fiber_block() mm_fiber_block_at(__LOCATION__, __FUNCTION__)
-# define mm_fiber_pause(t) mm_fiber_pause_at(t, __LOCATION__, __FUNCTION__)
+# define mm_fiber_yield(c) mm_fiber_yield_at(c, __LOCATION__, __FUNCTION__)
+# define mm_fiber_block(c) mm_fiber_block_at(c, __LOCATION__, __FUNCTION__)
+# define mm_fiber_pause(c, t) mm_fiber_pause_at(c, t, __LOCATION__, __FUNCTION__)
 
-void NONNULL(1, 2)
-mm_fiber_yield_at(const char *location, const char *function);
+void NONNULL(1, 2, 3)
+mm_fiber_yield_at(struct mm_context *context, const char *location, const char *function);
 
-void NONNULL(1, 2)
-mm_fiber_block_at(const char *location, const char *function);
+void NONNULL(1, 2, 3)
+mm_fiber_block_at(struct mm_context *context, const char *location, const char *function);
 
-void NONNULL(2, 3)
-mm_fiber_pause_at(mm_timeout_t timeout, const char *location, const char *function);
+void NONNULL(1, 3, 4)
+mm_fiber_pause_at(struct mm_context *context, mm_timeout_t timeout, const char *location, const char *function);
 
 #else /* !ENABLE_FIBER_LOCATION */
 
-void
-mm_fiber_yield(void);
+void NONNULL(1)
+mm_fiber_yield(struct mm_context *context);
 
-void
-mm_fiber_block(void);
+void NONNULL(1)
+mm_fiber_block(struct mm_context *context);
 
-void
-mm_fiber_pause(mm_timeout_t timeout);
+void NONNULL(1)
+mm_fiber_pause(struct mm_context *context, mm_timeout_t timeout);
 
 #endif /* !ENABLE_FIBER_LOCATION */
 
