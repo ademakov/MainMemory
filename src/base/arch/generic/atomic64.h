@@ -23,9 +23,9 @@
 typedef	uint64_t ALIGN(sizeof(uint64_t))  mm_atomic_uint64_t;
 
 static inline uint64_t
-mm_atomic_uint64_cas(mm_atomic_uint64_t *p, uint64_t v)
+mm_atomic_uint64_cas(mm_atomic_uint64_t *p, uint64_t c, uint64_t v)
 {
-	return __sync_lock_test_and_set(p, v);
+	return __sync_val_compare_and_swap(p, c, v);
 }
 
 static inline uint64_t
