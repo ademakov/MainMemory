@@ -32,7 +32,7 @@
 # include "base/arch/x86/cstack.h"
 #elif ARCH_X86_64
 # include "base/arch/x86-64/cstack.h"
-#elif
+#else
 # include "base/arch/generic/cstack.h"
 #endif
 
