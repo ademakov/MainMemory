@@ -24,7 +24,6 @@
 #include "base/runtime.h"
 #include "base/syscall.h"
 #include "base/event/event.h"
-#include "base/event/listener.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/strand.h"
 
@@ -182,7 +181,7 @@ mm_async_find_peer(void)
 }
 
 /**********************************************************************
- * Asynchronous procedure calls targeting a single listener.
+ * Asynchronous procedure calls targeting a single context.
  **********************************************************************/
 
 void NONNULL(1, 2)
@@ -282,7 +281,7 @@ mm_async_trycall_6(struct mm_context *const peer, mm_async_routine_t r,
 }
 
 /**********************************************************************
- * Asynchronous procedure calls targeting any listener of a dispatcher.
+ * Asynchronous procedure calls targeting any random context.
  **********************************************************************/
 
 void NONNULL(1)

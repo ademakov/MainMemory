@@ -46,7 +46,7 @@ void NONNULL(1)
 mm_async_handle_calls(struct mm_context *context);
 
 /**********************************************************************
- * Asynchronous procedure calls targeting a single listener.
+ * Asynchronous procedure calls targeting a single context.
  **********************************************************************/
 
 void NONNULL(1, 2)
@@ -104,7 +104,7 @@ mm_async_trycall_6(struct mm_context *context, mm_async_routine_t r,
 		   uintptr_t a1, uintptr_t a2, uintptr_t a3, uintptr_t a4, uintptr_t a5, uintptr_t a6);
 
 /**********************************************************************
- * Asynchronous procedure calls targeting any listener of a dispatcher.
+ * Asynchronous procedure calls targeting any random context.
  **********************************************************************/
 
 void NONNULL(1)

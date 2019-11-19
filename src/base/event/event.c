@@ -25,7 +25,6 @@
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
 #include "base/fiber/fiber.h"
-#include "base/fiber/strand.h"
 
 /**********************************************************************
  * Event sink activity.
