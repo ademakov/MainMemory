@@ -48,15 +48,6 @@
 /* Forward declarations. */
 struct mm_event_dispatch;
 
-#define MM_EVENT_LISTENER_STATUS	((uint32_t) 3)
-
-typedef enum
-{
-	MM_EVENT_LISTENER_RUNNING = 0,
-	MM_EVENT_LISTENER_POLLING = 1,
-	MM_EVENT_LISTENER_WAITING = 2,
-} mm_event_listener_status_t;
-
 #if ENABLE_EVENT_STATS
 /* Event listener statistics. */
 struct mm_event_listener_stats
@@ -76,16 +67,6 @@ struct mm_event_listener_stats
 
 struct mm_event_listener
 {
-	/*
-	 * The listener state.
-	 *
-	 * The two least-significant bits contain a mm_event_listener_status_t
-	 * value. The rest contain a snapshot of the dequeue stamp. On 32-bit
-	 * platforms this discards its 2 most significant bits. However the 30
-	 * remaining bits suffice to avoid any stamp clashes in practice.
-	 */
-	mm_atomic_uintptr_t state;
-
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
@@ -154,15 +135,15 @@ mm_event_listener_cleanup(struct mm_event_listener *listener);
 static inline void NONNULL(1)
 mm_event_listener_running(struct mm_event_listener *listener)
 {
-	mm_memory_store(listener->state, MM_EVENT_LISTENER_RUNNING);
+	mm_memory_store(listener->context->status, MM_CONTEXT_RUNNING);
 }
 
 /* Prepare the event listener to one of the sleeping states. */
 static inline mm_stamp_t NONNULL(1)
-mm_event_listener_posture(struct mm_event_listener *listener, mm_event_listener_status_t status)
+mm_event_listener_posture(struct mm_event_listener *listener, mm_context_status_t status)
 {
 	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->context->async_queue);
-	mm_atomic_uintptr_fetch_and_set(&listener->state, (((uintptr_t) stamp) << 2) | status);
+	mm_atomic_uintptr_fetch_and_set(&listener->context->status, (((uintptr_t) stamp) << 2) | status);
 	return stamp;
 }
 
@@ -177,7 +158,7 @@ mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
 static inline mm_stamp_t NONNULL(1)
 mm_event_listener_polling(struct mm_event_listener *listener)
 {
-	return mm_event_listener_posture(listener, MM_EVENT_LISTENER_POLLING);
+	return mm_event_listener_posture(listener, MM_CONTEXT_POLLING);
 }
 
 #if ENABLE_LINUX_FUTEX
@@ -206,7 +187,7 @@ static inline void NONNULL(1)
 mm_event_listener_timedwait(struct mm_event_listener *listener, mm_timeout_t timeout)
 {
 	/* Announce that the thread is about to sleep. */
-	mm_stamp_t stamp = mm_event_listener_posture(listener, MM_EVENT_LISTENER_WAITING);
+	mm_stamp_t stamp = mm_event_listener_posture(listener, MM_CONTEXT_WAITING);
 	if (!mm_event_listener_restful(listener, stamp))
 		goto leave;
 

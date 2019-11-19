@@ -34,6 +34,8 @@ __thread struct mm_context *__mm_context_self;
 void NONNULL(1)
 mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async_queue_size)
 {
+	context->status = MM_CONTEXT_PENDING;
+
 	// Gather pointers to main runtime components.
 	context->strand = mm_thread_ident_to_strand(ident);
 	context->listener = mm_thread_ident_to_event_listener(ident);

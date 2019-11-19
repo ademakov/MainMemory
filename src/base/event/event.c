@@ -647,9 +647,8 @@ mm_event_notify(struct mm_context *context, mm_stamp_t stamp)
 {
 	ENTER();
 
-	struct mm_event_listener *const listener = context->listener;
-	const uintptr_t state = mm_memory_load(listener->state);
-	if ((((uintptr_t) stamp) << 2) == (state & ~MM_EVENT_LISTENER_STATUS)) {
+	uintptr_t status = mm_memory_load(context->status);
+	if ((((uintptr_t) stamp) << 2) == (status & ~MM_CONTEXT_STATUS)) {
 		// Get the current status of the listener. It might
 		// become obsolete by the time the notification is
 		// sent. This is not a problem however as it implies
@@ -661,11 +660,11 @@ mm_event_notify(struct mm_context *context, mm_stamp_t stamp)
 		// a wrong listener being waken (if another listener
 		// becomes polling). So listeners should be prepared
 		// to get spurious wake up notifications.
-		const mm_event_listener_status_t status = state & MM_EVENT_LISTENER_STATUS;
-		if (status == MM_EVENT_LISTENER_WAITING)
-			mm_event_listener_signal(listener);
-		else if (status == MM_EVENT_LISTENER_POLLING)
-			mm_event_backend_notify(&listener->dispatch->backend);
+		status &= MM_CONTEXT_STATUS;
+		if (status == MM_CONTEXT_WAITING)
+			mm_event_listener_signal(context->listener);
+		else if (status == MM_CONTEXT_POLLING)
+			mm_event_backend_notify(&context->listener->dispatch->backend);
 	}
 
 	LEAVE();

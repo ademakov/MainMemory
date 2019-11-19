@@ -335,7 +335,9 @@ mm_regular_boot(mm_value_t arg)
 	mm_regular_boot_call_start_hooks(strand);
 
 	// Run fibers machinery for a while.
+	context->status = MM_CONTEXT_RUNNING;
 	mm_strand_loop(strand, context);
+	context->status = MM_CONTEXT_PENDING;
 
 	// Destroy per-strand resources.
 	mm_regular_boot_call_stop_hooks(strand);

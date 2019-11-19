@@ -21,9 +21,20 @@
 #define BASE_CONTEXT_H
 
 #include "common.h"
+#include "base/atomic.h"
 #include "base/ring.h"
 #include "base/task.h"
 #include "base/timepiece.h"
+
+#define MM_CONTEXT_STATUS	((uint32_t) 3)
+
+typedef enum
+{
+	MM_CONTEXT_RUNNING = 0,
+	MM_CONTEXT_PENDING = 1,
+	MM_CONTEXT_POLLING = 2,
+	MM_CONTEXT_WAITING = 3,
+} mm_context_status_t;
 
 struct mm_context_stats
 {
@@ -38,6 +49,17 @@ struct mm_context
 {
 	/* Currently running fiber. */
 	struct mm_fiber *fiber;
+
+	/*
+	 * The context status.
+	 *
+	 * The two least-significant bits contain a mm_context_status_t value.
+	 * For MM_CONTEXT_POLLING and MM_CONTEXT_WAITING values the remaining
+	 * bits contain a snapshot of the async_queue dequeue stamp. On 32-bit
+	 * platforms this discards its 2 most significant bits. However the 30
+	 * remaining bits suffice to avoid any stamp clashes in practice.
+	 */
+	mm_atomic_uintptr_t status;
 
 	/* Associated fiber strand. */
 	struct mm_strand *strand;

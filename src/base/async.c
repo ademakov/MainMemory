@@ -174,10 +174,10 @@ mm_async_find_peer(void)
 #if ENABLE_SMP
 	const mm_thread_t n = mm_number_of_regular_threads();
 	for (mm_thread_t i = 0; i < n; i++) {
-		struct mm_event_listener *const listener =  mm_thread_ident_to_event_listener(i);
-		uintptr_t state = mm_memory_load(listener->state);
-		if (state != MM_EVENT_LISTENER_RUNNING)
-			return listener->context;
+		struct mm_context *const context =  mm_thread_ident_to_context(i);
+		const uintptr_t status = mm_memory_load(context->status);
+		if (status != MM_CONTEXT_RUNNING && status != MM_CONTEXT_PENDING)
+			return context;
 	}
 #endif
 	return NULL;
