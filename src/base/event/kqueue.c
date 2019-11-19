@@ -294,7 +294,7 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 	// Enter the state that forbids fiber yield to avoid possible
 	// problems with re-entering from another fiber.
 	struct mm_context *const context = listener->context;
-	context->status = MM_STRAND_PENDING;
+	context->status = MM_CONTEXT_PENDING;
 
 	// If any event sinks are to be unregistered then start a reclamation epoch.
 	if (storage->nunregister != 0)
@@ -314,7 +314,7 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
 
 	// Restore normal running state.
-	context->status = MM_STRAND_RUNNING;
+	context->status = MM_CONTEXT_RUNNING;
 
 	LEAVE();
 }
