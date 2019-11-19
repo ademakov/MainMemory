@@ -69,9 +69,7 @@ mm_async_handle_calls(struct mm_context *context)
 	struct mm_async_pack pack;
 	if (mm_async_receive(context, &pack)) {
 		// Enter the state that forbids a recursive fiber switch.
-		struct mm_strand *const strand = context->strand;
-		const mm_strand_state_t state = strand->state;
-		strand->state = MM_STRAND_CSWITCH;
+		context->status = MM_CONTEXT_PENDING;
 
 		do {
 			mm_async_execute(context, &pack);
@@ -81,7 +79,7 @@ mm_async_handle_calls(struct mm_context *context)
 		} while (mm_async_receive(context, &pack));
 
 		// Restore normal running state.
-		strand->state = state;
+		context->status = MM_CONTEXT_RUNNING;
 	}
 
 	LEAVE();

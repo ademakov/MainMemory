@@ -331,8 +331,7 @@ static void
 mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 {
 	// Bail out if the strand is not in the normal running state.
-	struct mm_strand *const strand = context->strand;
-	if (unlikely(strand->state != MM_STRAND_RUNNING))
+	if (unlikely(context->status != MM_CONTEXT_RUNNING))
 		return;
 
 	// Get the currently running fiber.
@@ -340,6 +339,7 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 	ASSERT(old_fiber->state == MM_FIBER_RUNNING);
 
 	// Bring it to the requested state.
+	struct mm_strand *const strand = context->strand;
 	old_fiber->state = state;
 	if (state > MM_FIBER_BLOCKED) {
 		// Add it to the run queue.

@@ -30,21 +30,11 @@
 /* Forward declarations. */
 struct mm_fiber;
 
-typedef enum
-{
-	MM_STRAND_INVALID = -1,
-	MM_STRAND_RUNNING,
-	MM_STRAND_CSWITCH,
-} mm_strand_state_t;
-
 /* A strand of fibers. */
 struct mm_strand
 {
 	/* The counter of fiber context switches. */
 	uint64_t cswitch_count;
-
-	/* The strand status. */
-	mm_strand_state_t state;
 
 	/* Associated context. */
 	struct mm_context *context;

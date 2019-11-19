@@ -339,8 +339,6 @@ mm_strand_prepare(struct mm_strand *strand)
 
 	mm_wait_cache_prepare(&strand->wait_cache);
 
-	strand->state = MM_STRAND_INVALID;
-
 	strand->nidle = 0;
 	strand->nworkers = 0;
 	strand->nworkers_min = MM_NWORKERS_MIN;
@@ -408,9 +406,9 @@ mm_strand_loop(struct mm_strand *const strand, struct mm_context *const context)
 
 	// Relinquish control to the created fibers. Once these fibers and
 	// any fibers created later exit the control returns here.
-	strand->state = MM_STRAND_RUNNING;
+	context->status = MM_CONTEXT_RUNNING;
 	mm_fiber_yield(context);
-	strand->state = MM_STRAND_INVALID;
+	context->status = MM_CONTEXT_PENDING;
 }
 
 void NONNULL(1)
