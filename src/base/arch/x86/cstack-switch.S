@@ -1,7 +1,7 @@
 /*
  * base/arch/x86/cstack-switch.S - Arch-specific call stack support.
  *
- * Copyright (C) 2012  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,15 +25,16 @@ PROC_ENTRY(C_NAME(mm_cstack_switch))
 PROC_START
 	movl 4(%esp), %ecx
 	movl 8(%esp), %edx
-	movl %ebp, -4(%esp)
-	movl %ebx, -8(%esp)
-	movl %esi, -12(%esp)
-	movl %edi, -16(%esp)
 	movl %esp, (%ecx)
 	movl (%edx), %esp
-	movl -4(%esp), %ebp
-	movl -8(%esp), %ebx
-	movl -12(%esp), %esi
-	movl -16(%esp), %edi
-	ret
+	popl %eax
+	movl %ebp, 4(%ecx)
+	movl %ebx, 8(%ecx)
+	movl %esi, 12(%ecx)
+	movl %edi, 16(%ecx)
+	movl 4(%edx), %ebp
+	movl 8(%edx), %ebx
+	movl 12(%edx), %esi
+	movl 16(%edx), %edi
+	jmpl *%eax
 PROC_END

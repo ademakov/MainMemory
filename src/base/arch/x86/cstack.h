@@ -20,9 +20,10 @@
 #ifndef BASE_ARCH_X86_CSTACK_H
 #define BASE_ARCH_X86_CSTACK_H
 
-typedef void * mm_cstack_t;
-
-void NONNULL(1, 2)
-mm_cstack_switch(mm_cstack_t *old_ctx, mm_cstack_t *new_ctx);
+typedef struct
+{
+	// Space for the ESP, EBP, EBX, EDI, ESI registers.
+	uintptr_t store[5];
+} mm_cstack_t;
 
 #endif /* BASE_ARCH_X86_CSTACK_H */
