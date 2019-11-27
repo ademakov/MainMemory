@@ -43,12 +43,11 @@
  **********************************************************************/
 
 static void
-mm_strand_idle(struct mm_strand *strand)
+mm_strand_idle(struct mm_strand *const strand, struct mm_context *const context)
 {
 	ENTER();
 
-	// Put the fiber into the wait queue.
-	struct mm_context *const context = strand->context;
+	// Put the fiber into the idle queue.
 	struct mm_fiber *const fiber = context->fiber;
 	mm_list_insert(&strand->idle, &fiber->wait_queue);
 
@@ -59,15 +58,10 @@ mm_strand_idle(struct mm_strand *strand)
 	// Wait until poked.
 	mm_fiber_block(context);
 
-	// Normally an idle fiber starts after being poked and
-	// in this case it should already be removed from the
-	// wait list. But if the fiber has started for another
-	// reason it must be removed from the wait list here.
-	if (unlikely((fiber->flags & MM_FIBER_WAITING) != 0)) {
-		mm_list_delete(&fiber->wait_queue);
-		fiber->flags &= ~MM_FIBER_WAITING;
-		strand->nidle--;
-	}
+	// Remove the fiber from the idle queue.
+	mm_list_delete(&fiber->wait_queue);
+	fiber->flags &= ~MM_FIBER_WAITING;
+	strand->nidle--;
 
 	LEAVE();
 }
@@ -78,14 +72,9 @@ mm_strand_poke(struct mm_strand *strand)
 	ENTER();
 	ASSERT(!mm_list_empty(&strand->idle));
 
+	// Get a fiber from the idle queue.
 	struct mm_link *link = mm_list_head(&strand->idle);
 	struct mm_fiber *fiber = containerof(link, struct mm_fiber, wait_queue);
-
-	// Get a fiber from the wait queue.
-	ASSERT((fiber->flags & MM_FIBER_WAITING) != 0);
-	mm_list_delete(&fiber->wait_queue);
-	fiber->flags &= ~MM_FIBER_WAITING;
-	strand->nidle--;
 
 	// Put the fiber to the run queue.
 	mm_fiber_run(fiber);
@@ -168,7 +157,7 @@ mm_strand_worker(mm_value_t arg)
 		// Try to get a task.
 		if (!mm_task_list_get(&context->tasks, &slot)) {
 			// Wait for a task standing at the front of the idle queue.
-			mm_strand_idle(strand);
+			mm_strand_idle(strand, context);
 			continue;
 		}
 
