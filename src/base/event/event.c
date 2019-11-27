@@ -462,7 +462,7 @@ mm_event_disarm_timer(struct mm_context *context, struct mm_event_timer *sink)
 }
 
 static void
-mm_event_timer_fire(struct mm_event_listener *listener, struct mm_timeq_entry *entry)
+mm_event_timer_fire(struct mm_context *context, struct mm_timeq_entry *entry)
 {
 	ENTER();
 
@@ -470,7 +470,7 @@ mm_event_timer_fire(struct mm_event_listener *listener, struct mm_timeq_entry *e
 	if (sink->fiber != NULL) {
 		mm_fiber_run(sink->fiber);
 	} else {
-		mm_context_add_task(listener->context, sink->task, (mm_value_t) sink);
+		mm_context_add_task(context, sink->task, (mm_value_t) sink);
 	}
 
 	LEAVE();
@@ -632,7 +632,7 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 			// Remove the timer from the queue.
 			mm_timeq_delete(&listener->timer_queue, timer);
 			// Execute the timer action.
-			mm_event_timer_fire(listener, timer);
+			mm_event_timer_fire(context, timer);
 			// Get the next timer.
 			timer = mm_timeq_getmin(&listener->timer_queue);
 		}
