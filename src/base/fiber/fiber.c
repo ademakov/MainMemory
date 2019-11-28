@@ -327,7 +327,7 @@ mm_fiber_print_status(const struct mm_fiber *fiber)
  **********************************************************************/
 
 /* Switch to the next fiber in the run queue. */
-static void
+static inline void ALWAYS_INLINE
 mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 {
 	// Bail out if the strand is not in the normal running state.
@@ -344,6 +344,14 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 	if (state > MM_FIBER_BLOCKED) {
 		// Add it to the run queue.
 		mm_runq_put(&strand->runq, old_fiber);
+
+		// Handle any pending async calls. Sometimes this might touch the
+		// currently running fiber. For instance, it might be put to the
+		// run queue after just being blocked. So at this point the fiber
+		// must already be in completely consistent state. That is no
+		// manipulation with old_fiber is allowed below this point.
+		mm_async_handle_calls(context);
+
 	} else if (state == MM_FIBER_BLOCKED) {
 		// Add it to the blocked fiber list.
 		mm_list_append(&strand->block, &old_fiber->queue);
@@ -351,13 +359,6 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 		// Add it to the dead fiber list.
 		mm_list_append(&strand->dead, &old_fiber->queue);
 	}
-
-	// Handle any pending async calls. Sometimes this might touch the
-	// currently running fiber. For instance, it might be put to the
-	// run queue after just being blocked. So at this point the fiber
-	// must already be in completely consistent state. That is no
-	// manipulation with old_fiber is allowed below this point.
-	mm_async_handle_calls(context);
 
 	// Get the next fiber from the run queue.  As long as this function
 	// is called there is at least a boot fiber in the run queue.  So

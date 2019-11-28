@@ -100,6 +100,7 @@
 #define ALIGN(x)		__attribute__((__aligned__(x)))
 #define CACHE_ALIGN		ALIGN(MM_CACHELINE)
 
+#define ALWAYS_INLINE		__attribute__((__always_inline__))
 #define NORETURN		__attribute__((__noreturn__))
 #define NONNULL(...)		__attribute__((__nonnull__(__VA_ARGS__)))
 #define FORMAT(...)		__attribute__((__format__(printf, __VA_ARGS__)))
