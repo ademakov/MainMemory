@@ -95,6 +95,19 @@ mm_atomic_cas_type(void *, ptr, "cmpxchgq", "r")
 			     : "memory", "cc");				\
 	}
 
+#if __GCC_ASM_FLAG_OUTPUTS__
+#define mm_atomic_unary_test(base, name, mnemonic)			\
+	static inline int						\
+	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
+	{								\
+		char r;							\
+		asm volatile(MM_LOCK_PREFIX mnemonic " %0"		\
+			     : "+m"(*p), "=@ccnz" (r)			\
+			     :						\
+			     : "memory");				\
+		return r;						\
+	}
+#else
 #define mm_atomic_unary_test(base, name, mnemonic)			\
 	static inline int						\
 	mm_atomic_##base##_##name##_and_test(mm_atomic_##base##_t *p)	\
@@ -106,6 +119,7 @@ mm_atomic_cas_type(void *, ptr, "cmpxchgq", "r")
 			     : "memory", "cc");				\
 		return r;						\
 	}
+#endif
 
 /* Define atomic fetch-and-set ops. */
 mm_atomic_fetch(uint8, set, "", "xchgb", "q")
