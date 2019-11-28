@@ -171,6 +171,9 @@ mm_strand_worker(mm_value_t arg)
 
 		// Reset the priority that could have been temporary raised.
 		mm_fiber_restore_priority(context->fiber);
+
+		// Handle any incoming async calls.
+		mm_async_handle_calls(context);
 	}
 
 	// Cleanup on return.
@@ -236,29 +239,27 @@ mm_strand_master(mm_value_t arg)
 
 	// Run until stopped by a user request.
 	while (!mm_memory_load(strand->stop)) {
-		// Check to see if there are pending tasks.
+		// Check to see if there are no pending tasks.
 		if (mm_task_list_empty(&context->tasks)) {
 			// Release excessive resources allocated by fibers.
 			mm_strand_trim(strand);
-			// Halt waiting for any incoming events.
+			// Wait for I/O events and timers and handle them.
 			mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
-		}
-
-		// Activate a worker fiber to handle pending tasks.
-		if (strand->nidle) {
-			// Activate an idle worker.
-			mm_strand_poke(strand);
 		} else {
-			// Report the status of all fibers.
-			if (mm_get_verbose_enabled())
-				mm_strand_print_fibers(strand);
-			// Create a new worker if feasible.
-			if (!mm_task_list_empty(&context->tasks)
-			    && strand->nworkers < strand->nworkers_max)
-				mm_strand_worker_create(strand);
+			// Activate a worker fiber to handle pending tasks.
+			if (strand->nidle) {
+				// Activate an idle worker.
+				mm_strand_poke(strand);
+			} else {
+				// Report the status of all fibers.
+				if (mm_get_verbose_enabled())
+					mm_strand_print_fibers(strand);
+				// Create a new worker if feasible.
+				if (strand->nworkers < strand->nworkers_max)
+					mm_strand_worker_create(strand);
+			}
 		}
-
-		// Run active fibers if any.
+		// Run active fibers and handle async calls if any.
 		mm_fiber_yield(context);
 	}
 
