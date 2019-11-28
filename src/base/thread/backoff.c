@@ -30,15 +30,15 @@ mm_thread_backoff_slow(uint32_t count)
 {
 	struct mm_context *const context = mm_context_selfptr();
 	if (context != NULL) {
-		// Handle any pending async calls.
-		mm_async_handle_calls(context);
-		// If there are any waiting working fibers and this is a
-		// working fiber too then yield to let them make progress.
 		struct mm_strand *const strand = context->strand;
-		if (!mm_runq_empty_above(&strand->runq, MM_PRIO_MASTER) && context->fiber->priority < MM_PRIO_MASTER) {
-			mm_fiber_yield(context);
+		const uint64_t cswitch_count = strand->cswitch_count;
+
+		// Let other fibers run.
+		mm_fiber_yield(context);
+
+		// Check if other fibers indeed have run.
+		if ((cswitch_count + 1) != strand->cswitch_count)
 			return count + count + 1;
-		}
 	}
 
 	// If spinning for too long then yield the CPU to another thread/process.
