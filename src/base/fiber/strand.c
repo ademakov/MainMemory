@@ -245,6 +245,8 @@ mm_strand_master(mm_value_t arg)
 			// Wait for I/O events and timers and handle them.
 			mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
 		} else {
+			// Poll for events and timers w/o waiting.
+			mm_event_listen(context, 0);
 			// Activate a worker fiber to handle pending tasks.
 			if (strand->nidle) {
 				// Activate an idle worker.
