@@ -43,14 +43,12 @@
  **********************************************************************/
 
 static void
-mm_strand_idle(struct mm_strand *const strand, struct mm_context *const context)
+mm_strand_idle(struct mm_strand *const strand, struct mm_context *const context, struct mm_fiber *const fiber)
 {
 	ENTER();
 
 	// Put the fiber into the idle queue.
-	struct mm_fiber *const fiber = context->fiber;
 	mm_list_insert(&strand->idle, &fiber->wait_queue);
-
 	ASSERT((fiber->flags & MM_FIBER_WAITING) == 0);
 	fiber->flags |= MM_FIBER_WAITING;
 	strand->nidle++;
@@ -153,11 +151,12 @@ mm_strand_worker(mm_value_t arg)
 	// Run in a loop forever getting and executing tasks.
 	struct mm_strand *const strand = (struct mm_strand *) arg;
 	struct mm_context *const context = strand->context;
+	struct mm_fiber *const fiber = context->fiber;
 	for (;;) {
 		// Try to get a task.
 		if (!mm_task_list_get(&context->tasks, &slot)) {
 			// Wait for a task standing at the front of the idle queue.
-			mm_strand_idle(strand, context);
+			mm_strand_idle(strand, context, fiber);
 			continue;
 		}
 
@@ -170,7 +169,7 @@ mm_strand_worker(mm_value_t arg)
 		(task->complete)(slot.task_arg, result);
 
 		// Reset the priority that could have been temporary raised.
-		mm_fiber_restore_priority(context->fiber);
+		mm_fiber_restore_priority(fiber);
 
 		// Handle any incoming async calls.
 		mm_async_handle_calls(context);
