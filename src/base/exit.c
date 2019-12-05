@@ -1,7 +1,7 @@
 /*
  * base/exit.c - MainMemory exit handling.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,7 +59,7 @@ mm_exit(int status)
 }
 
 /**********************************************************************
- * Abnormal Exit Handling.
+ * Abnormal Termination.
  **********************************************************************/
 
 void
@@ -67,5 +67,23 @@ mm_abort(void)
 {
 	mm_log_str("\naborting...\n");
 	mm_do_atexit();
+	abort();
+}
+
+/**********************************************************************
+ * Urgent Abnormal Termination.
+ **********************************************************************/
+
+void NORETURN
+mm_panic(const char *msg)
+{
+	size_t len = strlen(msg);
+	while (len) {
+		ssize_t rc = write(2, msg, len);
+		if (rc < 0)
+			break;
+		msg += rc;
+		len -= rc;
+	}
 	abort();
 }

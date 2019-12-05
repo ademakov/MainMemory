@@ -1,7 +1,7 @@
 /*
  * base/exit.h - MainMemory exit handling.
  *
- * Copyright (C) 2012-2017  Aleksey Demakov
+ * Copyright (C) 2012-2019  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@
 #define BASE_EXIT_H
 
 #include "common.h"
-#include "base/atomic.h"
 
 #include <stdlib.h>
 #if HAVE_SYSEXITS_H
@@ -62,5 +61,12 @@ mm_exit(int status);
 
 void NORETURN
 mm_abort(void);
+
+/**********************************************************************
+ * Urgent Abnormal Termination.
+ **********************************************************************/
+
+void NORETURN
+mm_panic(const char *msg);
 
 #endif /* BASE_EXIT_H */
