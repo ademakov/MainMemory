@@ -69,6 +69,7 @@ libmainbase_la_SOURCES = \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
 	memory/space.c memory/space.h \
+	memory/vm.c memory/vm.h \
 	net/address.h net/address.c \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h \
