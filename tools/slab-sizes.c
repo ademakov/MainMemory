@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-#define MAX (64 * 1024)
+#define MAX (512 * 1024)
 
 size_t factors[] = {
 	2, 4, 6, 8, 10,
@@ -20,7 +20,7 @@ main()
 		size_t size = 16;
 		size_t delta = 16;
 		size_t factor = factors[i];
-		size_t n = 0, x[7] = { 0, 0, 0, 0 };
+		size_t n = 0, x[10] = { 0 };
 		printf("--- %d:\n", factor);
 		do {
 			if (n++) {
@@ -47,6 +47,12 @@ main()
 				x[5] = n;
 			else if (size == 64 * 1024)
 				x[6] = n;
+			else if (size == 128 * 1024)
+				x[7] = n;
+			else if (size == 256 * 1024)
+				x[8] = n;
+			else if (size == 512 * 1024)
+				x[9] = n;
 
 			if (size >= (delta * factor)) {
 				delta += delta;
@@ -56,14 +62,17 @@ main()
 
 		} while (size <= MAX);
 
-		printf("\n::: %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u\n",
+		printf("\n::: %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u %u/%u\n",
 		       1024, x[0],
 		       2 * 1024, x[1],
 		       4 * 1024, x[2],
 		       8 * 1024, x[3],
 		       16 * 1024, x[4],
 		       32 * 1024, x[5],
-		       64 * 1024, x[6]);
+		       64 * 1024, x[6],
+		       128 * 1024, x[7],
+		       256 * 1024, x[8],
+		       512 * 1024, x[9]);
 	}
 	return 0;
 }
