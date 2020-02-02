@@ -226,8 +226,8 @@ mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, s
 	mm_event_handle_input(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-		mm_event_epoll_reset_poller_input(storage, sink);
+	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) != 0)
+		mm_event_epoll_poller_disable_input(storage, sink);
 #endif
 }
 static inline void NONNULL(1, 2)
@@ -237,32 +237,32 @@ mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, 
 	mm_event_handle_output(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-		mm_event_epoll_reset_poller_output(storage, sink);
+	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) != 0)
+		mm_event_epoll_poller_disable_output(storage, sink);
 #endif
 }
 
 /* Start processing of an event after it is delivered to the target thread. */
-static inline void NONNULL(1)
-mm_event_backend_target_input(struct mm_event_fd *sink, uint32_t flag)
+static inline void NONNULL(1, 2)
+mm_event_backend_target_input(struct mm_event_backend *backend UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
 	mm_event_handle_input(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0)
-		mm_event_epoll_reset_input(sink);
+	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) != 0)
+		mm_event_epoll_disable_input(&backend->backend, sink);
 #endif
 }
-static inline void NONNULL(1)
-mm_event_backend_target_output(struct mm_event_fd *sink, uint32_t flag)
+static inline void NONNULL(1, 2)
+mm_event_backend_target_output(struct mm_event_backend *backend UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
 	mm_event_handle_output(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
-	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0)
-		mm_event_epoll_reset_output(sink);
+	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) != 0)
+		mm_event_epoll_disable_output(&backend->backend, sink);
 #endif
 }
 

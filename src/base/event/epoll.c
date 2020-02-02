@@ -259,34 +259,4 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epo
 	LEAVE();
 }
 
-/**********************************************************************
- * Interface for handling events delivered to the target thread.
- **********************************************************************/
-
-void NONNULL(1)
-mm_event_epoll_reset_input(struct mm_event_fd *sink)
-{
-	ENTER();
-
-	struct mm_event_dispatch *dispatch = sink->context->listener->dispatch;
-	struct mm_event_epoll *backend = &dispatch->backend.backend;
-
-	mm_event_epoll_disable_input(backend, sink);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_epoll_reset_output(struct mm_event_fd *sink)
-{
-	ENTER();
-
-	struct mm_event_dispatch *dispatch = sink->context->listener->dispatch;
-	struct mm_event_epoll *backend = &dispatch->backend.backend;
-
-	mm_event_epoll_disable_output(backend, sink);
-
-	LEAVE();
-}
-
 #endif /* HAVE_SYS_EPOLL_H */

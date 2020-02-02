@@ -241,12 +241,6 @@ mm_event_epoll_disable_output(struct mm_event_epoll *backend, struct mm_event_fd
  * Interface for handling events delivered to the target thread.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_epoll_reset_input(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_epoll_reset_output(struct mm_event_fd *sink);
-
 static inline void NONNULL(1)
 mm_event_epoll_poller_start(struct mm_event_epoll_storage *storage)
 {
@@ -264,14 +258,14 @@ mm_event_epoll_poller_finish(struct mm_event_epoll *backend, struct mm_event_epo
 }
 
 static inline void NONNULL(1, 2)
-mm_event_epoll_reset_poller_input(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+mm_event_epoll_poller_disable_input(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
 {
 	ASSERT(storage->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
 	storage->input_reset[storage->input_reset_num++] = sink;
 }
 
 static inline void NONNULL(1, 2)
-mm_event_epoll_reset_poller_output(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+mm_event_epoll_poller_disable_output(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
 {
 	ASSERT(storage->output_reset_num < MM_EVENT_EPOLL_NEVENTS);
 	storage->output_reset[storage->output_reset_num++] = sink;
