@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.c - MainMemory data buffers.
  *
- * Copyright (C) 2013-2019  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -232,6 +232,9 @@ mm_buffer_compact(struct mm_buffer *buf)
 	ENTER();
 	size_t consumed = 0;
 
+	if (buf->head.seg == &buf->stub.base)
+		goto leave;
+
 	// Consume the segments that precede the given position and release no longer
 	// used chunks.
 	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
@@ -317,6 +320,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		DEBUG("next chunk size: %u", buf->chunk_size);
 	}
 
+leave:
 	LEAVE();
 	return consumed;
 }

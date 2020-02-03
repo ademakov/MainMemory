@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.h - MainMemory data buffers.
  *
- * Copyright (C) 2013-2019  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
