@@ -1,7 +1,7 @@
 /*
  * base/memory/buffer.c - MainMemory data buffers.
  *
- * Copyright (C) 2013-2019  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,6 +22,8 @@
 #include "base/memory/memory.h"
 
 #include <stdio.h>
+
+#define MM_BUFFER_KEEP_LAST_CHUNK	1
 
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
@@ -232,6 +234,9 @@ mm_buffer_compact(struct mm_buffer *buf)
 	ENTER();
 	size_t consumed = 0;
 
+	if (buf->head.seg == &buf->stub.base)
+		goto leave;
+
 	// Consume the segments that precede the given position and release no longer
 	// used chunks.
 	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
@@ -276,7 +281,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		// Account the last read segment size.
 		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
 		consumed += area - MM_BUFFER_SEGMENT_SIZE;
-#if KEEP_LAST_CHUNK
+#if MM_BUFFER_KEEP_LAST_CHUNK
 		// Merge the last read segment with preceding ones.
 		first->meta = area + ((char *) buf->head.seg - (char *) first);
 		first->size = 0;
@@ -317,6 +322,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		DEBUG("next chunk size: %u", buf->chunk_size);
 	}
 
+leave:
 	LEAVE();
 	return consumed;
 }
