@@ -1,7 +1,7 @@
 /*
  * base/fiber/fiber.c - MainMemory user-space threads.
  *
- * Copyright (C) 2012-2019  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -344,14 +344,6 @@ mm_fiber_switch(struct mm_context *const context, const mm_fiber_state_t state)
 	if (state > MM_FIBER_BLOCKED) {
 		// Add it to the run queue.
 		mm_runq_put(&strand->runq, old_fiber);
-
-		// Handle any pending async calls. Sometimes this might touch the
-		// currently running fiber. For instance, it might be put to the
-		// run queue after just being blocked. So at this point the fiber
-		// must already be in completely consistent state. That is no
-		// manipulation with old_fiber is allowed below this point.
-		mm_async_handle_calls(context);
-
 	} else if (state == MM_FIBER_BLOCKED) {
 		// Add it to the blocked fiber list.
 		mm_list_append(&strand->block, &old_fiber->queue);
@@ -434,10 +426,15 @@ mm_fiber_yield_at(struct mm_context *context, const char *location, const char *
 {
 	ENTER();
 
+	// Store the call site.
 	struct mm_fiber *const fiber = context->fiber;
 	fiber->location = location;
 	fiber->function = function;
 
+	// Handle pending async calls if any. This might resume some blocked fibers.
+	mm_async_handle_calls(context);
+
+	// Let run other fibers with equal or higher priority if any.
 	mm_fiber_switch(context, MM_FIBER_PENDING);
 
 	LEAVE();
@@ -448,10 +445,12 @@ mm_fiber_block_at(struct mm_context *context, const char *location, const char *
 {
 	ENTER();
 
+	// Store the call site.
 	struct mm_fiber *const fiber = context->fiber;
 	fiber->location = location;
 	fiber->function = function;
 
+	// Block this fiber and let any other fibers run.
 	mm_fiber_switch(context, MM_FIBER_BLOCKED);
 
 	LEAVE();
@@ -464,6 +463,10 @@ mm_fiber_yield(struct mm_context *context)
 {
 	ENTER();
 
+	// Handle any pending async calls. This might unblock some fibers.
+	mm_async_handle_calls(context);
+
+	// Let run some other fibers with equal or higher priority.
 	mm_fiber_switch(context, MM_FIBER_PENDING);
 
 	LEAVE();
@@ -474,6 +477,7 @@ mm_fiber_block(struct mm_context *context)
 {
 	ENTER();
 
+	// Block this fiber and let any other fibers run.
 	mm_fiber_switch(context, MM_FIBER_BLOCKED);
 
 	LEAVE();
