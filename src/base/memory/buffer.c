@@ -23,6 +23,8 @@
 
 #include <stdio.h>
 
+#define MM_BUFFER_KEEP_LAST_CHUNK	1
+
 #define MM_BUFFER_SPLICE_THRESHOLD	(128)
 
 /**********************************************************************
@@ -279,7 +281,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 		// Account the last read segment size.
 		const uint32_t area = mm_buffer_segment_area(buf->head.seg);
 		consumed += area - MM_BUFFER_SEGMENT_SIZE;
-#if KEEP_LAST_CHUNK
+#if MM_BUFFER_KEEP_LAST_CHUNK
 		// Merge the last read segment with preceding ones.
 		first->meta = area + ((char *) buf->head.seg - (char *) first);
 		first->size = 0;
