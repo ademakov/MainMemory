@@ -62,6 +62,7 @@ libmainbase_la_SOURCES = \
 	memory/alloc.h \
 	memory/arena.h \
 	memory/buffer.c memory/buffer.h \
+	memory/cache.c memory/cache.h \
 	memory/chunk.c memory/chunk.h \
 	memory/global.c memory/global.h \
 	memory/malloc.c memory/malloc.h \
@@ -69,7 +70,7 @@ libmainbase_la_SOURCES = \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
 	memory/space.c memory/space.h \
-	memory/vm.c memory/vm.h \
+	memory/span.c memory/span.h \
 	net/address.h net/address.c \
 	net/net.c net/net.h \
 	net/netbuf.c net/netbuf.h \

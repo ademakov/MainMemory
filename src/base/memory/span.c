@@ -84,7 +84,7 @@ mm_memory_span_create_heap(struct mm_memory_cache *const cache, const bool activ
 
 		if (active) {
 			VERIFY(cache->active == NULL);
-			cache->active = span;
+			cache->active = (struct mm_memory_heap *) span;
 		} else {
 			mm_list_insert(&cache->heap, &span->cache_link);
 		}
@@ -133,7 +133,7 @@ mm_memory_span_activate(struct mm_memory_span *const span)
 
 	span->type_and_size = MM_MEMORY_SPAN_ACTIVE_HEAP;
 	mm_list_delete(&span->cache_link);
-	span->cache->active = span;
+	span->cache->active = (struct mm_memory_heap *) span;
 
 	LEAVE();
 }
