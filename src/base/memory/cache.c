@@ -251,6 +251,7 @@ mm_memory_deduce_base(const struct mm_memory_heap *const heap, const void *const
 static void
 mm_memory_add_chunk(struct mm_memory_heap *const heap, const uint32_t base, const uint32_t rank)
 {
+	ASSERT(rank >= MM_MEMORY_BLOCK_SIZES);
 	const uint32_t next = heap->chunks[rank - MM_MEMORY_BLOCK_SIZES];
 	heap->units[base + 1] = next | MM_MEMORY_NEXT_TAG;
 	heap->units[base + 2] = next >> MM_MEMORY_UNIT_LBITS;
@@ -262,6 +263,13 @@ mm_memory_set_chunk(struct mm_memory_heap *const heap, const uint32_t base, cons
 {
 	heap->units[base] = rank;
 	mm_memory_add_chunk(heap, base, rank);
+}
+
+static void
+mm_memory_set_chunks(struct mm_memory_heap *const heap, const uint32_t base, const uint32_t first, const uint32_t second)
+{
+	mm_memory_set_chunk(heap, base, first);
+	mm_memory_set_chunk(heap, base + mm_memory_rank_sizes[first] / MM_MEMORY_UNIT_SIZE, second);
 }
 
 static uint32_t
@@ -294,8 +302,8 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 
 	uint32_t running_base = original_base;
 	uint32_t running_rank = required_rank;
-	heap->units[original_base] = original_rank;
-	running_base += mm_memory_rank_sizes[original_rank] / MM_MEMORY_UNIT_SIZE;
+	heap->units[original_base] = required_rank;
+	running_base += mm_memory_rank_sizes[required_rank] / MM_MEMORY_UNIT_SIZE;
 
 	while (running_rank < (MM_MEMORY_BLOCK_SIZES + MM_MEMORY_BUDDY_SIZES)) {
 		mm_memory_set_chunk(heap, running_base, running_rank);
@@ -314,19 +322,20 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 		mm_memory_set_chunk(heap, running_base, (running_rank & ~3u) - 8);
 		break;
 	case 2:
-		switch ((running_rank & 3))
-		{
-		case 0: case 1: case 2:
-			mm_memory_set_chunk(heap, running_base, (running_rank & ~3u) - 4);
+		switch ((running_rank & 3)) {
+		case 0:
+			mm_memory_set_chunk(heap, running_base, running_rank - 4);
 			break;
-		case 3:
+		case 1: case 3:
 			mm_memory_set_chunk(heap, running_base, running_rank - 5);
+			break;
+		case 2:
+			mm_memory_set_chunk(heap, running_base, running_rank - 6);
 			break;
 		}
 		break;
 	case 3:
-		switch ((running_rank & 3))
-		{
+		switch ((running_rank & 3)) {
 		case 0: case 2: case 3:
 			mm_memory_set_chunk(heap, running_base, running_rank - 2);
 			break;
@@ -339,124 +348,77 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 		mm_memory_set_chunk(heap, running_base, running_rank);
 		break;
 	case 5:
-		switch ((running_rank & 3))
-		{
+		switch ((running_rank & 3)) {
 		case 0:	case 1: case 2:
 			mm_memory_set_chunk(heap, running_base, running_rank + 2);
 			break;
-		case 3: {
-			uint32_t rank = running_rank - 3;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank - 2);
+		case 3:
+			mm_memory_set_chunks(heap, running_base, running_rank - 3, running_rank - 2);
 			break;
-		}
 		}
 		break;
 	case 6:
-		switch ((running_rank & 3))
-		{
+		switch ((running_rank & 3)) {
 		case 0:
 			mm_memory_set_chunk(heap, running_base, running_rank + 4);
 			break;
-		case 1: {
-			uint32_t rank = running_rank - 1;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank);
+		case 1:
+			mm_memory_set_chunks(heap, running_base, running_rank - 1, running_rank);
 			break;
-		}
 		case 2:
 			mm_memory_set_chunk(heap, running_base, running_rank + 3);
 			break;
-		case 3: {
-			uint32_t rank = running_rank - 2;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank + 1);
+		case 3:
+			mm_memory_set_chunks(heap, running_base, running_rank - 2, running_rank + 1);
 			break;
-		}
 		}
 		break;
 	case 7:
-		switch ((running_rank & 3))
-		{
+		switch ((running_rank & 3)) {
 		case 0: case 2:
 			mm_memory_set_chunk(heap, running_base, running_rank + 5);
 			break;
-		case 1: {
-			uint32_t rank = running_rank - 1;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank + 2);
+		case 1:
+			mm_memory_set_chunks(heap, running_base, running_rank - 1, running_rank + 2);
 			break;
-		}
-		case 3: {
-			uint32_t rank = running_rank - 2;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank + 3);
+		case 3:
+			mm_memory_set_chunks(heap, running_base, running_rank - 2, running_rank + 3);
 			break;
-		}
 		}
 		break;
 	case 8:
-		switch ((running_rank & 3))
-		{
+		switch ((running_rank & 3)) {
 		case 0:
 			mm_memory_set_chunk(heap, running_base, running_rank + 6);
 			break;
-		case 1:	case 2: {
-			uint32_t rank = running_rank + 2;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank + 3);
+		case 1:	case 2:
+			mm_memory_set_chunks(heap, running_base, running_rank + 2, running_rank + 3);
 			break;
-		}
-		case 3: {
-			uint32_t rank = running_rank - 2;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, running_rank + 5);
+		case 3:
+			mm_memory_set_chunks(heap, running_base, running_rank - 2, running_rank + 5);
 			break;
-		}
 		}
 		break;
 	case 9:
 		if (running_rank == (MM_MEMORY_CACHE_SIZES - 12)) {
 			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 4);
 		} else if (running_rank == (MM_MEMORY_CACHE_SIZES - 11)) {
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 9;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 6);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 9, MM_MEMORY_CACHE_SIZES - 6);
 		} else if (running_rank == (MM_MEMORY_CACHE_SIZES - 10)) {
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 8;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 5);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 8, MM_MEMORY_CACHE_SIZES - 5);
 		} else {
 			ASSERT(running_rank == (MM_MEMORY_CACHE_SIZES - 9));
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 11;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 3);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 11, MM_MEMORY_CACHE_SIZES - 3);
 		}
 		break;
 	case 10:
 		if (running_rank == (MM_MEMORY_CACHE_SIZES - 12)) {
 			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 3);
 		} else if (running_rank == (MM_MEMORY_CACHE_SIZES - 11)) {
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 9;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 4);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 9, MM_MEMORY_CACHE_SIZES - 4);
 		} else {
 			ASSERT(running_rank == (MM_MEMORY_CACHE_SIZES - 10));
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 7;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 4);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 7, MM_MEMORY_CACHE_SIZES - 4);
 		}
 		break;
 	case 11:
@@ -464,10 +426,7 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 2);
 		} else {
 			ASSERT(running_rank == (MM_MEMORY_CACHE_SIZES - 11));
-			const uint32_t rank = MM_MEMORY_CACHE_SIZES - 9;
-			mm_memory_set_chunk(heap, running_base, rank);
-			running_base += mm_memory_rank_sizes[rank] / MM_MEMORY_UNIT_SIZE;
-			mm_memory_set_chunk(heap, running_base, MM_MEMORY_CACHE_SIZES - 3);
+			mm_memory_set_chunks(heap, running_base, MM_MEMORY_CACHE_SIZES - 9, MM_MEMORY_CACHE_SIZES - 3);
 		}
 		break;
 	case 12:
@@ -480,14 +439,46 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 }
 
 static void
-mm_memory_cache_prepare_heap(struct mm_memory_span *const span)
+mm_memory_prepare_heap(struct mm_memory_heap *const heap)
 {
-	struct mm_memory_heap *const heap = (struct mm_memory_heap *) span;
 	for (uint32_t i = 0; i < MM_MEMORY_BLOCK_SIZES; i++)
 		heap->blocks[i] = NULL;
 	for (uint32_t i = 0; i < MM_MEMORY_LARGE_SIZES; i++)
 		heap->chunks[i] = 0;
+
 	memset(heap->units, 0, sizeof heap->units);
+	mm_memory_split_chunk(heap, 0, MM_MEMORY_CACHE_SIZES, MM_MEMORY_BLOCK_SIZES);
+}
+
+static void *
+mm_memory_alloc_chunk(struct mm_memory_cache *const cache, const uint32_t required_rank)
+{
+	struct mm_memory_heap *heap = cache->active;
+	uint32_t original_rank = mm_memory_find_chunk(heap, required_rank);
+	if (original_rank >= MM_MEMORY_CACHE_SIZES) {
+		heap = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
+		if (heap == NULL)
+			mm_fatal(errno, "failed to create an additional memory span");
+		mm_memory_prepare_heap(heap);
+
+		cache->active->base.type_and_size = MM_MEMORY_SPAN_STAGING_HEAP;
+		mm_list_append(&cache->heap, &cache->active->base.cache_link);
+		cache->active = heap;
+
+		original_rank = mm_memory_find_chunk(heap, required_rank);
+		ASSERT(original_rank < MM_MEMORY_CACHE_SIZES);
+	}
+
+	const uint32_t index = original_rank - MM_MEMORY_BLOCK_SIZES;
+	const uint32_t base = heap->chunks[index];
+	heap->chunks[index] = mm_memory_decode_base(heap->units[base + 2], heap->units[base + 1]);
+	heap->units[base + 1] = 0;
+	heap->units[base + 2] = 0;
+
+	if (original_rank != required_rank)
+		mm_memory_split_chunk(heap, base, original_rank, required_rank);
+
+	return ((uint8_t *) heap) + base * MM_MEMORY_UNIT_SIZE;
 }
 
 void NONNULL(1)
@@ -495,15 +486,15 @@ mm_memory_cache_prepare(struct mm_memory_cache *cache, struct mm_context *contex
 {
 	ENTER();
 
-	cache->active = NULL;
-	mm_list_prepare(&cache->heap);
-	mm_list_prepare(&cache->huge);
 	cache->context = context;
 
-	struct mm_memory_span *const span = mm_memory_span_create_heap(cache, true);
-	if (span == NULL)
+	mm_list_prepare(&cache->heap);
+	mm_list_prepare(&cache->huge);
+
+	cache->active = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
+	if (cache->active == NULL)
 		mm_fatal(errno, "failed to create an initial memory span");
-	mm_memory_cache_prepare_heap(span);
+	mm_memory_prepare_heap(cache->active);
 
 	LEAVE();
 }
@@ -537,27 +528,18 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 	ENTER();
 	void *chunk = NULL;
 
-	const uint32_t code = mm_memory_encode_size(size);
-	if (code >= MM_MEMORY_BLOCK_SIZES) {
-		if (code >= MM_MEMORY_CACHE_SIZES) {
+	const uint32_t rank = mm_memory_encode_size(size);
+	if (rank >= MM_MEMORY_BLOCK_SIZES) {
+		if (rank >= MM_MEMORY_CACHE_SIZES) {
 			struct mm_memory_span *span = mm_memory_span_create_huge(cache, size);
 			chunk = ((uint8_t *) span) + sizeof(struct mm_memory_span);
 		} else {
-			const uint32_t index = code - MM_MEMORY_BLOCK_SIZES;
-			struct mm_memory_heap *heap = cache->active;
-			uint32_t base = heap->chunks[index];
-			if (base == 0) {
-				// TODO
-				goto leave;
-			}
-			heap->chunks[index] = mm_memory_decode_base(heap->units[base + 2],
-								    heap->units[base + 1]);
-			chunk = ((uint8_t *) heap) + base * MM_MEMORY_UNIT_SIZE;
+			chunk = mm_memory_alloc_chunk(cache, rank);
 		}
 
-	} else if (code >= MM_MEMORY_SMALL_SIZES) {
+	} else if (rank >= MM_MEMORY_SMALL_SIZES) {
 		struct mm_memory_heap *heap = cache->active;
-		struct mm_memory_block *block = heap->blocks[code];
+		struct mm_memory_block *block = heap->blocks[rank];
 		if (block == NULL || block->chunk_free == 0) {
 			// TODO
 			goto leave;
@@ -569,7 +551,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 
 	} else {
 		struct mm_memory_heap *heap = cache->active;
-		struct mm_memory_block *block = heap->blocks[code];
+		struct mm_memory_block *block = heap->blocks[rank];
 		if (block == NULL || block->inner_free == 0) {
 			if (block == NULL || block->chunk_free == 0) {
 				// TODO

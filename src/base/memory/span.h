@@ -104,7 +104,7 @@ mm_memory_span_resident_size(struct mm_memory_span *span)
 }
 
 struct mm_memory_span * NONNULL(1)
-mm_memory_span_create_heap(struct mm_memory_cache *cache, bool active);
+mm_memory_span_create_heap(struct mm_memory_cache *cache);
 
 struct mm_memory_span * NONNULL(1)
 mm_memory_span_create_huge(struct mm_memory_cache *cache, size_t size);

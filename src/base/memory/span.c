@@ -70,24 +70,17 @@ mm_memory_alloc_space(const size_t size, const size_t addr_mask)
 }
 
 struct mm_memory_span * NONNULL(1)
-mm_memory_span_create_heap(struct mm_memory_cache *const cache, const bool active)
+mm_memory_span_create_heap(struct mm_memory_cache *const cache)
 {
 	ENTER();
 
 	struct mm_memory_span *span = mm_memory_alloc_space(MM_MEMORY_SPAN_HEAP_SIZE, MM_MEMORY_SPAN_ALIGNMENT_MASK);
 	if (likely(span != NULL)) {
-		span->type_and_size = active ? MM_MEMORY_SPAN_ACTIVE_HEAP : MM_MEMORY_SPAN_STAGING_HEAP;
+		span->type_and_size = MM_MEMORY_SPAN_ACTIVE_HEAP;
 		span->resident_size = MM_MEMORY_SPAN_HEAP_SIZE;
 
 		span->cache = cache;
 		span->context = cache->context;
-
-		if (active) {
-			VERIFY(cache->active == NULL);
-			cache->active = (struct mm_memory_heap *) span;
-		} else {
-			mm_list_insert(&cache->heap, &span->cache_link);
-		}
 	}
 
 	LEAVE();
