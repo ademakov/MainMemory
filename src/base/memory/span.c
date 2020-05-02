@@ -57,7 +57,7 @@ mm_memory_alloc_space(const size_t size, const size_t addr_mask)
 		if (upsized_addr == MAP_FAILED)
 			return NULL;
 
-		addr = (void *) ((((uintptr_t) upsized_addr) + addr_mask) & addr_mask);
+		addr = (void *) ((((uintptr_t) upsized_addr) + addr_mask) & ~addr_mask);
 		const size_t leading_size = addr - upsized_addr;
 		const size_t trailing_size = upsized_size - leading_size - size;
 		if (leading_size)
