@@ -4,4 +4,5 @@
 bitops-test
 bitset-test
 json-reader-test
+memory-cache-test
 scan-test
