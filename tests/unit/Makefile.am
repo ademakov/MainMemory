@@ -2,7 +2,7 @@
 AM_CPPFLAGS = -I$(top_srcdir)/src
 AM_CFLAGS = -Wall -Wextra
 
-LDADD = $(top_builddir)/src/base/libmmbase.la $(top_builddir)/src/arch/libmmarch.la
+LDADD = $(top_builddir)/src/base/libmainbase.la
 
 TESTS = bitops-test bitset-test json-reader-test scan-test
 

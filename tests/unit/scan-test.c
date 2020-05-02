@@ -10,8 +10,10 @@ static int fail = 0;
 	do {								\
 		int x = 0;						\
 		type v = 0;						\
+		const char *sp = text;					\
 		const char *ep = text + strlen(text);			\
-		const char *rp = func(&v, &x, text, ep);		\
+		filter(&sp, &ep);					\
+		const char *rp = func(&v, &x, sp, ep);			\
 		if (x != error)	{					\
 			fprintf(stderr, "# number: %s\n", text);	\
 			if (rp != ep) {					\
@@ -44,8 +46,10 @@ static int fail = 0;
 	do {								\
 		int x = 0;						\
 		type v = 0;						\
+		const char *sp = text;					\
 		const char *ep = text + strlen(text);			\
-		const char *rp = func(&v, &x, text, ep);		\
+		filter(&sp, &ep);					\
+		const char *rp = func(&v, &x, sp, ep);			\
 		if (strcmp(rp, end) != 0) {				\
 			fprintf(stderr, "# number: %s\n", text);	\
 			fprintf(stderr, "# expect: %s\n", end);		\
@@ -66,6 +70,19 @@ static int fail = 0;
 			fail++;						\
 		}							\
 	} while(0)
+
+static void
+filter(const char **spp, const char **epp)
+{
+	if ((*spp)[0] == '(') {
+		if ((*epp)[-1] != ')') {
+			fprintf(stderr, "Cannot parse the number: '%s'\n", *spp);
+			exit(EXIT_FAILURE);
+		}
+		(*spp)++;
+		(*epp)--;
+	}
+}
 
 int
 main()
@@ -91,7 +108,7 @@ main()
 	TEST_INT(UINT32_MAX, mm_scan_u64, uint64_t, PRIu64);
 	TEST_INT(UINT64_MAX, mm_scan_u64, uint64_t, PRIu64);
 
-	TEST_HEX(0X0, mm_scan_x32, uint32_t, PRIx32);
+	TEST_HEX(0x0, mm_scan_x32, uint32_t, PRIx32);
 	TEST_HEX(0x0, mm_scan_x32, uint32_t, PRIx32);
 	TEST_HEX(0x1, mm_scan_x32, uint32_t, PRIx32);
 	TEST_HEX(0x2, mm_scan_x32, uint32_t, PRIx32);
