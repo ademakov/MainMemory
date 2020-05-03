@@ -627,7 +627,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 			struct mm_memory_span *span = mm_memory_span_create_huge(cache, size);
 			if (unlikely(span == NULL))
 				return NULL;
-			return (uint8_t *) span + sizeof(struct mm_memory_span);
+			return mm_memory_span_huge_data(span);
 		}
 		return mm_memory_alloc_large(cache, rank, false);
 
