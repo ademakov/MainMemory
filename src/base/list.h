@@ -1,7 +1,7 @@
 /*
  * base/list.h - MainMemory lists.
  *
- * Copyright (C) 2012-2015  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -46,6 +46,12 @@ mm_list_prepare(struct mm_list *list)
 	list->base.next = list->base.prev = &list->base;
 }
 
+static inline const struct mm_link *
+mm_list_sentinel(const struct mm_list *list)
+{
+	return &list->base;
+}
+
 static inline struct mm_link *
 mm_list_head(struct mm_list *list)
 {
@@ -59,13 +65,13 @@ mm_list_tail(struct mm_list *list)
 }
 
 static inline bool
-mm_list_is_head(struct mm_list *list, struct mm_link *item)
+mm_list_is_head(const struct mm_list *list, const struct mm_link *item)
 {
 	return list->base.next == item;
 }
 
 static inline bool
-mm_list_is_tail(struct mm_list *list, struct mm_link *item)
+mm_list_is_tail(const struct mm_list *list, const struct mm_link *item)
 {
 	return list->base.prev == item;
 }
@@ -73,7 +79,7 @@ mm_list_is_tail(struct mm_list *list, struct mm_link *item)
 static inline bool
 mm_list_empty(struct mm_list *list)
 {
-	return mm_list_is_tail(list, &list->base);
+	return mm_list_head(list) == mm_list_sentinel(list);
 }
 
 static inline void
@@ -274,13 +280,13 @@ mm_queue_tail(struct mm_queue *list)
 }
 
 static inline bool
-mm_queue_is_tail(struct mm_qlink *item)
+mm_queue_is_tail(const struct mm_qlink *item)
 {
 	return item->next == NULL;
 }
 
 static inline bool
-mm_queue_empty(struct mm_queue *list)
+mm_queue_empty(const struct mm_queue *list)
 {
 	return mm_queue_is_tail(&list->head);
 }

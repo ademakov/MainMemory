@@ -482,21 +482,38 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 	uint32_t original_rank = mm_memory_find_chunk(heap, required_rank);
 	if (original_rank >= MM_MEMORY_CACHE_SIZES) {
 		// TODO: Try to coalesce freed memory in the active span.
-		// TODO: Try available inactive spans.
 
-		heap = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
-		if (heap == NULL) {
-			// Out of memory.
-			return 0;
+		heap = NULL;
+
+		// Try to find a suitable span in the staging list.
+		struct mm_link *link = mm_list_head(&cache->staging);
+		while (link != mm_list_sentinel(&cache->staging)) {
+			struct mm_memory_heap *next = containerof(link, struct mm_memory_heap, staging_link);
+			original_rank = mm_memory_find_chunk(next, required_rank);
+			if (original_rank < MM_MEMORY_CACHE_SIZES){
+				next->status = MM_MEMORY_HEAP_ACTIVE;
+				heap = next;
+				break;
+			}
+			link = link->next;
 		}
-		mm_memory_prepare_heap(heap);
+
+		// Allocate a new span if none found.
+		if (heap == NULL) {
+			heap = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
+			if (heap == NULL) {
+				// Out of memory.
+				return NULL;
+			}
+
+			mm_memory_prepare_heap(heap);
+			original_rank = mm_memory_find_chunk(heap, required_rank);
+			ASSERT(original_rank < MM_MEMORY_CACHE_SIZES);
+		}
 
 		cache->active->status = MM_MEMORY_HEAP_STAGING;
-		mm_list_append(&cache->staging, &cache->active->staging_link);
+		mm_list_insert(&cache->staging, &cache->active->staging_link);
 		cache->active = heap;
-
-		original_rank = mm_memory_find_chunk(heap, required_rank);
-		ASSERT(original_rank < MM_MEMORY_CACHE_SIZES);
 	}
 
 	// Remove the chunk from the free list.
