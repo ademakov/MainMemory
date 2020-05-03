@@ -23,9 +23,6 @@
 #include "common.h"
 #include "base/list.h"
 
-/* Forward declarations. */
-struct mm_memory_heap;
-
 /*
  * A memory allocation cache.
  */
@@ -37,11 +34,11 @@ struct mm_memory_cache
 	/* The inactive spans to gather freed memory. */
 	struct mm_list staging;
 
-	/* The execution context the cache belongs to. */
-	struct mm_context *context;
-
 	/* All the spans that belong to the cache. */
 	struct mm_list spans;
+
+	/* The execution context the cache belongs to. */
+	struct mm_context *context;
 };
 
 void NONNULL(1)
@@ -50,7 +47,7 @@ mm_memory_cache_prepare(struct mm_memory_cache *cache, struct mm_context *contex
 void NONNULL(1)
 mm_memory_cache_cleanup(struct mm_memory_cache *cache);
 
-void * NONNULL(1)
+void * NONNULL(1) MALLOC
 mm_memory_cache_alloc(struct mm_memory_cache *cache, size_t size);
 
 void NONNULL(1, 2)

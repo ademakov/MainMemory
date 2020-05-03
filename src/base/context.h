@@ -25,6 +25,7 @@
 #include "base/ring.h"
 #include "base/task.h"
 #include "base/timepiece.h"
+#include "base/memory/cache.h"
 
 #define MM_CONTEXT_STATUS	((uint32_t) 3)
 
@@ -77,6 +78,9 @@ struct mm_context
 
 	/* Statistics. */
 	struct mm_context_stats stats;
+
+	/* Local memory allocator. */
+	struct mm_memory_cache cache;
 };
 
 extern __thread struct mm_context *__mm_context_self;
@@ -141,5 +145,21 @@ mm_context_post_task(mm_task_t task, mm_value_t arg);
 void NONNULL(1)
 mm_context_distribute_tasks(struct mm_context *self);
 #endif
+
+/**********************************************************************
+ * Local memory allocation.
+ **********************************************************************/
+
+static inline void * NONNULL(1) MALLOC
+mm_context_alloc(struct mm_context *context, size_t size)
+{
+	return mm_memory_cache_alloc(&context->cache, size);
+}
+
+static inline void NONNULL(1, 2)
+mm_context_free(struct mm_context *context, void *ptr)
+{
+	mm_memory_cache_free(&context->cache, ptr);
+}
 
 #endif /* BASE_CONTEXT_H */

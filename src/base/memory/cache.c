@@ -614,7 +614,7 @@ mm_memory_cache_cleanup(struct mm_memory_cache *const cache)
 	}
 }
 
-void * NONNULL(1)
+void * NONNULL(1) MALLOC
 mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 {
 	const uint32_t rank = mm_memory_get_rank(size);

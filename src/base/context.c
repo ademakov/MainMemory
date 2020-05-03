@@ -53,11 +53,17 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 	if (sz < MM_ASYNC_QUEUE_MIN_SIZE)
 		sz = MM_ASYNC_QUEUE_MIN_SIZE;
 	context->async_queue = mm_ring_mpmc_create(sz);
+
+	// Prepare local memory allocator.
+	mm_memory_cache_prepare(&context->cache, context);
 }
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
+	// Destroy the local memory allocator.
+	mm_memory_cache_cleanup(&context->cache);
+
 	// Destroy the associated async call queue.
 	mm_ring_mpmc_destroy(context->async_queue);
 
