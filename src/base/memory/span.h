@@ -1,5 +1,5 @@
 /*
- * base/memory/span.h - MainMemory virtual memory span.
+ * base/memory/span.h - MainMemory virtual memory spans.
  *
  * Copyright (C) 2019-2020  Aleksey Demakov
  *
@@ -22,85 +22,95 @@
 
 #include "common.h"
 #include "base/list.h"
+#include "base/report.h"
 
 /*
- * A memory span is a large memory chunk allocated with a mmap() system call.
- * A span always starts at an address that is aligned to a 2 MiB boundary. At
- * this address there is always a struct that describes the span itself.
+ * A memory span is a big memory chunk allocated with a mmap() system call.
+ * A span always starts at an address that is aligned to a 2 MiB boundary.
+ * At this address there is always a struct that describes the span itself.
+ *
+ * There are two kinds of spans:
+ *   -- heap spans are used to store a number of smaller memory chunks;
+ *   -- huge spans are used to store a single chunk that doesn't fit a heap
+ *      span.
+ *
+ * Heap spans always take 2 MiB of memory. Huge spans vary in size.
  */
 
 /* Span alignment values. */
 #define MM_MEMORY_SPAN_ALIGNMENT	(((size_t) 1) << 21)
 #define MM_MEMORY_SPAN_ALIGNMENT_MASK	(MM_MEMORY_SPAN_ALIGNMENT - 1)
 
-/* Size of a regular span used as a storage for smaller objects. */
+/* The size of a span that keeps smaller objects inside. Such spans comprise
+   a memory heap. Thus it is called a 'heap' span. */
 #define MM_MEMORY_SPAN_HEAP_SIZE	MM_MEMORY_SPAN_ALIGNMENT
 
-/* Regular span types. */
-#define MM_MEMORY_SPAN_ACTIVE_HEAP	(0u)
-#define MM_MEMORY_SPAN_STAGING_HEAP	(1u)
-#define MM_MEMORY_SPAN_LAST_HEAP_TYPE	MM_MEMORY_SPAN_STAGING_HEAP
+/* The token value that tags heap spans. */
+#define MM_MEMORY_SPAN_HEAP_TAG		((size_t) 0)
 
 /* Span descriptor. */
 struct mm_memory_span
 {
-	/* The type and size of the span. */
-	size_t type_and_size;
-	/* The size that is actually used for data storage. */
-	size_t resident_size;
+	/* The heap tag or the usable size for a huge span. */
+	size_t tag_or_size;
+	/* The memory size that is actually mmap()-ed. */
+	size_t virtual_size;
 
-	/* The execution context the span belongs to. */
+	/* The execution context the span belongs to (if any). */
 	struct mm_context *context;
+
 	/* The memory cache the span belongs to. */
 	struct mm_memory_cache *cache;
 	struct mm_link cache_link;
 };
 
+/* Huge span header. */
+union mm_memory_span_huge
+{
+	struct mm_memory_span span;
+	uint8_t padding[MM_CACHELINE];
+};
+
 /* Get span descriptor for an address within 2MiB from its start. */
 static inline struct mm_memory_span * NONNULL(1)
-mm_memory_span_from_ptr(void *ptr)
+mm_memory_span_from_ptr(const void *ptr)
 {
 	return (struct mm_memory_span *) ((uintptr_t) ptr & ~MM_MEMORY_SPAN_ALIGNMENT_MASK);
 }
 
+/* Get the actual size of virtual memory occupied by the span. */
+static inline size_t NONNULL(1)
+mm_memory_span_virtual_size(const struct mm_memory_span *span)
+{
+	return span->virtual_size;
+}
+
+/* Check to see if the span is for regular heap allocation. */
+static inline bool NONNULL(1)
+mm_memory_span_heap(const struct mm_memory_span *span)
+{
+	return (span->tag_or_size == MM_MEMORY_SPAN_HEAP_TAG);
+}
+
 /* Check to see if the span is for a single huge chunk. */
 static inline bool NONNULL(1)
-mm_memory_span_huge(struct mm_memory_span *span)
+mm_memory_span_huge(const struct mm_memory_span *span)
 {
-	return (span->type_and_size > MM_MEMORY_SPAN_LAST_HEAP_TYPE);
-}
-
-/* Check to see if the span is for regular chunk allocation. */
-static inline bool NONNULL(1)
-mm_memory_span_heap(struct mm_memory_span *span)
-{
-	return (span->type_and_size <= MM_MEMORY_SPAN_LAST_HEAP_TYPE);
-}
-
-/* Check to see if the span is for regular chunk allocation and is currently active. */
-static inline bool NONNULL(1)
-mm_memory_span_active(struct mm_memory_span *span)
-{
-	return (span->type_and_size == MM_MEMORY_SPAN_ACTIVE_HEAP);
-}
-
-/* Check to see if the span is for regular chunk allocation but is currently on hold. */
-static inline bool NONNULL(1)
-mm_memory_span_staging(struct mm_memory_span *span)
-{
-	return (span->type_and_size == MM_MEMORY_SPAN_STAGING_HEAP);
+	return (span->tag_or_size != MM_MEMORY_SPAN_HEAP_TAG);
 }
 
 static inline size_t NONNULL(1)
-mm_memory_span_virtual_size(struct mm_memory_span *span)
+mm_memory_span_huge_size(const struct mm_memory_span *span)
 {
-	return mm_memory_span_heap(span) ? MM_MEMORY_SPAN_HEAP_SIZE : span->type_and_size;
+	ASSERT(mm_memory_span_huge(span));
+	return span->tag_or_size;
 }
 
-static inline size_t NONNULL(1)
-mm_memory_span_resident_size(struct mm_memory_span *span)
+static inline void * NONNULL(1)
+mm_memory_span_huge_data(const struct mm_memory_span *span)
 {
-	return mm_memory_span_heap(span) ? MM_MEMORY_SPAN_HEAP_SIZE : span->resident_size;
+	ASSERT(mm_memory_span_huge(span));
+	return (uint8_t *) span + sizeof(union mm_memory_span_huge);
 }
 
 struct mm_memory_span * NONNULL(1)
@@ -108,12 +118,6 @@ mm_memory_span_create_heap(struct mm_memory_cache *cache);
 
 struct mm_memory_span * NONNULL(1)
 mm_memory_span_create_huge(struct mm_memory_cache *cache, size_t size);
-
-void NONNULL(1)
-mm_memory_span_activate(struct mm_memory_span *span);
-
-void NONNULL(1)
-mm_memory_span_deactivate(struct mm_memory_span *span);
 
 void NONNULL(1)
 mm_memory_span_destroy(struct mm_memory_span *span);

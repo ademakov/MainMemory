@@ -20,6 +20,7 @@
 #include "base/memory/cache.h"
 
 #include "base/bitops.h"
+#include "base/exit.h"
 #include "base/report.h"
 #include "base/memory/span.h"
 
@@ -153,6 +154,12 @@
 	MM_CHUNK_ROW(17u, _),		\
 	MM_CHUNK_ROW(18u, _)
 
+typedef enum
+{
+	MM_MEMORY_HEAP_ACTIVE = 0,
+	MM_MEMORY_HEAP_STAGING = 1
+} mm_memory_heap_status_t;
+
 // The header struct for a block of small chunks.
 struct mm_memory_block_inner
 {
@@ -188,9 +195,12 @@ struct mm_memory_heap
 {
 	struct mm_memory_span base;
 
+	struct mm_link staging_link;
+	mm_memory_heap_status_t status;
+
 	// Cached blocks and chunks.
-	uint16_t chunks[MM_MEMORY_LARGE_SIZES];
 	struct mm_memory_block *blocks[MM_MEMORY_BLOCK_SIZES];
+	uint16_t chunks[MM_MEMORY_LARGE_SIZES];
 
 	// The map of units.
 	uint8_t units[MM_MEMORY_UNIT_NUMBER];
@@ -444,12 +454,22 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 static void
 mm_memory_prepare_heap(struct mm_memory_heap *const heap)
 {
-	for (uint32_t i = 0; i < MM_MEMORY_LARGE_SIZES; i++)
-		heap->chunks[i] = 0;
+	// As the heap comes after a fresh mmap() call there is no need
+	// to zero it out manually.
+#if 0
+	heap->status = MM_MEMORY_HEAP_ACTIVE;
+
 	for (uint32_t i = 0; i < MM_MEMORY_BLOCK_SIZES; i++)
 		heap->blocks[i] = NULL;
+	for (uint32_t i = 0; i < MM_MEMORY_LARGE_SIZES; i++)
+		heap->chunks[i] = 0;
 
 	memset(heap->units, 0, sizeof heap->units);
+#endif
+
+	// The initial heap layout takes out the very first 4KiB chunk
+	// from the heap. It is used up for the very heap header that is
+	// initialized here.
 	mm_memory_split_chunk(heap, 0, MM_MEMORY_CACHE_SIZES, MM_MEMORY_BLOCK_SIZES);
 }
 
@@ -471,8 +491,8 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 		}
 		mm_memory_prepare_heap(heap);
 
-		cache->active->base.type_and_size = MM_MEMORY_SPAN_STAGING_HEAP;
-		mm_list_append(&cache->heap, &cache->active->base.cache_link);
+		cache->active->status = MM_MEMORY_HEAP_STAGING;
+		mm_list_append(&cache->staging, &cache->active->staging_link);
 		cache->active = heap;
 
 		original_rank = mm_memory_find_chunk(heap, required_rank);
@@ -558,31 +578,22 @@ mm_memory_cache_prepare(struct mm_memory_cache *const cache, struct mm_context *
 {
 	cache->context = context;
 
-	mm_list_prepare(&cache->heap);
-	mm_list_prepare(&cache->huge);
+	mm_list_prepare(&cache->staging);
+	mm_list_prepare(&cache->spans);
 
 	cache->active = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
 	if (cache->active == NULL)
-		mm_fatal(errno, "failed to create an initial memory span");
+		mm_panic("panic: failed to create an initial memory span\n");
 	mm_memory_prepare_heap(cache->active);
 }
 
 void NONNULL(1)
 mm_memory_cache_cleanup(struct mm_memory_cache *const cache)
 {
-	while (!mm_list_empty(&cache->huge)) {
-		struct mm_link *link = mm_list_remove_head(&cache->huge);
+	while (!mm_list_empty(&cache->spans)) {
+		struct mm_link *link = mm_list_head(&cache->spans);
 		struct mm_memory_span *span = containerof(link, struct mm_memory_span, cache_link);
 		mm_memory_span_destroy(span);
-	}
-	while (!mm_list_empty(&cache->heap)) {
-		struct mm_link *link = mm_list_remove_head(&cache->heap);
-		struct mm_memory_span *span = containerof(link, struct mm_memory_span, cache_link);
-		mm_memory_span_destroy(span);
-	}
-	if (cache->active != NULL) {
-		mm_memory_span_destroy(&cache->active->base);
-		cache->active = NULL;
 	}
 }
 

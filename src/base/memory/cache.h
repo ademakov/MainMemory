@@ -27,18 +27,21 @@
 struct mm_memory_heap;
 
 /*
- * Per-thread memory cache.
+ * A memory allocation cache.
  */
 struct mm_memory_cache
 {
-	/* The active regular span to allocate memory from. */
+	/* The active span to allocate memory from. */
 	struct mm_memory_heap *active;
+
+	/* The inactive spans to gather freed memory. */
+	struct mm_list staging;
+
 	/* The execution context the cache belongs to. */
 	struct mm_context *context;
-	/* Inactive spans to gather released memory. */
-	struct mm_list heap;
-	/* Active spans with huge chunks inside. */
-	struct mm_list huge;
+
+	/* All the spans that belong to the cache. */
+	struct mm_list spans;
 };
 
 void NONNULL(1)
