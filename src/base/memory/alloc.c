@@ -23,8 +23,14 @@
 #include "base/context.h"
 #include "base/exit.h"
 #include "base/lock.h"
+#include "base/report.h"
 #include "base/memory/cache.h"
 #include "base/memory/span.h"
+#include "base/thread/backoff.h"
+
+#define MM_FREE_WARN_THRESHOLD	(64)
+#define MM_FREE_ERROR_THRESHOLD	(512)
+#define MM_FREE_FATAL_THRESHOLD	(4096)
 
 // Global memory cache used to bootsrtrap per-context caches.
 static struct mm_memory_cache mm_memory_initial_cache;
@@ -97,10 +103,30 @@ mm_memory_initial_free(void *ptr)
 }
 
 static void
-mm_memory_free_req(struct mm_context *context, uintptr_t *arguments)
+mm_memory_remote_context_free_req(struct mm_context *context, uintptr_t *arguments)
 {
 	void *ptr = (void *) arguments[0];
 	mm_context_free(context, ptr);
+}
+
+static void
+mm_memory_remote_context_free(struct mm_context *context, void *ptr)
+{
+	if (!mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
+		uint32_t count = 0;
+		uint32_t backoff = 0;
+		while (mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
+			count++;
+			if (count == MM_FREE_WARN_THRESHOLD) {
+				mm_warning(0, "Problem with slow chunk reclamation");
+			} else if (count == MM_FREE_ERROR_THRESHOLD) {
+				mm_error(0, "Problem with slow chunk reclamation");
+			} else if (count == MM_FREE_FATAL_THRESHOLD) {
+				mm_fatal(0, "Problem with slow chunk reclamation");
+			}
+			backoff = mm_thread_backoff(backoff);
+		}
+	}
 }
 
 void * MALLOC
@@ -170,10 +196,9 @@ mm_memory_free(void *ptr)
 		if (context == span->context) {
 			mm_context_free(context, ptr);
 		} else {
-			mm_async_call_1(span->context, mm_memory_free_req, (uintptr_t) ptr);
+			mm_memory_remote_context_free(span->context, ptr);
 		}
 	} else {
 		return mm_memory_initial_free(ptr);
 	}
 }
-
