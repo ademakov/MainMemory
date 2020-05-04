@@ -130,6 +130,106 @@
 #define mm_prefetch(...)	__builtin_prefetch(__VA_ARGS__)
 
 /**********************************************************************
+ * Arithmetic with overflow checks.
+ **********************************************************************/
+
+static inline bool
+mm_add_int32(int32_t a, int32_t b, int32_t *res)
+{
+	return __builtin_sadd_overflow(a, b, res);
+}
+
+static inline bool
+mm_add_int64(int64_t a, int64_t b, int64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_saddll_overflow(a, b, res);
+#else
+	return __builtin_saddl_overflow(a, b, res);
+#endif
+}
+
+static inline bool
+mm_add_uint32(uint32_t a, uint32_t b, uint32_t *res)
+{
+	return __builtin_uadd_overflow(a, b, res);
+}
+
+static inline bool
+mm_add_uint64(uint64_t a, uint64_t b, uint64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_uaddll_overflow(a, b, res);
+#else
+	return __builtin_uaddl_overflow(a, b, res);
+#endif
+}
+
+static inline bool
+mm_sub_int32(int32_t a, int32_t b, int32_t *res)
+{
+	return __builtin_ssub_overflow(a, b, res);
+}
+
+static inline bool
+mm_sub_int64(int64_t a, int64_t b, int64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_ssubll_overflow(a, b, res);
+#else
+	return __builtin_ssubl_overflow(a, b, res);
+#endif
+}
+
+static inline bool
+mm_sub_uint32(uint32_t a, uint32_t b, uint32_t *res)
+{
+	return __builtin_usub_overflow(a, b, res);
+}
+
+static inline bool
+mm_sub_uint64(uint64_t a, uint64_t b, uint64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_usubll_overflow(a, b, res);
+#else
+	return __builtin_usubl_overflow(a, b, res);
+#endif
+}
+
+static inline bool
+mm_mul_int32(int32_t a, int32_t b, int32_t *res)
+{
+	return __builtin_smul_overflow(a, b, res);
+}
+
+static inline bool
+mm_mul_int64(int64_t a, int64_t b, int64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_smulll_overflow(a, b, res);
+#else
+	return __builtin_smull_overflow(a, b, res);
+#endif
+}
+
+static inline bool
+mm_mul_uint32(uint32_t a, uint32_t b, uint32_t *res)
+{
+	return __builtin_umul_overflow(a, b, res);
+}
+
+static inline bool
+mm_mul_uint64(uint64_t a, uint64_t b, uint64_t *res)
+{
+#if MM_WORD_32BIT
+	return __builtin_umulll_overflow(a, b, res);
+#else
+	return __builtin_umull_overflow(a, b, res);
+#endif
+}
+
+/**********************************************************************
  * Basic Definitions.
  **********************************************************************/
 

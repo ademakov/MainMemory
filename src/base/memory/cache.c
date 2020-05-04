@@ -497,6 +497,7 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 			heap = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
 			if (heap == NULL) {
 				// Out of memory.
+				errno = ENOMEM;
 				return NULL;
 			}
 
@@ -707,6 +708,16 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 }
 
 void * NONNULL(1) MALLOC
+mm_memory_cache_zalloc(struct mm_memory_cache *cache, size_t size)
+{
+	void *ptr = mm_memory_cache_alloc(cache, size);
+	if (ptr != NULL) {
+		memset(ptr, 0, size);
+	}
+	return ptr;
+}
+
+void * NONNULL(1) MALLOC
 mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_t size)
 {
 	if (!mm_is_pow2z(align)) {
@@ -758,15 +769,17 @@ mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_
 void * NONNULL(1) MALLOC
 mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size)
 {
-	// TODO: check for aithmetic overflow.
-	size_t total_size = count * size;
-
-	void *ptr = mm_memory_cache_alloc(cache, total_size);
-	if (ptr == NULL)
+	size_t total;
+#if MM_WORD_32BIT
+	bool overflow = mm_mul_uint32(count, size, &total);
+#else
+	bool overflow = mm_mul_uint64(count, size, &total);
+#endif
+	if (overflow) {
+		errno = EOVERFLOW;
 		return NULL;
-	memset(ptr, 0, total_size);
-
-	return ptr;
+	}
+	return mm_memory_cache_zalloc(cache, total);
 }
 
 void * NONNULL(1) MALLOC
