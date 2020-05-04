@@ -218,7 +218,6 @@ mm_strand_trim(struct mm_strand *strand)
 
 	// Cleanup the temporary data.
 	mm_wait_cache_truncate(&strand->wait_cache);
-	mm_chunk_enqueue_deferred(strand->thread, true);
 
 #if ENABLE_SMP
 	// Trim private memory space.

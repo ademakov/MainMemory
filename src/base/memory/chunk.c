@@ -1,7 +1,7 @@
 /*
  * base/memory/chunk.c - MainMemory chunks.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,8 +22,6 @@
 #include "base/async.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/memory/global.h"
-#include "base/memory/memory.h"
 #include "base/thread/backoff.h"
 #include "base/thread/thread.h"
 
@@ -36,114 +34,12 @@
  **********************************************************************/
 
 struct mm_chunk * MALLOC
-mm_chunk_create_global(size_t size)
-{
-	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_global_alloc(size);
-	chunk->base.tag = MM_CHUNK_GLOBAL;
-	mm_slink_prepare(&chunk->base.slink);
-	return chunk;
-}
-
-struct mm_chunk * MALLOC
-mm_chunk_create_common(size_t size)
-{
-	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_common_alloc(size);
-	chunk->base.tag = MM_CHUNK_COMMON;
-	mm_slink_prepare(&chunk->base.slink);
-	return chunk;
-}
-
-struct mm_chunk * MALLOC
-mm_chunk_create_regular(size_t size)
-{
-	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_regular_alloc(size);
-	chunk->base.tag = MM_CHUNK_REGULAR;
-	mm_slink_prepare(&chunk->base.slink);
-	return chunk;
-}
-
-struct mm_chunk * MALLOC
-mm_chunk_create_private(size_t size)
-{
-	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_private_alloc(size);
-	chunk->base.tag = mm_thread_self();
-	mm_slink_prepare(&chunk->base.slink);
-	return chunk;
-}
-
-struct mm_chunk * MALLOC
 mm_chunk_create(size_t size)
 {
-	// Prefer private space if available.
-#if ENABLE_SMP
-	struct mm_private_space *space = mm_private_space_get();
-	if (mm_private_space_ready(space))
-		return mm_chunk_create_private(size);
-#else
-	struct mm_thread *thread = mm_thread_selfptr();
-	if (mm_thread_ident(thread) == 0 && mm_private_space_ready(&mm_regular_space))
-		return mm_chunk_create_regular(size);
-#endif
-
-	// Common space could only be used after it gets
-	// initialized during bootstrap.
-	if (likely(mm_common_space_ready()))
-		return mm_chunk_create_common(size);
-
-	// Use global allocator if everything else fails
-	// (that is during bootstrap and shutdown).
-	return mm_chunk_create_global(size);
-}
-
-void NONNULL(1)
-mm_chunk_destroy(struct mm_chunk *chunk)
-{
-	mm_chunk_t tag = mm_chunk_gettag(chunk);
-
-	// A chunk from a shared memory space can be freed by any thread in
-	// the same manner utilizing synchronization mechanisms built-in to
-	// the corresponding memory allocation routines.
-	if (tag == MM_CHUNK_COMMON) {
-		mm_common_free(chunk);
-		return;
-	}
-	if (unlikely(tag == MM_CHUNK_GLOBAL)) {
-		mm_global_free(chunk);
-		return;
-	}
-
-	if (tag == MM_CHUNK_REGULAR) {
-#if ENABLE_SMP
-		// In SMP mode regular memory space is just another case of
-		// shared space with built-in synchronization. So it can be
-		// freed by any thread alike.
-		mm_regular_free(chunk);
-		return;
-#else
-		struct mm_thread *thread = mm_thread_selfptr();
-		if (mm_thread_ident(thread) == 0) {
-			mm_regular_free(chunk);
-			return;
-		}
-#endif
-	}
-
-	// A chunk from a private space can be immediately freed by its
-	// originating thread but it is a subject for asynchronous memory
-	// reclamation mechanism for any other thread.
-	struct mm_thread *thread = mm_thread_selfptr();
-	if (tag == mm_thread_ident(thread)) {
-		mm_private_free(chunk);
-		return;
-	}
-
-	thread->deferred_chunks_count++;
-	mm_chunk_stack_insert(&thread->deferred_chunks, chunk);
-	mm_chunk_enqueue_deferred(thread, false);
+	size += sizeof(struct mm_chunk);
+	struct mm_chunk *chunk = mm_memory_alloc(size);
+	mm_slink_prepare(&chunk->base.slink);
+	return chunk;
 }
 
 void NONNULL(1)
@@ -165,55 +61,5 @@ mm_chunk_destroy_queue(struct mm_queue *queue)
 		struct mm_chunk *next = mm_chunk_queue_next(chunk);
 		mm_chunk_destroy(chunk);
 		chunk = next;
-	}
-}
-
-static void
-mm_chunk_free_req(struct mm_context *context UNUSED, uintptr_t *arguments)
-{
-	struct mm_chunk *chunk = (struct mm_chunk *) arguments[0];
-	mm_private_free(chunk);
-}
-
-void NONNULL(1)
-mm_chunk_enqueue_deferred(struct mm_thread *thread, bool flush)
-{
-	if (!flush && thread->deferred_chunks_count < MM_CHUNK_FLUSH_THRESHOLD)
-		return;
-
-	// Capture all the deferred chunks.
-	struct mm_stack chunks = thread->deferred_chunks;
-	mm_stack_prepare(&thread->deferred_chunks);
-	thread->deferred_chunks_count = 0;
-
-	// Try to submit the chunks to respective reclamation queues.
-	while (!mm_stack_empty(&chunks)) {
-		struct mm_chunk *chunk = mm_chunk_stack_remove(&chunks);
-
-#if ENABLE_SMP
-		mm_chunk_t tag = mm_chunk_gettag(chunk);
-		struct mm_context *origin = mm_thread_ident_to_context(tag);
-#else
-		struct mm_context *origin = mm_thread_ident_to_context(0);
-#endif
-		uint32_t backoff = 0;
-		while (!mm_async_trycall_1(origin, mm_chunk_free_req, (uintptr_t) chunk)) {
-			if (backoff >= MM_BACKOFF_SMALL) {
-				// If failed to submit the chunk after a number
-				// of attempts then defer it again.
-				mm_chunk_stack_insert(&thread->deferred_chunks, chunk);
-				thread->deferred_chunks_count++;
-				break;
-			}
-			backoff = mm_thread_backoff(backoff);
-		}
-	}
-
-	// Let know if chunk reclamation consistently has problems.
-	if (thread->deferred_chunks_count > MM_CHUNK_ERROR_THRESHOLD) {
-		if (thread->deferred_chunks_count < MM_CHUNK_FATAL_THRESHOLD)
-			mm_error(0, "Problem with chunk reclamation");
-		else
-			mm_fatal(0, "Problem with chunk reclamation");
 	}
 }

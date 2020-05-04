@@ -198,7 +198,7 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 	DEBUG("create a buffer chunk of %zu (min %u) bytes", size, buf->chunk_size);
 
 	// Allocate a memory chunk.
-	struct mm_chunk *chunk = mm_chunk_create_private(size);
+	struct mm_chunk *chunk = mm_chunk_create(size);
 	// Append the chunk to the buffer chunk list.
 	mm_chunk_queue_append(&buf->chunks, chunk);
 
