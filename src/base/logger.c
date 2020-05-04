@@ -22,7 +22,7 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
-#include "base/memory/alloc.h"
+#include "base/memory/allocx.h"
 #include "base/memory/chunk.h"
 #include "base/memory/space.h"
 #include "base/thread/thread.h"

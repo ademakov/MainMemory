@@ -50,7 +50,19 @@ mm_memory_cache_cleanup(struct mm_memory_cache *cache);
 void * NONNULL(1) MALLOC
 mm_memory_cache_alloc(struct mm_memory_cache *cache, size_t size);
 
-void NONNULL(1, 2)
+void * NONNULL(1) MALLOC
+mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_t size);
+
+void * NONNULL(1) MALLOC
+mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size);
+
+void * NONNULL(1) MALLOC
+mm_memory_cache_realloc(struct mm_memory_cache *cache, void *ptr, size_t size);
+
+void NONNULL(1)
 mm_memory_cache_free(struct mm_memory_cache *cache, void *ptr);
+
+size_t
+mm_memory_cache_chunk_size(const void *ptr);
 
 #endif /* BASE_MEMORY_CACHE_H */

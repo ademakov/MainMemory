@@ -174,15 +174,9 @@ struct mm_memory_block
 	struct mm_memory_block *next;
 	struct mm_memory_block *inner_next;
 
-	uint32_t chunk_size;
-	uint32_t chunk_magic;
-
         // A bitset of free chunks. The very first chunk is never free as
 	// it is used for the header itself.
 	uint32_t chunk_free;
-
-	uint32_t inner_size;
-	uint32_t inner_magic;
 
         // A bitset of chunks used for small chunks.
 	uint32_t inner_used;
@@ -207,13 +201,13 @@ struct mm_memory_heap
 };
 
 // Memory rank sizes.
-static const uint32_t mm_memory_chunk_sizes[] = {
+static const uint32_t mm_memory_sizes[] = {
 	MM_CHUNK_LOWER_ROWS(MM_CHUNK_MAKE_SIZE),
 	MM_CHUNK_UPPER_ROWS(MM_CHUNK_MAKE_SIZE)
 };
 
 // Chunk size magic numbers.
-static const uint32_t mm_memory_chunk_magic[] = {
+static const uint32_t mm_memory_magic[] = {
 	MM_CHUNK_LOWER_ROWS(MM_CHUNK_MAKE_MAGIC)
 };
 
@@ -282,7 +276,7 @@ static void
 mm_memory_make_two(struct mm_memory_heap *const heap, const uint32_t base, const uint32_t first, const uint32_t second)
 {
 	mm_memory_make_chunk(heap, base, first);
-	mm_memory_make_chunk(heap, base + mm_memory_chunk_sizes[first] / MM_MEMORY_UNIT_SIZE, second);
+	mm_memory_make_chunk(heap, base + mm_memory_sizes[first] / MM_MEMORY_UNIT_SIZE, second);
 }
 
 static uint32_t
@@ -315,17 +309,16 @@ mm_memory_split_chunk(struct mm_memory_heap *const heap, const uint32_t original
 	uint32_t running_base = original_base;
 	uint32_t running_rank = required_rank;
 	heap->units[original_base] = required_rank;
-	running_base += mm_memory_chunk_sizes[required_rank] / MM_MEMORY_UNIT_SIZE;
+	running_base += mm_memory_sizes[required_rank] / MM_MEMORY_UNIT_SIZE;
 
 	while (running_rank < (MM_MEMORY_BLOCK_SIZES + MM_MEMORY_BUDDY_SIZES)) {
 		mm_memory_make_chunk(heap, running_base, running_rank);
+		running_base += mm_memory_sizes[running_rank] / MM_MEMORY_UNIT_SIZE;
 
 		running_rank += 4;
 		if (running_rank == original_rank) {
 			return;
 		}
-
-		running_base += mm_memory_chunk_sizes[running_rank] / MM_MEMORY_UNIT_SIZE;
 	}
 
 	const uint32_t running_distance = original_rank - running_rank;
@@ -470,6 +463,7 @@ mm_memory_prepare_heap(struct mm_memory_heap *const heap)
 	// The initial heap layout takes out the very first 4KiB chunk
 	// from the heap. It is used up for the very heap header that is
 	// initialized here.
+	heap->units[0] = MM_MEMORY_BLOCK_SIZES;
 	mm_memory_split_chunk(heap, 0, MM_MEMORY_CACHE_SIZES, MM_MEMORY_BLOCK_SIZES);
 }
 
@@ -540,7 +534,7 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 		};
 
 		uint8_t *const map = &heap->units[base + 1];
-		const uint32_t end = mm_memory_chunk_sizes[required_rank] / MM_MEMORY_UNIT_SIZE - 1;
+		const uint32_t end = mm_memory_sizes[required_rank] / MM_MEMORY_UNIT_SIZE - 1;
 		const uint32_t loop_end = end & ~3u;
 		const uint32_t tail = end & 3u;
 
@@ -572,10 +566,6 @@ mm_memory_alloc_block(struct mm_memory_cache *const cache, const uint32_t rank)
 	// Set it up as a block.
 	block->next = NULL;
 	block->inner_next = NULL;
-	block->chunk_size = mm_memory_chunk_sizes[rank - MM_MEMORY_MEDIUM_SIZES];
-	block->chunk_magic = mm_memory_chunk_magic[rank - MM_MEMORY_MEDIUM_SIZES];
-	block->inner_size = mm_memory_chunk_sizes[rank - MM_MEMORY_BLOCK_SIZES];
-	block->inner_magic = mm_memory_chunk_magic[rank - MM_MEMORY_BLOCK_SIZES];
 	block->inner_used = 0;
 	block->inner_free = 0;
 
@@ -619,9 +609,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 {
 	const uint32_t rank = mm_memory_get_rank(size);
 	if (rank >= MM_MEMORY_BLOCK_SIZES) {
-		//
 		// Handle a huge or large size.
-		//
 
 		if (rank >= MM_MEMORY_CACHE_SIZES) {
 			struct mm_memory_span *span = mm_memory_span_create_huge(cache, size);
@@ -632,9 +620,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 		return mm_memory_alloc_large(cache, rank, false);
 
 	} else if (rank >= MM_MEMORY_SMALL_SIZES) {
-		//
 		// Handle a medium size.
-		//
 
 		// Use a cached block if any.
 		struct mm_memory_block *block = cache->active->blocks[rank];
@@ -646,26 +632,25 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 				// Remove a fully used block.
 				cache->active->blocks[rank] = block->next;
 			}
-			return (uint8_t *) block + shift * block->chunk_size;
+			return (uint8_t *) block + shift * mm_memory_sizes[rank];
 		}
 
 		// Allocate a new block.
 		block = mm_memory_alloc_block(cache, rank + MM_MEMORY_MEDIUM_SIZES);
 		if (unlikely(block == NULL))
 			return NULL;
-		return (uint8_t *) block + block->chunk_size;
+		return (uint8_t *) block + mm_memory_sizes[rank];
 
 	} else {
-		//
 		// Handle a small size.
-		//
 
 		// Use a cached inner block if any.
 		struct mm_memory_block *block = cache->active->blocks[rank];
+		const uint32_t medium_rank = rank + MM_MEMORY_SMALL_SIZES;
 		if (block != NULL) {
 			ASSERT(block->inner_free);
 			const uint32_t shift = mm_ctz(block->inner_free);
-			uint8_t *const inner_base = ((uint8_t *) block) + shift * block->chunk_size;
+			uint8_t *const inner_base = ((uint8_t *) block) + shift * mm_memory_sizes[medium_rank];
 
 			struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) inner_base;
 			ASSERT(inner->free != 0);
@@ -679,12 +664,12 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 				}
 			}
 
-			return inner_base + inner_shift * block->inner_size;
+			return inner_base + inner_shift * mm_memory_sizes[rank];
 		}
 
 		// Allocate a medium chunk and use it as an inner block.
 		uint8_t *inner_base;
-		block = cache->active->blocks[rank + MM_MEMORY_SMALL_SIZES];
+		block = cache->active->blocks[medium_rank];
 		if (block != NULL) {
 			// Use a cached block.
 			ASSERT(block->chunk_free);
@@ -695,9 +680,9 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 			block->chunk_free ^= (1u << shift);
 			if (block->chunk_free == 0) {
 				// Remove a fully used block.
-				cache->active->blocks[rank + MM_MEMORY_SMALL_SIZES] = block->next;
+				cache->active->blocks[medium_rank] = block->next;
 			}
-			inner_base = (uint8_t *) block + shift * block->chunk_size;
+			inner_base = (uint8_t *) block + shift * mm_memory_sizes[medium_rank];
 		} else {
 			// Allocate a new block.
 			block = mm_memory_alloc_block(cache, rank + MM_MEMORY_BLOCK_SIZES);
@@ -706,7 +691,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 			// Mark the medium chunk as an inner block.
 			block->inner_used |= 2;
 			block->inner_free |= 2;
-			inner_base = (uint8_t *) block + block->chunk_size;
+			inner_base = (uint8_t *) block + mm_memory_sizes[medium_rank];
 		}
 
 		// Mark the remaining small chunks as free.
@@ -717,89 +702,224 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 		cache->active->blocks[rank] = block;
 		block->inner_next = NULL;
 
-		return inner_base + block->inner_size;
+		return inner_base + mm_memory_sizes[rank];
 	}
+}
+
+void * NONNULL(1) MALLOC
+mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_t size)
+{
+	if (!mm_is_pow2z(align)) {
+		errno = EINVAL;
+		return NULL;
+	}
+	if (align > MM_MEMORY_SPAN_ALIGNMENT / 2) {
+		errno = EINVAL;
+		return NULL;
+	}
+
+	// Handle naturally aligned sizes.
+	if (align <= MM_MEMORY_UNIT_SIZE) {
+		const uint32_t rank = mm_memory_get_rank(size);
+
+		size_t alloc_align;
+		if (rank >= MM_MEMORY_BLOCK_SIZES) {
+			if (rank >= MM_MEMORY_CACHE_SIZES)
+				alloc_align = MM_CACHELINE;
+			else
+				alloc_align = MM_MEMORY_UNIT_SIZE;
+		} else {
+			switch ((rank & 3)) {
+			case 0:
+				alloc_align = mm_memory_sizes[rank];
+				break;
+			case 1:
+				alloc_align = mm_memory_sizes[rank - 1] / 4;
+				break;
+			case 2:
+				alloc_align = mm_memory_sizes[rank - 2] / 2;
+				break;
+			case 3:
+				alloc_align = mm_memory_sizes[rank - 3] / 4;
+				break;
+			}
+		}
+
+		if (alloc_align >= align) {
+			return mm_memory_cache_alloc(cache, size);
+		}
+	}
+
+	const size_t align_mask = align - 1;
+	void *const ptr = mm_memory_cache_alloc(cache, size + align_mask);
+	return (void *) ((((uintptr_t) ptr) + align_mask) & ~align_mask);
+}
+
+void * NONNULL(1) MALLOC
+mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size)
+{
+	// TODO: check for aithmetic overflow.
+	size_t total_size = count * size;
+
+	void *ptr = mm_memory_cache_alloc(cache, total_size);
+	if (ptr == NULL)
+		return NULL;
+	memset(ptr, 0, total_size);
+
+	return ptr;
+}
+
+void * NONNULL(1) MALLOC
+mm_memory_cache_realloc(struct mm_memory_cache *const cache, void *const ptr, const size_t size)
+{
+	if (size == 0) {
+		mm_memory_cache_free(cache, ptr);
+		return NULL;
+	}
+
+	const size_t prev_size = mm_memory_cache_chunk_size(ptr);
+	if (prev_size >= size) {
+		if (prev_size == size)
+			return ptr;
+
+		const uint32_t rank = mm_memory_get_rank(size);
+		const uint32_t prev_rank = mm_memory_get_rank(prev_size);
+		if (prev_rank == rank)
+			return ptr;
+	}
+
+	void *next_ptr = mm_memory_cache_alloc(cache, size);
+	if (next_ptr == NULL)
+		return NULL;
+
+	memcpy(next_ptr, ptr, min(prev_size, size));
+	mm_memory_cache_free(cache, ptr);
+
+	return next_ptr;
 }
 
 void NONNULL(1)
 mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 {
+	if (ptr == NULL)
+		return;
+
 	struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
 	VERIFY(cache == span->cache);
 
-	//
-	// Free a huge chunk.
-	//
+	// Handle a huge chunk.
 	if (mm_memory_span_huge(span)) {
 		mm_list_delete(&span->cache_link);
 		mm_memory_span_destroy(span);
 		return;
 	}
 
-	//
 	// Identify the chunk.
-	//
 	struct mm_memory_heap *const heap = (struct mm_memory_heap *) span;
 	const uint32_t base = mm_memory_deduce_base(heap, ptr);
-	VERIFY(heap->units[base] >= MM_MEMORY_BLOCK_SIZES);
-	VERIFY(heap->units[base] < MM_MEMORY_CACHE_SIZES);
 	const uint8_t rank = heap->units[base];
 	const uint8_t mark = heap->units[base + 1];
+	if (rank < MM_MEMORY_BLOCK_SIZES || rank > MM_MEMORY_CACHE_SIZES)
+		mm_panic("panic: bad memory chunk\n");
+	if (mark != 0 && (mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG)
+		mm_panic("panic: bad memory chunk\n");
 
-	//
-	// Free a large chunk.
-	//
+	// Handle a large chunk.
 	if (mark == 0) {
 		mm_memory_free_chunk(heap, base, rank);
 		return;
 	}
 
-	//
-	// Locate a medium or small chunk in the block.
-	//
-	VERIFY(mark == ((mark & MM_MEMORY_UNIT_LMASK) | MM_MEMORY_BASE_TAG));
+	// Locate the block.
+	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
 	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
-	const uint32_t offset = (uint8_t *) ptr - (uint8_t *) block;
-	VERIFY(offset >= block->chunk_size);
-	const uint32_t shift = (offset * block->chunk_magic) >> MM_CHUNK_MAGIC_SHIFT;
-	const uint32_t mask = 1u << shift;
+	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
+	if (shift == 0 || shift > 31)
+		mm_panic("panic: bad memory chunk\n");
 
-	//
-	// Free a medium chunk.
-	//
+	// Handle a medium chunk.
+	const uint32_t mask = 1u << shift;
 	if ((block->inner_used & mask) == 0) {
-		VERIFY((block->chunk_free & mask) == 0);
 		if (block->chunk_free == 0) {
-			block->next = heap->blocks[rank - MM_MEMORY_MEDIUM_SIZES];
-			heap->blocks[rank - MM_MEMORY_MEDIUM_SIZES] = block;
+			block->next = heap->blocks[medium_rank];
+			heap->blocks[medium_rank] = block;
+		} else if ((block->chunk_free & mask) != 0) {
+			mm_panic("panic: double free\n");
 		}
 		block->chunk_free |= mask;
 		return;
 	}
 
-	//
-	// Free a small chunk.
-	//
-	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * block->chunk_size);
-	const uint32_t inner_offset = (uint8_t *) ptr - (uint8_t *) inner;
-	VERIFY(inner_offset >= block->inner_size);
-	const uint32_t inner_shift = (inner_offset * block->inner_magic) >> MM_CHUNK_MAGIC_SHIFT;
+	// Locate the inner block.
+	const uint32_t small_rank = rank - MM_MEMORY_BLOCK_SIZES;
+	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * mm_memory_sizes[medium_rank]);
+	const uint32_t inner_shift = (((uint8_t *) ptr - (uint8_t *) inner) * mm_memory_magic[small_rank]) >> MM_CHUNK_MAGIC_SHIFT;
+	if (inner_shift == 0 || inner_shift > 31)
+		mm_panic("panic: bad memory chunk\n");
+
+	// Handle a small chunk.
 	const uint32_t inner_mask = 1u << inner_shift;
-	VERIFY((inner->free & inner_mask) == 0);
+	if ((inner->free & inner_mask) != 0)
+		mm_panic("panic: double free\n");
 	inner->free |= inner_mask;
 	if (inner->free == 0xfffe) {
 		block->inner_used ^= mask;
 		block->inner_free ^= mask;
 		if (block->chunk_free == 0) {
-			block->next = heap->blocks[rank - MM_MEMORY_MEDIUM_SIZES];
-			heap->blocks[rank - MM_MEMORY_MEDIUM_SIZES] = block;
+			block->next = heap->blocks[medium_rank];
+			heap->blocks[medium_rank] = block;
 		}
 		block->chunk_free |= mask;
 	} else {
 		if (block->inner_free == 0) {
-			block->inner_next = heap->blocks[rank - MM_MEMORY_BLOCK_SIZES];
-			heap->blocks[rank - MM_MEMORY_BLOCK_SIZES] = block;
+			block->inner_next = heap->blocks[small_rank];
+			heap->blocks[small_rank] = block;
 		}
 		block->inner_free |= mask;
 	}
+}
+
+size_t
+mm_memory_cache_chunk_size(const void *const ptr)
+{
+	if (ptr == NULL)
+		return 0;
+
+	const struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
+	if (span == NULL)
+		mm_panic("panic: bad memory chunk\n");
+
+	// Handle a huge chunk.
+	if (mm_memory_span_huge(span))
+		return mm_memory_span_huge_size(span);
+
+	// Identify the chunk.
+	struct mm_memory_heap *const heap = (struct mm_memory_heap *) span;
+	const uint32_t base = mm_memory_deduce_base(heap, ptr);
+	const uint8_t rank = heap->units[base];
+	const uint8_t mark = heap->units[base + 1];
+	if (rank < MM_MEMORY_BLOCK_SIZES || rank > MM_MEMORY_CACHE_SIZES)
+		mm_panic("panic: bad memory chunk\n");
+	if (mark != 0 && (mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG)
+		mm_panic("panic: bad memory chunk\n");
+
+	// Handle a large chunk.
+	if (mark == 0)
+		return mm_memory_sizes[rank];
+
+	// Locate the block.
+	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
+	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
+	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
+	if (shift == 0 || shift > 31)
+		mm_panic("panic: bad memory chunk\n");
+
+	// Handle a medium chunk.
+	const uint32_t mask = 1u << shift;
+	if ((block->inner_used & mask) == 0)
+		return mm_memory_sizes[medium_rank];
+
+	// Handle a small chunk.
+	const uint32_t small_rank = rank - MM_MEMORY_BLOCK_SIZES;
+	return mm_memory_sizes[small_rank];
 }

@@ -1,5 +1,5 @@
 /*
- * base/memory/alloc.h - MainMemory memory allocation.
+ * base/memory/allocx.h - MainMemory dlmalloc constants.
  *
  * Copyright (C) 2012-2015  Aleksey Demakov
  *
@@ -17,8 +17,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#ifndef BASE_MEMORY_ALLOC_H
-#define BASE_MEMORY_ALLOC_H
+#ifndef BASE_MEMORY_ALLOCX_H
+#define BASE_MEMORY_ALLOCX_H
 
 /* DLMalloc alignment. */
 #define MM_ALLOC_ALIGNMENT	(8)
@@ -39,4 +39,4 @@
 # endif
 #endif
 
-#endif /* BASE_MEMORY_ALLOC_H */
+#endif /* BASE_MEMORY_ALLOCX_H */

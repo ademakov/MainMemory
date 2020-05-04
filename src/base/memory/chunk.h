@@ -22,7 +22,7 @@
 
 #include "common.h"
 #include "base/list.h"
-#include "base/memory/alloc.h"
+#include "base/memory/allocx.h"
 #include "base/memory/space.h"
 
 struct mm_thread;

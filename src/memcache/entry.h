@@ -25,7 +25,7 @@
 #include "base/context.h"
 #include "base/list.h"
 #include "base/event/event.h"
-#include "base/memory/alloc.h"
+#include "base/memory/allocx.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
 # include "base/atomic.h"
