@@ -45,12 +45,12 @@ mm_memory_arena_xalloc(const struct mm_arena *arena UNUSED, size_t size)
 static void *
 mm_memory_arena_xcalloc(const struct mm_arena *arena UNUSED, size_t count, size_t size)
 {
-	return mm_memory_calloc(count, size);
+	return mm_memory_xcalloc(count, size);
 }
 static void *
 mm_memory_arena_xrealloc(const struct mm_arena *arena UNUSED, void *ptr, size_t size)
 {
-	return mm_memory_realloc(ptr, size);
+	return mm_memory_xrealloc(ptr, size);
 }
 static void
 mm_memory_arena_free(const struct mm_arena *arena UNUSED, void *ptr)
