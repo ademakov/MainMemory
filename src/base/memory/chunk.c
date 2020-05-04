@@ -37,7 +37,7 @@ struct mm_chunk * MALLOC
 mm_chunk_create(size_t size)
 {
 	size += sizeof(struct mm_chunk);
-	struct mm_chunk *chunk = mm_memory_alloc(size);
+	struct mm_chunk *chunk = mm_memory_xalloc(size);
 	mm_slink_prepare(&chunk->base.slink);
 	return chunk;
 }

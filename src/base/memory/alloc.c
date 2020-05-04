@@ -184,6 +184,51 @@ mm_memory_realloc(void *ptr, size_t size)
 	}
 }
 
+void * MALLOC
+mm_memory_xalloc(size_t size)
+{
+	void *ptr = mm_memory_alloc(size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_xzalloc(size_t size)
+{
+	void *ptr = mm_memory_zalloc(size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_aligned_xalloc(size_t align, size_t size)
+{
+	void *ptr = mm_memory_aligned_alloc(align, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_xcalloc(size_t count, size_t size)
+{
+	void *ptr = mm_memory_calloc(count, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating (%zu * %zu) bytes of memory", count, size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_xrealloc(void *ptr, size_t size)
+{
+	ptr = mm_memory_realloc(ptr, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
 void
 mm_memory_free(void *ptr)
 {
