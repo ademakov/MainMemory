@@ -24,6 +24,9 @@
 #include "base/context.h"
 #include "base/cstack.h"
 #include "base/list.h"
+#if ENABLE_TRACE
+#include "base/report.h"
+#endif
 
 #define ENABLE_FIBER_LOCATION	0
 
