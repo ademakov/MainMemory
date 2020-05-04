@@ -883,6 +883,19 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 			heap->blocks[medium_rank] = block;
 		}
 		block->chunk_free |= mask;
+
+		if (heap->blocks[small_rank] == block) {
+			heap->blocks[small_rank] = block->next;
+		} else {
+			struct mm_memory_block *prev = heap->blocks[small_rank];
+			while (prev) {
+				if (prev->next == block) {
+					prev->next = block->next;
+					break;
+				}
+				prev = prev->next;
+			}
+		}
 	} else {
 		if (block->inner_free == 0) {
 			block->inner_next = heap->blocks[small_rank];
