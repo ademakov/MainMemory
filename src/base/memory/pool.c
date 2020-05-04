@@ -22,7 +22,7 @@
 #include "base/format.h"
 #include "base/report.h"
 #include "base/runtime.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 
@@ -134,7 +134,7 @@ mm_pool_prepare_low(struct mm_pool *pool,
 
 	mm_stack_prepare(&pool->free_list);
 
-	pool->pool_name = mm_global_strdup(pool_name);
+	pool->pool_name = mm_memory_strdup(pool_name);
 }
 
 void NONNULL(1)
@@ -146,7 +146,7 @@ mm_pool_cleanup(struct mm_pool *pool)
 		mm_arena_free(pool->arena, pool->block_array[i]);
 	mm_arena_free(pool->arena, pool->block_array);
 
-	mm_global_free(pool->pool_name);
+	mm_memory_free(pool->pool_name);
 
 	LEAVE();
 }
@@ -484,7 +484,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 
 		mm_stack_prepare(&cdata->cache);
 		cdata->item_guard = 0;
-		cdata->guard_buffer = mm_global_calloc(n, sizeof(struct mm_link *));
+		cdata->guard_buffer = mm_memory_xcalloc(n, sizeof(struct mm_link *));
 		cdata->cache_size = 0;
 		cdata->cache_full = false;
 	}
@@ -546,7 +546,7 @@ mm_pool_prepare_global(struct mm_pool *pool, const char *name, uint32_t item_siz
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_global_arena, item_size);
+	mm_pool_prepare_low(pool, name, &mm_memory_xarena, item_size);
 
 	pool->shared = false;
 	pool->global = true;

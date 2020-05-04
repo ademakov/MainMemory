@@ -22,7 +22,7 @@
 #include "base/bitops.h"
 #include "base/cstack.h"
 #include "base/logger.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/thread/ident.h"
 #include "base/thread/local.h"
 
@@ -53,7 +53,7 @@ mm_domain_attr_ensure_threads_attr(struct mm_domain_attr *attr, mm_thread_t n)
 		mm_fatal(0, "invalid thread number: %d (max is %d)", n, attr->nthreads - 1);
 
 	if (attr->threads_attr == NULL) {
-		attr->threads_attr = mm_global_calloc(attr->nthreads, sizeof(struct mm_domain_thread_attr));
+		attr->threads_attr = mm_memory_xcalloc(attr->nthreads, sizeof(struct mm_domain_thread_attr));
 		for (mm_thread_t i = 0; i < attr->nthreads; i++) {
 			attr->threads_attr[i].arg = 0;
 			attr->threads_attr[i].cpu_tag = MM_THREAD_CPU_ANY;
@@ -75,7 +75,7 @@ void NONNULL(1)
 mm_domain_attr_cleanup(struct mm_domain_attr *attr)
 {
 	if (attr->threads_attr != NULL)
-		mm_global_free(attr->threads_attr);
+		mm_memory_free(attr->threads_attr);
 }
 
 void NONNULL(1)
@@ -85,7 +85,7 @@ mm_domain_attr_setsize(struct mm_domain_attr *attr, mm_thread_t size)
 
 	attr->nthreads = size;
 	if (attr->threads_attr != NULL) {
-		mm_global_free(attr->threads_attr);
+		mm_memory_free(attr->threads_attr);
 		attr->threads_attr = NULL;
 	}
 }
@@ -145,7 +145,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	ENTER();
 
 	// Create a domain object.
-	struct mm_domain *domain = mm_global_alloc(sizeof(struct mm_domain));
+	struct mm_domain *domain = mm_memory_xalloc(sizeof(struct mm_domain));
 
 	// Set basic domain attributes.
 	if (attr == NULL) {
@@ -192,7 +192,7 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	}
 
 	// Create and start threads.
-	domain->threads = mm_global_calloc(domain->nthreads, sizeof(struct mm_thread *));
+	domain->threads = mm_memory_xcalloc(domain->nthreads, sizeof(struct mm_thread *));
 	for (mm_thread_t i = 0; i < domain->nthreads; i++) {
 		mm_thread_attr_setdomain(&thread_attr, domain, i);
 		if (attr == NULL || attr->threads_attr == NULL)
@@ -239,10 +239,10 @@ mm_domain_destroy(struct mm_domain *domain)
 		struct mm_thread *thread = domain->threads[i];
 		mm_thread_destroy(thread);
 	}
-	mm_global_free(domain->threads);
+	mm_memory_free(domain->threads);
 
 	// Release the domain;
-	mm_global_free(domain);
+	mm_memory_free(domain);
 
 	LEAVE();
 }

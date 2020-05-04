@@ -25,7 +25,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/settings.h"
-#include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/net/net.h"
 

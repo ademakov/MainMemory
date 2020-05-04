@@ -34,7 +34,7 @@
 #include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
 #include "base/fiber/strand.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
@@ -433,7 +433,7 @@ static void
 mm_daemon_cleanup(void)
 {
 	if (mm_log_file_name != NULL)
-		mm_global_free(mm_log_file_name);
+		mm_memory_free(mm_log_file_name);
 }
 
 void NONNULL(2)
@@ -486,7 +486,7 @@ mm_set_daemon_mode(const char *log_file)
 
 	VERIFY(mm_log_file_name == NULL);
 	if (log_file != NULL) {
-		mm_log_file_name = mm_global_strdup(log_file);
+		mm_log_file_name = mm_memory_strdup(log_file);
 		mm_atexit(mm_daemon_cleanup);
 	}
 

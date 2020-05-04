@@ -23,7 +23,7 @@
 #include "base/report.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "base/memory/global.h"
+#include "base/memory/arena.h"
 
 static char mm_conf_buffer[1024];
 
@@ -84,7 +84,7 @@ mm_conf_load(const char *name)
 	}
 
 	struct mm_json_reader reader;
-	mm_json_reader_prepare(&reader, &mm_global_arena);
+	mm_json_reader_prepare(&reader, &mm_memory_xarena);
 	mm_json_token_t token = mm_conf_next(fd, name, &reader);
 	if (token != MM_JSON_START_OBJECT)
 		mm_fatal(0, "configuration file: %s: invalid data", name);

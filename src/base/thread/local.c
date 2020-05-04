@@ -23,7 +23,7 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/thread/domain.h"
 #include "base/util/libcall.h"
 
@@ -53,7 +53,7 @@ mm_thread_local_create_chunk(struct mm_domain *domain)
 {
 	size_t size = MM_THREAD_LOCAL_CHUNK_HEAD + domain->nthreads * MM_THREAD_LOCAL_CHUNK_SIZE;
 
-	struct mm_thread_local_chunk *chunk = mm_global_alloc(size);
+	struct mm_thread_local_chunk *chunk = mm_memory_xalloc(size);
 	chunk->used = 0;
 
 	return chunk;
@@ -80,14 +80,14 @@ mm_thread_local_term(struct mm_domain *domain)
 	while (!mm_queue_empty(&domain->per_thread_entry_list)) {
 		struct mm_qlink *link = mm_queue_remove(&domain->per_thread_entry_list);
 		struct mm_thread_local_entry *entry = containerof(link, struct mm_thread_local_entry, link);
-		mm_global_free(entry);
+		mm_memory_free(entry);
 	}
 
 	// Release all data chunks.
 	while (!mm_queue_empty(&domain->per_thread_chunk_list)) {
 		struct mm_qlink *link = mm_queue_remove(&domain->per_thread_chunk_list);
 		struct mm_thread_local_chunk *chunk = containerof(link, struct mm_thread_local_chunk, link);
-		mm_global_free(chunk);
+		mm_memory_free(chunk);
 	}
 }
 
@@ -98,8 +98,8 @@ mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 	ASSERT(size <= MM_THREAD_LOCAL_CHUNK_SIZE);
 
 	// Allocate the info entry.
-	struct mm_thread_local_entry *entry = mm_global_alloc(sizeof(struct mm_thread_local_entry));
-	entry->name = mm_global_strdup(name);
+	struct mm_thread_local_entry *entry = mm_memory_xalloc(sizeof(struct mm_thread_local_entry));
+	entry->name = mm_memory_strdup(name);
 	entry->size = size;
 
 	// Round the size to maintain the required alignment.
@@ -149,7 +149,7 @@ mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 
 	// Release the discarded chunk at last.
 	if (discard_chunk != NULL)
-		mm_global_free(discard_chunk);
+		mm_memory_free(discard_chunk);
 
 	return entry->base;
 }

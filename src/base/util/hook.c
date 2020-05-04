@@ -21,7 +21,7 @@
 
 #include "base/list.h"
 #include "base/report.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 
 struct mm_hook_link0
 {
@@ -41,7 +41,7 @@ struct mm_hook_link1
 static struct mm_hook_link0 *
 mm_hook_create_link0(mm_hook_rtn0 proc)
 {
-	struct mm_hook_link0 *link = mm_global_alloc(sizeof(struct mm_hook_link0));
+	struct mm_hook_link0 *link = mm_memory_xalloc(sizeof(struct mm_hook_link0));
 	link->arity = 0;
 	link->proc = proc;
 	return link;
@@ -50,7 +50,7 @@ mm_hook_create_link0(mm_hook_rtn0 proc)
 static struct mm_hook_link1 *
 mm_hook_create_link1(mm_hook_rtn1 proc, void *data)
 {
-	struct mm_hook_link1 *link = mm_global_alloc(sizeof(struct mm_hook_link1));
+	struct mm_hook_link1 *link = mm_memory_xalloc(sizeof(struct mm_hook_link1));
 	link->arity = 1;
 	link->proc = proc;
 	link->data = data;
@@ -80,7 +80,7 @@ mm_hook_call(struct mm_queue *hook, bool free)
 
 		mm_hook_call_link(link);
 		if (free)
-			mm_global_free(link);
+			mm_memory_free(link);
 
 		link = next;
 	}
@@ -123,7 +123,7 @@ mm_hook_free(struct mm_queue *hook)
 	struct mm_qlink *link = mm_queue_head(hook);
 	while (link != NULL) {
 		struct mm_qlink *next = link->next;
-		mm_global_free(link);
+		mm_memory_free(link);
 		link = next;
 	}
 

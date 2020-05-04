@@ -24,7 +24,6 @@
 #include "base/format.h"
 #include "base/logger.h"
 #include "base/fiber/fiber.h"
-#include "base/memory/global.h"
 #include "base/thread/thread.h"
 
 #include <stdarg.h>
@@ -277,7 +276,7 @@ mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict 
 {
 	va_list va;
 	va_start(va, fmt);
-	context->owner = mm_vformat(&mm_global_arena, fmt, va);
+	context->owner = mm_vformat(&mm_memory_xarena, fmt, va);
 	va_end(va);
 
 	context->level = 0;
@@ -287,7 +286,7 @@ mm_trace_context_prepare(struct mm_trace_context *context, const char *restrict 
 void NONNULL(1)
 mm_trace_context_cleanup(struct mm_trace_context *context)
 {
-	mm_arena_free(&mm_global_arena, context->owner);
+	mm_arena_free(&mm_memory_xarena, context->owner);
 }
 
 #endif

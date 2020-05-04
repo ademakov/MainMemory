@@ -23,7 +23,8 @@
 #include "base/hashmap.h"
 #include "base/report.h"
 #include "base/scan.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
+#include "base/memory/arena.h"
 
 struct mm_settings_entry
 {
@@ -40,10 +41,10 @@ static void
 mm_settings_map_free(struct mm_hashmap *map UNUSED, struct mm_hashmap_entry *hep)
 {
 	struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
-	mm_global_free((char *) sep->entry.key);
+	mm_memory_free((char *) sep->entry.key);
 	if (sep->value != NULL && sep->value != mm_settings_empty)
-		mm_global_free((char *) sep->value);
-	mm_global_free(sep);
+		mm_memory_free((char *) sep->value);
+	mm_memory_free(sep);
 }
 
 static void
@@ -65,7 +66,7 @@ mm_settings_init(void)
 {
 	ENTER();
 
-	mm_hashmap_prepare(&mm_settings_map, &mm_global_arena);
+	mm_hashmap_prepare(&mm_settings_map, &mm_memory_xarena);
 	mm_atexit(mm_settings_cleanup);
 
 	LEAVE();
@@ -81,8 +82,8 @@ mm_settings_set_info(const char *key, mm_settings_info_t info)
 		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
 		sep->info = info;
 	} else {
-		struct mm_settings_entry *sep = mm_global_alloc(sizeof(struct mm_settings_entry));
-		mm_hashmap_setkey(&sep->entry, mm_global_memdup(key, len), len);
+		struct mm_settings_entry *sep = mm_memory_xalloc(sizeof(struct mm_settings_entry));
+		mm_hashmap_setkey(&sep->entry, mm_memory_memdup(key, len), len);
 		mm_hashmap_insert(&mm_settings_map, &sep->entry);
 		sep->value = NULL;
 		sep->info = info;
@@ -118,20 +119,20 @@ mm_settings_set(const char *key, const char *value, bool overwrite)
 				if (!overwrite)
 					return;
 				if (sep->value != mm_settings_empty)
-					mm_global_free((char *) sep->value);
+					mm_memory_free((char *) sep->value);
 			}
 		} else {
-			sep = mm_global_alloc(sizeof(struct mm_settings_entry));
-			mm_hashmap_setkey(&sep->entry, mm_global_memdup(key, len), len);
+			sep = mm_memory_xalloc(sizeof(struct mm_settings_entry));
+			mm_hashmap_setkey(&sep->entry, mm_memory_memdup(key, len), len);
 			mm_hashmap_insert(&mm_settings_map, &sep->entry);
 			sep->info = MM_SETTINGS_UNKNOWN;
 		}
-		sep->value = *value ? mm_global_strdup(value) : mm_settings_empty;
+		sep->value = *value ? mm_memory_strdup(value) : mm_settings_empty;
 	} else if (hep != NULL && !overwrite) {
 		struct mm_settings_entry *sep = containerof(hep, struct mm_settings_entry, entry);
 		if (sep->info != MM_SETTINGS_UNKNOWN && sep->value != NULL) {
 			if (sep->value != mm_settings_empty)
-				mm_global_free((char *) sep->value);
+				mm_memory_free((char *) sep->value);
 			sep->value = NULL;
 		} else {
 			mm_hashmap_remove(&mm_settings_map, hep);

@@ -20,7 +20,7 @@
 #include "base/thread/thread.h"
 
 #include "base/logger.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/thread/domain.h"
 #include "base/thread/ident.h"
 
@@ -253,7 +253,7 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 	int rc;
 
 	// Create a thread object.
-	struct mm_thread *thread = mm_global_alloc(sizeof(struct mm_thread));
+	struct mm_thread *thread = mm_memory_xalloc(sizeof(struct mm_thread));
 	thread->start = start;
 	thread->start_arg = start_arg;
 
@@ -331,7 +331,7 @@ mm_thread_destroy(struct mm_thread *thread)
 	mm_trace_context_cleanup(&thread->trace);
 #endif
 
-	mm_global_free(thread);
+	mm_memory_free(thread);
 
 	LEAVE();
 }

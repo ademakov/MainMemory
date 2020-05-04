@@ -21,7 +21,7 @@
 
 #include "base/logger.h"
 #include "base/event/listener.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/memory/memory.h"
 
 #define MM_DISPATCH_EVENT_QUEUE_SIZE		(2 * MM_EVENT_BACKEND_NEVENTS)
@@ -45,7 +45,7 @@ void NONNULL(1)
 mm_event_dispatch_attr_cleanup(struct mm_event_dispatch_attr *attr)
 {
 	if (attr->listeners_attr != NULL)
-		mm_global_free(attr->listeners_attr);
+		mm_memory_free(attr->listeners_attr);
 }
 
 void NONNULL(1)
@@ -55,7 +55,7 @@ mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thre
 
 	attr->nlisteners = n;
 	if (attr->listeners_attr != NULL) {
-		mm_global_free(attr->listeners_attr);
+		mm_memory_free(attr->listeners_attr);
 		attr->listeners_attr = NULL;
 	}
 }
@@ -82,7 +82,7 @@ mm_event_dispatch_attr_setxxx(struct mm_event_dispatch_attr *attr, mm_thread_t n
 		mm_fatal(0, "invalid event listener number: %d (max is %d)", n, attr->nlisteners);
 
 	if (attr->listeners_attr == NULL) {
-		attr->listeners_attr = mm_global_calloc(attr->nlisteners, sizeof(struct mm_event_dispatch_listener_attr));
+		attr->listeners_attr = mm_memory_xcalloc(attr->nlisteners, sizeof(struct mm_event_dispatch_listener_attr));
 	}
 
 	attr->listeners_attr[n].xxx = xxx;

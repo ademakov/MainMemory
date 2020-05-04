@@ -61,11 +61,10 @@ libmainbase_la_SOURCES = \
 	fiber/wait.c fiber/wait.h \
 	memory/alloc.c memory/alloc.h \
 	memory/allocx.h \
-	memory/arena.h \
+	memory/arena.h memory/arena.c \
 	memory/buffer.c memory/buffer.h \
 	memory/cache.c memory/cache.h \
 	memory/chunk.c memory/chunk.h \
-	memory/global.c memory/global.h \
 	memory/malloc.c memory/malloc.h \
 	memory/memory.c memory/memory.h \
 	memory/pool.c memory/pool.h \

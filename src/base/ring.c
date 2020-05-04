@@ -20,7 +20,7 @@
 #include "base/ring.h"
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 
 /**********************************************************************
  * Common Ring Buffer Header.
@@ -59,7 +59,7 @@ mm_ring_spsc_create(size_t size, uint8_t locks)
 	nbytes += size * sizeof(void *);
 
 	// Create the ring.
-	struct mm_ring_spsc *ring = mm_global_aligned_alloc(MM_CACHELINE, nbytes);
+	struct mm_ring_spsc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
 	mm_ring_spsc_prepare(ring, size, locks);
 
 	return ring;
@@ -68,7 +68,7 @@ mm_ring_spsc_create(size_t size, uint8_t locks)
 void NONNULL(1)
 mm_ring_spsc_destroy(struct mm_ring_spsc *ring)
 {
-	mm_global_free(ring);
+	mm_memory_free(ring);
 }
 
 void NONNULL(1)
@@ -94,7 +94,7 @@ mm_ring_mpmc_create(size_t size)
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the ring.
-	struct mm_ring_mpmc *ring = mm_global_aligned_alloc(MM_CACHELINE, nbytes);
+	struct mm_ring_mpmc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
 	mm_ring_mpmc_prepare(ring, size);
 
 	return ring;
@@ -103,7 +103,7 @@ mm_ring_mpmc_create(size_t size)
 void NONNULL(1)
 mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
 {
-	mm_global_free(ring);
+	mm_memory_free(ring);
 }
 
 void NONNULL(1)

@@ -27,7 +27,8 @@
 #include "base/stdcall.h"
 #include "base/event/nonblock.h"
 #include "base/fiber/fiber.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
+#include "base/memory/arena.h"
 #include "base/memory/memory.h"
 #include "base/memory/pool.h"
 
@@ -291,9 +292,9 @@ mm_net_shutdown_server(struct mm_net_server *srv)
 		mm_net_close_server_socket(&srv->addr, srv->event.fd);
 
 	// Free all the server data.
-	mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
-	mm_global_free(srv->name);
-	mm_global_free(srv);
+	mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
+	mm_memory_free(srv->name);
+	mm_memory_free(srv);
 
 	LEAVE();
 }
@@ -326,7 +327,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	}
 
 	// Allocate a server.
-	struct mm_net_server *srv = mm_global_alloc(sizeof(struct mm_net_server));
+	struct mm_net_server *srv = mm_memory_xalloc(sizeof(struct mm_net_server));
 
 	// Initialize its data.
 	srv->proto = proto;
@@ -334,7 +335,7 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	srv->event.flags = MM_EVENT_REGULAR_INPUT;
 	srv->name = NULL;
 	mm_event_prepare_io(&srv->tasks, proto->reader, proto->writer);
-	mm_bitset_prepare(&srv->affinity, &mm_global_arena, 0);
+	mm_bitset_prepare(&srv->affinity, &mm_memory_xarena, 0);
 
 	// Register the server stop hook.
 	mm_common_stop_hook_1((void (*)(void *)) mm_net_shutdown_server, srv);
@@ -403,7 +404,7 @@ mm_net_create_unix_server(const char *name, struct mm_net_proto *proto,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server(proto);
-	srv->name = mm_format(&mm_global_arena, "%s (%s)", name, path);
+	srv->name = mm_format(&mm_memory_xarena, "%s (%s)", name, path);
 	if (!mm_net_set_unix_addr(&srv->addr, path))
 		mm_fatal(0, "failed to create '%s' server with path '%s'", name, path);
 
@@ -418,7 +419,7 @@ mm_net_create_inet_server(const char *name, struct mm_net_proto *proto,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server(proto);
-	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_format(&mm_memory_xarena, "%s (%s:%d)", name, addrstr, port);
 	if (!mm_net_set_inet_addr(&srv->addr, addrstr, port))
 		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
 
@@ -433,7 +434,7 @@ mm_net_create_inet6_server(const char *name, struct mm_net_proto *proto,
 	ENTER();
 
 	struct mm_net_server *srv = mm_net_alloc_server(proto);
-	srv->name = mm_format(&mm_global_arena, "%s (%s:%d)", name, addrstr, port);
+	srv->name = mm_format(&mm_memory_xarena, "%s (%s:%d)", name, addrstr, port);
 	if (!mm_net_set_inet6_addr(&srv->addr, addrstr, port))
 		mm_fatal(0, "failed to create '%s' server with address '%s:%d'", name, addrstr, port);
 
@@ -451,8 +452,8 @@ mm_net_set_server_affinity(struct mm_net_server *srv, struct mm_bitset *mask)
 	if (mm_bitset_size(&srv->affinity) == size) {
 		mm_bitset_clear_all(&srv->affinity);
 	} else {
-		mm_bitset_cleanup(&srv->affinity, &mm_global_arena);
-		mm_bitset_prepare(&srv->affinity, &mm_global_arena, size);
+		mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
+		mm_bitset_prepare(&srv->affinity, &mm_memory_xarena, size);
 	}
 
 	// Assign the new affinity mask value.

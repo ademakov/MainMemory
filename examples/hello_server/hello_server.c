@@ -21,7 +21,7 @@
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "base/memory/global.h"
+#include "base/memory/alloc.h"
 #include "base/net/net.h"
 
 #include <fcntl.h>
@@ -68,7 +68,7 @@ read_hello_message(const char *file)
 		mm_fatal(errno, "fstat()");
 
 	hello_len = st.st_size;
-	char *buffer = mm_global_alloc(hello_len);
+	char *buffer = mm_memory_xalloc(hello_len);
 	hello_msg = buffer;
 
 	if (mm_read(fd, buffer, hello_len) != (ssize_t) hello_len)

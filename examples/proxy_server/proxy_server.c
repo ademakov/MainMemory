@@ -22,7 +22,6 @@
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/net/netbuf.h"
 

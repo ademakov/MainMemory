@@ -25,7 +25,6 @@
 #include "base/logger.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/chunk.h"
-#include "base/memory/global.h"
 #include "base/memory/memory.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"
