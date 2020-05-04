@@ -22,6 +22,10 @@
 
 #include "common.h"
 
+/**********************************************************************
+ * Basic memory allocation routines.
+ **********************************************************************/
+
 void * MALLOC
 mm_memory_alloc(size_t size);
 
@@ -54,5 +58,21 @@ mm_memory_xrealloc(void *ptr, size_t size);
 
 void
 mm_memory_free(void *ptr);
+
+/**********************************************************************
+ * Auxiliary memory allocation routines.
+ **********************************************************************/
+
+static inline void *
+mm_memory_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_memory_xalloc(size), ptr, size);
+}
+
+static inline char *
+mm_memory_strdup(const char *ptr)
+{
+	return mm_memory_memdup(ptr, strlen(ptr) + 1);
+}
 
 #endif /* BASE_MEMORY_ALLOC_H */
