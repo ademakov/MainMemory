@@ -156,6 +156,30 @@ mm_context_alloc(struct mm_context *context, size_t size)
 	return mm_memory_cache_alloc(&context->cache, size);
 }
 
+static inline void * NONNULL(1) MALLOC
+mm_context_zalloc(struct mm_context *context, size_t size)
+{
+	return mm_memory_cache_zalloc(&context->cache, size);
+}
+
+static inline void * NONNULL(1) MALLOC
+mm_context_aligned_alloc(struct mm_context *context, size_t align, size_t size)
+{
+	return mm_memory_cache_aligned_alloc(&context->cache, align, size);
+}
+
+static inline void * NONNULL(1) MALLOC
+mm_context_calloc(struct mm_context *context, size_t count, size_t size)
+{
+	return mm_memory_cache_calloc(&context->cache, count, size);
+}
+
+static inline void * NONNULL(1) MALLOC
+mm_context_realloc(struct mm_context *context, void *ptr, size_t size)
+{
+	return mm_memory_cache_realloc(&context->cache, ptr, size);
+}
+
 static inline void NONNULL(1, 2)
 mm_context_free(struct mm_context *context, void *ptr)
 {
