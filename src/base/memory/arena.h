@@ -1,7 +1,7 @@
 /*
  * base/memory/arena.h - MainMemory memory arenas.
  *
- * Copyright (C) 2014  Aleksey Demakov
+ * Copyright (C) 2014-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -89,5 +89,15 @@ mm_arena_strdup(mm_arena_t arena, const char *ptr)
 {
 	return mm_arena_memdup(arena, ptr, strlen(ptr) + 1);
 }
+
+/**********************************************************************
+ *  Memory Arena Implementations.
+ **********************************************************************/
+
+/* Normal allocation functions. */
+extern const struct mm_arena mm_memory_uarena;
+
+/* X-style allocation functions. */
+extern const struct mm_arena mm_memory_xarena;
 
 #endif /* BASE_MEMORY_ARENA_H */
