@@ -2,7 +2,7 @@
 #include <stdlib.h>
 
 #include "base/json.h"
-#include "base/memory/global.h"
+#include "base/memory/arena.h"
 
 static int fail = 0;
 
@@ -49,7 +49,7 @@ void
 test_single(const char *text, mm_json_token_t *tokens)
 {
 	struct mm_json_reader reader;
-	mm_json_reader_prepare(&reader, &mm_global_arena);
+	mm_json_reader_prepare(&reader, &mm_memory_xarena);
 
 	mm_json_reader_feed(&reader, text, strlen(text));
 	for (size_t i = 0; tokens[i] != (mm_json_token_t) -1; i++) {

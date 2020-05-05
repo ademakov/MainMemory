@@ -3,7 +3,7 @@
 
 #include "common.h"
 #include "base/bitset.h"
-#include "base/memory/global.h"
+#include "base/memory/arena.h"
 
 #define test(v, e)						\
 	do {							\
@@ -25,7 +25,7 @@ test_find_small(void)
 {
 	struct mm_bitset set;
 
-	mm_bitset_prepare(&set, &mm_global_arena, 64);
+	mm_bitset_prepare(&set, &mm_memory_xarena, 64);
 	test(mm_bitset_find(&set, 0), MM_BITSET_NONE);
 
 	mm_bitset_set(&set, 0);
@@ -43,7 +43,7 @@ test_find_small(void)
 	test(mm_bitset_find(&set, 2), 32);
 	test(mm_bitset_find(&set, 33), MM_BITSET_NONE);
 
-	mm_bitset_cleanup(&set, &mm_global_arena);
+	mm_bitset_cleanup(&set, &mm_memory_xarena);
 }
 
 void
@@ -51,7 +51,7 @@ test_find_large(void)
 {
 	struct mm_bitset set;
 
-	mm_bitset_prepare(&set, &mm_global_arena, 1024);
+	mm_bitset_prepare(&set, &mm_memory_xarena, 1024);
 	test(mm_bitset_find(&set, 0), MM_BITSET_NONE);
 
 	mm_bitset_set(&set, 0);
@@ -76,7 +76,7 @@ test_find_large(void)
 	test(mm_bitset_find(&set, 900), 900);
 	test(mm_bitset_find(&set, 901), MM_BITSET_NONE);
 
-	mm_bitset_cleanup(&set, &mm_global_arena);
+	mm_bitset_cleanup(&set, &mm_memory_xarena);
 }
 
 int
