@@ -25,8 +25,8 @@
 
 #include "base/bytes.h"
 #include "base/report.h"
+#include "base/memory/alloc.h"
 #include "base/memory/buffer.h"
-#include "base/memory/memory.h"
 #include "base/net/net.h"
 
 // The logging verbosity level.
@@ -410,7 +410,7 @@ mc_command_append(struct mc_action_storage *action)
 	}
 
 	if (action->own_alter_value)
-		mm_private_free((char *) alter_value);
+		mm_memory_free((char *) alter_value);
 
 	LEAVE();
 }
@@ -450,7 +450,7 @@ mc_command_prepend(struct mc_action_storage *action)
 	}
 
 	if (action->own_alter_value)
-		mm_private_free((char *) alter_value);
+		mm_memory_free((char *) alter_value);
 
 	LEAVE();
 }

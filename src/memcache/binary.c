@@ -23,7 +23,7 @@
 
 #include "base/bytes.h"
 #include "base/report.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #define MC_BINARY_STORAGE_EXTRA_SIZE	(8)
 #define MC_BINARY_DELTA_EXTRA_SIZE	(20)
@@ -220,7 +220,7 @@ mc_binary_concat_command(struct mc_state *state, const struct mc_command_type *t
 		mm_netbuf_radd(&state->sock, value_len);
 		command->action.own_alter_value = false;
 	} else {
-		value = mm_private_alloc(value_len);
+		value = mm_memory_xalloc(value_len);
 		mm_netbuf_read(&state->sock, value, value_len);
 		command->action.own_alter_value = true;
 	}

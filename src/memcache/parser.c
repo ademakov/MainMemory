@@ -21,7 +21,7 @@
 #include "memcache/binary.h"
 #include "memcache/state.h"
 
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 #include "base/net/netbuf.h"
 
 
@@ -142,7 +142,7 @@ mc_parser_scan_value(struct mc_state *state, uint32_t kind)
 			action->alter_value = iter->ptr;
 			iter->ptr += action->value_len;
 		} else {
-			char *value = mm_private_alloc(action->value_len);
+			char *value = mm_memory_xalloc(action->value_len);
 			mm_netbuf_read(&state->sock, value, action->value_len);
 			action->alter_value = value;
 			action->own_alter_value = true;
@@ -656,7 +656,7 @@ again:
 				command->action.new_entry = NULL;
 			}
 			if (command->action.own_alter_value)
-				mm_private_free((char *) command->action.alter_value);
+				mm_memory_free((char *) command->action.alter_value);
 			mc_command_cleanup(&command->base);
 
 			command->base.type = &mc_command_ascii_error;

@@ -22,7 +22,7 @@
 #include "base/runtime.h"
 #include "base/settings.h"
 #include "base/stdcall.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 #include "base/net/netbuf.h"
 
 #include <stdio.h>
@@ -200,7 +200,7 @@ proxy_read(struct proxy_command *command)
 	for (;;) {
 		if ((reply_max - reply_len) < 512) {
 			reply_max *= 2;
-			reply_msg = mm_private_realloc(reply_msg, reply_max);
+			reply_msg = mm_memory_xrealloc(reply_msg, reply_max);
 		}
 
 		char *ptr = reply_msg + reply_len;

@@ -19,7 +19,7 @@
 
 #include "base/memory/buffer.h"
 
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #include <stdio.h>
 
@@ -469,10 +469,10 @@ mm_buffer_vprintf(struct mm_buffer *buf, const char *restrict fmt, va_list va)
 	} else {
 		// It does not fit into the available segment. Use an
 		// intermediate buffer.
-		char *ptr = mm_private_alloc(len + 1);
+		char *ptr = mm_memory_xalloc(len + 1);
 		len = vsnprintf(ptr, len + 1, fmt, va);
 		mm_buffer_write(buf, ptr, len);
-		mm_private_free(ptr);
+		mm_memory_free(ptr);
 	}
 
 	LEAVE();
