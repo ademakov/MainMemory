@@ -112,7 +112,7 @@ main(int ac, char *av[])
 static struct proxy_command *
 command_create(void)
 {
-	struct proxy_command *command = mm_regular_alloc(sizeof(struct proxy_command));
+	struct proxy_command *command = mm_memory_xalloc(sizeof(struct proxy_command));
 	memset(command, 0, sizeof *command);
 	return command;
 }
@@ -122,15 +122,15 @@ static void
 command_destroy(struct proxy_command *command)
 {
 	if (command->reply_msg != NULL)
-		mm_regular_free(command->reply_msg);
-	mm_regular_free(command);
+		mm_memory_free(command->reply_msg);
+	mm_memory_free(command);
 }
 
 // Create a socket that serves an incoming connection.
 static struct mm_net_socket *
 proxy_create(void)
 {
-	struct client_conn *client = mm_regular_alloc(sizeof(struct client_conn));
+	struct client_conn *client = mm_memory_xalloc(sizeof(struct client_conn));
 	mm_netbuf_prepare(&client->sock, 0, 0);
 	mm_list_prepare(&client->commands);
 	return &client->sock.sock;
@@ -147,7 +147,7 @@ proxy_destroy(struct mm_event_fd *sink)
 		command_destroy(command);
 	}
 	mm_netbuf_cleanup(&client->sock);
-	mm_regular_free(client);
+	mm_memory_free(client);
 }
 
 // Parse a command -- get the target IP address and port.
@@ -196,7 +196,7 @@ proxy_read(struct proxy_command *command)
 	}
 
 	size_t reply_len = 0, reply_max = 1024;
-	char *reply_msg = mm_regular_alloc(reply_max);
+	char *reply_msg = mm_memory_xalloc(reply_max);
 	for (;;) {
 		if ((reply_max - reply_len) < 512) {
 			reply_max *= 2;
@@ -209,7 +209,7 @@ proxy_read(struct proxy_command *command)
 		if (n <= 0) {
 			if (n < 0) {
 				mm_error(errno, "Read failure");
-				mm_regular_free(reply_msg);
+				mm_memory_free(reply_msg);
 				reply_msg = NULL;
 				reply_len = 0;
 			}

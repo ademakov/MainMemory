@@ -27,7 +27,7 @@
 #include "base/runtime.h"
 #include "base/task.h"
 #include "base/fiber/fiber.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #include <sys/mman.h>
 
@@ -454,7 +454,7 @@ mc_table_start(const struct mm_memcache_config *config)
 		nentries_increment *= 2;
 
 	// Initialize the table.
-	mc_table.parts = mm_regular_calloc(nparts, sizeof(struct mc_tpart));
+	mc_table.parts = mm_memory_xcalloc(nparts, sizeof(struct mc_tpart));
 	mc_table.nparts = nparts;
 	mc_table.part_bits = nbits;
 	mc_table.part_mask = nparts - 1;
@@ -501,7 +501,7 @@ mc_table_stop(void)
 	}
 
 	// Free the table partitions.
-	mm_regular_free(mc_table.parts);
+	mm_memory_free(mc_table.parts);
 
 	// Compute the reserved address space size.
 	size_t buckets_size = mc_table_buckets_size(mc_table.nparts,

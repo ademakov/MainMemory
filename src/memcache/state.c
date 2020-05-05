@@ -30,7 +30,7 @@ mc_state_create(void)
 {
 	ENTER();
 
-	struct mc_state *state = mm_regular_alloc(sizeof(struct mc_state));
+	struct mc_state *state = mm_memory_xalloc(sizeof(struct mc_state));
 
 	state->command_first = NULL;
 	state->command_last = NULL;
@@ -52,7 +52,7 @@ mc_state_destroy(struct mm_event_fd *sink)
 	struct mc_state *state = containerof(sink, struct mc_state, sock.sock.event);
 
 	mm_netbuf_cleanup(&state->sock);
-	mm_regular_free(state);
+	mm_memory_free(state);
 
 	LEAVE();
 }

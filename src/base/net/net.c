@@ -117,13 +117,13 @@ mm_net_close_server_socket(struct mm_net_addr *addr, int sock)
 static struct mm_net_socket *
 mm_net_socket_alloc(void)
 {
-	return mm_regular_alloc(sizeof(struct mm_net_socket));
+	return mm_memory_xalloc(sizeof(struct mm_net_socket));
 }
 
 static void
 mm_net_socket_free(struct mm_event_fd *sink)
 {
-	mm_regular_free(containerof(sink, struct mm_net_socket, event));
+	mm_memory_free(containerof(sink, struct mm_net_socket, event));
 }
 
 static struct mm_net_socket *

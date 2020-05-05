@@ -465,7 +465,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 {
 	ENTER();
 
-	mm_pool_prepare_low(pool, name, &mm_regular_space.xarena, item_size);
+	mm_pool_prepare_low(pool, name, &mm_memory_xarena, item_size);
 
 	pool->shared = true;
 	pool->global = false;

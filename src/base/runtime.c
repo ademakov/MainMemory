@@ -313,7 +313,7 @@ mm_regular_boot(mm_value_t arg)
 	ENTER();
 
 	// Allocate and setup the execution context.
-	struct mm_context *const context = mm_regular_alloc(sizeof(struct mm_context));
+	struct mm_context *const context = mm_memory_xalloc(sizeof(struct mm_context));
 	mm_context_prepare(context, arg, mm_regular_nthreads * 32);
 	mm_context_table[arg] = context;
 	__mm_context_self = context;
@@ -350,7 +350,7 @@ mm_regular_boot(mm_value_t arg)
 	mm_context_stats_store[arg] = context->stats;
 	mm_task_stats_store[arg] = context->tasks.stats;
 	mm_context_cleanup(context);
-	mm_regular_free(context);
+	mm_memory_free(context);
 
 	LEAVE();
 	return 0;
