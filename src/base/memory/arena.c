@@ -52,23 +52,77 @@ mm_memory_arena_xrealloc(const struct mm_arena *arena UNUSED, void *ptr, size_t 
 {
 	return mm_memory_xrealloc(ptr, size);
 }
+
 static void
 mm_memory_arena_free(const struct mm_arena *arena UNUSED, void *ptr)
 {
 	mm_memory_free(ptr);
 }
 
-MM_ARENA_VTABLE(mm_memory_uarena_vtable,
+static void *
+mm_memory_arena_fixed_alloc(const struct mm_arena *arena UNUSED, size_t size)
+{
+	return mm_memory_fixed_alloc(size);
+}
+static void *
+mm_memory_arena_fixed_calloc(const struct mm_arena *arena UNUSED, size_t count, size_t size)
+{
+	return mm_memory_fixed_calloc(count, size);
+}
+static void *
+mm_memory_arena_fixed_realloc(const struct mm_arena *arena UNUSED, void *ptr, size_t size)
+{
+	return mm_memory_fixed_realloc(ptr, size);
+}
+
+static void *
+mm_memory_arena_fixed_xalloc(const struct mm_arena *arena UNUSED, size_t size)
+{
+	return mm_memory_fixed_xalloc(size);
+}
+static void *
+mm_memory_arena_fixed_xcalloc(const struct mm_arena *arena UNUSED, size_t count, size_t size)
+{
+	return mm_memory_fixed_xcalloc(count, size);
+}
+static void *
+mm_memory_arena_fixed_xrealloc(const struct mm_arena *arena UNUSED, void *ptr, size_t size)
+{
+	return mm_memory_fixed_xrealloc(ptr, size);
+}
+
+static void
+mm_memory_arena_fixed_free(const struct mm_arena *arena UNUSED, void *ptr)
+{
+	mm_memory_fixed_free(ptr);
+}
+
+MM_ARENA_VTABLE(mm_memory_arena_uvtable,
 	mm_memory_arena_alloc,
 	mm_memory_arena_calloc,
 	mm_memory_arena_realloc,
 	mm_memory_arena_free);
 
-MM_ARENA_VTABLE(mm_memory_xarena_vtable,
+MM_ARENA_VTABLE(mm_memory_arena_xvtable,
 	mm_memory_arena_xalloc,
 	mm_memory_arena_xcalloc,
 	mm_memory_arena_xrealloc,
 	mm_memory_arena_free);
 
-const struct mm_arena mm_memory_uarena = { .vtable = &mm_memory_uarena_vtable };
-const struct mm_arena mm_memory_xarena = { .vtable = &mm_memory_xarena_vtable };
+MM_ARENA_VTABLE(mm_memory_arena_fixed_uvtable,
+	mm_memory_arena_fixed_alloc,
+	mm_memory_arena_fixed_calloc,
+	mm_memory_arena_fixed_realloc,
+	mm_memory_arena_fixed_free);
+
+MM_ARENA_VTABLE(mm_memory_arena_fixed_xvtable,
+	mm_memory_arena_fixed_xalloc,
+	mm_memory_arena_fixed_xcalloc,
+	mm_memory_arena_fixed_xrealloc,
+	mm_memory_arena_fixed_free);
+
+const struct mm_arena mm_memory_uarena = { .vtable = &mm_memory_arena_uvtable };
+const struct mm_arena mm_memory_xarena = { .vtable = &mm_memory_arena_xvtable };
+
+const struct mm_arena mm_memory_fixed_uarena = { .vtable = &mm_memory_arena_fixed_uvtable };
+const struct mm_arena mm_memory_fixed_xarena = { .vtable = &mm_memory_arena_fixed_xvtable };

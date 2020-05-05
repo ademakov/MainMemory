@@ -100,4 +100,10 @@ extern const struct mm_arena mm_memory_uarena;
 /* X-style allocation functions. */
 extern const struct mm_arena mm_memory_xarena;
 
+/* 'Fixed' allocation functions. */
+extern const struct mm_arena mm_memory_fixed_uarena;
+
+/* X-style 'fixed' allocation functions. */
+extern const struct mm_arena mm_memory_fixed_xarena;
+
 #endif /* BASE_MEMORY_ARENA_H */
