@@ -60,6 +60,43 @@ void
 mm_memory_free(void *ptr);
 
 /**********************************************************************
+ * 'Fixed' memory allocation routines -- survive context destruction.
+ **********************************************************************/
+
+void * MALLOC
+mm_memory_fixed_alloc(size_t size);
+
+void * MALLOC
+mm_memory_fixed_zalloc(size_t size);
+
+void * MALLOC
+mm_memory_fixed_aligned_alloc(size_t align, size_t size);
+
+void * MALLOC
+mm_memory_fixed_calloc(size_t count, size_t size);
+
+void * MALLOC
+mm_memory_fixed_realloc(void *ptr, size_t size);
+
+void * MALLOC
+mm_memory_fixed_xalloc(size_t size);
+
+void * MALLOC
+mm_memory_fixed_xzalloc(size_t size);
+
+void * MALLOC
+mm_memory_fixed_aligned_xalloc(size_t align, size_t size);
+
+void * MALLOC
+mm_memory_fixed_xcalloc(size_t count, size_t size);
+
+void * MALLOC
+mm_memory_fixed_xrealloc(void *ptr, size_t size);
+
+void
+mm_memory_fixed_free(void *ptr);
+
+/**********************************************************************
  * Auxiliary memory allocation routines.
  **********************************************************************/
 
@@ -73,6 +110,18 @@ static inline char *
 mm_memory_strdup(const char *ptr)
 {
 	return mm_memory_memdup(ptr, strlen(ptr) + 1);
+}
+
+static inline void *
+mm_memory_fixed_memdup(const void *ptr, size_t size)
+{
+	return memcpy(mm_memory_fixed_xalloc(size), ptr, size);
+}
+
+static inline char *
+mm_memory_fixed_strdup(const char *ptr)
+{
+	return mm_memory_fixed_memdup(ptr, strlen(ptr) + 1);
 }
 
 #endif /* BASE_MEMORY_ALLOC_H */

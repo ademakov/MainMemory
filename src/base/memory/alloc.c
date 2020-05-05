@@ -21,7 +21,6 @@
 
 #include "base/async.h"
 #include "base/context.h"
-#include "base/exit.h"
 #include "base/lock.h"
 #include "base/report.h"
 #include "base/memory/cache.h"
@@ -33,73 +32,15 @@
 #define MM_FREE_FATAL_THRESHOLD	(4096)
 
 // Global memory cache used to bootsrtrap per-context caches.
-static struct mm_memory_cache mm_memory_initial_cache;
-static mm_lock_t mm_memory_initial_cache_lock = MM_LOCK_INIT;
+static struct mm_memory_cache mm_memory_fixed_cache;
+static mm_lock_t mm_memory_fixed_cache_lock = MM_LOCK_INIT;
 
 static void
-mm_memory_initial_cache_ensure(void)
+mm_memory_fixed_cache_ensure(void)
 {
-	if (unlikely(mm_memory_initial_cache.active == NULL)) {
-		mm_memory_cache_prepare(&mm_memory_initial_cache, NULL);
+	if (unlikely(mm_memory_fixed_cache.active == NULL)) {
+		mm_memory_cache_prepare(&mm_memory_fixed_cache, NULL);
 	}
-}
-
-static void * MALLOC
-mm_memory_initial_alloc(size_t size)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_initial_cache_ensure();
-	void *ptr = mm_memory_cache_alloc(&mm_memory_initial_cache, size);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
-	return ptr;
-}
-
-static void * MALLOC
-mm_memory_initial_zalloc(size_t size)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_initial_cache_ensure();
-	void *ptr = mm_memory_cache_zalloc(&mm_memory_initial_cache, size);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
-	return ptr;
-}
-
-static void * MALLOC
-mm_memory_initial_aligned_alloc(size_t align, size_t size)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_initial_cache_ensure();
-	void *ptr = mm_memory_cache_aligned_alloc(&mm_memory_initial_cache, align, size);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
-	return ptr;
-}
-
-static void * MALLOC
-mm_memory_initial_calloc(size_t count, size_t size)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_initial_cache_ensure();
-	void *ptr = mm_memory_cache_calloc(&mm_memory_initial_cache, count, size);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
-	return ptr;
-}
-
-static void * MALLOC
-mm_memory_initial_realloc(void *ptr, size_t size)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_initial_cache_ensure();
-	ptr = mm_memory_cache_realloc(&mm_memory_initial_cache, ptr, size);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
-	return ptr;
-}
-
-static void
-mm_memory_initial_free(void *ptr)
-{
-	mm_global_lock(&mm_memory_initial_cache_lock);
-	mm_memory_cache_free(&mm_memory_initial_cache, ptr);
-	mm_global_unlock(&mm_memory_initial_cache_lock);
 }
 
 static void
@@ -129,6 +70,117 @@ mm_memory_remote_context_free(struct mm_context *context, void *ptr)
 	}
 }
 
+/**********************************************************************
+ * 'Fixed' memory allocation routines -- survive context destruction.
+ **********************************************************************/
+
+void * MALLOC
+mm_memory_fixed_alloc(size_t size)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_fixed_cache_ensure();
+	void *ptr = mm_memory_cache_alloc(&mm_memory_fixed_cache, size);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_zalloc(size_t size)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_fixed_cache_ensure();
+	void *ptr = mm_memory_cache_zalloc(&mm_memory_fixed_cache, size);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_aligned_alloc(size_t align, size_t size)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_fixed_cache_ensure();
+	void *ptr = mm_memory_cache_aligned_alloc(&mm_memory_fixed_cache, align, size);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_calloc(size_t count, size_t size)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_fixed_cache_ensure();
+	void *ptr = mm_memory_cache_calloc(&mm_memory_fixed_cache, count, size);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_realloc(void *ptr, size_t size)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_fixed_cache_ensure();
+	ptr = mm_memory_cache_realloc(&mm_memory_fixed_cache, ptr, size);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_xalloc(size_t size)
+{
+	void *ptr = mm_memory_fixed_alloc(size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_xzalloc(size_t size)
+{
+	void *ptr = mm_memory_fixed_zalloc(size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_aligned_xalloc(size_t align, size_t size)
+{
+	void *ptr = mm_memory_fixed_aligned_alloc(align, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_xcalloc(size_t count, size_t size)
+{
+	void *ptr = mm_memory_fixed_calloc(count, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating (%zu * %zu) bytes of memory", count, size);
+	return ptr;
+}
+
+void * MALLOC
+mm_memory_fixed_xrealloc(void *ptr, size_t size)
+{
+	ptr = mm_memory_fixed_realloc(ptr, size);
+	if (unlikely(ptr == NULL))
+		mm_fatal(errno, "error allocating %zu bytes of memory", size);
+	return ptr;
+}
+
+void
+mm_memory_fixed_free(void *ptr)
+{
+	mm_global_lock(&mm_memory_fixed_cache_lock);
+	mm_memory_cache_free(&mm_memory_fixed_cache, ptr);
+	mm_global_unlock(&mm_memory_fixed_cache_lock);
+}
+
+/**********************************************************************
+ * Basic memory allocation routines.
+ **********************************************************************/
+
 void * MALLOC
 mm_memory_alloc(size_t size)
 {
@@ -136,7 +188,7 @@ mm_memory_alloc(size_t size)
 	if (context != NULL) {
 		return mm_context_alloc(context, size);
 	} else {
-		return mm_memory_initial_alloc(size);
+		return mm_memory_fixed_alloc(size);
 	}
 }
 
@@ -147,7 +199,7 @@ mm_memory_zalloc(size_t size)
 	if (context != NULL) {
 		return mm_context_zalloc(context, size);
 	} else {
-		return mm_memory_initial_zalloc(size);
+		return mm_memory_fixed_zalloc(size);
 	}
 }
 
@@ -158,7 +210,7 @@ mm_memory_aligned_alloc(size_t align, size_t size)
 	if (context != NULL) {
 		return mm_context_aligned_alloc(context, align, size);
 	} else {
-		return mm_memory_initial_aligned_alloc(align, size);
+		return mm_memory_fixed_aligned_alloc(align, size);
 	}
 }
 
@@ -169,7 +221,7 @@ mm_memory_calloc(size_t count, size_t size)
 	if (context != NULL) {
 		return mm_context_calloc(context, count, size);
 	} else {
-		return mm_memory_initial_calloc(count, size);
+		return mm_memory_fixed_calloc(count, size);
 	}
 }
 
@@ -180,7 +232,7 @@ mm_memory_realloc(void *ptr, size_t size)
 	if (context != NULL) {
 		return mm_context_realloc(context, ptr, size);
 	} else {
-		return mm_memory_initial_realloc(ptr, size);
+		return mm_memory_fixed_realloc(ptr, size);
 	}
 }
 
@@ -244,6 +296,6 @@ mm_memory_free(void *ptr)
 			mm_memory_remote_context_free(span->context, ptr);
 		}
 	} else {
-		mm_memory_initial_free(ptr);
+		mm_memory_fixed_free(ptr);
 	}
 }
