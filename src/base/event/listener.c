@@ -22,7 +22,7 @@
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #if ENABLE_MACH_SEMAPHORE
 # include <mach/mach_init.h>
@@ -299,7 +299,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->dispatch = dispatch;
 
 	// Prepare the timer queue.
-	mm_timeq_prepare(&listener->timer_queue, &mm_common_space.xarena);
+	mm_timeq_prepare(&listener->timer_queue, &mm_memory_xarena);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

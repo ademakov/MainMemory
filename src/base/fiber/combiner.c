@@ -22,7 +22,7 @@
 #include "base/bitops.h"
 #include "base/report.h"
 #include "base/fiber/fiber.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 #include "base/memory/space.h"
 #include "base/thread/domain.h"
 
@@ -40,7 +40,7 @@ mm_fiber_combiner_create(const char *name, size_t size, size_t handoff)
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the combiner.
-	struct mm_fiber_combiner *combiner = mm_common_aligned_alloc(MM_CACHELINE, nbytes);
+	struct mm_fiber_combiner *combiner = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
 	mm_fiber_combiner_prepare(combiner, name, size, handoff);
 
 	LEAVE();
@@ -52,7 +52,7 @@ mm_fiber_combiner_destroy(struct mm_fiber_combiner *combiner)
 {
 	ENTER();
 
-	mm_common_free(combiner);
+	mm_memory_free(combiner);
 
 	LEAVE();
 }

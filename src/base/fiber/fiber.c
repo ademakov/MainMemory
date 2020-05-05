@@ -24,7 +24,7 @@
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/fiber/strand.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 #include "base/thread/thread.h"
 
 /* Regular fiber stack size. */
@@ -129,7 +129,7 @@ static struct mm_fiber *
 mm_fiber_new(struct mm_strand *strand)
 {
 	// Allocate a fiber.
-	struct mm_fiber *fiber = mm_common_alloc(sizeof(struct mm_fiber));
+	struct mm_fiber *fiber = mm_memory_xalloc(sizeof(struct mm_fiber));
 
 	// Store the strand that owns the fiber.
 	fiber->strand = strand;
@@ -266,7 +266,7 @@ mm_fiber_destroy(struct mm_fiber *fiber)
 		mm_cstack_destroy(fiber->stack_base, fiber->stack_size);
 
 	// At last free the fiber struct.
-	mm_common_free(fiber);
+	mm_memory_free(fiber);
 
 	LEAVE();
 }

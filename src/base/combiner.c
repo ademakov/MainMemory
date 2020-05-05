@@ -21,7 +21,7 @@
 
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #define MM_COMBINER_MINIMUM_HANDOFF	4
 #define MM_COMBINER_DEFAULT_HANDOFF	16
@@ -52,7 +52,7 @@ mm_combiner_create(size_t size, size_t handoff)
 	nbytes += size * sizeof(struct mm_ring_node);
 
 	// Create the combiner.
-	struct mm_combiner *combiner = mm_common_aligned_alloc(MM_CACHELINE, nbytes);
+	struct mm_combiner *combiner = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
 	mm_combiner_prepare(combiner, size, handoff);
 
 	LEAVE();
@@ -64,7 +64,7 @@ mm_combiner_destroy(struct mm_combiner *combiner)
 {
 	ENTER();
 
-	mm_common_free(combiner);
+	mm_memory_free(combiner);
 
 	LEAVE();
 }

@@ -376,12 +376,12 @@ mm_common_start(void)
 	ENTER();
 
 	// Allocate the storage for thread execution contexts.
-	mm_context_table = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context *));
-	mm_context_stats_store = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_context_stats));
-	mm_task_stats_store = mm_common_calloc(mm_regular_nthreads, sizeof(struct mm_task_stats));
+	mm_context_table = mm_memory_xcalloc(mm_regular_nthreads, sizeof(struct mm_context *));
+	mm_context_stats_store = mm_memory_xcalloc(mm_regular_nthreads, sizeof(struct mm_context_stats));
+	mm_task_stats_store = mm_memory_xcalloc(mm_regular_nthreads, sizeof(struct mm_task_stats));
 
 	// Allocate a fiber strand for each regular thread.
-	mm_regular_strands = mm_common_aligned_alloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
+	mm_regular_strands = mm_memory_aligned_xalloc(MM_CACHELINE, mm_regular_nthreads * sizeof(struct mm_strand));
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
@@ -421,10 +421,10 @@ mm_common_stop(void)
 	// Cleanup fiber subsystem.
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
 		mm_strand_cleanup(&mm_regular_strands[i]);
-	mm_common_free(mm_regular_strands);
+	mm_memory_free(mm_regular_strands);
 
 	// Release the storage for thread execution contexts.
-	mm_common_free(mm_context_table);
+	mm_memory_free(mm_context_table);
 
 	LEAVE();
 }

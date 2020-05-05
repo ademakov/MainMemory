@@ -23,7 +23,7 @@
 #include "base/logger.h"
 #include "base/report.h"
 #include "base/context.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 /**********************************************************************
  * Task submission.
@@ -132,14 +132,14 @@ mm_task_list_cleanup(struct mm_task_list *list)
 	do {
 		struct mm_qlink *link = mm_queue_remove(&list->list);
 		struct mm_task_ring *ring = containerof(link, struct mm_task_ring, link);
-		mm_common_free(ring);
+		mm_memory_free(ring);
 	} while (!mm_queue_empty(&list->list));
 }
 
 struct mm_task_ring * NONNULL(1)
 mm_task_list_add_ring(struct mm_task_list *list)
 {
-	struct mm_task_ring *ring = mm_common_alloc(sizeof(struct mm_task_ring));
+	struct mm_task_ring *ring = mm_memory_xalloc(sizeof(struct mm_task_ring));
 	ring->head = 0;
 	ring->tail = 0;
 	mm_queue_append(&list->list, &ring->link);
@@ -152,7 +152,7 @@ mm_task_list_get_ring(struct mm_task_list *list)
 {
 	struct mm_qlink *link = mm_queue_remove(&list->list);
 	struct mm_task_ring *ring = containerof(link, struct mm_task_ring, link);
-	mm_common_free(ring);
+	mm_memory_free(ring);
 	return containerof(mm_queue_head(&list->list), struct mm_task_ring, link);
 }
 

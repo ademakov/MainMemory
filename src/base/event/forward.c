@@ -24,7 +24,7 @@
 #include "base/report.h"
 #include "base/event/dispatch.h"
 #include "base/event/listener.h"
-#include "base/memory/memory.h"
+#include "base/memory/alloc.h"
 
 #if ENABLE_SMP
 
@@ -272,13 +272,13 @@ mm_event_forward_prepare(struct mm_event_forward_cache *cache, mm_thread_t ntarg
 {
 	ENTER();
 
-	cache->buffers = mm_common_calloc(ntargets, sizeof(cache->buffers[0]));
+	cache->buffers = mm_memory_xcalloc(ntargets, sizeof(cache->buffers[0]));
 	for (mm_thread_t i = 0; i < ntargets; i++) {
 		cache->buffers[i].nsinks = 0;
 		cache->buffers[i].ntotal = 0;
 	}
 
-	mm_bitset_prepare(&cache->targets, &mm_common_space.xarena, ntargets);
+	mm_bitset_prepare(&cache->targets, &mm_memory_xarena, ntargets);
 
 	LEAVE();
 }
@@ -289,8 +289,8 @@ mm_event_forward_cleanup(struct mm_event_forward_cache *cache)
 	ENTER();
 
 	// Release forward buffers.
-	mm_common_free(cache->buffers);
-	mm_bitset_cleanup(&cache->targets, &mm_common_space.xarena);
+	mm_memory_free(cache->buffers);
+	mm_bitset_cleanup(&cache->targets, &mm_memory_xarena);
 
 	LEAVE();
 }

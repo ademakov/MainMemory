@@ -22,7 +22,6 @@
 #include "base/logger.h"
 #include "base/event/listener.h"
 #include "base/memory/alloc.h"
-#include "base/memory/memory.h"
 
 #define MM_DISPATCH_EVENT_QUEUE_SIZE		(2 * MM_EVENT_BACKEND_NEVENTS)
 #define MM_DISPATCH_ASYNC_QUEUE_MIN_SIZE	16
@@ -104,7 +103,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 
 	// Prepare listener info.
 	dispatch->nlisteners = attr->nlisteners;
-	dispatch->listeners = mm_common_calloc(attr->nlisteners, sizeof(struct mm_event_listener));
+	dispatch->listeners = mm_memory_xcalloc(attr->nlisteners, sizeof(struct mm_event_listener));
 	for (mm_thread_t i = 0; i < attr->nlisteners; i++)
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch);
 
@@ -144,7 +143,7 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 	// Release listener info.
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
-	mm_common_free(dispatch->listeners);
+	mm_memory_free(dispatch->listeners);
 
 	LEAVE();
 }

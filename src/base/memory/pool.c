@@ -474,8 +474,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 	pool->shared_data.grow_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
 
 	struct mm_domain *domain = mm_domain_selfptr();
-	char *cdata_name = mm_format(&mm_common_space.xarena,
-				     "'%s' memory pool", name);
+	char *cdata_name = mm_format(&mm_memory_xarena, "'%s' memory pool", name);
 	MM_THREAD_LOCAL_ALLOC(domain, cdata_name, pool->shared_data.cdata);
 	mm_thread_t n = mm_domain_getsize(domain);
 	for (mm_thread_t i = 0; i < n; i++) {
@@ -488,7 +487,7 @@ mm_pool_prepare_shared(struct mm_pool *pool, const char *name, uint32_t item_siz
 		cdata->cache_size = 0;
 		cdata->cache_full = false;
 	}
-	mm_common_free(cdata_name);
+	mm_memory_free(cdata_name);
 
 	pool->alloc_item = mm_pool_shared_alloc;
 	pool->free_item = mm_pool_shared_free;
