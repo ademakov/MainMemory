@@ -21,6 +21,7 @@
 
 #include "base/async.h"
 #include "base/bitops.h"
+#include "base/logger.h"
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/event/listener.h"
@@ -61,6 +62,10 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context UNUSED)
 {
+	// Flush logs before the memory with possible log chunks is unmapped.
+	mm_log_relay();
+	mm_log_flush();
+
 	// Destroy the local memory allocator.
 	mm_memory_cache_cleanup(&context->cache);
 
