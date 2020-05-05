@@ -237,7 +237,6 @@ mm_memory_deduce_base(const struct mm_memory_heap *const heap, const void *const
 {
 	const uint32_t offset = (uint8_t *) ptr - (uint8_t *) heap;
 	const uint32_t unit = offset / MM_MEMORY_UNIT_SIZE;
-	MEMORY_VERIFY(unit >= 4, "bad pointer");
 
 	const uint8_t x = heap->units[unit];
 	if (x <= MM_MEMORY_UNIT_HMASK) {
@@ -830,6 +829,7 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	// Identify the chunk.
 	struct mm_memory_heap *const heap = (struct mm_memory_heap *) span;
 	const uint32_t base = mm_memory_deduce_base(heap, ptr);
+	MEMORY_VERIFY(base >= 4 && base < MM_MEMORY_UNIT_NUMBER, "bad pointer");
 	const uint8_t rank = heap->units[base];
 	const uint8_t mark = heap->units[base + 1];
 	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
