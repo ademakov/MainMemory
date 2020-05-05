@@ -1,5 +1,4 @@
 #include "base/combiner.h"
-#include "base/memory/memory.h"
 
 #include "params.h"
 #include "runner.h"
@@ -30,7 +29,6 @@ routine(void *arg UNUSED)
 int
 main(int ac, char **av)
 {
-	mm_memory_init();
 	set_params(ac, av, TEST_COMBINER);
 	g_combiner = mm_combiner_create(g_ring_size, g_handoff);
 	test1(NULL, routine);

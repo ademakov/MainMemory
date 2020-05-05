@@ -23,7 +23,6 @@
 #include "base/report.h"
 #include "base/runtime.h"
 #include "base/memory/alloc.h"
-#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 
 #define MM_POOL_BLOCK_SIZE	(0x2000)

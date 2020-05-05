@@ -21,7 +21,7 @@
 
 #include "base/scan.h"
 #include "base/report.h"
-#include "base/memory/memory.h"
+#include "base/memory/arena.h"
 
 #define MM_JSON_STACK_UNIT	(sizeof(uintptr_t) * 8)
 

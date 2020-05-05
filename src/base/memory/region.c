@@ -19,8 +19,6 @@
 
 #include "base/memory/region.h"
 
-#include "base/memory/memory.h"
-
 void NONNULL(1)
 mm_region_prepare(struct mm_region *reg)
 {

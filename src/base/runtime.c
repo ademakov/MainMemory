@@ -35,7 +35,6 @@
 #include "base/fiber/future.h"
 #include "base/fiber/strand.h"
 #include "base/memory/alloc.h"
-#include "base/memory/memory.h"
 #include "base/thread/domain.h"
 #include "base/thread/thread.h"
 #include "base/util/hook.h"
@@ -463,9 +462,6 @@ mm_init(int argc, char *argv[], size_t ninfo, const struct mm_args_info *info)
 	mm_cksum_init();
 	mm_thread_init();
 
-	// Initialize the memory spaces.
-	mm_memory_init();
-
 	// Setup the basic common start hook.
 	mm_common_start_hook_0(mm_common_start);
 	mm_common_stop_hook_0(mm_common_stop);
@@ -573,8 +569,6 @@ mm_start(void)
 	mm_free_hooks();
 	// Free regular thread domain.
 	mm_domain_destroy(mm_regular_domain);
-	// Cleanup memory spaces.
-	mm_memory_term();
 
 	LEAVE();
 }

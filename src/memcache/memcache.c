@@ -32,7 +32,6 @@
 #include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
 #include "base/memory/chunk.h"
-#include "base/memory/memory.h"
 
 struct mm_memcache_config mc_config;
 

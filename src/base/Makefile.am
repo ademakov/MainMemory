@@ -66,7 +66,6 @@ libmainbase_la_SOURCES = \
 	memory/cache.c memory/cache.h \
 	memory/chunk.c memory/chunk.h \
 	memory/malloc.c memory/malloc.h \
-	memory/memory.c memory/memory.h \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
 	memory/space.c memory/space.h \
