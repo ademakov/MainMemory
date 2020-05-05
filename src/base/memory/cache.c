@@ -484,8 +484,9 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 		while (link != mm_list_sentinel(&cache->staging)) {
 			struct mm_memory_heap *next = containerof(link, struct mm_memory_heap, staging_link);
 			original_rank = mm_memory_find_chunk(next, required_rank);
-			if (original_rank < MM_MEMORY_CACHE_SIZES){
+			if (original_rank < MM_MEMORY_CACHE_SIZES) {
 				next->status = MM_MEMORY_HEAP_ACTIVE;
+				mm_list_delete(link);
 				heap = next;
 				break;
 			}
