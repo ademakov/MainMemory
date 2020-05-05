@@ -53,20 +53,18 @@ mm_memory_remote_context_free_req(struct mm_context *context, uintptr_t *argumen
 static void
 mm_memory_remote_context_free(struct mm_context *context, void *ptr)
 {
-	if (!mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
-		uint32_t count = 0;
-		uint32_t backoff = 0;
-		while (mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
-			count++;
-			if (count == MM_FREE_WARN_THRESHOLD) {
-				mm_warning(0, "Problem with slow chunk reclamation");
-			} else if (count == MM_FREE_ERROR_THRESHOLD) {
-				mm_error(0, "Problem with slow chunk reclamation");
-			} else if (count == MM_FREE_FATAL_THRESHOLD) {
-				mm_fatal(0, "Problem with slow chunk reclamation");
-			}
-			backoff = mm_thread_backoff(backoff);
+	uint32_t count = 0;
+	uint32_t backoff = 0;
+	while (!mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
+		count++;
+		if (count == MM_FREE_WARN_THRESHOLD) {
+			mm_warning(0, "Problem with slow chunk reclamation");
+		} else if (count == MM_FREE_ERROR_THRESHOLD) {
+			mm_error(0, "Problem with slow chunk reclamation");
+		} else if (count == MM_FREE_FATAL_THRESHOLD) {
+			mm_fatal(0, "Problem with slow chunk reclamation");
 		}
+		backoff = mm_thread_backoff(backoff);
 	}
 }
 
