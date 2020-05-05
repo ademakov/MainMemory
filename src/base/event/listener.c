@@ -346,7 +346,7 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 	ENTER();
 
 	// Destroy the timer queue.
-	mm_timeq_destroy(&listener->timer_queue);
+	mm_timeq_cleanup(&listener->timer_queue);
 
 #if ENABLE_SMP
 	// Release event forwarding data.
