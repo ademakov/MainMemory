@@ -53,7 +53,7 @@ mm_thread_local_create_chunk(struct mm_domain *domain)
 {
 	size_t size = MM_THREAD_LOCAL_CHUNK_HEAD + domain->nthreads * MM_THREAD_LOCAL_CHUNK_SIZE;
 
-	struct mm_thread_local_chunk *chunk = mm_memory_xalloc(size);
+	struct mm_thread_local_chunk *chunk = mm_memory_fixed_xalloc(size);
 	chunk->used = 0;
 
 	return chunk;
@@ -98,7 +98,7 @@ mm_thread_local_alloc(struct mm_domain *domain, const char *name, size_t size)
 	ASSERT(size <= MM_THREAD_LOCAL_CHUNK_SIZE);
 
 	// Allocate the info entry.
-	struct mm_thread_local_entry *entry = mm_memory_xalloc(sizeof(struct mm_thread_local_entry));
+	struct mm_thread_local_entry *entry = mm_memory_fixed_xalloc(sizeof(struct mm_thread_local_entry));
 	entry->name = mm_memory_strdup(name);
 	entry->size = size;
 
