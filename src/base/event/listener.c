@@ -299,7 +299,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->dispatch = dispatch;
 
 	// Prepare the timer queue.
-	mm_timeq_prepare(&listener->timer_queue, &mm_memory_xarena);
+	mm_timeq_prepare(&listener->timer_queue, &mm_memory_fixed_xarena);
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
