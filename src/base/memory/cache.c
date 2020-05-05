@@ -21,8 +21,9 @@
 
 #include "base/bitops.h"
 #include "base/exit.h"
-#include "base/report.h"
 #include "base/memory/span.h"
+
+#define MEMORY_VERIFY(e, msg) (likely(e) ? (void) 0 : mm_panic("panic: " __LOCATION__ ": " msg "\n"))
 
 /*
   Chunk Ranks
@@ -236,12 +237,12 @@ mm_memory_deduce_base(const struct mm_memory_heap *const heap, const void *const
 {
 	const uint32_t offset = (uint8_t *) ptr - (uint8_t *) heap;
 	const uint32_t unit = offset / MM_MEMORY_UNIT_SIZE;
-	VERIFY(unit >= 4);
+	MEMORY_VERIFY(unit >= 4, "bad pointer");
 
 	const uint8_t x = heap->units[unit];
 	if (x <= MM_MEMORY_UNIT_HMASK) {
 		const uint8_t y = heap->units[unit - 1];
-		VERIFY(y >= MM_MEMORY_BASE_TAG);
+		MEMORY_VERIFY(y >= MM_MEMORY_BASE_TAG, "bad pointer");
 		return mm_memory_decode_base(x, y);
 	}
 	if (x >= MM_MEMORY_BASE_TAG) {
@@ -590,8 +591,7 @@ mm_memory_cache_prepare(struct mm_memory_cache *const cache, struct mm_context *
 	mm_list_prepare(&cache->spans);
 
 	cache->active = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
-	if (cache->active == NULL)
-		mm_panic("panic: failed to create an initial memory span\n");
+	MEMORY_VERIFY(cache->active, "failed to create an initial memory span");
 	mm_memory_prepare_heap(cache->active);
 }
 
@@ -818,7 +818,7 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 		return;
 
 	struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
-	VERIFY(cache == span->cache);
+	MEMORY_VERIFY(cache == span->cache, "wrong cache");
 
 	// Handle a huge chunk.
 	if (mm_memory_span_huge(span)) {
@@ -832,10 +832,8 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	const uint32_t base = mm_memory_deduce_base(heap, ptr);
 	const uint8_t rank = heap->units[base];
 	const uint8_t mark = heap->units[base + 1];
-	if (rank < MM_MEMORY_BLOCK_SIZES || rank > MM_MEMORY_CACHE_SIZES)
-		mm_panic("panic: bad memory chunk\n");
-	if (mark != 0 && (mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG)
-		mm_panic("panic: bad memory chunk\n");
+	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
+	MEMORY_VERIFY(mark == 0 || (mark & ~MM_MEMORY_UNIT_LMASK) == MM_MEMORY_BASE_TAG, "bad pointer");
 
 	// Handle a large chunk.
 	if (mark == 0) {
@@ -847,17 +845,15 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
 	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
 	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
-	if (shift == 0 || shift > 31)
-		mm_panic("panic: bad memory chunk\n");
+	MEMORY_VERIFY(shift > 0 || shift < 32, "bad pointer");
 
 	// Handle a medium chunk.
 	const uint32_t mask = 1u << shift;
 	if ((block->inner_used & mask) == 0) {
+		MEMORY_VERIFY((block->chunk_free & mask) == 0, "double free");
 		if (block->chunk_free == 0) {
 			block->next = heap->blocks[medium_rank];
 			heap->blocks[medium_rank] = block;
-		} else if ((block->chunk_free & mask) != 0) {
-			mm_panic("panic: double free\n");
 		}
 		block->chunk_free |= mask;
 		return;
@@ -867,13 +863,11 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	const uint32_t small_rank = rank - MM_MEMORY_BLOCK_SIZES;
 	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * mm_memory_sizes[medium_rank]);
 	const uint32_t inner_shift = (((uint8_t *) ptr - (uint8_t *) inner) * mm_memory_magic[small_rank]) >> MM_CHUNK_MAGIC_SHIFT;
-	if (inner_shift == 0 || inner_shift > 31)
-		mm_panic("panic: bad memory chunk\n");
+	MEMORY_VERIFY(inner_shift > 0 || inner_shift < 32, "bad pointer");
 
 	// Handle a small chunk.
 	const uint32_t inner_mask = 1u << inner_shift;
-	if ((inner->free & inner_mask) != 0)
-		mm_panic("panic: double free\n");
+	MEMORY_VERIFY((inner->free & inner_mask) == 0, "double free");
 	inner->free |= inner_mask;
 	if (inner->free == 0xfffe) {
 		block->inner_used ^= mask;
@@ -911,11 +905,8 @@ mm_memory_cache_chunk_size(const void *const ptr)
 	if (ptr == NULL)
 		return 0;
 
-	const struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
-	if (span == NULL)
-		mm_panic("panic: bad memory chunk\n");
-
 	// Handle a huge chunk.
+	const struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
 	if (mm_memory_span_huge(span))
 		return mm_memory_span_huge_size(span);
 
@@ -924,10 +915,8 @@ mm_memory_cache_chunk_size(const void *const ptr)
 	const uint32_t base = mm_memory_deduce_base(heap, ptr);
 	const uint8_t rank = heap->units[base];
 	const uint8_t mark = heap->units[base + 1];
-	if (rank < MM_MEMORY_BLOCK_SIZES || rank > MM_MEMORY_CACHE_SIZES)
-		mm_panic("panic: bad memory chunk\n");
-	if (mark != 0 && (mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG)
-		mm_panic("panic: bad memory chunk\n");
+	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
+	MEMORY_VERIFY(mark == 0 || (mark & ~MM_MEMORY_UNIT_LMASK) == MM_MEMORY_BASE_TAG, "bad pointer");
 
 	// Handle a large chunk.
 	if (mark == 0)
@@ -937,8 +926,7 @@ mm_memory_cache_chunk_size(const void *const ptr)
 	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
 	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
 	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
-	if (shift == 0 || shift > 31)
-		mm_panic("panic: bad memory chunk\n");
+	MEMORY_VERIFY(shift > 0 || shift < 32, "bad pointer");
 
 	// Handle a medium chunk.
 	const uint32_t mask = 1u << shift;
