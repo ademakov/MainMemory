@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.c - MainMemory thread domain.
  *
- * Copyright (C) 2014-2019  Aleksey Demakov
+ * Copyright (C) 2014-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -105,12 +105,6 @@ mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cp
 }
 
 void NONNULL(1)
-mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable)
-{
-	attr->private_space = enable;
-}
-
-void NONNULL(1)
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size)
 {
 	attr->stack_size = size;
@@ -183,8 +177,6 @@ mm_domain_create(struct mm_domain_attr *attr, mm_routine_t start)
 	uint32_t stack_size = 0;
 	uint32_t guard_size = 0;
 	if (attr != NULL) {
-		mm_thread_attr_setspace(&thread_attr, attr->private_space);
-
 		stack_size = mm_round_up(attr->stack_size, MM_PAGE_SIZE);
 		if (stack_size && stack_size < MM_THREAD_STACK_MIN)
 			stack_size = MM_THREAD_STACK_MIN;

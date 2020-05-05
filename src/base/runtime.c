@@ -532,7 +532,6 @@ mm_start(void)
 	mm_domain_attr_setsize(&attr, mm_regular_nthreads);
 	mm_domain_attr_setstacksize(&attr, MM_PAGE_SIZE); // enough for fiber bootstrap
 	mm_domain_attr_setguardsize(&attr, MM_PAGE_SIZE);
-	mm_domain_attr_setspace(&attr, true);
 
 	bool thread_affinity = mm_settings_get_bool("thread-affinity", false);
 	if (thread_affinity) {

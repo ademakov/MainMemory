@@ -217,10 +217,7 @@ mm_strand_trim(struct mm_strand *strand)
 	// Cleanup the temporary data.
 	mm_wait_cache_truncate(&strand->wait_cache);
 
-#if ENABLE_SMP
-	// Trim private memory space.
-	mm_private_space_trim(mm_thread_getspace(strand->thread));
-#endif
+	// TODO: coalesce context memory cache
 
 	LEAVE();
 }

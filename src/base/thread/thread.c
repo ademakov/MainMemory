@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.c - MainMemory threads.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -83,18 +83,6 @@ mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, 
 {
 	attr->domain = domain;
 	attr->domain_index = index;
-}
-
-void NONNULL(1)
-mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable)
-{
-	attr->private_space = enable;
-}
-
-void NONNULL(1)
-mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size)
-{
-	attr->reclaim_queue = size;
 }
 
 void NONNULL(1)
@@ -275,26 +263,11 @@ mm_thread_create(struct mm_thread_attr *attr, mm_routine_t start, mm_value_t sta
 		thread->thread_ident = thread->domain->thread_ident_base + thread->domain_index;
 	}
 
-	// Initialize private memory space if required.
-#if ENABLE_SMP
-	if (attr != NULL && attr->private_space)
-		mm_private_space_prepare(&thread->space, attr->reclaim_queue);
-	else
-		mm_private_space_reset(&thread->space);
-#else
-	if (attr->private_space || attr->reclaim_queue)
-		mm_warning(0, "ignore private space thread attributes");
-#endif
-
 	// Set the thread name.
 	if (attr != NULL && attr->name[0])
 		memcpy(thread->name, attr->name, MM_THREAD_NAME_SIZE);
 	else
 		strcpy(thread->name, "unnamed");
-
-	// Initialize deferred chunks info.
-	mm_stack_prepare(&thread->deferred_chunks);
-	thread->deferred_chunks_count = 0;
 
 	// Initialize log message queue.
 	mm_queue_prepare(&thread->log_queue);
@@ -321,11 +294,6 @@ void NONNULL(1)
 mm_thread_destroy(struct mm_thread *thread)
 {
 	ENTER();
-
-#if ENABLE_SMP
-	if (thread->space.space.opaque != NULL)
-		mm_private_space_cleanup(&thread->space);
-#endif
 
 #if ENABLE_TRACE
 	mm_trace_context_cleanup(&thread->trace);

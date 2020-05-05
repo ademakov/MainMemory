@@ -1,7 +1,7 @@
 /*
  * base/thread/domain.h - MainMemory thread domain.
  *
- * Copyright (C) 2014-2019  Aleksey Demakov
+ * Copyright (C) 2014-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -36,9 +36,6 @@ struct mm_domain_attr
 {
 	/* The number of threads. */
 	mm_thread_t nthreads;
-
-	/* Enable private memory space for domain's threads. */
-	bool private_space;
 
 	/* Common stack parameters for domain's threads. */
 	uint32_t stack_size;
@@ -97,9 +94,6 @@ mm_domain_attr_setarg(struct mm_domain_attr *attr, mm_thread_t n, mm_value_t arg
 
 void NONNULL(1)
 mm_domain_attr_setcputag(struct mm_domain_attr *attr, mm_thread_t n, uint32_t cpu_tag);
-
-void NONNULL(1)
-mm_domain_attr_setspace(struct mm_domain_attr *attr, bool enable);
 
 void NONNULL(1)
 mm_domain_attr_setstacksize(struct mm_domain_attr *attr, uint32_t size);

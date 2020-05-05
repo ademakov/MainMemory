@@ -1,7 +1,7 @@
 /*
  * base/thread/thread.h - MainMemory threads.
  *
- * Copyright (C) 2013-2017  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #include "base/list.h"
 #include "base/report.h"
 #include "base/event/event.h"
-#include "base/memory/space.h"
 #include "base/thread/barrier.h"
 
 #include <pthread.h>
@@ -52,12 +51,6 @@ struct mm_thread_attr
 	struct mm_domain *domain;
 	mm_thread_t domain_index;
 
-	/* Enable private memory space. */
-	bool private_space;
-
-	/* The size of queue for memory chunks released by other threads. */
-	uint32_t reclaim_queue;
-
 	/* CPU affinity tag. */
 	uint32_t cpu_tag;
 
@@ -79,15 +72,6 @@ struct mm_thread
 
 	/* The thread identity. Must be unique among threads. */
 	mm_thread_t thread_ident;
-
-#if ENABLE_SMP
-	/* Private memory space. */
-	struct mm_private_space space;
-#endif
-
-	/* Memory chunks from other threads with deferred destruction. */
-	struct mm_stack deferred_chunks;
-	size_t deferred_chunks_count;
 
 	/* The log message storage. */
 	struct mm_queue log_queue;
@@ -126,12 +110,6 @@ mm_thread_attr_prepare(struct mm_thread_attr *attr);
 
 void NONNULL(1, 2)
 mm_thread_attr_setdomain(struct mm_thread_attr *attr, struct mm_domain *domain, mm_thread_t index);
-
-void NONNULL(1)
-mm_thread_attr_setspace(struct mm_thread_attr *attr, bool enable);
-
-void NONNULL(1)
-mm_thread_attr_setreclaimqueue(struct mm_thread_attr *attr, uint32_t size);
 
 void NONNULL(1)
 mm_thread_attr_setcputag(struct mm_thread_attr *attr, uint32_t cpu_tag);
@@ -195,14 +173,6 @@ mm_thread_self(void)
 {
 	return mm_thread_getnumber(mm_thread_selfptr());
 }
-
-#if ENABLE_SMP
-static inline struct mm_private_space * NONNULL(1)
-mm_thread_getspace(struct mm_thread *thread)
-{
-	return &thread->space;
-}
-#endif
 
 static inline struct mm_queue * NONNULL(1)
 mm_thread_getlog(struct mm_thread *thread)
