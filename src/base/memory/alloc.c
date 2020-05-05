@@ -232,10 +232,10 @@ mm_memory_xrealloc(void *ptr, size_t size)
 void
 mm_memory_free(void *ptr)
 {
-	struct mm_memory_span *span = mm_memory_span_from_ptr(ptr);
-	if (unlikely(span == NULL))
-		mm_panic("panic: freeing unknown memory\n");
+	if (ptr == NULL)
+		return;
 
+	struct mm_memory_span *span = mm_memory_span_from_ptr(ptr);
 	if (span->context != NULL) {
 		struct mm_context *context = mm_context_selfptr();
 		if (context == span->context) {
@@ -244,6 +244,6 @@ mm_memory_free(void *ptr)
 			mm_memory_remote_context_free(span->context, ptr);
 		}
 	} else {
-		return mm_memory_initial_free(ptr);
+		mm_memory_initial_free(ptr);
 	}
 }
