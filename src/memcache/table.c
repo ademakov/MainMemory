@@ -28,6 +28,7 @@
 #include "base/task.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/alloc.h"
+#include "base/memory/cache.h"
 
 #include <sys/mman.h>
 
@@ -358,7 +359,7 @@ mc_table_init_part(mm_thread_t index, struct mm_strand *target UNUSED)
 	part->nentries_free = 0;
 	part->nentries_void = 0;
 
-	mm_private_space_prepare(&part->data_space, 0);
+	mm_memory_cache_prepare(&part->data_space, NULL);
 
 	part->volume = 0;
 
@@ -497,7 +498,7 @@ mc_table_stop(void)
 	// Free the table entries.
 	for (mm_thread_t p = 0; p < mc_table.nparts; p++) {
 		struct mc_tpart *part = &mc_table.parts[p];
-		mm_private_space_cleanup(&part->data_space);
+		mm_memory_cache_cleanup(&part->data_space);
 	}
 
 	// Free the table partitions.
