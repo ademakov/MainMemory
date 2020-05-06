@@ -654,7 +654,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 			uint8_t *const inner_base = ((uint8_t *) block) + shift * mm_memory_sizes[medium_rank];
 
 			struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) inner_base;
-			ASSERT(inner->free != 0);
+			ASSERT(inner->free);
 			const uint32_t inner_shift = mm_ctz(inner->free);
 			inner->free ^= (1u << inner_shift);
 			if (inner->free == 0) {
@@ -834,10 +834,11 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	const uint8_t rank = heap->units[base];
 	const uint8_t mark = heap->units[base + 1];
 	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
-	MEMORY_VERIFY(mark == 0 || (mark & ~MM_MEMORY_UNIT_LMASK) == MM_MEMORY_BASE_TAG, "bad pointer");
 
 	// Handle a large chunk.
-	if (mark == 0) {
+	if ((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG) {
+		MEMORY_VERIFY((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_NEXT_TAG, "double free");
+		MEMORY_VERIFY(mark == 0, "bad pointer");
 		mm_memory_free_chunk(heap, base, rank);
 		return;
 	}
@@ -880,12 +881,12 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 		block->chunk_free |= mask;
 
 		if (heap->blocks[small_rank] == block) {
-			heap->blocks[small_rank] = block->next;
+			heap->blocks[small_rank] = block->inner_next;
 		} else {
 			struct mm_memory_block *prev = heap->blocks[small_rank];
 			while (prev) {
-				if (prev->next == block) {
-					prev->next = block->next;
+				if (prev->inner_next == block) {
+					prev->inner_next = block->inner_next;
 					break;
 				}
 				prev = prev->next;
