@@ -25,7 +25,6 @@
 #include "base/context.h"
 #include "base/list.h"
 #include "base/event/event.h"
-#include "base/memory/allocx.h"
 
 #if !ENABLE_MEMCACHE_COMBINER
 # include "base/atomic.h"
@@ -75,9 +74,7 @@ mc_entry_fix_exptime(uint32_t exptime)
 static inline uint32_t
 mc_entry_size(struct mc_entry *entry)
 {
-	return (sizeof(struct mc_entry)
-		+ entry->key_len + entry->value_len
-		+ MM_ALLOC_OVERHEAD);
+	return (sizeof(struct mc_entry)	+ entry->key_len + entry->value_len);
 }
 
 static inline char *

@@ -22,16 +22,14 @@
 #include "base/list.h"
 #include "base/lock.h"
 #include "base/report.h"
-#include "base/memory/allocx.h"
 #include "base/memory/chunk.h"
-#include "base/memory/space.h"
 #include "base/thread/thread.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
 
-#define MM_LOG_CHUNK_SIZE	(MM_PAGE_SIZE - MM_ALLOC_OVERHEAD)
+#define MM_LOG_CHUNK_SIZE	MM_PAGE_SIZE
 
 struct mm_log_chunk
 {

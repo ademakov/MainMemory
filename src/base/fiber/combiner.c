@@ -23,7 +23,6 @@
 #include "base/report.h"
 #include "base/fiber/fiber.h"
 #include "base/memory/alloc.h"
-#include "base/memory/space.h"
 #include "base/thread/domain.h"
 
 struct mm_fiber_combiner *

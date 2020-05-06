@@ -60,15 +60,12 @@ libmainbase_la_SOURCES = \
 	fiber/strand.c fiber/strand.h \
 	fiber/wait.c fiber/wait.h \
 	memory/alloc.c memory/alloc.h \
-	memory/allocx.h \
 	memory/arena.h memory/arena.c \
 	memory/buffer.c memory/buffer.h \
 	memory/cache.c memory/cache.h \
 	memory/chunk.c memory/chunk.h \
-	memory/malloc.c memory/malloc.h \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
-	memory/space.c memory/space.h \
 	memory/span.c memory/span.h \
 	net/address.h net/address.c \
 	net/net.c net/net.h \
