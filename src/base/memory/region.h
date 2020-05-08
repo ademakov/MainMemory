@@ -1,7 +1,7 @@
 /*
  * base/memory/region.h - MainMemory region allocator.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -22,11 +22,11 @@
 
 #include "common.h"
 #include "base/bitops.h"
+#include "base/list.h"
 #include "base/report.h"
-#include "base/memory/chunk.h"
 
 #define MM_REGION_ALIGN		(sizeof(uintptr_t))
-#define MM_REGION_CHUNK_SIZE	(4 * 1024 - MM_CHUNK_OVERHEAD)
+#define MM_REGION_CHUNK_SIZE	(4u * 1024u - (sizeof(struct mm_slink)))
 
 struct mm_region
 {

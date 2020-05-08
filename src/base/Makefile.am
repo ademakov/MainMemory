@@ -63,7 +63,6 @@ libmainbase_la_SOURCES = \
 	memory/arena.h memory/arena.c \
 	memory/buffer.c memory/buffer.h \
 	memory/cache.c memory/cache.h \
-	memory/chunk.c memory/chunk.h \
 	memory/pool.c memory/pool.h \
 	memory/region.c memory/region.h \
 	memory/span.c memory/span.h \

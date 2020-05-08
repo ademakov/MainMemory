@@ -1,7 +1,7 @@
 /*
  * base/memory/region.c - MainMemory region allocator.
  *
- * Copyright (C) 2015-2017  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,6 +18,9 @@
  */
 
 #include "base/memory/region.h"
+
+#include "base/memory/alloc.h"
+#include "base/memory/cache.h"
 
 void NONNULL(1)
 mm_region_prepare(struct mm_region *reg)
@@ -38,7 +41,10 @@ mm_region_cleanup(struct mm_region *reg)
 {
 	ENTER();
 
-	mm_chunk_destroy_stack(&reg->chunks);
+	while (!mm_stack_empty(&reg->chunks)) {
+		struct mm_slink *link = mm_stack_remove(&reg->chunks);
+		mm_memory_free(link);
+	}
 
 	LEAVE();
 }
@@ -62,12 +68,12 @@ mm_region_reserve(struct mm_region *reg, size_t more_size)
 		mm_fatal(EOVERFLOW, "chunk size overflow");
 
 	// Create a new memory chunk.
-	struct mm_chunk *chunk = mm_chunk_create(new_size);
-	reg->chunk_end = chunk->data + mm_chunk_getsize(chunk);
-	mm_chunk_stack_insert(&reg->chunks, chunk);
+	struct mm_slink *chunk = mm_memory_xalloc(new_size);
+	reg->chunk_end = (char *) chunk + mm_memory_cache_chunk_size(chunk);
+	mm_stack_insert(&reg->chunks, chunk);
 
 	// Align the initial block address.
-	uintptr_t addr = (uintptr_t) chunk->data;
+	uintptr_t addr = (uintptr_t) ((char *) chunk + sizeof(struct mm_slink));
 	addr = mm_round_up(addr, MM_REGION_ALIGN);
 	char *ptr = (char *) addr;
 
@@ -76,12 +82,12 @@ mm_region_reserve(struct mm_region *reg, size_t more_size)
 		memcpy(ptr, reg->block_ptr, old_size);
 
 		// Free the old chunk if it was entirely used for the old block.
-		struct mm_chunk *old_chunk = mm_chunk_stack_next(chunk);
-		addr = (uintptr_t) old_chunk->data;
+		struct mm_slink *old_chunk = chunk->next;
+		addr = (uintptr_t) ((char *) old_chunk + sizeof(struct mm_slink));
 		addr = mm_round_up(addr, MM_REGION_ALIGN);
 		if (reg->block_ptr == (char *) addr) {
-			mm_stack_remove_next(&chunk->base.slink);
-			mm_chunk_destroy(old_chunk);
+			mm_stack_remove_next(chunk);
+			mm_memory_free(old_chunk);
 		}
 	}
 
