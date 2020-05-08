@@ -21,8 +21,8 @@
 
 #include "base/list.h"
 #include "base/lock.h"
-#include "base/report.h"
-#include "base/memory/chunk.h"
+#include "base/memory/alloc.h"
+#include "base/memory/cache.h"
 #include "base/thread/thread.h"
 
 #include <stdio.h>
@@ -33,8 +33,8 @@
 
 struct mm_log_chunk
 {
-	struct mm_chunk_base base;
-	uint16_t used;
+	struct mm_qlink link;
+	uint32_t used;
 	char data[];
 };
 
@@ -47,25 +47,25 @@ static bool mm_log_busy = false;
 static struct mm_log_chunk *
 mm_log_create_chunk(size_t size)
 {
-	size += sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk);
+	size += sizeof(struct mm_log_chunk);
 	if (size < MM_LOG_CHUNK_SIZE)
 		size = MM_LOG_CHUNK_SIZE;
 
-	struct mm_chunk *chunk = mm_chunk_create(size);
-	struct mm_log_chunk *log_chunk = (struct mm_log_chunk *) chunk;
-	log_chunk->used = 0;
+	struct mm_log_chunk *chunk = mm_memory_xalloc(size);
+	mm_qlink_prepare(&chunk->link);
+	chunk->used = 0;
 
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_selfptr());
-	mm_queue_append(queue, &log_chunk->base.qlink);
+	mm_queue_append(queue, &chunk->link);
 
-	return log_chunk;
+	return chunk;
 }
 
 static size_t
 mm_log_chunk_size(const struct mm_log_chunk *chunk)
 {
-	size_t size = mm_chunk_base_getsize(&chunk->base);
-	return size - (sizeof(struct mm_log_chunk) - sizeof(struct mm_chunk));
+	size_t size = mm_memory_cache_chunk_size(chunk);
+	return size - sizeof(struct mm_log_chunk);
 }
 
 void NONNULL(1)
@@ -77,7 +77,7 @@ mm_log_str(const char *str)
 	struct mm_queue *queue = mm_thread_getlog(mm_thread_selfptr());
 	if (!mm_queue_empty(queue)) {
 		struct mm_qlink *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_log_chunk, base.qlink);
+		chunk = containerof(link, struct mm_log_chunk, link);
 
 		size_t avail = mm_log_chunk_size(chunk) - chunk->used;
 		if (avail < len) {
@@ -104,7 +104,7 @@ mm_log_vfmt(const char *restrict fmt, va_list va)
 	struct mm_queue *queue = mm_thread_getlog(thread);
 	if (!mm_queue_empty(queue)) {
 		struct mm_qlink *link = mm_queue_tail(queue);
-		chunk = containerof(link, struct mm_log_chunk, base.qlink);
+		chunk = containerof(link, struct mm_log_chunk, link);
 	}
 
 	char dummy;
@@ -176,8 +176,8 @@ mm_log_flush(void)
 	size_t written = 0;
 
 	do {
-		struct mm_log_chunk *chunk = containerof(link, struct mm_log_chunk, base.qlink);
-		link = chunk->base.qlink.next;
+		struct mm_log_chunk *chunk = containerof(link, struct mm_log_chunk, link);
+		link = chunk->link.next;
 
 		// TODO: take care of partial writes
 		if (write(2, chunk->data, chunk->used) != chunk->used)
@@ -185,7 +185,7 @@ mm_log_flush(void)
 
 		written += chunk->used;
 
-		mm_chunk_destroy((struct mm_chunk *) chunk);
+		mm_memory_free(chunk);
 
 	} while (link != NULL);
 
