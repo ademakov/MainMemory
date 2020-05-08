@@ -292,9 +292,16 @@ mm_buffer_compact(struct mm_buffer *buf)
 			mm_buffer_reader_set(&buf->head, first);
 		} else {
 			// Yes, release the chunk(s).
-			mm_chunk_destroy_queue(&buf->chunks);
-			// Re-initialize the chunk list.
-			mm_queue_prepare(&buf->chunks);
+			struct mm_buffer_segment *seg = buf->tail.seg;
+			do {
+				do {
+					seg = mm_buffer_segment_adjacent_next(seg);
+				} while (!mm_buffer_segment_terminal(seg));
+				seg = mm_buffer_segment_terminal_next(seg);
+				mm_memory_free(first);
+				first = seg;
+			} while (seg != NULL);
+
 			// Re-initialize the stub segment.
 			buf->stub.next = NULL;
 			// Re-initialize the read iterator.
