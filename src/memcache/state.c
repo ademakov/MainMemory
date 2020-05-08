@@ -21,6 +21,7 @@
 #include "memcache/memcache.h"
 
 #include "base/event/event.h"
+#include "base/memory/alloc.h"
 
 extern struct mm_memcache_config mc_config;
 

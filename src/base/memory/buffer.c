@@ -20,6 +20,7 @@
 #include "base/memory/buffer.h"
 
 #include "base/memory/alloc.h"
+#include "base/memory/cache.h"
 
 #include <stdio.h>
 
@@ -44,16 +45,16 @@ mm_buffer_round_room(uint32_t size)
 }
 
 static inline uint32_t NONNULL(1)
-mm_buffer_chunk_area(const struct mm_chunk *chunk)
+mm_buffer_chunk_area(const struct mm_buffer_segment *chunk)
 {
-	uint32_t room = mm_chunk_getsize(chunk) - MM_BUFFER_TERMINAL_SIZE;
+	uint32_t room = mm_memory_cache_chunk_size(chunk) - MM_BUFFER_TERMINAL_SIZE;
 	return mm_buffer_round_room(room);
 }
 
 static inline struct mm_buffer_tsegment * NONNULL(1)
-mm_buffer_chunk_tseg(const struct mm_chunk *chunk, uint32_t chunk_area)
+mm_buffer_chunk_tseg(const struct mm_buffer_segment *chunk, uint32_t chunk_area)
 {
-	return (struct mm_buffer_tsegment *) (chunk->data + chunk_area);
+	return (struct mm_buffer_tsegment *) ((uint8_t *) chunk + chunk_area);
 }
 
 /**********************************************************************
@@ -134,9 +135,6 @@ mm_buffer_prepare(struct mm_buffer *buf, size_t chunk_size)
 	ENTER();
 	DEBUG("chunk size %zu", chunk_size);
 
-	// Initialize the chunk list.
-	mm_queue_prepare(&buf->chunks);
-
 	// Initialize the pseudo-segment.
 	buf->stub.base.meta = MM_BUFFER_SEGMENT_SIZE | MM_BUFFER_SEGMENT_TERMINAL;
 	buf->stub.base.size = 0;
@@ -162,18 +160,20 @@ mm_buffer_cleanup(struct mm_buffer *buf)
 {
 	ENTER();
 
-	// Release external segments.
-	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
-	for (; chunk != NULL; chunk = mm_chunk_queue_next(chunk)) {
-		struct mm_buffer_segment *seg = mm_buffer_segment_first(chunk);
+	struct mm_buffer_segment *first = mm_buffer_segment_first(buf);
+	while (first != NULL) {
+		// Release external segments.
+		struct mm_buffer_segment *seg = first;
 		do {
 			mm_buffer_segment_release(seg);
 			seg = mm_buffer_segment_adjacent_next(seg);
 		} while (!mm_buffer_segment_terminal(seg));
-	}
 
-	// Release buffer chunks.
-	mm_chunk_destroy_queue(&buf->chunks);
+		// Release the whole chunk.
+		seg = mm_buffer_segment_terminal_next(seg);
+		mm_memory_free(first);
+		first = seg;
+	}
 
 	LEAVE();
 }
@@ -198,18 +198,14 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 	DEBUG("create a buffer chunk of %zu (min %u) bytes", size, buf->chunk_size);
 
 	// Allocate a memory chunk.
-	struct mm_chunk *chunk = mm_chunk_create(size);
-	// Append the chunk to the buffer chunk list.
-	mm_chunk_queue_append(&buf->chunks, chunk);
-
+	struct mm_buffer_segment *chunk = mm_memory_xalloc(size);
 	// Initialize the initial segment.
-	struct mm_buffer_segment *seg = mm_buffer_segment_first(chunk);
-	seg->meta = mm_buffer_chunk_area(chunk);
-	seg->size = 0;
-	DEBUG("setup initial segment %p: %u", seg, seg->meta);
+	chunk->meta = mm_buffer_chunk_area(chunk);
+	chunk->size = 0;
+	DEBUG("setup initial segment %p: %u", chunk, chunk->meta);
 
 	// Initialize the new terminal segment. It has no room for data.
-	struct mm_buffer_tsegment *tseg = mm_buffer_chunk_tseg(chunk, seg->meta);
+	struct mm_buffer_tsegment *tseg = mm_buffer_chunk_tseg(chunk, chunk->meta);
 	tseg->base.meta = MM_BUFFER_SEGMENT_SIZE | MM_BUFFER_SEGMENT_TERMINAL;
 	tseg->base.size = 0;
 	tseg->next = NULL;
@@ -217,10 +213,10 @@ mm_buffer_writer_grow(struct mm_buffer_writer *pos, struct mm_buffer *buf, size_
 
 	// Link the initial segment with the previous terminal segment.
 	VERIFY(mm_buffer_segment_terminal(pos->seg));
-	((struct mm_buffer_tsegment *) pos->seg)->next = seg;
+	((struct mm_buffer_tsegment *) pos->seg)->next = chunk;
 
 	LEAVE();
-	return seg;
+	return chunk;
 }
 
 /**********************************************************************
@@ -239,8 +235,7 @@ mm_buffer_compact(struct mm_buffer *buf)
 
 	// Consume the segments that precede the given position and release no longer
 	// used chunks.
-	struct mm_chunk *chunk = mm_chunk_queue_head(&buf->chunks);
-	struct mm_buffer_segment *first = mm_buffer_segment_first(chunk);
+	struct mm_buffer_segment *first = mm_buffer_segment_first(buf);
 	for (struct mm_buffer_segment *seg = first; seg != buf->head.seg; ) {
 		// Account for the segment size.
 		consumed += mm_buffer_segment_area(seg);
@@ -250,14 +245,11 @@ mm_buffer_compact(struct mm_buffer *buf)
 		seg = mm_buffer_segment_adjacent_next(seg);
 		// On a terminal segment move to the next chunk.
 		if (mm_buffer_segment_terminal(seg)) {
-			struct mm_chunk *next = mm_chunk_queue_next(chunk);
-			seg = first = mm_buffer_segment_first(next);
+			seg = mm_buffer_segment_terminal_next(seg);
 			consumed -= MM_BUFFER_SEGMENT_SIZE;
-
-			// Destroy the previous chunk.
-			mm_queue_remove(&buf->chunks);
-			mm_chunk_destroy(chunk);
-			chunk = next;
+			mm_memory_free(first);
+			buf->stub.next = seg;
+			first = seg;
 		}
 	}
 

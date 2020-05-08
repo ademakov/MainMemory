@@ -23,7 +23,6 @@
 #include "common.h"
 #include "base/bitops.h"
 #include "base/report.h"
-#include "base/memory/chunk.h"
 
 #include <stdarg.h>
 
@@ -61,9 +60,9 @@
  * concurrently.
  */
 
-#define MM_BUFFER_MIN_CHUNK_SIZE	(1024 - MM_BUFFER_CHUNK_OVERHEAD)
-#define MM_BUFFER_MAX_CHUNK_SIZE	(4 * 1024 * 1024 - MM_BUFFER_CHUNK_OVERHEAD)
-#define MM_BUFFER_CHUNK_OVERHEAD	(MM_CHUNK_OVERHEAD + MM_BUFFER_SEGMENT_SIZE + MM_BUFFER_TERMINAL_SIZE)
+#define MM_BUFFER_MIN_CHUNK_SIZE	(1024u - MM_BUFFER_CHUNK_OVERHEAD)
+#define MM_BUFFER_MAX_CHUNK_SIZE	(512u * 1024u - MM_BUFFER_CHUNK_OVERHEAD)
+#define MM_BUFFER_CHUNK_OVERHEAD	(MM_BUFFER_SEGMENT_SIZE + MM_BUFFER_TERMINAL_SIZE)
 
 #define MM_BUFFER_SEGMENT_SIZE		sizeof(struct mm_buffer_segment)
 #define MM_BUFFER_TERMINAL_SIZE		sizeof(struct mm_buffer_tsegment)
@@ -150,8 +149,6 @@ struct mm_buffer
 	struct mm_buffer_writer tail;
 	/* Initial pseudo-segment. */
 	struct mm_buffer_tsegment stub;
-	/* Entire buffer memory as a list of chunks. */
-	struct mm_queue chunks;
 	/* The minimum chunk size. */
 	uint32_t chunk_size;
 };
@@ -249,12 +246,6 @@ mm_buffer_segment_data(const struct mm_buffer_segment *seg)
 }
 
 static inline struct mm_buffer_segment * NONNULL(1)
-mm_buffer_segment_first(const struct mm_chunk *chunk)
-{
-	return (struct mm_buffer_segment *) chunk->data;
-}
-
-static inline struct mm_buffer_segment * NONNULL(1)
 mm_buffer_segment_adjacent_next(const struct mm_buffer_segment *seg)
 {
 	uint32_t area = mm_buffer_segment_area(seg);
@@ -274,6 +265,12 @@ mm_buffer_segment_next(const struct mm_buffer_segment *seg)
 		return mm_buffer_segment_terminal_next(seg);
 	else
 		return mm_buffer_segment_adjacent_next(seg);
+}
+
+static inline struct mm_buffer_segment * NONNULL(1)
+mm_buffer_segment_first(struct mm_buffer *buffer)
+{
+	return mm_buffer_segment_terminal_next(&buffer->stub.base);
 }
 
 /**********************************************************************
