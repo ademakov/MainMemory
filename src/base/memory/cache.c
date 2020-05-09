@@ -31,29 +31,28 @@
 
   row | msb | 0            | 1            | 2            | 3            |
  -----+-----+--------------+--------------+--------------+--------------+--------------
-   0  |  2  |       4 (0)  |       5 (1)  |       6 (2)  |       7 (3)  | SMALL SIZES
-   1  |  3  |       8 (4)  |      10 (5)  |      12 (6)  |      14 (7)  |
-   2  |  4  |      16 (8)  |      20 (9)  |      24 (10) |      28 (11) |
-   3  |  5  |      32 (12) |      40 (13) |      48 (14) }      56 (15) |
-   4  |  6  |      64 (16) |      80 (17) |      96 (18) |     112 (19) |
+   0  |  3  |       8 (0)  |      10 (1)  |      12 (2)  |      14 (3)  | SMALL SIZES
+   1  |  4  |      16 (4)  |      20 (5)  |      24 (6)  |      28 (7)  |
+   2  |  5  |      32 (8)  |      40 (9)  |      48 (10) }      56 (11) |
+   3  |  6  |      64 (12) |      80 (13) |      96 (14) |     112 (15) |
  -----+-----+--------------+--------------+--------------+-----------------------------
-   5  |  7  |     128 (20) |     160 (21) |     192 (22) |     224 (23) | MEDIUM SIZES
-   6  |  8  |     256 (24) |     320 (25) |     384 (26) |     448 (27) |
-   7  |  9  |     512 (28) |     640 (29) |     768 (30) |     896 (31) |
-   8  | 10  |    1024 (32) |    1280 (33) |    1536 (34) |    1792 (35) |
-   9  | 11  |    2048 (36) |    2560 (37) |    3072 (38) |    3584 (39) |
+   4  |  7  |     128 (16) |     160 (17) |     192 (18) |     224 (19) | MEDIUM SIZES
+   5  |  8  |     256 (20) |     320 (21) |     384 (22) |     448 (23) |
+   6  |  9  |     512 (24) |     640 (25) |     768 (26) |     896 (27) |
+   7  | 10  |    1024 (28) |    1280 (29) |    1536 (30) |    1792 (31) |
+   8  | 11  |    2048 (32) |    2560 (33) |    3072 (34) |    3584 (35) |
  -----+-----+--------------+--------------+--------------+--------------+--------------
-  10  | 12  |    4096 (40) |    5120 (41) |    6144 (42) |    7168 (43) | LARGE SIZES
-  11  | 13  |    8192 (44) |   10240 (45) |   12288 (46) |   14336 (47) |
-  12  | 14  |   16384 (48) |   20480 (49) |   24576 (50) |   28672 (51) |
-  13  | 15  |   32768 (52) |   40960 (53) |   49152 (54) |   57344 (55) |
-  14  | 16  |   65536 (56) |   81920 (57) |   98304 (58) |  114688 (59) |
-  15  | 17  |  131072 (60) |  163840 (61) |  196608 (62) |  229376 (63) |
-  16  | 18  |  262144 (64) |  327680 (65) |  393216 (66) |  458752 (67) |
-  17  | 19  |  524288 (68) |  655360 (69) |  786432 (70) |  917504 (71) |
-  18  | 20  | 1048576 (72) | 1310720 (73) | 1572864 (74) | 1835008 (75) |
+   9  | 12  |    4096 (36) |    5120 (37) |    6144 (38) |    7168 (39) | LARGE SIZES
+  10  | 13  |    8192 (40) |   10240 (41) |   12288 (42) |   14336 (43) |
+  11  | 14  |   16384 (44) |   20480 (45) |   24576 (46) |   28672 (47) |
+  12  | 15  |   32768 (48) |   40960 (49) |   49152 (50) |   57344 (51) |
+  13  | 16  |   65536 (52) |   81920 (53) |   98304 (54) |  114688 (55) |
+  14  | 17  |  131072 (56) |  163840 (57) |  196608 (58) |  229376 (59) |
+  15  | 18  |  262144 (60) |  327680 (61) |  393216 (62) |  458752 (63) |
+  16  | 19  |  524288 (64) |  655360 (65) |  786432 (66) |  917504 (67) |
+  17  | 20  | 1048576 (68) | 1310720 (69) | 1572864 (70) | 1835008 (71) |
  -----+-----+--------------+--------------+--------------+--------------+--------------
-  19  | 21  | 2097152 (76)  ...                                         | HUGE SIZES
+  18  | 21  | 2097152 (72)  ...                                         | HUGE SIZES
 
 
   Unit Map Encoding
@@ -62,8 +61,8 @@
   byte 0
   ------
   large chunk size index:
-    value >= 0x28 --  40 -- 0 0 1 0 | 1 0 0 0
-    value <= 0x4b --  75 -- 0 1 0 0 | 1 0 1 1
+    value >= 0x24 --  36 -- 0 0 1 0 | 0 1 0 0
+    value <= 0x47 --  71 -- 0 1 0 0 | 0 1 1 1
     0 x x x | x x x x
 
   byte 1
@@ -103,11 +102,13 @@
 */
 
 // The number of chunk ranks.
-#define MM_MEMORY_SMALL_SIZES		(20u)
+#define MM_MEMORY_SMALL_SIZES		(16u)
 #define MM_MEMORY_MEDIUM_SIZES		(20u)
 #define MM_MEMORY_LARGE_SIZES		(36u)
 #define MM_MEMORY_BLOCK_SIZES		(MM_MEMORY_SMALL_SIZES + MM_MEMORY_MEDIUM_SIZES)
 #define MM_MEMORY_CACHE_SIZES		(MM_MEMORY_BLOCK_SIZES + MM_MEMORY_LARGE_SIZES)
+
+#define MM_MEMORY_SMALL_TO_MEDIUM	(20u)
 
 // The number of chunk ranks that are allocated by halving.
 #define MM_MEMORY_BUDDY_SIZES		(MM_MEMORY_LARGE_SIZES - 12u)
@@ -126,13 +127,13 @@
 #define MM_MEMORY_BASE_TAG		(128u)
 #define MM_MEMORY_NEXT_TAG		(192u)
 
-#define MM_CHUNK_MAKE_SIZE(r, m)	((size_t) (4u | (m)) << (r))
+#define MM_CHUNK_MAKE_SIZE(r, m)	((size_t) (4u | (m)) << (r + 1u))
 
 #define MM_CHUNK_MAGIC_SHIFT		(18u)
 #define MM_CHUNK_MAGIC_FACTOR		(1u << MM_CHUNK_MAGIC_SHIFT)
-#define MM_CHUNK_MAKE_MAGIC(e, m)	((MM_CHUNK_MAGIC_FACTOR + MM_CHUNK_MAKE_SIZE(e, m) - 1u) / MM_CHUNK_MAKE_SIZE(e, m))
+#define MM_CHUNK_MAKE_MAGIC(r, m)	((MM_CHUNK_MAGIC_FACTOR + MM_CHUNK_MAKE_SIZE(r, m) - 1u) / MM_CHUNK_MAKE_SIZE(r, m))
 
-#define MM_CHUNK_ROW(e, _)		_(e, 0u), _(e, 1u), _(e, 2u), _(e, 3u)
+#define MM_CHUNK_ROW(r, _)		_(r, 0u), _(r, 1u), _(r, 2u), _(r, 3u)
 #define MM_CHUNK_LOWER_ROWS(_)		\
 	MM_CHUNK_ROW(0u, _),		\
 	MM_CHUNK_ROW(1u, _),		\
@@ -142,9 +143,9 @@
 	MM_CHUNK_ROW(5u, _),		\
 	MM_CHUNK_ROW(6u, _),		\
 	MM_CHUNK_ROW(7u, _),		\
-	MM_CHUNK_ROW(8u, _),		\
-	MM_CHUNK_ROW(9u, _)
+	MM_CHUNK_ROW(8u, _)
 #define MM_CHUNK_UPPER_ROWS(_)		\
+	MM_CHUNK_ROW(9u, _),		\
 	MM_CHUNK_ROW(10u, _),		\
 	MM_CHUNK_ROW(11u, _),		\
 	MM_CHUNK_ROW(12u, _),		\
@@ -152,8 +153,7 @@
 	MM_CHUNK_ROW(14u, _),		\
 	MM_CHUNK_ROW(15u, _),		\
 	MM_CHUNK_ROW(16u, _),		\
-	MM_CHUNK_ROW(17u, _),		\
-	MM_CHUNK_ROW(18u, _)
+	MM_CHUNK_ROW(17u, _)
 
 typedef enum
 {
@@ -215,7 +215,7 @@ static const uint32_t mm_memory_magic[] = {
 static inline uint32_t
 mm_memory_get_rank(size_t size)
 {
-	if (size-- <= 4)
+	if (size-- <= 8)
 		return 0;
 
 	// Search for most significant set bit, on x86 this should translate
@@ -223,7 +223,7 @@ mm_memory_get_rank(size_t size)
 	const uint32_t msb = mm_clz(size) ^ (mm_nbits(size) - 1);
 
 	// Calcualte the rank.
-	return (msb << 2u) + (size >> (msb - 2u)) - 11u;
+	return (msb << 2u) + (size >> (msb - 2u)) - 15u;
 }
 
 static inline uint32_t
@@ -647,7 +647,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 
 		// Use a cached inner block if any.
 		struct mm_memory_block *block = cache->active->blocks[rank];
-		const uint32_t medium_rank = rank + MM_MEMORY_SMALL_SIZES;
+		const uint32_t medium_rank = rank + MM_MEMORY_SMALL_TO_MEDIUM;
 		if (block != NULL) {
 			ASSERT(block->inner_free);
 			const uint32_t shift = mm_ctz(block->inner_free);
@@ -686,7 +686,7 @@ mm_memory_cache_alloc(struct mm_memory_cache *const cache, const size_t size)
 			inner_base = (uint8_t *) block + shift * mm_memory_sizes[medium_rank];
 		} else {
 			// Allocate a new block.
-			block = mm_memory_alloc_block(cache, rank + MM_MEMORY_BLOCK_SIZES);
+			block = mm_memory_alloc_block(cache, medium_rank + MM_MEMORY_MEDIUM_SIZES);
 			if (unlikely(block == NULL))
 				return NULL;
 			// Mark the medium chunk as an inner block.
@@ -862,7 +862,7 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 	}
 
 	// Locate the inner block.
-	const uint32_t small_rank = rank - MM_MEMORY_BLOCK_SIZES;
+	const uint32_t small_rank = medium_rank - MM_MEMORY_SMALL_TO_MEDIUM;
 	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * mm_memory_sizes[medium_rank]);
 	const uint32_t inner_shift = (((uint8_t *) ptr - (uint8_t *) inner) * mm_memory_magic[small_rank]) >> MM_CHUNK_MAGIC_SHIFT;
 	MEMORY_VERIFY(inner_shift > 0 || inner_shift < 32, "bad pointer");
@@ -936,6 +936,5 @@ mm_memory_cache_chunk_size(const void *const ptr)
 		return mm_memory_sizes[medium_rank];
 
 	// Handle a small chunk.
-	const uint32_t small_rank = rank - MM_MEMORY_BLOCK_SIZES;
-	return mm_memory_sizes[small_rank];
+	return mm_memory_sizes[medium_rank - MM_MEMORY_SMALL_TO_MEDIUM];
 }
