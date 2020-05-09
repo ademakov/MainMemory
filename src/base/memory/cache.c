@@ -481,7 +481,7 @@ mm_memory_alloc_large(struct mm_memory_cache *const cache, const uint32_t requir
 
 		// Try to find a suitable span in the staging list.
 		struct mm_link *link = mm_list_head(&cache->staging);
-		while (link != mm_list_sentinel(&cache->staging)) {
+		while (link != mm_list_stub(&cache->staging)) {
 			struct mm_memory_heap *next = containerof(link, struct mm_memory_heap, staging_link);
 			original_rank = mm_memory_find_chunk(next, required_rank);
 			if (original_rank < MM_MEMORY_CACHE_SIZES) {

@@ -47,7 +47,7 @@ mm_list_prepare(struct mm_list *list)
 }
 
 static inline const struct mm_link *
-mm_list_sentinel(const struct mm_list *list)
+mm_list_stub(const struct mm_list *list)
 {
 	return &list->base;
 }
@@ -79,7 +79,7 @@ mm_list_is_tail(const struct mm_list *list, const struct mm_link *item)
 static inline bool
 mm_list_empty(struct mm_list *list)
 {
-	return mm_list_head(list) == mm_list_sentinel(list);
+	return mm_list_head(list) == mm_list_stub(list);
 }
 
 static inline void
