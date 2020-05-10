@@ -22,6 +22,7 @@
 
 #include "common.h"
 #include "base/atomic.h"
+#include <stdatomic.h>
 
 /**********************************************************************
  * Double-linked circular list.
@@ -328,6 +329,87 @@ mm_queue_remove(struct mm_queue *list)
 	if (head->next == NULL)
 		list->tail = &list->head;
 	return head;
+}
+
+/**********************************************************************
+ * MPSC concurrent queue.
+ **********************************************************************/
+
+/*
+ * This is basically Dmitry Vyukov's intrusive MPSC node-based queue:
+ *
+ * http://www.1024cores.net/home/lock-free-algorithms/queues/intrusive-mpsc-node-based-queue
+ *
+ * The only thing is that here the 'tail' and 'head' have reverse meanining.
+ */
+
+struct mm_mpsc_qlink
+{
+	 struct mm_mpsc_qlink *_Atomic next;
+};
+
+struct mm_mpsc_queue
+{
+	CACHE_ALIGN struct mm_mpsc_qlink *_Atomic tail;
+	CACHE_ALIGN struct mm_mpsc_qlink *head;
+	struct mm_mpsc_qlink stub;
+};
+
+static inline void
+mm_mpsc_qlink_prepare(struct mm_mpsc_qlink *link)
+{
+	atomic_init(&link->next, NULL);
+}
+
+static inline void
+mm_mpsc_queue_prepare(struct mm_mpsc_queue *list)
+{
+	list->head = &list->stub;
+	atomic_init(&list->tail, &list->stub);
+	mm_mpsc_qlink_prepare(&list->stub);
+}
+
+static inline void
+mm_mpsc_queue_append_span(struct mm_mpsc_queue *list, struct mm_mpsc_qlink *head, struct mm_mpsc_qlink *tail)
+{
+	struct mm_mpsc_qlink *prev = atomic_exchange(&list->tail, tail);
+	atomic_store_explicit(&prev->next, head, memory_order_release);
+}
+
+static inline void
+mm_mpsc_queue_append(struct mm_mpsc_queue *list, struct mm_mpsc_qlink *link)
+{
+	mm_mpsc_queue_append_span(list, link, link);
+}
+
+static inline struct mm_mpsc_qlink *
+mm_mpsc_queue_remove(struct mm_mpsc_queue *list)
+{
+	struct mm_mpsc_qlink *head = list->head;
+	struct mm_mpsc_qlink *next = atomic_load_explicit(&head->next, memory_order_acquire);
+	if (head == &list->stub) {
+		if (next == NULL)
+			return NULL;
+		list->head = head = next;
+		next = atomic_load_explicit(&next->next, memory_order_acquire);
+	}
+	if (next != NULL) {
+		list->head = next;
+		return head;
+	}
+
+	struct mm_mpsc_qlink *tail = atomic_load_explicit(&list->tail, memory_order_acquire);
+	if (tail != head)
+		return NULL;
+
+	mm_mpsc_qlink_prepare(&list->stub);
+	mm_mpsc_queue_append(list, &list->stub);
+	next = atomic_load_explicit(&head->next, memory_order_acquire);
+	if (next) {
+		list->head = next;
+		return head;
+	}
+	return NULL;
 }
 
 #endif /* BASE_LIST_H */
