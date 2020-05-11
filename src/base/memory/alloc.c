@@ -43,31 +43,6 @@ mm_memory_fixed_cache_ensure(void)
 	}
 }
 
-static void
-mm_memory_remote_context_free_req(struct mm_context *context, uintptr_t *arguments)
-{
-	void *ptr = (void *) arguments[0];
-	mm_context_free(context, ptr);
-}
-
-static void
-mm_memory_remote_context_free(struct mm_context *context, void *ptr)
-{
-	uint32_t count = 0;
-	uint32_t backoff = 0;
-	while (!mm_async_trycall_1(context, mm_memory_remote_context_free_req, (uintptr_t) ptr)) {
-		count++;
-		if (count == MM_FREE_WARN_THRESHOLD) {
-			mm_warning(0, "Problem with slow chunk reclamation");
-		} else if (count == MM_FREE_ERROR_THRESHOLD) {
-			mm_error(0, "Problem with slow chunk reclamation");
-		} else if (count == MM_FREE_FATAL_THRESHOLD) {
-			mm_fatal(0, "Problem with slow chunk reclamation");
-		}
-		backoff = mm_thread_backoff(backoff);
-	}
-}
-
 /**********************************************************************
  * 'Fixed' memory allocation routines -- survive context destruction.
  **********************************************************************/
@@ -294,7 +269,7 @@ mm_memory_free(void *ptr)
 		if (context == span->context) {
 			mm_context_free(context, ptr);
 		} else {
-			mm_memory_remote_context_free(span->context, ptr);
+			mm_memory_cache_remote_free(span, ptr);
 		}
 	} else {
 		mm_memory_fixed_free(ptr);
