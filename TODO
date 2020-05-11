@@ -2,10 +2,10 @@
 v 0.4
 =====
 
-* new concurrent memory manager
-** https://github.com/cksystemsgroup/scalloc
-** slab allocator (to base object pools on)
-** buddy allocator (for chunks and slabs)
+* finish TODOs in the new memory manager
+* use normal free list for large sizes?
+* fewer small size classes?
+* chunk coalescing
 * split large memcache entries
 * minimize memcache locks or non-blocking memcache table
 
@@ -58,6 +58,7 @@ Larger items:
 * AF_PACKET and/or DPDK-based net I/O
 
 Low priority enhancements:
+* slab allocator?
 * hires timers
 * DNS resolver
 * background workers
