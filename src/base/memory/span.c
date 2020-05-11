@@ -77,7 +77,6 @@ mm_memory_span_create_heap(struct mm_memory_cache *const cache)
 
 		span->cache = cache;
 		span->context = cache->context;
-		mm_list_insert(&cache->spans, &span->cache_link);
 	}
 	return span;
 }
@@ -99,7 +98,6 @@ mm_memory_span_create_huge(struct mm_memory_cache *const cache, const size_t siz
 
 		span->cache = cache;
 		span->context = cache->context;
-		mm_list_insert(&cache->spans, &span->cache_link);
 	}
 	return span;
 }
@@ -107,6 +105,5 @@ mm_memory_span_create_huge(struct mm_memory_cache *const cache, const size_t siz
 void NONNULL(1)
 mm_memory_span_destroy(struct mm_memory_span *const span)
 {
-	mm_list_delete(&span->cache_link);
 	mm_memory_free_space(span, mm_memory_span_virtual_size(span));
 }

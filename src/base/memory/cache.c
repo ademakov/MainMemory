@@ -588,7 +588,6 @@ mm_memory_cache_prepare(struct mm_memory_cache *const cache, struct mm_context *
 	cache->context = context;
 
 	mm_list_prepare(&cache->staging);
-	mm_list_prepare(&cache->spans);
 
 	cache->active = (struct mm_memory_heap *) mm_memory_span_create_heap(cache);
 	MEMORY_VERIFY(cache->active, "failed to create an initial memory span");
@@ -598,10 +597,13 @@ mm_memory_cache_prepare(struct mm_memory_cache *const cache, struct mm_context *
 void NONNULL(1)
 mm_memory_cache_cleanup(struct mm_memory_cache *const cache)
 {
-	while (!mm_list_empty(&cache->spans)) {
-		struct mm_link *link = mm_list_head(&cache->spans);
-		struct mm_memory_span *span = containerof(link, struct mm_memory_span, cache_link);
-		mm_memory_span_destroy(span);
+	while (!mm_list_empty(&cache->staging)) {
+		struct mm_link *link = mm_list_remove_head(&cache->staging);
+		struct mm_memory_heap *heap = containerof(link, struct mm_memory_heap, staging_link);
+		mm_memory_span_destroy(&heap->base);
+	}
+	if (cache->active != NULL) {
+		mm_memory_span_destroy(&cache->active->base);
 	}
 }
 
@@ -822,7 +824,6 @@ mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
 
 	// Handle a huge chunk.
 	if (mm_memory_span_huge(span)) {
-		mm_list_delete(&span->cache_link);
 		mm_memory_span_destroy(span);
 		return;
 	}

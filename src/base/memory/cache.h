@@ -34,9 +34,6 @@ struct mm_memory_cache
 	/* The inactive spans to gather freed memory. */
 	struct mm_list staging;
 
-	/* All the spans that belong to the cache. */
-	struct mm_list spans;
-
 	/* The execution context the cache belongs to. */
 	struct mm_context *context;
 };

@@ -61,7 +61,6 @@ struct mm_memory_span
 
 	/* The memory cache the span belongs to. */
 	struct mm_memory_cache *cache;
-	struct mm_link cache_link;
 };
 
 /* Huge span header. */
