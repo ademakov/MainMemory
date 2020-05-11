@@ -37,7 +37,7 @@ test_alloc(const char *title, const size_t size)
 
 	void *data = allocate(&cache, size);
 	memset(data, 0, size);
-	mm_memory_cache_free(&cache, data);
+	mm_memory_cache_local_free(&cache, data);
 
 	mm_memory_cache_cleanup(&cache);
 }
@@ -69,8 +69,8 @@ test_alloc_2(const char *title, const size_t size)
 		}
 	}
 
-	mm_memory_cache_free(&cache, data);
-	mm_memory_cache_free(&cache, data2);
+	mm_memory_cache_local_free(&cache, data);
+	mm_memory_cache_local_free(&cache, data2);
 
 	mm_memory_cache_cleanup(&cache);
 }
