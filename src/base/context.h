@@ -180,10 +180,12 @@ mm_context_realloc(struct mm_context *context, void *ptr, size_t size)
 	return mm_memory_cache_realloc(&context->cache, ptr, size);
 }
 
-static inline void NONNULL(1, 2)
+static inline void NONNULL(1)
 mm_context_free(struct mm_context *context, void *ptr)
 {
-	mm_memory_cache_free(&context->cache, ptr);
+	if (ptr != NULL) {
+		mm_memory_cache_local_free(&context->cache, ptr);
+	}
 }
 
 #endif /* BASE_CONTEXT_H */

@@ -23,6 +23,9 @@
 #include "common.h"
 #include "base/list.h"
 
+/* Forward declaration. */
+struct mm_memory_span;
+
 /*
  * A memory allocation cache.
  */
@@ -44,6 +47,9 @@ mm_memory_cache_prepare(struct mm_memory_cache *cache, struct mm_context *contex
 void NONNULL(1)
 mm_memory_cache_cleanup(struct mm_memory_cache *cache);
 
+void NONNULL(1)
+mm_memory_cache_collect(struct mm_memory_cache *cache);
+
 void * NONNULL(1) MALLOC
 mm_memory_cache_alloc(struct mm_memory_cache *cache, size_t size);
 
@@ -59,8 +65,11 @@ mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size)
 void * NONNULL(1) MALLOC
 mm_memory_cache_realloc(struct mm_memory_cache *cache, void *ptr, size_t size);
 
-void NONNULL(1)
-mm_memory_cache_free(struct mm_memory_cache *cache, void *ptr);
+void NONNULL(1, 2)
+mm_memory_cache_local_free(struct mm_memory_cache *cache, void *ptr);
+
+void NONNULL(1, 2)
+mm_memory_cache_remote_free(struct mm_memory_span *span, void *ptr);
 
 size_t
 mm_memory_cache_chunk_size(const void *ptr);

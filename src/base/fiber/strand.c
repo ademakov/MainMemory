@@ -208,19 +208,6 @@ mm_strand_worker_create(struct mm_strand *strand)
 // Master loop sleep time - 10 seconds
 #define MM_STRAND_HALT_TIMEOUT	((mm_timeout_t) 10 * 1000 * 1000)
 
-static void
-mm_strand_trim(struct mm_strand *strand)
-{
-	ENTER();
-
-	// Cleanup the temporary data.
-	mm_wait_cache_truncate(&strand->wait_cache);
-
-	// TODO: coalesce context memory cache
-
-	LEAVE();
-}
-
 static mm_value_t
 mm_strand_master(mm_value_t arg)
 {
@@ -235,8 +222,10 @@ mm_strand_master(mm_value_t arg)
 		if (strand->nidle) {
 			// Check for available tasks.
 			if (mm_task_list_empty(&context->tasks)) {
-				// Release previously taken unused resources.
-				mm_strand_trim(strand);
+				// Cleanup the temporary data.
+				mm_wait_cache_truncate(&strand->wait_cache);
+				// Collect released context memory.
+				mm_memory_cache_collect(&context->cache);
 				// Wait for I/O events and timers.
 				mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
 			}

@@ -193,6 +193,9 @@ struct mm_memory_heap
 	struct mm_link staging_link;
 	mm_memory_heap_status_t status;
 
+	// The list of chunks freed remotely.
+	struct mm_mpsc_queue remote_free_list;
+
 	// Cached blocks and chunks.
 	struct mm_memory_block *blocks[MM_MEMORY_BLOCK_SIZES];
 	uint16_t chunks[MM_MEMORY_LARGE_SIZES];
@@ -460,6 +463,9 @@ mm_memory_prepare_heap(struct mm_memory_heap *const heap)
 	memset(heap->units, 0, sizeof heap->units);
 #endif
 
+	// Initialize the remote free list.
+	mm_mpsc_queue_prepare(&heap->remote_free_list);
+
 	// The initial heap layout takes out the very first 4KiB chunk
 	// from the heap. It is used up for the very heap header that is
 	// initialized here.
@@ -582,6 +588,93 @@ mm_memory_alloc_block(struct mm_memory_cache *const cache, const uint32_t rank)
 	return block;
 }
 
+static void
+mm_memory_cache_free_chunk(struct mm_memory_heap *const heap, void *const ptr)
+{
+	// Identify the chunk.
+	const uint32_t base = mm_memory_deduce_base(heap, ptr);
+	MEMORY_VERIFY(base >= 4 && base < MM_MEMORY_UNIT_NUMBER, "bad pointer");
+	const uint8_t rank = heap->units[base];
+	const uint8_t mark = heap->units[base + 1];
+	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
+
+	// Handle a large chunk.
+	if ((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG) {
+		MEMORY_VERIFY((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_NEXT_TAG, "double free");
+		MEMORY_VERIFY(mark == 0, "bad pointer");
+		mm_memory_free_chunk(heap, base, rank);
+		return;
+	}
+
+	// Locate the block.
+	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
+	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
+	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
+	MEMORY_VERIFY(shift > 0 || shift < 32, "bad pointer");
+
+	// Handle a medium chunk.
+	const uint32_t mask = 1u << shift;
+	if ((block->inner_used & mask) == 0) {
+		MEMORY_VERIFY((block->chunk_free & mask) == 0, "double free");
+		if (block->chunk_free == 0) {
+			block->next = heap->blocks[medium_rank];
+			heap->blocks[medium_rank] = block;
+		}
+		block->chunk_free |= mask;
+		return;
+	}
+
+	// Locate the inner block.
+	const uint32_t small_rank = medium_rank - MM_MEMORY_SMALL_TO_MEDIUM;
+	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * mm_memory_sizes[medium_rank]);
+	const uint32_t inner_shift = (((uint8_t *) ptr - (uint8_t *) inner) * mm_memory_magic[small_rank]) >> MM_CHUNK_MAGIC_SHIFT;
+	MEMORY_VERIFY(inner_shift > 0 || inner_shift < 32, "bad pointer");
+
+	// Handle a small chunk.
+	const uint32_t inner_mask = 1u << inner_shift;
+	MEMORY_VERIFY((inner->free & inner_mask) == 0, "double free");
+	inner->free |= inner_mask;
+	if (inner->free == 0xfffe) {
+		block->inner_used ^= mask;
+		block->inner_free ^= mask;
+		if (block->chunk_free == 0) {
+			block->next = heap->blocks[medium_rank];
+			heap->blocks[medium_rank] = block;
+		}
+		block->chunk_free |= mask;
+
+		if (heap->blocks[small_rank] == block) {
+			heap->blocks[small_rank] = block->inner_next;
+		} else {
+			struct mm_memory_block *prev = heap->blocks[small_rank];
+			while (prev) {
+				if (prev->inner_next == block) {
+					prev->inner_next = block->inner_next;
+					break;
+				}
+				prev = prev->next;
+			}
+		}
+	} else {
+		if (block->inner_free == 0) {
+			block->inner_next = heap->blocks[small_rank];
+			heap->blocks[small_rank] = block;
+		}
+		block->inner_free |= mask;
+	}
+}
+
+static void
+mm_memory_cache_handle_remote_free_list(struct mm_memory_heap *const heap)
+{
+	for (;;) {
+		struct mm_mpsc_qlink *link = mm_mpsc_queue_remove(&heap->remote_free_list);
+		if (link == NULL)
+			break;
+		mm_memory_cache_free_chunk(heap, link);
+	}
+}
+
 void NONNULL(1)
 mm_memory_cache_prepare(struct mm_memory_cache *const cache, struct mm_context *context)
 {
@@ -604,6 +697,18 @@ mm_memory_cache_cleanup(struct mm_memory_cache *const cache)
 	}
 	if (cache->active != NULL) {
 		mm_memory_span_destroy(&cache->active->base);
+	}
+}
+
+void NONNULL(1)
+mm_memory_cache_collect(struct mm_memory_cache *const cache)
+{
+	mm_memory_cache_handle_remote_free_list(cache->active);
+
+	struct mm_link *link = mm_list_head(&cache->staging);
+	while (link != mm_list_stub(&cache->staging)) {
+		struct mm_memory_heap *heap = containerof(link, struct mm_memory_heap, staging_link);
+		mm_memory_cache_handle_remote_free_list(heap);
 	}
 }
 
@@ -788,7 +893,8 @@ void * NONNULL(1) MALLOC
 mm_memory_cache_realloc(struct mm_memory_cache *const cache, void *const ptr, const size_t size)
 {
 	if (size == 0) {
-		mm_memory_cache_free(cache, ptr);
+		// TODO: verify that it's local.
+		mm_memory_cache_local_free(cache, ptr);
 		return NULL;
 	}
 
@@ -808,98 +914,43 @@ mm_memory_cache_realloc(struct mm_memory_cache *const cache, void *const ptr, co
 		return NULL;
 
 	memcpy(next_ptr, ptr, min(prev_size, size));
-	mm_memory_cache_free(cache, ptr);
+	mm_memory_cache_local_free(cache, ptr);
 
 	return next_ptr;
 }
 
-void NONNULL(1)
-mm_memory_cache_free(struct mm_memory_cache *const cache, void *const ptr)
+void NONNULL(1, 2)
+mm_memory_cache_local_free(struct mm_memory_cache *cache, void *ptr)
 {
-	if (ptr == NULL)
-		return;
+	struct mm_memory_span *span = mm_memory_span_from_ptr(ptr);
+	VERIFY(cache == span->cache);
 
-	struct mm_memory_span *const span = mm_memory_span_from_ptr(ptr);
-	MEMORY_VERIFY(cache == span->cache, "wrong cache");
-
-	// Handle a huge chunk.
+	// Handle a huge span.
 	if (mm_memory_span_huge(span)) {
 		mm_memory_span_destroy(span);
 		return;
 	}
 
-	// Identify the chunk.
-	struct mm_memory_heap *const heap = (struct mm_memory_heap *) span;
-	const uint32_t base = mm_memory_deduce_base(heap, ptr);
-	MEMORY_VERIFY(base >= 4 && base < MM_MEMORY_UNIT_NUMBER, "bad pointer");
-	const uint8_t rank = heap->units[base];
-	const uint8_t mark = heap->units[base + 1];
-	MEMORY_VERIFY(rank >= MM_MEMORY_BLOCK_SIZES && rank < MM_MEMORY_CACHE_SIZES, "bad pointer");
+	// Handle a chunk in a heap span.
+	mm_memory_cache_free_chunk((struct mm_memory_heap *) span, ptr);
+}
 
-	// Handle a large chunk.
-	if ((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_BASE_TAG) {
-		MEMORY_VERIFY((mark & ~MM_MEMORY_UNIT_LMASK) != MM_MEMORY_NEXT_TAG, "double free");
-		MEMORY_VERIFY(mark == 0, "bad pointer");
-		mm_memory_free_chunk(heap, base, rank);
+void NONNULL(1, 2)
+mm_memory_cache_remote_free(struct mm_memory_span *const span, void *const ptr)
+{
+	ASSERT(span == mm_memory_span_from_ptr(ptr));
+
+	// Handle a huge span.
+	if (mm_memory_span_huge(span)) {
+		mm_memory_span_destroy(span);
 		return;
 	}
 
-	// Locate the block.
-	const uint32_t medium_rank = rank - MM_MEMORY_MEDIUM_SIZES;
-	struct mm_memory_block *const block = (struct mm_memory_block *) ((uint8_t *) heap + base * MM_MEMORY_UNIT_SIZE);
-	const uint32_t shift = (((uint8_t *) ptr - (uint8_t *) block) * mm_memory_magic[medium_rank]) >> MM_CHUNK_MAGIC_SHIFT;
-	MEMORY_VERIFY(shift > 0 || shift < 32, "bad pointer");
-
-	// Handle a medium chunk.
-	const uint32_t mask = 1u << shift;
-	if ((block->inner_used & mask) == 0) {
-		MEMORY_VERIFY((block->chunk_free & mask) == 0, "double free");
-		if (block->chunk_free == 0) {
-			block->next = heap->blocks[medium_rank];
-			heap->blocks[medium_rank] = block;
-		}
-		block->chunk_free |= mask;
-		return;
-	}
-
-	// Locate the inner block.
-	const uint32_t small_rank = medium_rank - MM_MEMORY_SMALL_TO_MEDIUM;
-	struct mm_memory_block_inner *const inner = (struct mm_memory_block_inner *) ((uint8_t *) block + shift * mm_memory_sizes[medium_rank]);
-	const uint32_t inner_shift = (((uint8_t *) ptr - (uint8_t *) inner) * mm_memory_magic[small_rank]) >> MM_CHUNK_MAGIC_SHIFT;
-	MEMORY_VERIFY(inner_shift > 0 || inner_shift < 32, "bad pointer");
-
-	// Handle a small chunk.
-	const uint32_t inner_mask = 1u << inner_shift;
-	MEMORY_VERIFY((inner->free & inner_mask) == 0, "double free");
-	inner->free |= inner_mask;
-	if (inner->free == 0xfffe) {
-		block->inner_used ^= mask;
-		block->inner_free ^= mask;
-		if (block->chunk_free == 0) {
-			block->next = heap->blocks[medium_rank];
-			heap->blocks[medium_rank] = block;
-		}
-		block->chunk_free |= mask;
-
-		if (heap->blocks[small_rank] == block) {
-			heap->blocks[small_rank] = block->inner_next;
-		} else {
-			struct mm_memory_block *prev = heap->blocks[small_rank];
-			while (prev) {
-				if (prev->inner_next == block) {
-					prev->inner_next = block->inner_next;
-					break;
-				}
-				prev = prev->next;
-			}
-		}
-	} else {
-		if (block->inner_free == 0) {
-			block->inner_next = heap->blocks[small_rank];
-			heap->blocks[small_rank] = block;
-		}
-		block->inner_free |= mask;
-	}
+	// Handle a chunk in a heap span.
+	struct mm_mpsc_queue *const list = &((struct mm_memory_heap *) span)->remote_free_list;
+	struct mm_mpsc_qlink *const link = ptr;
+	mm_mpsc_qlink_prepare(link);
+	mm_mpsc_queue_append(list, link);
 }
 
 size_t

@@ -170,8 +170,11 @@ mm_memory_fixed_xrealloc(void *ptr, size_t size)
 void
 mm_memory_fixed_free(void *ptr)
 {
+	if (ptr == NULL)
+		return;
+
 	mm_global_lock(&mm_memory_fixed_cache_lock);
-	mm_memory_cache_free(&mm_memory_fixed_cache, ptr);
+	mm_memory_cache_local_free(&mm_memory_fixed_cache, ptr);
 	mm_global_unlock(&mm_memory_fixed_cache_lock);
 }
 

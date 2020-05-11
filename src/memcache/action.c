@@ -141,7 +141,7 @@ static void
 mc_action_free_chunks(struct mc_tpart *part, struct mc_entry *entry)
 {
 	if (likely(entry->data != NULL)) {
-		mm_memory_cache_free(&part->data_space, entry->data);
+		mm_memory_cache_local_free(&part->data_space, entry->data);
 		entry->data = NULL;
 	}
 }
