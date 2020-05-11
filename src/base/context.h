@@ -177,7 +177,11 @@ mm_context_calloc(struct mm_context *context, size_t count, size_t size)
 static inline void * NONNULL(1) MALLOC
 mm_context_realloc(struct mm_context *context, void *ptr, size_t size)
 {
-	return mm_memory_cache_realloc(&context->cache, ptr, size);
+	if (ptr != NULL) {
+		return mm_memory_cache_realloc(&context->cache, ptr, size);
+	} else {
+		return mm_memory_cache_alloc(&context->cache, size);
+	}
 }
 
 static inline void NONNULL(1)

@@ -62,7 +62,7 @@ mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_
 void * NONNULL(1) MALLOC
 mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size);
 
-void * NONNULL(1) MALLOC
+void * NONNULL(1, 2) MALLOC
 mm_memory_cache_realloc(struct mm_memory_cache *cache, void *ptr, size_t size);
 
 void NONNULL(1, 2)

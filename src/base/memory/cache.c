@@ -870,6 +870,7 @@ mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_
 
 	const size_t align_mask = align - 1;
 	void *const ptr = mm_memory_cache_alloc(cache, size + align_mask);
+	// TODO: extend the unit map for large chunks with large alignment
 	return (void *) ((((uintptr_t) ptr) + align_mask) & ~align_mask);
 }
 
@@ -889,11 +890,12 @@ mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size)
 	return mm_memory_cache_zalloc(cache, total);
 }
 
-void * NONNULL(1) MALLOC
+void * NONNULL(1, 2) MALLOC
 mm_memory_cache_realloc(struct mm_memory_cache *const cache, void *const ptr, const size_t size)
 {
+	// TODO: verify that ptr is local.
+
 	if (size == 0) {
-		// TODO: verify that it's local.
 		mm_memory_cache_local_free(cache, ptr);
 		return NULL;
 	}

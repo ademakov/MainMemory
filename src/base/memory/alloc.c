@@ -92,7 +92,10 @@ mm_memory_fixed_realloc(void *ptr, size_t size)
 {
 	mm_global_lock(&mm_memory_fixed_cache_lock);
 	mm_memory_fixed_cache_ensure();
-	ptr = mm_memory_cache_realloc(&mm_memory_fixed_cache, ptr, size);
+	if (ptr != NULL)
+		ptr = mm_memory_cache_realloc(&mm_memory_fixed_cache, ptr, size);
+	else
+		ptr = mm_memory_cache_alloc(&mm_memory_fixed_cache, size);
 	mm_global_unlock(&mm_memory_fixed_cache_lock);
 	return ptr;
 }
@@ -204,9 +207,19 @@ mm_memory_calloc(size_t count, size_t size)
 void * MALLOC
 mm_memory_realloc(void *ptr, size_t size)
 {
-	struct mm_context *context = mm_context_selfptr();
-	if (context != NULL) {
-		return mm_context_realloc(context, ptr, size);
+	if (ptr == NULL)
+		return mm_memory_alloc(size);
+
+	struct mm_memory_span *span = mm_memory_span_from_ptr(ptr);
+	if (span->context != NULL) {
+		struct mm_context *context = mm_context_selfptr();
+		if (context == span->context) {
+			return mm_memory_cache_realloc(&context->cache, ptr, size);
+		} else {
+			// TODO: optimize for huge spans
+			mm_memory_cache_remote_free(span, ptr);
+			return mm_memory_cache_alloc(&context->cache, size);
+		}
 	} else {
 		return mm_memory_fixed_realloc(ptr, size);
 	}
@@ -267,7 +280,7 @@ mm_memory_free(void *ptr)
 	if (span->context != NULL) {
 		struct mm_context *context = mm_context_selfptr();
 		if (context == span->context) {
-			mm_context_free(context, ptr);
+			mm_memory_cache_local_free(&context->cache, ptr);
 		} else {
 			mm_memory_cache_remote_free(span, ptr);
 		}
