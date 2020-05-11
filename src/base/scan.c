@@ -50,7 +50,7 @@ static uint8_t mm_scan_dtab[256] = {
 static inline uint8_t
 mm_scan_digit(const char *sp, const char *ep)
 {
-	return sp < ep ? mm_scan_dtab[(uint8_t) *sp] : -1;
+	return sp < ep ? mm_scan_dtab[*((uint8_t *) sp)] : -1;
 }
 
 /**********************************************************************
