@@ -28,62 +28,20 @@
  * Common Ring Buffer Header.
  **********************************************************************/
 
-#define MM_RING_LOCKED_PUT	1
-#define MM_RING_LOCKED_GET	2
-
 typedef mm_atomic_uint32_t mm_ring_atomic_t;
 
 struct mm_ring_base
 {
 	/* Consumer data. */
 	mm_ring_atomic_t head CACHE_ALIGN;
-	mm_common_lock_t head_lock;
 
 	/* Producer data. */
 	mm_ring_atomic_t tail CACHE_ALIGN;
-	mm_common_lock_t tail_lock;
 
 	/* Shared data. */
 	mm_stamp_t mask CACHE_ALIGN;
 	uintptr_t data[7]; /* User data. */
 };
-
-void NONNULL(1)
-mm_ring_base_prepare_locks(struct mm_ring_base *ring, uint8_t locks);
-
-/* Multi-producer task synchronization. */
-static inline bool
-mm_ring_producer_trylock(struct mm_ring_base *ring)
-{
-	return mm_common_trylock(&ring->tail_lock);
-}
-static inline void
-mm_ring_producer_lock(struct mm_ring_base *ring)
-{
-	mm_common_lock(&ring->tail_lock);
-}
-static inline void
-mm_ring_producer_unlock(struct mm_ring_base *ring)
-{
-	mm_common_unlock(&ring->tail_lock);
-}
-
-/* Multi-consumer task synchronization. */
-static inline bool
-mm_ring_consumer_trylock(struct mm_ring_base *ring)
-{
-	return mm_common_trylock(&ring->head_lock);
-}
-static inline void
-mm_ring_consumer_lock(struct mm_ring_base *ring)
-{
-	mm_common_lock(&ring->head_lock);
-}
-static inline void
-mm_ring_consumer_unlock(struct mm_ring_base *ring)
-{
-	mm_common_unlock(&ring->head_lock);
-}
 
 static inline mm_stamp_t
 mm_ring_atomic_fai(mm_ring_atomic_t *p)
@@ -98,98 +56,11 @@ mm_ring_atomic_cas(mm_ring_atomic_t *p, mm_stamp_t e, mm_stamp_t v)
 }
 
 /**********************************************************************
- * Single-Producer Single-Consumer Ring Buffer.
- **********************************************************************/
-
-/*
- * The algorithm is based on the single-producer/single-consumer algorithm
- * described in the following paper:
- *
- * John Giacomoni, Tipp Moseley, Manish Vachharajani
- * FastForward for Efficient Pipeline Parallelism: A Cache-Optimized
- * Concurrent Lock-Free Queue.
- *
- * However currently only the basic algorithm is implemented, the suggested
- * enhancements like temporal slipping are not.
- *
- * Instead it is extended to optionally support multiple producers and
- * consumers with spinlock protection.
- */
-
-struct mm_ring_spsc
-{
-	/* Ring header. */
-	struct mm_ring_base base;
-	/* Ring buffer. */
-	void *ring[0];
-};
-
-struct mm_ring_spsc *
-mm_ring_spsc_create(size_t size, uint8_t locks);
-
-void NONNULL(1)
-mm_ring_spsc_destroy(struct mm_ring_spsc *ring);
-
-void NONNULL(1)
-mm_ring_spsc_prepare(struct mm_ring_spsc *ring, size_t size, uint8_t locks);
-
-/* Single-producer enqueue operation. */
-static inline bool NONNULL(1, 2)
-mm_ring_spsc_put(struct mm_ring_spsc *ring, void *data)
-{
-	mm_stamp_t tail = ring->base.tail;
-	void *prev = mm_memory_load(ring->ring[tail]);
-	if (prev == NULL)
-	{
-		mm_memory_store(ring->ring[tail], data);
-		ring->base.tail = ((tail + 1) & ring->base.mask);
-		return true;
-	}
-	return false;
-}
-
-/* Single-consumer dequeue operation. */
-static inline bool NONNULL(1, 2)
-mm_ring_spsc_get(struct mm_ring_spsc *ring, void **data_ptr)
-{
-	mm_stamp_t head = ring->base.head;
-	void *data = mm_memory_load(ring->ring[head]);
-	if (data != NULL)
-	{
-		mm_memory_store(ring->ring[head], NULL);
-		ring->base.head = ((head + 1) & ring->base.mask);
-		*data_ptr = data;
-		return true;
-	}
-	return false;
-}
-
-/* Multi-producer enqueue operation with synchronization for tasks. */
-static inline bool NONNULL(1, 2)
-mm_ring_spsc_locked_put(struct mm_ring_spsc *ring, void *data)
-{
-	mm_ring_producer_lock(&ring->base);
-	bool rc = mm_ring_spsc_put(ring, data);
-	mm_ring_producer_unlock(&ring->base);
-	return rc;
-}
-
-/* Multi-producer dequeue operation with synchronization for tasks. */
-static inline bool NONNULL(1, 2)
-mm_ring_spsc_locked_get(struct mm_ring_spsc *ring, void **data_ptr)
-{
-	mm_ring_consumer_lock(&ring->base);
-	bool rc = mm_ring_spsc_get(ring, data_ptr);
-	mm_ring_consumer_unlock(&ring->base);
-	return rc;
-}
-
-/**********************************************************************
  * Non-Blocking Multiple Producer Multiple Consumer Ring Buffer.
  **********************************************************************/
 
 /*
- * The algorithm is a variation of those described in the following papres:
+ * The algorithm is a variation of those described in the following papers:
  *
  * Massimiliano Meneghin, Davide Pasetto, Hubertus Franke, Fabrizio Petrini,
  * Jimi Xenidis
