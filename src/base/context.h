@@ -1,7 +1,7 @@
 /*
  * base/context.h - MainMemory per-thread execution context.
  *
- * Copyright (C) 2019  Aleksey Demakov
+ * Copyright (C) 2019-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -74,7 +74,7 @@ struct mm_context
 	struct mm_task_list tasks;
 
 	/* Asynchronous call queue. */
-	struct mm_ring_mpmc *async_queue;
+	struct mm_ring_mpmc async_queue;
 
 	/* Statistics. */
 	struct mm_context_stats stats;

@@ -1,7 +1,7 @@
 /*
  * base/context.c - MainMemory per-thread execution context.
  *
- * Copyright (C) 2019  Aleksey Demakov
+ * Copyright (C) 2019-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -53,7 +53,7 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 	uint32_t sz = mm_upper_pow2(async_queue_size);
 	if (sz < MM_ASYNC_QUEUE_MIN_SIZE)
 		sz = MM_ASYNC_QUEUE_MIN_SIZE;
-	context->async_queue = mm_ring_mpmc_create(sz);
+	 mm_ring_mpmc_prepare(&context->async_queue, sz);
 
 	// Prepare local memory allocator.
 	mm_memory_cache_prepare(&context->cache, context);
@@ -70,7 +70,7 @@ mm_context_cleanup(struct mm_context *context UNUSED)
 	mm_memory_cache_cleanup(&context->cache);
 
 	// Destroy the associated async call queue.
-	mm_ring_mpmc_destroy(context->async_queue);
+	mm_ring_mpmc_cleanup(&context->async_queue);
 
 	// Destroy storage for tasks.
 	mm_task_list_cleanup(&context->tasks);
@@ -174,7 +174,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 				continue;
 
 			uint64_t n = mm_task_peer_list_size(&peer->tasks);
-			n += mm_ring_mpmc_size(peer->async_queue) * MM_TASK_SEND_MAX;
+			n += mm_ring_mpmc_size(&peer->async_queue) * MM_TASK_SEND_MAX;
 			while (n < limit && mm_task_list_reassign(&self->tasks, peer))
 				n += MM_TASK_SEND_MAX;
 			count++;

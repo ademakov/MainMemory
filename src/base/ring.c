@@ -26,20 +26,6 @@
  * Non-Blocking Multiple Producer Multiple Consumer Ring Buffer.
  **********************************************************************/
 
-struct mm_ring_mpmc *
-mm_ring_mpmc_create(size_t size)
-{
-	struct mm_ring_mpmc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, sizeof(struct mm_ring_mpmc));
-	mm_ring_mpmc_prepare(ring, size);
-	return ring;
-}
-
-void NONNULL(1)
-mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
-{
-	mm_memory_free(ring);
-}
-
 void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 {
@@ -55,4 +41,25 @@ mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 	for (size_t i = 0; i < size; i++) {
 		ring->ring[i].lock = i;
 	}
+}
+
+void NONNULL(1)
+mm_ring_mpmc_cleanup(struct mm_ring_mpmc *ring)
+{
+	mm_memory_free(ring->ring);
+}
+
+struct mm_ring_mpmc *
+mm_ring_mpmc_create(size_t size)
+{
+	struct mm_ring_mpmc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, sizeof(struct mm_ring_mpmc));
+	mm_ring_mpmc_prepare(ring, size);
+	return ring;
+}
+
+void NONNULL(1)
+mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
+{
+	mm_ring_mpmc_cleanup(ring);
+	mm_memory_free(ring);
 }

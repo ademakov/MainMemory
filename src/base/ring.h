@@ -88,6 +88,9 @@ mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring);
 void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size);
 
+void NONNULL(1)
+mm_ring_mpmc_cleanup(struct mm_ring_mpmc *ring);
+
 static inline uint32_t
 mm_ring_mpmc_size(struct mm_ring_mpmc *ring)
 {

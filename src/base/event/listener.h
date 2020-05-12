@@ -142,7 +142,7 @@ mm_event_listener_running(struct mm_event_listener *listener)
 static inline mm_stamp_t NONNULL(1)
 mm_event_listener_posture(struct mm_event_listener *listener, mm_context_status_t status)
 {
-	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(listener->context->async_queue);
+	mm_stamp_t stamp = mm_ring_mpsc_dequeue_stamp(&listener->context->async_queue);
 	mm_atomic_uintptr_fetch_and_set(&listener->context->status, (((uintptr_t) stamp) << 2) | status);
 	return stamp;
 }
@@ -151,7 +151,7 @@ mm_event_listener_posture(struct mm_event_listener *listener, mm_context_status_
 static inline bool NONNULL(1)
 mm_event_listener_restful(struct mm_event_listener *listener, mm_stamp_t stamp)
 {
-	return stamp == mm_ring_mpmc_enqueue_stamp(listener->context->async_queue);
+	return stamp == mm_ring_mpmc_enqueue_stamp(&listener->context->async_queue);
 }
 
 /* Prepare the event listener for polling. */
@@ -165,7 +165,7 @@ mm_event_listener_polling(struct mm_event_listener *listener)
 static inline uintptr_t NONNULL(1)
 mm_event_listener_futex(struct mm_event_listener *listener)
 {
-	return (uintptr_t) &listener->context->async_queue->base.tail;
+	return (uintptr_t) &listener->context->async_queue.tail;
 }
 #endif
 
