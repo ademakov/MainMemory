@@ -709,6 +709,7 @@ mm_memory_cache_collect(struct mm_memory_cache *const cache)
 	while (link != mm_list_stub(&cache->staging)) {
 		struct mm_memory_heap *heap = containerof(link, struct mm_memory_heap, staging_link);
 		mm_memory_cache_handle_remote_free_list(heap);
+		link = link->next;
 	}
 }
 
