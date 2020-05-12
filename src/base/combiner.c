@@ -29,13 +29,13 @@
 static size_t
 mm_combiner_gethandoff(const struct mm_combiner *combiner)
 {
-	return combiner->ring.base.data[0];
+	return combiner->ring.data[0];
 }
 
 static void
 mm_combiner_sethandoff(struct mm_combiner *combiner, size_t value)
 {
-	combiner->ring.base.data[0] = value;
+	combiner->ring.data[0] = value;
 }
 
 struct mm_combiner *
@@ -91,7 +91,7 @@ mm_combiner_execute(struct mm_combiner *combiner, mm_combiner_routine_t routine,
 {
 	ENTER();
 
-	struct mm_ring_base *const base = &combiner->ring.base;
+	struct mm_ring_mpmc *const base = &combiner->ring;
 	struct mm_ring_node *const ring = combiner->ring.ring;
 	const mm_stamp_t mask = base->mask;
 

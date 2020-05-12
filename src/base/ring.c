@@ -1,7 +1,7 @@
 /*
  * base/ring.h - MainMemory single-consumer circular buffer of pointers.
  *
- * Copyright (C) 2013-2015  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -23,35 +23,14 @@
 #include "base/memory/alloc.h"
 
 /**********************************************************************
- * Common Ring Buffer Header.
- **********************************************************************/
-
-static void
-mm_ring_base_prepare(struct mm_ring_base *ring, size_t size)
-{
-	// The size must be a power of 2.
-	ASSERT(mm_is_pow2(size));
-
-	ring->head = 0;
-	ring->tail = 0;
-	ring->mask = size - 1;
-}
-
-/**********************************************************************
  * Non-Blocking Multiple Producer Multiple Consumer Ring Buffer.
  **********************************************************************/
 
 struct mm_ring_mpmc *
 mm_ring_mpmc_create(size_t size)
 {
-	// Find the required ring size in bytes.
-	size_t nbytes = sizeof(struct mm_ring_mpmc);
-	nbytes += size * sizeof(struct mm_ring_node);
-
-	// Create the ring.
-	struct mm_ring_mpmc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
+	struct mm_ring_mpmc *ring = mm_memory_aligned_xalloc(MM_CACHELINE, sizeof(struct mm_ring_mpmc));
 	mm_ring_mpmc_prepare(ring, size);
-
 	return ring;
 }
 
@@ -64,8 +43,15 @@ mm_ring_mpmc_destroy(struct mm_ring_mpmc *ring)
 void NONNULL(1)
 mm_ring_mpmc_prepare(struct mm_ring_mpmc *ring, size_t size)
 {
-	mm_ring_base_prepare(&ring->base, size);
+	// The size must be a power of 2.
+	ASSERT(mm_is_pow2(size));
 
+	ring->head = 0;
+	ring->tail = 0;
+	ring->mask = size - 1;
+
+	size_t nbytes = size * sizeof(struct mm_ring_node);
+	ring->ring = mm_memory_aligned_xalloc(MM_CACHELINE, nbytes);
 	for (size_t i = 0; i < size; i++) {
 		ring->ring[i].lock = i;
 	}
