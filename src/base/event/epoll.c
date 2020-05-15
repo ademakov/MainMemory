@@ -25,12 +25,14 @@
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
 
+#define MM_EVENT_EPOLL_NOTIFY_SINK ((struct mm_event_fd *) -1)
+
 /**********************************************************************
  * Helper routines for handling incoming events.
  **********************************************************************/
 
 static void
-mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
+mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *listener, int nevents)
 {
 	mm_event_listener_handle_start(listener, nevents);
 
@@ -38,11 +40,17 @@ mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
 		struct epoll_event *event = &listener->backend.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
-		if ((event->events & EPOLLIN) != 0)
-			mm_event_listener_input(listener, sink);
+		if ((event->events & EPOLLIN) != 0) {
+			if (sink == MM_EVENT_EPOLL_NOTIFY_SINK) {
+				backend->notified = true;
+			} else {
+				mm_event_listener_input(listener, sink);
+			}
+		}
 
-		if ((event->events & EPOLLOUT) != 0)
+		if ((event->events & EPOLLOUT) != 0) {
 			mm_event_listener_output(listener, sink);
+		}
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
 			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
@@ -71,8 +79,9 @@ mm_event_epoll_prepare(struct mm_event_epoll *backend)
 	if (backend->event_fd < 0)
 		mm_fatal(errno, "failed to create epoll fd");
 
-	// Mark the evenefd file descriptor as unused.
-	backend->notify_fd.fd = -1;
+	// Notification is disabled by default.
+	backend->notify_fd = -1;
+	backend->notified = false;
 
 	LEAVE();
 }
@@ -82,8 +91,9 @@ mm_event_epoll_cleanup(struct mm_event_epoll *backend)
 {
 	ENTER();
 
-	if (backend->notify_fd.fd >= 0)
-		mm_close(backend->notify_fd.fd);
+	// Close the eventfd file descriptor.
+	if (backend->notify_fd >= 0)
+		mm_close(backend->notify_fd);
 
 	// Close the epoll file descriptor.
 	mm_close(backend->event_fd);
@@ -113,7 +123,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local 
 {
 	ENTER();
 
-	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
+	struct mm_event_listener *const listener = containerof(local, struct mm_event_listener, backend);
 
 	if (timeout) {
 		// Announce that the thread is about to sleep.
@@ -141,7 +151,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local 
 
 	// Handle incoming events.
 	if (n != 0) {
-		mm_event_epoll_handle(listener, n);
+		mm_event_epoll_handle(backend, listener, n);
 	}
 
 #if ENABLE_EVENT_STATS
@@ -160,19 +170,16 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 	int fd = mm_eventfd(0, 0);
 	if (fd < 0)
 		mm_fatal(errno, "eventfd");
+	backend->notify_fd = fd;
 
 	// Set it up for non-blocking I/O.
 	mm_set_nonblocking(fd);
 
-	// Initialize the corresponding event sink.
-	mm_event_prepare_fd(&backend->notify_fd, fd, mm_event_instant_io(),
-			    MM_EVENT_IGNORED, MM_EVENT_IGNORED, MM_EVENT_REGULAR_INPUT | MM_EVENT_NOTIFY_FD);
-
 	// Register the event sink.
 	struct epoll_event ee;
 	ee.events = EPOLLIN | EPOLLET;
-	ee.data.ptr = &backend->notify_fd;
-	int er = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, backend->notify_fd.fd, &ee);
+	ee.data.ptr = MM_EVENT_EPOLL_NOTIFY_SINK;
+	int er = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, fd, &ee);
 	if (unlikely(er < 0))
 		mm_fatal(errno, "epoll_ctl");
 
@@ -185,7 +192,7 @@ mm_event_epoll_notify(struct mm_event_epoll *backend)
 	ENTER();
 
 	uint64_t value = 1;
-	int n = mm_write(backend->notify_fd.fd, &value, sizeof value);
+	int n = mm_write(backend->notify_fd, &value, sizeof value);
 	if (unlikely(n != sizeof value))
 		mm_fatal(errno, "eventfd write");
 
@@ -197,11 +204,11 @@ mm_event_epoll_notify_clean(struct mm_event_epoll *backend)
 {
 	ENTER();
 
-	if ((backend->notify_fd.flags & MM_EVENT_INPUT_READY) != 0) {
-		backend->notify_fd.flags &= ~MM_EVENT_INPUT_READY;
+	if (backend->notified) {
+		backend->notified = false;
 
 		uint64_t value;
-		int n = mm_read(backend->notify_fd.fd, &value, sizeof value);
+		int n = mm_read(backend->notify_fd, &value, sizeof value);
 		if (n != sizeof value)
 			mm_warning(errno, "eventfd read");
 	}

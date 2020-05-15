@@ -40,7 +40,10 @@ struct mm_event_epoll
 	int event_fd;
 
 	/* The eventfd descriptor used for notification. */
-	struct mm_event_fd notify_fd;
+	int notify_fd;
+
+	/* Notification flag. */
+	bool notified;
 };
 
 /* Per-listener data for epoll support. */
