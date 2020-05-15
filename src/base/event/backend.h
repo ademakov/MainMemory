@@ -45,7 +45,7 @@ struct mm_event_backend
 #if HAVE_SYS_EPOLL_H
 # define mm_event_backend_local mm_event_epoll_local
 #elif HAVE_SYS_EVENT_H
-# define mm_event_backend_local mm_event_kqueue_storage
+# define mm_event_backend_local mm_event_kqueue_local
 #else
 # error "Event backend is not implemented"
 #endif

@@ -56,7 +56,7 @@ struct mm_event_kqueue
 };
 
 /* Per-listener data for kqueue support. */
-struct mm_event_kqueue_storage
+struct mm_event_kqueue_local
 {
 	/* The kevent list size. */
 	uint32_t nevents;
@@ -92,104 +92,100 @@ void NONNULL(1)
 mm_event_kqueue_cleanup(struct mm_event_kqueue *backend);
 
 void NONNULL(1)
-mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
+mm_event_kqueue_storage_prepare(struct mm_event_kqueue_local *local);
 
 /**********************************************************************
  * Event backend poll and notify routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage, mm_timeout_t timeout);
+mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, mm_timeout_t timeout);
 
 void NONNULL(1, 2)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_backend_local *some_local);
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *some_local);
 
 void NONNULL(1)
 mm_event_kqueue_notify(struct mm_event_kqueue *backend);
 
-static inline void NONNULL(1)
-mm_event_kqueue_notify_clean(struct mm_event_epoll *backend);
+void NONNULL(1)
+mm_event_kqueue_notify_clean(struct mm_event_kqueue *backend);
 
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage);
+mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local);
 
 static inline void NONNULL(1, 2, 3)
-mm_event_kqueue_register_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-			    struct mm_event_fd *sink)
+mm_event_kqueue_register_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, struct mm_event_fd *sink)
 {
 	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
 	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
 	uint32_t n = (input != 0) + (output != 0);
 	if (n) {
-		if (unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
-			mm_event_kqueue_flush(backend, storage);
+		if (unlikely((local->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
+			mm_event_kqueue_flush(backend, local);
 
 		if (input) {
 			int flags = (sink->flags & MM_EVENT_REGULAR_INPUT) ? EV_ADD | EV_CLEAR : EV_ADD | EV_ONESHOT;
-			struct kevent *kp = &storage->events[storage->nevents++];
+			struct kevent *kp = &local->events[local->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, flags, 0, 0, sink);
 		}
 		if (output) {
 			int flags = (sink->flags & MM_EVENT_REGULAR_OUTPUT) ? EV_ADD | EV_CLEAR : EV_ADD | EV_ONESHOT;
-			struct kevent *kp = &storage->events[storage->nevents++];
+			struct kevent *kp = &local->events[local->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, flags, 0, 0, sink);
 		}
 	}
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-			      struct mm_event_fd *sink)
+mm_event_kqueue_unregister_fd(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, struct mm_event_fd *sink)
 {
 	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
 	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
 	uint32_t n = (input != 0) + (output != 0);
 	if (n) {
 		if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
-		    || unlikely((storage->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
-			mm_event_kqueue_flush(backend, storage);
+		    || unlikely((local->nevents + n) > MM_EVENT_KQUEUE_NCHANGES))
+			mm_event_kqueue_flush(backend, local);
 
-		storage->unregister[storage->nunregister++] = sink;
+		local->unregister[local->nunregister++] = sink;
 		if (input) {
-			struct kevent *kp = &storage->events[storage->nevents++];
+			struct kevent *kp = &local->events[local->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_READ, EV_DELETE, 0, 0, 0);
 		}
 		if (output) {
-			struct kevent *kp = &storage->events[storage->nevents++];
+			struct kevent *kp = &local->events[local->nevents++];
 			EV_SET(kp, sink->fd, EVFILT_WRITE, EV_DELETE, 0, 0, 0);
 		}
 	}
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_kqueue_trigger_input(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-			      struct mm_event_fd *sink)
+mm_event_kqueue_trigger_input(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, struct mm_event_fd *sink)
 {
 	if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
-	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
-		mm_event_kqueue_flush(backend, storage);
+	    || unlikely(local->nevents == MM_EVENT_KQUEUE_NCHANGES))
+		mm_event_kqueue_flush(backend, local);
 
 	sink->flags |= MM_EVENT_CHANGE;
-	storage->changes[storage->nchanges++] = sink;
-	struct kevent *kp = &storage->events[storage->nevents++];
+	local->changes[local->nchanges++] = sink;
+	struct kevent *kp = &local->events[local->nevents++];
 	EV_SET(kp, sink->fd, EVFILT_READ, EV_ADD | EV_ONESHOT, 0, 0, sink);
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-			       struct mm_event_fd *sink)
+mm_event_kqueue_trigger_output(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, struct mm_event_fd *sink)
 {
 	if (unlikely((sink->flags & MM_EVENT_CHANGE) != 0)
-	    || unlikely(storage->nevents == MM_EVENT_KQUEUE_NCHANGES))
-		mm_event_kqueue_flush(backend, storage);
+	    || unlikely(local->nevents == MM_EVENT_KQUEUE_NCHANGES))
+		mm_event_kqueue_flush(backend, local);
 
 	sink->flags |= MM_EVENT_CHANGE;
-	storage->changes[storage->nchanges++] = sink;
-	struct kevent *kp = &storage->events[storage->nevents++];
+	local->changes[local->nchanges++] = sink;
+	struct kevent *kp = &local->events[local->nevents++];
 	EV_SET(kp, sink->fd, EVFILT_WRITE, EV_ADD | EV_ONESHOT, 0, 0, sink);
 }
 

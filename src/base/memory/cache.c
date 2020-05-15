@@ -878,10 +878,11 @@ mm_memory_cache_aligned_alloc(struct mm_memory_cache *cache, size_t align, size_
 void * NONNULL(1) MALLOC
 mm_memory_cache_calloc(struct mm_memory_cache *cache, size_t count, size_t size)
 {
-	size_t total;
 #if MM_WORD_32BIT
+	uint32_t total;
 	bool overflow = mm_mul_uint32(count, size, &total);
 #else
+	uint64_t total;
 	bool overflow = mm_mul_uint64(count, size, &total);
 #endif
 	if (overflow) {

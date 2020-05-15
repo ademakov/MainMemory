@@ -68,7 +68,7 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct kevent *event = &listener->storage.revents[i];
+		struct kevent *event = &listener->backend.revents[i];
 
 		if (event->filter == EVFILT_READ) {
 			DEBUG("read event: fd %d", (int) event->ident);
@@ -107,23 +107,23 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 static void
 mm_event_kqueue_finish_changes(struct mm_event_listener *listener)
 {
-	listener->storage.nevents = 0;
+	listener->backend.nevents = 0;
 
 	// Reset change flags.
-	const uint32_t nchanges = listener->storage.nchanges;
+	const uint32_t nchanges = listener->backend.nchanges;
 	if (nchanges) {
-		listener->storage.nchanges = 0;
+		listener->backend.nchanges = 0;
 		for (uint32_t i = 0; i < nchanges; i++) {
-			listener->storage.changes[i]->flags |= ~MM_EVENT_CHANGE;
+			listener->backend.changes[i]->flags |= ~MM_EVENT_CHANGE;
 		}
 	}
 
 	// Handle unregistered sinks.
-	const uint32_t nunregister = listener->storage.nunregister;
+	const uint32_t nunregister = listener->backend.nunregister;
 	if (nunregister) {
-		listener->storage.nunregister = 0;
+		listener->backend.nunregister = 0;
 		for (uint32_t i = 0; i < nunregister; i++) {
-			mm_event_listener_unregister(listener, listener->storage.unregister[i]);
+			mm_event_listener_unregister(listener, listener->backend.unregister[i]);
 		}
 	}
 }
@@ -173,17 +173,17 @@ mm_event_kqueue_cleanup(struct mm_event_kqueue *backend)
 }
 
 void NONNULL(1)
-mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
+mm_event_kqueue_storage_prepare(struct mm_event_kqueue_local *local)
 {
 	ENTER();
 
-	storage->nevents = 0;
-	storage->nchanges = 0;
-	storage->nunregister = 0;
+	local->nevents = 0;
+	local->nchanges = 0;
+	local->nunregister = 0;
 
 #if ENABLE_EVENT_STATS
 	for (size_t i = 0; i <= MM_EVENT_KQUEUE_NEVENTS; i++)
-		storage->nevents_stats[i] = 0;
+		local->nevents_stats[i] = 0;
 #endif
 
 	LEAVE();
@@ -194,12 +194,11 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-		     mm_timeout_t timeout)
+mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
 
 	// Announce that the thread is about to sleep.
 	if (timeout) {
@@ -219,9 +218,9 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 	}
 
 	// Poll the system for events.
-	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents,
-			  storage->revents, MM_EVENT_KQUEUE_NEVENTS, &ts);
-	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
+	int n = mm_kevent(backend->event_fd, local->events, local->nevents,
+			  local->revents, MM_EVENT_KQUEUE_NEVENTS, &ts);
+	DEBUG("kevent changed: %d, received: %d", local->nevents, n);
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "kevent");
@@ -243,7 +242,7 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 	}
 
 #if ENABLE_EVENT_STATS
-	storage->nevents_stats[n]++;
+	local->nevents_stats[n]++;
 #endif
 
 	LEAVE();
@@ -281,9 +280,11 @@ mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_b
 	if (!native_notify) {
 		// Open the event self-pipe.
 		mm_selfpipe_prepare(&backend->selfpipe);
+
 		// Register the self-pipe.
-		mm_event_backend_register_fd(backend, some_local, &backend->selfpipe.event);
-		mm_event_backend_flush(backend, some_local);
+		struct mm_event_backend *evbe = containerof(backend, struct mm_event_backend, backend);
+		mm_event_backend_register_fd(evbe, some_local, &backend->selfpipe.event);
+		mm_event_backend_flush(evbe, some_local);
 	}
 
 	backend->notify_enabled = true;
@@ -324,7 +325,7 @@ mm_event_kqueue_notify(struct mm_event_kqueue *backend)
 }
 
 void NONNULL(1)
-mm_event_kqueue_notify_clean(struct mm_event_epoll *backend)
+mm_event_kqueue_notify_clean(struct mm_event_kqueue *backend)
 {
 	ENTER();
 	ASSERT(backend->notify_enabled);
@@ -351,11 +352,11 @@ mm_event_kqueue_notify_clean(struct mm_event_epoll *backend)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage)
+mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
 	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
 
 	// Enter the state that forbids fiber yield to avoid possible
@@ -364,12 +365,12 @@ mm_event_kqueue_flush(struct mm_event_kqueue *backend, struct mm_event_kqueue_st
 	context->status = MM_CONTEXT_PENDING;
 
 	// If any event sinks are to be unregistered then start a reclamation epoch.
-	if (storage->nunregister != 0)
+	if (local->nunregister != 0)
 		mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Submit change events.
-	int n = mm_kevent(backend->event_fd, storage->events, storage->nevents, NULL, 0, NULL);
-	DEBUG("kevent changed: %d, received: %d", storage->nevents, n);
+	int n = mm_kevent(backend->event_fd, local->events, local->nevents, NULL, 0, NULL);
+	DEBUG("kevent changed: %d, received: %d", local->nevents, n);
 	if (unlikely(n < 0))
 		mm_error(errno, "kevent");
 
