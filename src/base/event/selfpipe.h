@@ -1,7 +1,7 @@
 /*
  * base/event/selfpipe.h - MainMemory self-pipe trick.
  *
- * Copyright (C) 2013-2019  Aleksey Demakov
+ * Copyright (C) 2013-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,12 +21,12 @@
 #define BASE_EVENT_SELFPIPE_H
 
 #include "common.h"
-#include "base/event/event.h"
 
 struct mm_selfpipe
 {
-	struct mm_event_fd event;
+	int read_fd;
 	int write_fd;
+	bool notified;
 };
 
 void NONNULL(1)
@@ -35,10 +35,22 @@ mm_selfpipe_prepare(struct mm_selfpipe *selfpipe);
 void NONNULL(1)
 mm_selfpipe_cleanup(struct mm_selfpipe *selfpipe);
 
-void NONNULL(1)
-mm_selfpipe_write(struct mm_selfpipe *selfpipe);
+static inline bool NONNULL(1)
+mm_selfpipe_is_notified(const struct mm_selfpipe *selfpipe)
+{
+	return selfpipe->notified;
+}
+
+static inline void NONNULL(1)
+mm_selfpipe_set_notified(struct mm_selfpipe *selfpipe)
+{
+	selfpipe->notified = true;
+}
 
 void NONNULL(1)
-mm_selfpipe_clean(struct mm_selfpipe *selfpipe);
+mm_selfpipe_notify(struct mm_selfpipe *selfpipe);
+
+void NONNULL(1)
+mm_selfpipe_absorb(struct mm_selfpipe *selfpipe);
 
 #endif /* BASE_EVENT_SELFPIPE_H */

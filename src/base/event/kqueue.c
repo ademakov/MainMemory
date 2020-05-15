@@ -63,7 +63,7 @@ mm_kevent(int kq, const struct kevent *changes, int nchanges,
  **********************************************************************/
 
 static void
-mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
+mm_event_kqueue_handle(struct mm_event_kqueue *backend, struct mm_event_listener *listener, int nevents)
 {
 	mm_event_listener_handle_start(listener, nevents);
 
@@ -74,6 +74,10 @@ mm_event_kqueue_handle(struct mm_event_listener *listener, int nevents)
 			DEBUG("read event: fd %d", (int) event->ident);
 			if (unlikely((event->flags & EV_ERROR) != 0)) {
 				mm_warning(event->data, "kevent change failed");
+				continue;
+			}
+			if (event->ident == (uintptr_t) backend->selfpipe.read_fd) {
+				mm_selfpipe_set_notified(&backend->selfpipe);
 				continue;
 			}
 
@@ -144,6 +148,8 @@ mm_event_kqueue_prepare(struct mm_event_kqueue *backend)
 
 	// Notification is disabled by default.
 	backend->notify_enabled = false;
+	backend->selfpipe.read_fd = -1;
+	backend->selfpipe.write_fd = -1;
 
 	LEAVE();
 }
@@ -238,7 +244,7 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_loc
 
 	// Handle incoming events.
 	if (n != 0) {
-		mm_event_kqueue_handle(listener, n);
+		mm_event_kqueue_handle(backend, listener, n);
 	}
 
 #if ENABLE_EVENT_STATS
@@ -248,8 +254,8 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_loc
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_backend_local *some_local)
+void NONNULL(1)
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend)
 {
 	ENTER();
 
@@ -281,10 +287,14 @@ mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_b
 		// Open the event self-pipe.
 		mm_selfpipe_prepare(&backend->selfpipe);
 
-		// Register the self-pipe.
-		struct mm_event_backend *evbe = containerof(backend, struct mm_event_backend, backend);
-		mm_event_backend_register_fd(evbe, some_local, &backend->selfpipe.event);
-		mm_event_backend_flush(evbe, some_local);
+		// Register it with kqueue.
+		struct kevent event;
+		EV_SET(&event, backend->selfpipe.read_fd, EVFILT_READ, EV_ADD | EV_CLEAR, 0, 0, NULL);
+		int n = mm_kevent(backend->event_fd, &event, 1, NULL, 0, NULL);
+		if (unlikely(n < 0)) {
+			mm_fatal(errno, "kevent");
+			native_notify = false;
+		}
 	}
 
 	backend->notify_enabled = true;
@@ -312,12 +322,12 @@ mm_event_kqueue_notify(struct mm_event_kqueue *backend)
 		if (unlikely(n < 0))
 			mm_error(errno, "kevent");
 	} else {
-		mm_selfpipe_write(&backend->selfpipe);
+		mm_selfpipe_notify(&backend->selfpipe);
 	}
 
 #else /* MM_EVENT_NATIVE_NOTIFY */
 
-	mm_selfpipe_write(&backend->selfpipe);
+	mm_selfpipe_notify(&backend->selfpipe);
 
 #endif /* MM_EVENT_NATIVE_NOTIFY */
 
@@ -334,13 +344,15 @@ mm_event_kqueue_notify_clean(struct mm_event_kqueue *backend)
 
 	if (backend->native_notify) {
 		// do nothing
-	} else {
-		mm_selfpipe_clean(&backend->selfpipe);
+	} else if (mm_selfpipe_is_notified(&backend->selfpipe)) {
+		mm_selfpipe_absorb(&backend->selfpipe);
 	}
 
 #else /* MM_EVENT_NATIVE_NOTIFY */
 
-	mm_selfpipe_clean(&backend->selfpipe);
+	if (mm_selfpipe_is_notified(&backend->selfpipe)) {
+		mm_selfpipe_absorb(&backend->selfpipe);
+	}
 
 #endif /* MM_EVENT_NATIVE_NOTIFY */
 

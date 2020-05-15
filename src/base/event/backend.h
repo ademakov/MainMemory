@@ -82,7 +82,7 @@ mm_event_backend_notify(struct mm_event_backend *backend)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_notify(&backend->backend);
-#elif HAVE_SYS_EVENT_H && MM_EVENT_NATIVE_NOTIFY
+#elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_notify(&backend->backend);
 #endif
 }
@@ -92,7 +92,7 @@ mm_event_backend_notify_clean(struct mm_event_backend *backend)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_notify_clean(&backend->backend);
-#elif HAVE_SYS_EVENT_H && MM_EVENT_NATIVE_NOTIFY
+#elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_notify_clean(&backend->backend);
 #endif
 }

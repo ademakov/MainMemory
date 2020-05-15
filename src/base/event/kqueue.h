@@ -101,8 +101,8 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_local *local);
 void NONNULL(1, 2)
 mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *local, mm_timeout_t timeout);
 
-void NONNULL(1, 2)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_kqueue_local *some_local);
+void NONNULL(1)
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend);
 
 void NONNULL(1)
 mm_event_kqueue_notify(struct mm_event_kqueue *backend);

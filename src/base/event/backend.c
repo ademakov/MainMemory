@@ -35,7 +35,7 @@ mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backe
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_enable_notify(&backend->backend);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_enable_notify(&backend->backend, some_local);
+	mm_event_kqueue_enable_notify(&backend->backend);
 #endif
 
 	LEAVE();
