@@ -1,7 +1,7 @@
 /*
  * base/event/kqueue.c - MainMemory kqueue support.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by 
@@ -142,6 +142,9 @@ mm_event_kqueue_prepare(struct mm_event_kqueue *backend)
 	if (backend->event_fd == -1)
 		mm_fatal(errno, "Failed to create kqueue");
 
+	// Notification is disabled by default.
+	backend->notify_enabled = false;
+
 	LEAVE();
 }
 
@@ -149,6 +152,19 @@ void NONNULL(1)
 mm_event_kqueue_cleanup(struct mm_event_kqueue *backend)
 {
 	ENTER();
+
+	// Close the event self-pipe if needed.
+#if MM_EVENT_NATIVE_NOTIFY
+	if (backend->native_notify) {
+		// do nothing
+	} else if (backend->notify_enabled) {
+		mm_selfpipe_cleanup(&backend->selfpipe);
+	}
+#else
+	if (backend->notify_enabled) {
+		mm_selfpipe_cleanup(&backend->selfpipe);
+	}
+#endif
 
 	// Close the kqueue file descriptor.
 	mm_close(backend->event_fd);
@@ -233,13 +249,14 @@ mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_sto
 	LEAVE();
 }
 
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend)
+void NONNULL(1, 2)
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_backend_local *some_local)
 {
 	ENTER();
-	bool rc = true;
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+	bool native_notify = true;
 
 	static const struct kevent event = {
 		.filter = EVFILT_USER,
@@ -248,36 +265,86 @@ mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend)
 	};
 
 	int n = mm_kevent(backend->event_fd, &event, 1, NULL, 0, NULL);
-	DEBUG("kevent notify: %d", n);
 	if (unlikely(n < 0)) {
 		mm_warning(errno, "kevent");
-		rc = false;
+		native_notify = false;
 	}
 
+	backend->native_notify = native_notify;
+
+#else /* MM_EVENT_NATIVE_NOTIFY */
+
+	bool native_notify = false;
+
+#endif /* MM_EVENT_NATIVE_NOTIFY */
+
+	if (!native_notify) {
+		// Open the event self-pipe.
+		mm_selfpipe_prepare(&backend->selfpipe);
+		// Register the self-pipe.
+		mm_event_backend_register_fd(backend, some_local, &backend->selfpipe.event);
+		mm_event_backend_flush(backend, some_local);
+	}
+
+	backend->notify_enabled = true;
+
 	LEAVE();
-	return rc;
 }
 
 void NONNULL(1)
 mm_event_kqueue_notify(struct mm_event_kqueue *backend)
 {
 	ENTER();
+	ASSERT(backend->notify_enabled);
 
-	static const struct kevent event = {
-		.filter = EVFILT_USER,
-		.ident = MM_EVENT_KQUEUE_NOTIFY_ID,
-		.fflags = NOTE_TRIGGER,
-	};
+#if MM_EVENT_NATIVE_NOTIFY
 
-	int n = mm_kevent(backend->event_fd, &event, 1, NULL, 0, NULL);
-	DEBUG("kevent notify: %d", n);
-	if (unlikely(n < 0))
-		mm_error(errno, "kevent");
+	if (backend->native_notify) {
+		static const struct kevent event = {
+				.filter = EVFILT_USER,
+				.ident = MM_EVENT_KQUEUE_NOTIFY_ID,
+				.fflags = NOTE_TRIGGER,
+		};
+
+		int n = mm_kevent(backend->event_fd, &event, 1, NULL, 0, NULL);
+		DEBUG("kevent notify: %d", n);
+		if (unlikely(n < 0))
+			mm_error(errno, "kevent");
+	} else {
+		mm_selfpipe_write(&backend->selfpipe);
+	}
+
+#else /* MM_EVENT_NATIVE_NOTIFY */
+
+	mm_selfpipe_write(&backend->selfpipe);
+
+#endif /* MM_EVENT_NATIVE_NOTIFY */
 
 	LEAVE();
 }
 
+void NONNULL(1)
+mm_event_kqueue_notify_clean(struct mm_event_epoll *backend)
+{
+	ENTER();
+	ASSERT(backend->notify_enabled);
+
+#if MM_EVENT_NATIVE_NOTIFY
+
+	if (backend->native_notify) {
+		// do nothing
+	} else {
+		mm_selfpipe_clean(&backend->selfpipe);
+	}
+
+#else /* MM_EVENT_NATIVE_NOTIFY */
+
+	mm_selfpipe_clean(&backend->selfpipe);
+
 #endif /* MM_EVENT_NATIVE_NOTIFY */
+
+	LEAVE();
+}
 
 /**********************************************************************
  * Event sink I/O control.

@@ -1,7 +1,7 @@
 /*
  * base/event/epoll.c - MainMemory epoll support.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,10 +25,6 @@
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
 
-#if HAVE_SYS_EVENTFD_H
-# include <sys/eventfd.h>
-#endif
-
 /**********************************************************************
  * Helper routines for handling incoming events.
  **********************************************************************/
@@ -39,7 +35,7 @@ mm_event_epoll_handle(struct mm_event_listener *listener, int nevents)
 	mm_event_listener_handle_start(listener, nevents);
 
 	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &listener->storage.events[i];
+		struct epoll_event *event = &listener->backend.events[i];
 		struct mm_event_fd *sink = event->data.ptr;
 
 		if ((event->events & EPOLLIN) != 0)
@@ -96,13 +92,13 @@ mm_event_epoll_cleanup(struct mm_event_epoll *backend)
 }
 
 void NONNULL(1)
-mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage UNUSED)
+mm_event_epoll_local_prepare(struct mm_event_epoll_local *local UNUSED)
 {
 	ENTER();
 
 #if ENABLE_EVENT_STATS
 	for (size_t i = 0; i <= MM_EVENT_EPOLL_NEVENTS; i++)
-		storage->nevents_stats[i] = 0;
+		local->nevents_stats[i] = 0;
 #endif
 
 	LEAVE();
@@ -113,12 +109,11 @@ mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage UNUSED)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-		    mm_timeout_t timeout)
+mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, mm_timeout_t timeout)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
 
 	if (timeout) {
 		// Announce that the thread is about to sleep.
@@ -132,7 +127,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	}
 
 	// Poll the system for events.
-	int n = mm_epoll_wait(backend->event_fd, storage->events, MM_EVENT_EPOLL_NEVENTS, timeout);
+	int n = mm_epoll_wait(backend->event_fd, local->events, MM_EVENT_EPOLL_NEVENTS, timeout);
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "epoll_wait");
@@ -150,27 +145,21 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storag
 	}
 
 #if ENABLE_EVENT_STATS
-	storage->nevents_stats[n]++;
+	local->nevents_stats[n]++;
 #endif
 
 	LEAVE();
 }
 
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
+void NONNULL(1)
 mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 {
 	ENTER();
-	bool rc = true;
 
 	// Create a file descriptor for notifications.
 	int fd = mm_eventfd(0, 0);
-	if (fd < 0) {
-		mm_warning(errno, "eventfd");
-		rc = false;
-		goto leave;
-	}
+	if (fd < 0)
+		mm_fatal(errno, "eventfd");
 
 	// Set it up for non-blocking I/O.
 	mm_set_nonblocking(fd);
@@ -187,9 +176,7 @@ mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
 	if (unlikely(er < 0))
 		mm_fatal(errno, "epoll_ctl");
 
-leave:
 	LEAVE();
-	return rc;
 }
 
 void NONNULL(1)
@@ -222,19 +209,16 @@ mm_event_epoll_notify_clean(struct mm_event_epoll *backend)
 	LEAVE();
 }
 
-#endif /* MM_EVENT_NATIVE_NOTIFY */
-
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-			     struct mm_event_fd *sink)
+mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
 	ENTER();
 
-	struct mm_event_listener *listener = containerof(storage, struct mm_event_listener, storage);
+	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
 	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
 
 	// Start a reclamation epoch.

@@ -1,7 +1,7 @@
 /*
  * base/event/listener.h - MainMemory event listener.
  *
- * Copyright (C) 2015-2019  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -107,8 +107,8 @@ struct mm_event_listener
 	struct mm_event_forward_cache forward;
 #endif
 
-	/* Private event storage. */
-	struct mm_event_backend_storage storage;
+	/* Private part of the event backend. */
+	struct mm_event_backend_local backend;
 
 #if ENABLE_EVENT_STATS
 	/* Statistics. */

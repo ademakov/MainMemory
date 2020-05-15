@@ -1,7 +1,7 @@
 /*
  * base/event/kqueue.h - MainMemory kqueue support.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@
 #if HAVE_SYS_EVENT_H
 
 #include "base/event/event.h"
+#include "base/event/selfpipe.h"
 
 #include <sys/types.h>
 #include <sys/event.h>
@@ -41,6 +42,17 @@ struct mm_event_kqueue
 {
 	/* The kqueue file descriptor. */
 	int event_fd;
+
+#if MM_EVENT_NATIVE_NOTIFY
+	/* A flag indicating that the system supports a better
+	   notification mechanism than a self-pipe. */
+	bool native_notify;
+#endif
+	/* A flag indicating that notification mechanism was enabled. */
+	bool notify_enabled;
+
+	/* Event loop self-pipe. */
+	struct mm_selfpipe selfpipe;
 };
 
 /* Per-listener data for kqueue support. */
@@ -87,18 +99,16 @@ mm_event_kqueue_storage_prepare(struct mm_event_kqueue_storage *storage);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage,
-		     mm_timeout_t timeout);
+mm_event_kqueue_poll(struct mm_event_kqueue *backend, struct mm_event_kqueue_storage *storage, mm_timeout_t timeout);
 
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
-mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend);
+void NONNULL(1, 2)
+mm_event_kqueue_enable_notify(struct mm_event_kqueue *backend, struct mm_event_backend_local *some_local);
 
 void NONNULL(1)
 mm_event_kqueue_notify(struct mm_event_kqueue *backend);
 
-#endif
+static inline void NONNULL(1)
+mm_event_kqueue_notify_clean(struct mm_event_epoll *backend);
 
 /**********************************************************************
  * Event sink I/O control.

@@ -1,7 +1,7 @@
 /*
  * base/event/event.c - MainMemory event loop.
  *
- * Copyright (C) 2012-2019  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -284,7 +284,7 @@ mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink)
 
 	// Register with the event backend.
 	struct mm_event_listener *listener = context->listener;
-	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->storage, sink);
+	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->backend, sink);
 
 	LEAVE();
 }
@@ -303,7 +303,7 @@ mm_event_close_fd(struct mm_event_fd *sink)
 	struct mm_context *context = sink->context;
 	ASSERT(context == mm_context_selfptr());
 	struct mm_event_listener *listener = context->listener;
-	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
+	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->backend, sink);
 
 	LEAVE();
 }
@@ -322,8 +322,8 @@ mm_event_close_broken_fd(struct mm_event_fd *sink)
 	struct mm_context *context = sink->context;
 	ASSERT(context == mm_context_selfptr());
 	struct mm_event_listener *listener = context->listener;
-	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->storage, sink);
-	mm_event_backend_flush(&listener->dispatch->backend, &listener->storage);
+	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->backend, sink);
+	mm_event_backend_flush(&listener->dispatch->backend, &listener->backend);
 
 	LEAVE();
 }
@@ -344,7 +344,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 		ASSERT(context == mm_context_selfptr());
 		struct mm_event_listener *listener = context->listener;
 
-		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->storage, sink);
+		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->backend, sink);
 	}
 
 	LEAVE();
@@ -366,7 +366,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 		ASSERT(context == mm_context_selfptr());
 		struct mm_event_listener *listener = context->listener;
 
-		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->storage, sink);
+		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->backend, sink);
 	}
 
 	LEAVE();
@@ -531,7 +531,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Check incoming events and wait for notification/timeout.
-	mm_event_backend_poll(&dispatch->backend, &listener->storage, timeout);
+	mm_event_backend_poll(&dispatch->backend, &listener->backend, timeout);
 
 	// End a reclamation critical section.
 	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
@@ -554,7 +554,7 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 		// context switches.
 		listener->spin_count--;
 		timeout = 0;
-	} else if (mm_event_backend_has_urgent_changes(&listener->storage)) {
+	} else if (mm_event_backend_has_urgent_changes(&listener->backend)) {
 		// There are event poll changes that need to be immediately
 		// acknowledged.
 		timeout = 0;
@@ -596,8 +596,8 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 		mm_context_distribute_tasks(context);
 	} else {
 		// Flush event poll changes if any.
-		if (mm_event_backend_has_changes(&listener->storage)) {
-			mm_event_backend_flush(&dispatch->backend, &listener->storage);
+		if (mm_event_backend_has_changes(&listener->backend)) {
+			mm_event_backend_flush(&dispatch->backend, &listener->backend);
 		}
 
 		// Wait for forwarded events or timeout expiration.

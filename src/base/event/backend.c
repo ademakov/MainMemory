@@ -1,7 +1,7 @@
 /*
  * base/event/backend.c - MainMemory event system backend.
  *
- * Copyright (C) 2015-2019  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@
 #include "base/event/backend.h"
 
 void NONNULL(1, 2)
-mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_storage *some_storage)
+mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_local *some_local UNUSED)
 {
 	ENTER();
 
@@ -31,25 +31,12 @@ mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backe
 	mm_event_kqueue_prepare(&backend->backend);
 #endif
 
-	// Try to use native system notify mechanism.
-#if MM_EVENT_NATIVE_NOTIFY
-# if HAVE_SYS_EPOLL_H
-	backend->native_notify = mm_event_epoll_enable_notify(&backend->backend);
-# elif HAVE_SYS_EVENT_H
-	backend->native_notify = mm_event_kqueue_enable_notify(&backend->backend);
-# endif
-	bool native_notify = backend->native_notify;
-#else
-	bool native_notify = false;
+	// Set up the notification mechanism.
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_enable_notify(&backend->backend);
+#elif HAVE_SYS_EVENT_H
+	mm_event_kqueue_enable_notify(&backend->backend, some_local);
 #endif
-
-	if (!native_notify) {
-		// Open the event self-pipe.
-		mm_selfpipe_prepare(&backend->selfpipe);
-		// Register the self-pipe.
-		mm_event_backend_register_fd(backend, some_storage, &backend->selfpipe.event);
-		mm_event_backend_flush(backend, some_storage);
-	}
 
 	LEAVE();
 }
@@ -58,14 +45,6 @@ void NONNULL(1)
 mm_event_backend_cleanup(struct mm_event_backend *backend)
 {
 	ENTER();
-
-	// Close the event self-pipe.
-# if MM_EVENT_NATIVE_NOTIFY
-	if (!backend->native_notify)
-		mm_selfpipe_cleanup(&backend->selfpipe);
-#else
-	mm_selfpipe_cleanup(&backend->selfpipe);
-#endif
 
 	// Close the epoll/kqueue file descriptor.
 #if HAVE_SYS_EPOLL_H
@@ -78,14 +57,14 @@ mm_event_backend_cleanup(struct mm_event_backend *backend)
 }
 
 void NONNULL(1)
-mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage)
+mm_event_backend_local_prepare(struct mm_event_backend_local *local)
 {
 	ENTER();
 
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_storage_prepare(storage);
+	mm_event_epoll_local_prepare(local);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_storage_prepare(storage);
+	mm_event_kqueue_storage_prepare(local);
 #endif
 
 	LEAVE();

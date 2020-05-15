@@ -1,7 +1,7 @@
 /*
  * base/event/backend.h - MainMemory events system backend.
  *
- * Copyright (C) 2015-2018  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -24,7 +24,6 @@
 #include "base/report.h"
 #include "base/event/epoll.h"
 #include "base/event/kqueue.h"
-#include "base/event/selfpipe.h"
 
 #if HAVE_SYS_EPOLL_H
 # define MM_EVENT_BACKEND_NEVENTS MM_EVENT_EPOLL_NEVENTS
@@ -40,24 +39,15 @@ struct mm_event_backend
 #elif HAVE_SYS_EVENT_H
 	struct mm_event_kqueue backend;
 #endif
-
-#if MM_EVENT_NATIVE_NOTIFY
-	/* A flag indicating that the system supports a better
-	   notification mechanism than a self-pipe. */
-	bool native_notify;
-#endif
-
-	/* Event loop self-pipe. */
-	struct mm_selfpipe selfpipe;
 };
 
 /* System-specific events storage. */
 #if HAVE_SYS_EPOLL_H
-# define mm_event_backend_storage mm_event_epoll_storage
+# define mm_event_backend_local mm_event_epoll_local
 #elif HAVE_SYS_EVENT_H
-# define mm_event_backend_storage mm_event_kqueue_storage
+# define mm_event_backend_local mm_event_kqueue_storage
 #else
-struct mm_event_backend_storage;
+# error "Event backend is not implemented"
 #endif
 
 /**********************************************************************
@@ -65,57 +55,46 @@ struct mm_event_backend_storage;
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_storage *some_storage);
+mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_local *some_local);
 
 void NONNULL(1)
 mm_event_backend_cleanup(struct mm_event_backend *backend);
 
 void NONNULL(1)
-mm_event_backend_storage_prepare(struct mm_event_backend_storage *storage);
+mm_event_backend_local_prepare(struct mm_event_backend_local *local);
 
 /**********************************************************************
  * Event backend poll and notify routines.
  **********************************************************************/
 
 static inline void NONNULL(1, 2)
-mm_event_backend_poll(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
-		      mm_timeout_t timeout)
+mm_event_backend_poll(struct mm_event_backend *backend, struct mm_event_backend_local *local, mm_timeout_t timeout)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_poll(&backend->backend, storage, timeout);
+	mm_event_epoll_poll(&backend->backend, local, timeout);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_poll(&backend->backend, storage, timeout);
+	mm_event_kqueue_poll(&backend->backend, local, timeout);
 #endif
 }
 
 static inline void NONNULL(1)
 mm_event_backend_notify(struct mm_event_backend *backend)
 {
-#if MM_EVENT_NATIVE_NOTIFY
-	if (backend->native_notify) {
-# if HAVE_SYS_EPOLL_H
-		mm_event_epoll_notify(&backend->backend);
-# elif HAVE_SYS_EVENT_H
-		mm_event_kqueue_notify(&backend->backend);
-# endif
-		return;
-	}
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_notify(&backend->backend);
+#elif HAVE_SYS_EVENT_H && MM_EVENT_NATIVE_NOTIFY
+	mm_event_kqueue_notify(&backend->backend);
 #endif
-	mm_selfpipe_write(&backend->selfpipe);
 }
 
 static inline void NONNULL(1)
 mm_event_backend_notify_clean(struct mm_event_backend *backend)
 {
-#if MM_EVENT_NATIVE_NOTIFY
-	if (backend->native_notify) {
-# if HAVE_SYS_EPOLL_H
-		mm_event_epoll_notify_clean(&backend->backend);
-# endif
-		return;
-	}
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_notify_clean(&backend->backend);
+#elif HAVE_SYS_EVENT_H && MM_EVENT_NATIVE_NOTIFY
+	mm_event_kqueue_notify_clean(&backend->backend);
 #endif
-	mm_selfpipe_clean(&backend->selfpipe);
 }
 
 /**********************************************************************
@@ -123,76 +102,72 @@ mm_event_backend_notify_clean(struct mm_event_backend *backend)
  **********************************************************************/
 
 static inline bool NONNULL(1)
-mm_event_backend_has_changes(struct mm_event_backend_storage *storage UNUSED)
+mm_event_backend_has_changes(struct mm_event_backend_local *local UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
 	return false;
 #elif HAVE_SYS_EVENT_H
-	return storage->nevents != 0;
+	return local->nevents != 0;
 #endif
 }
 
 static inline bool NONNULL(1)
-mm_event_backend_has_urgent_changes(struct mm_event_backend_storage *storage UNUSED)
+mm_event_backend_has_urgent_changes(struct mm_event_backend_local *local UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
 	return false;
 #elif HAVE_SYS_EVENT_H
-	return storage->nunregister != 0;
+	return local->nunregister != 0;
 #endif
 }
 
 static inline void NONNULL(1, 2)
-mm_event_backend_flush(struct mm_event_backend *backend UNUSED, struct mm_event_backend_storage *storage UNUSED)
+mm_event_backend_flush(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
 	// Nothing to do.
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_flush(&backend->backend, storage);
+	mm_event_kqueue_flush(&backend->backend, local);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_register_fd(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
-			     struct mm_event_fd *sink)
+mm_event_backend_register_fd(struct mm_event_backend *backend, struct mm_event_backend_local *local UNUSED, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_register_fd(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_register_fd(&backend->backend, storage, sink);
+	mm_event_kqueue_register_fd(&backend->backend, local, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event_backend_storage *storage,
-			       struct mm_event_fd *sink)
+mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event_backend_local *local, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_unregister_fd(&backend->backend, storage, sink);
+	mm_event_epoll_unregister_fd(&backend->backend, local, sink);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_unregister_fd(&backend->backend, storage, sink);
+	mm_event_kqueue_unregister_fd(&backend->backend, local, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
-			       struct mm_event_fd *sink)
+mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event_backend_local *local UNUSED, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_trigger_input(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_trigger_input(&backend->backend, storage, sink);
+	mm_event_kqueue_trigger_input(&backend->backend, local, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_storage *storage UNUSED,
-			        struct mm_event_fd *sink)
+mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_local *local UNUSED, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_trigger_output(&backend->backend, sink);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_trigger_output(&backend->backend, storage, sink);
+	mm_event_kqueue_trigger_output(&backend->backend, local, sink);
 #endif
 }
 
@@ -202,43 +177,43 @@ mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_even
 
 /* Prepare a poller thread for handling received events. */
 static inline void NONNULL(1)
-mm_event_backend_poller_start(struct mm_event_backend_storage *storage UNUSED)
+mm_event_backend_poller_start(struct mm_event_backend_local *local UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_poller_start(storage);
+	mm_event_epoll_poller_start(local);
 #endif
 }
 
 /* Make a poller thread done with received events. */
 static inline void NONNULL(1, 2)
-mm_event_backend_poller_finish(struct mm_event_backend *backend UNUSED, struct mm_event_backend_storage *storage UNUSED)
+mm_event_backend_poller_finish(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local UNUSED)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_poller_finish(&backend->backend, storage);
+	mm_event_epoll_poller_finish(&backend->backend, local);
 #endif
 }
 
 /* Start processing of an event after it is accepted by the poller thread. */
 static inline void NONNULL(1, 2)
-mm_event_backend_poller_input(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, uint32_t flag)
+mm_event_backend_poller_input(struct mm_event_backend_local *local UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
 	mm_event_handle_input(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) != 0)
-		mm_event_epoll_poller_disable_input(storage, sink);
+		mm_event_epoll_poller_disable_input(local, sink);
 #endif
 }
 static inline void NONNULL(1, 2)
-mm_event_backend_poller_output(struct mm_event_backend_storage *storage UNUSED, struct mm_event_fd *sink, uint32_t flag)
+mm_event_backend_poller_output(struct mm_event_backend_local *local UNUSED, struct mm_event_fd *sink, uint32_t flag)
 {
 	/* Start processing the event. */
 	mm_event_handle_output(sink, flag);
 	/* Perform backend-specific I/O state reset. */
 #if HAVE_SYS_EPOLL_H
 	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) != 0)
-		mm_event_epoll_poller_disable_output(storage, sink);
+		mm_event_epoll_poller_disable_output(local, sink);
 #endif
 }
 

@@ -1,7 +1,7 @@
 /*
  * base/event/epoll.h - MainMemory epoll support.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -29,10 +29,7 @@
 #include "base/event/event.h"
 
 #include <sys/epoll.h>
-
-#if HAVE_SYS_EVENTFD_H
-# define MM_EVENT_NATIVE_NOTIFY		1
-#endif
+#include <sys/eventfd.h>
 
 #define MM_EVENT_EPOLL_NEVENTS		(64)
 
@@ -42,14 +39,12 @@ struct mm_event_epoll
 	/* The epoll file descriptor. */
 	int event_fd;
 
-#if MM_EVENT_NATIVE_NOTIFY
 	/* The eventfd descriptor used for notification. */
 	struct mm_event_fd notify_fd;
-#endif
 };
 
 /* Per-listener data for epoll support. */
-struct mm_event_epoll_storage
+struct mm_event_epoll_local
 {
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
@@ -77,7 +72,7 @@ void NONNULL(1)
 mm_event_epoll_cleanup(struct mm_event_epoll *backend);
 
 void NONNULL(1)
-mm_event_epoll_storage_prepare(struct mm_event_epoll_storage *storage);
+mm_event_epoll_local_prepare(struct mm_event_epoll_local *local);
 
 /**********************************************************************
  * Wrappers for epoll system calls.
@@ -100,9 +95,7 @@ mm_epoll_ctl(int ep, int op, int fd, struct epoll_event *event)
 static inline int
 mm_epoll_wait(int ep, struct epoll_event *events, int nevents, int timeout)
 {
-	return mm_syscall_4(SYS_epoll_wait, ep,
-			    (uintptr_t) events, nevents,
-			    timeout);
+	return mm_syscall_4(SYS_epoll_wait, ep, (uintptr_t) events, nevents, timeout);
 }
 
 static inline int
@@ -125,12 +118,9 @@ mm_eventfd(unsigned int value, int flags)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-		    mm_timeout_t timeout);
+mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, mm_timeout_t timeout);
 
-#if MM_EVENT_NATIVE_NOTIFY
-
-bool NONNULL(1)
+void NONNULL(1)
 mm_event_epoll_enable_notify(struct mm_event_epoll *backend);
 
 void NONNULL(1)
@@ -138,8 +128,6 @@ mm_event_epoll_notify(struct mm_event_epoll *backend);
 
 void NONNULL(1)
 mm_event_epoll_notify_clean(struct mm_event_epoll *backend);
-
-#endif
 
 /**********************************************************************
  * Event sink I/O control.
@@ -166,8 +154,7 @@ mm_event_epoll_register_fd(struct mm_event_epoll *backend, struct mm_event_fd *s
 }
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage,
-			     struct mm_event_fd *sink);
+mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 static inline void NONNULL(1, 2)
 mm_event_epoll_trigger_input(struct mm_event_epoll *backend, struct mm_event_fd *sink)
@@ -242,33 +229,33 @@ mm_event_epoll_disable_output(struct mm_event_epoll *backend, struct mm_event_fd
  **********************************************************************/
 
 static inline void NONNULL(1)
-mm_event_epoll_poller_start(struct mm_event_epoll_storage *storage)
+mm_event_epoll_poller_start(struct mm_event_epoll_local *local)
 {
-	storage->input_reset_num = 0;
-	storage->output_reset_num = 0;
+	local->input_reset_num = 0;
+	local->output_reset_num = 0;
 }
 
 static inline void NONNULL(1, 2)
-mm_event_epoll_poller_finish(struct mm_event_epoll *backend, struct mm_event_epoll_storage *storage)
+mm_event_epoll_poller_finish(struct mm_event_epoll *backend, struct mm_event_epoll_local *local)
 {
-	for (int i = 0; i < storage->input_reset_num; i++)
-		mm_event_epoll_disable_input(backend, storage->input_reset[i]);
-	for (int i = 0; i < storage->output_reset_num; i++)
-		mm_event_epoll_disable_output(backend, storage->output_reset[i]);
+	for (int i = 0; i < local->input_reset_num; i++)
+		mm_event_epoll_disable_input(backend, local->input_reset[i]);
+	for (int i = 0; i < local->output_reset_num; i++)
+		mm_event_epoll_disable_output(backend, local->output_reset[i]);
 }
 
 static inline void NONNULL(1, 2)
-mm_event_epoll_poller_disable_input(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+mm_event_epoll_poller_disable_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
-	ASSERT(storage->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
-	storage->input_reset[storage->input_reset_num++] = sink;
+	ASSERT(local->input_reset_num < MM_EVENT_EPOLL_NEVENTS);
+	local->input_reset[local->input_reset_num++] = sink;
 }
 
 static inline void NONNULL(1, 2)
-mm_event_epoll_poller_disable_output(struct mm_event_epoll_storage *storage, struct mm_event_fd *sink)
+mm_event_epoll_poller_disable_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
-	ASSERT(storage->output_reset_num < MM_EVENT_EPOLL_NEVENTS);
-	storage->output_reset[storage->output_reset_num++] = sink;
+	ASSERT(local->output_reset_num < MM_EVENT_EPOLL_NEVENTS);
+	local->output_reset[local->output_reset_num++] = sink;
 }
 
 #endif /* HAVE_SYS_EPOLL_H */

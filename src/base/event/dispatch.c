@@ -114,7 +114,7 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	mm_brief("event-poll-spin-limit: %d", dispatch->poll_spin_limit);
 
 	// Initialize system-specific resources.
-	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].storage);
+	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].backend);
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare(&dispatch->global_epoch);
 
@@ -179,7 +179,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 			   (unsigned long long) stats->retargeted_forwarded_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
-			uint64_t n = listener->storage.nevents_stats[j];
+			uint64_t n = listener->backend.nevents_stats[j];
 			if (j && !n)
 				continue;
 			mm_log_fmt(" %d=%llu", j, (unsigned long long) n);
