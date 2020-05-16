@@ -78,6 +78,7 @@ mm_event_kqueue_handle(struct mm_event_kqueue *backend, struct mm_event_listener
 			}
 			if (event->ident == (uintptr_t) backend->selfpipe.read_fd) {
 				mm_selfpipe_set_notified(&backend->selfpipe);
+				listener->notifications++;
 				continue;
 			}
 

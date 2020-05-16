@@ -47,21 +47,20 @@ mm_event_active(const struct mm_event_fd *sink UNUSED)
 	return sink->receive_stamp != stamp;
 }
 
-static bool
+static void
 mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	// Cannot unbind certain kinds of sinks at all.
-	if ((sink->flags & (MM_EVENT_FIXED_LISTENER | MM_EVENT_NOTIFY_FD)) != 0)
-		return false;
+	if ((sink->flags & (MM_EVENT_FIXED_LISTENER)) != 0)
+		return;
 
 	// Cannot unbind if there is some event handling activity.
 	ASSERT(sink->context != NULL);
 	if (mm_event_active(sink))
-		return true;
+		return;
 
 	// Attach the sink to the poller.
 	sink->context = listener->context;
-	return true;
 }
 
 #endif
@@ -124,15 +123,7 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 
 #if ENABLE_SMP
 	// Unbind or rebind the sink if appropriate.
-	if (!mm_event_test_binding(listener, sink)) {
-		if ((sink->flags & MM_EVENT_NOTIFY_FD) != 0) {
-			sink->flags |= MM_EVENT_INPUT_READY;
-#if ENABLE_EVENT_STATS
-			listener->stats.stray_events++;
-#endif
-			goto leave;
-		}
-	}
+	mm_event_test_binding(listener, sink);
 
 	// Count the received event.
 	mm_event_update(sink);
@@ -147,19 +138,10 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 		listener->events.forwarded++;
 	}
 #else
-	if ((sink->flags & MM_EVENT_NOTIFY_FD) != 0) {
-		sink->flags |= MM_EVENT_INPUT_READY;
-#if ENABLE_EVENT_STATS
-		listener->stats.stray_events++;
-#endif
-		goto leave;
-	}
-
 	mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_READY);
 	listener->events.direct++;
 #endif
 
-leave:
 	LEAVE();
 }
 
@@ -170,10 +152,7 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 
 #if ENABLE_SMP
 	// Unbind or rebind the sink if appropriate.
-	if (!mm_event_test_binding(listener, sink)) {
-		// Error events must never occur with notify FD.
-		VERIFY((sink->flags & MM_EVENT_NOTIFY_FD) == 0);
-	}
+	mm_event_test_binding(listener, sink);
 
 	// Count the received event.
 	mm_event_update(sink);
@@ -202,10 +181,7 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 
 #if ENABLE_SMP
 	// Unbind or rebind the sink if appropriate.
-	if (!mm_event_test_binding(listener, sink)) {
-		// Never register notify FD for output events.
-		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) == 0);
-	}
+	mm_event_test_binding(listener, sink);
 
 	// Count the received event.
 	mm_event_update(sink);
@@ -234,10 +210,7 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 
 #if ENABLE_SMP
 	// Unbind or rebind the sink if appropriate.
-	if (!mm_event_test_binding(listener, sink)) {
-		// Never register notify FD for output events.
-		ASSERT((sink->flags & MM_EVENT_NOTIFY_FD) == 0);
-	}
+	mm_event_test_binding(listener, sink);
 
 	// Count the received event.
 	mm_event_update(sink);
@@ -322,12 +295,12 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 
 	// Initialize the statistic counters.
 	mm_event_listener_clear_events(listener);
+	listener->notifications = 0;
 #if ENABLE_EVENT_STATS
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
 	listener->stats.wait_calls = 0;
 	listener->stats.spin_count = 0;
-	listener->stats.stray_events = 0;
 	listener->stats.direct_events = 0;
 	listener->stats.forwarded_events = 0;
 	listener->stats.received_forwarded_events = 0;

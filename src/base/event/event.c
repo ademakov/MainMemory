@@ -279,8 +279,7 @@ mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink)
 	VERIFY(context == mm_context_selfptr());
 
 	// Bind the sink to this thread's event listener.
-	if ((sink->flags & MM_EVENT_NOTIFY_FD) == 0)
-		sink->context = context;
+	sink->context = context;
 
 	// Register with the event backend.
 	struct mm_event_listener *listener = context->listener;

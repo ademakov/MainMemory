@@ -43,6 +43,7 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
 		if ((event->events & EPOLLIN) != 0) {
 			if (sink == MM_EVENT_EPOLL_NOTIFY_SINK) {
 				backend->notified = true;
+				listener->notifications++;
 			} else {
 				mm_event_listener_input(listener, sink);
 			}

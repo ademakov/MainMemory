@@ -57,7 +57,6 @@ struct mm_event_listener_stats
 	uint64_t wait_calls;
 	uint64_t spin_count;
 
-	uint64_t stray_events;
 	uint64_t direct_events;
 	uint64_t forwarded_events;
 	uint64_t received_forwarded_events;
@@ -110,8 +109,9 @@ struct mm_event_listener
 	/* Private part of the event backend. */
 	struct mm_event_backend_local backend;
 
-#if ENABLE_EVENT_STATS
 	/* Statistics. */
+	uint64_t notifications;
+#if ENABLE_EVENT_STATS
 	struct mm_event_listener_stats stats;
 #endif
 
