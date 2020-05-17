@@ -54,8 +54,8 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
 		}
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
-			bool output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
+			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
+			bool output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
 			if (input)
 				mm_event_listener_input_error(listener, sink);
 			if (output && (event->events & (EPOLLERR | EPOLLHUP)) != 0)

@@ -153,26 +153,22 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_server *srv, i
 	if (srv->proto->reader == NULL && srv->proto->writer != NULL)
 		options |= MM_NET_EGRESS;
 
-	mm_event_mode_t input, output;
-	if ((options & MM_NET_EGRESS) == 0) {
-		VERIFY(srv->proto->reader != NULL);
-		input = MM_EVENT_REGULAR;
-		output = MM_EVENT_ONESHOT;
-	} else {
-		VERIFY(srv->proto->writer != NULL);
-		input = MM_EVENT_ONESHOT;
-		output = MM_EVENT_REGULAR;
-	}
-
 	// Assume that an accepted socket is ready for output right away.
 	uint32_t flags = MM_EVENT_OUTPUT_READY;
+	if ((options & MM_NET_EGRESS) == 0) {
+		VERIFY(srv->proto->reader != NULL);
+		flags |= MM_EVENT_REGULAR_INPUT;
+	} else {
+		VERIFY(srv->proto->writer != NULL);
+		flags |= MM_EVENT_REGULAR_OUTPUT;
+	}
 	if ((options & MM_NET_BOUND) != 0)
 		flags = MM_EVENT_FIXED_LISTENER;
 
 	// Initialize basic fields.
 	mm_net_prepare(sock, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, &srv->tasks, input, output, flags);
+	mm_event_prepare_fd(&sock->event, fd, &srv->tasks, flags);
 }
 
 /**********************************************************************
@@ -367,8 +363,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks,
-			    MM_EVENT_REGULAR, MM_EVENT_IGNORED, MM_EVENT_FIXED_LISTENER);
+	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks, MM_EVENT_FIXED_LISTENER | MM_EVENT_REGULAR_INPUT);
 
 	MM_TASK(register_task, mm_net_register_server, mm_task_complete_noop, mm_task_reassign_off);
 	struct mm_context *context = mm_thread_ident_to_context(target);
@@ -545,7 +540,7 @@ retry:
 		flags |= MM_EVENT_OUTPUT_TRIGGER;
 	else
 		flags |= MM_EVENT_OUTPUT_READY;
-	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), MM_EVENT_ONESHOT, MM_EVENT_ONESHOT, flags);
+	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), flags);
 
 	// Register the socket in the event loop.
 	struct mm_context *const context = mm_context_selfptr();

@@ -239,8 +239,7 @@ mm_event_instant_io(void)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io,
-		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io, uint32_t flags)
 {
 	ENTER();
 	DEBUG("fd %d", fd);
@@ -258,14 +257,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *
 	sink->complete_stamp = 0;
 #endif
 
-	if (input == MM_EVENT_REGULAR)
-		flags |= MM_EVENT_REGULAR_INPUT;
-	else if (input == MM_EVENT_ONESHOT)
-		flags |= MM_EVENT_ONESHOT_INPUT;
-	if (output == MM_EVENT_REGULAR)
-		flags |= MM_EVENT_REGULAR_OUTPUT;
-	else if (output == MM_EVENT_ONESHOT)
-		flags |= MM_EVENT_ONESHOT_OUTPUT;
 	sink->flags = flags;
 
 	LEAVE();
@@ -336,7 +327,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 
 	mm_event_reset_input_ready(sink);
 
-	if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_INPUT_TRIGGER)) == MM_EVENT_ONESHOT_INPUT) {
+	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) == 0) {
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
 
 		struct mm_context *context = sink->context;
@@ -358,7 +349,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 
 	mm_event_reset_output_ready(sink);
 
-	if ((sink->flags & (MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) == MM_EVENT_ONESHOT_OUTPUT) {
+	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) == 0) {
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
 
 		struct mm_context *context = sink->context;

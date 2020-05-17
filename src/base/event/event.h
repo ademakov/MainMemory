@@ -36,17 +36,6 @@ typedef enum {
 	MM_EVENT_INDEX_OUTPUT_ERROR = 3,
 } mm_event_index_t;
 
-/* I/O event repeat modes. */
-typedef enum {
-	/* No event are expected. */
-	MM_EVENT_IGNORED,
-	/* Repeated events are expected. */
-	MM_EVENT_REGULAR,
-	/* Single event is expected. To get another one it required
-	   to call a corresponding trigger function. */
-	MM_EVENT_ONESHOT,
-} mm_event_mode_t;
-
 /*
  * NB: Oneshot event sinks have some restrictions.
  *
@@ -86,8 +75,6 @@ typedef enum {
 /* Polling mode for I/O events. */
 #define MM_EVENT_REGULAR_INPUT	0x001000
 #define MM_EVENT_REGULAR_OUTPUT	0x002000
-#define MM_EVENT_ONESHOT_INPUT	0x004000
-#define MM_EVENT_ONESHOT_OUTPUT	0x008000
 #define MM_EVENT_INPUT_TRIGGER	0x010000
 #define MM_EVENT_OUTPUT_TRIGGER	0x020000
 
@@ -276,8 +263,7 @@ mm_event_instant_io(void);
 
 /* Prepare an I/O event sink. */
 void NONNULL(1, 3)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io,
-		    mm_event_mode_t input, mm_event_mode_t output, uint32_t flags);
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io, uint32_t flags);
 
 void NONNULL(1, 2)
 mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink);
