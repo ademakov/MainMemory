@@ -64,7 +64,7 @@ mm_event_backend_local_prepare(struct mm_event_backend_local *local)
 #if HAVE_SYS_EPOLL_H
 	mm_event_epoll_local_prepare(local);
 #elif HAVE_SYS_EVENT_H
-	mm_event_kqueue_storage_prepare(local);
+	mm_event_kqueue_local_prepare(local);
 #endif
 
 	LEAVE();

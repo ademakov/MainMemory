@@ -92,7 +92,7 @@ void NONNULL(1)
 mm_event_kqueue_cleanup(struct mm_event_kqueue *backend);
 
 void NONNULL(1)
-mm_event_kqueue_storage_prepare(struct mm_event_kqueue_local *local);
+mm_event_kqueue_local_prepare(struct mm_event_kqueue_local *local);
 
 /**********************************************************************
  * Event backend poll and notify routines.
