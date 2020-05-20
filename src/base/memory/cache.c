@@ -634,33 +634,35 @@ mm_memory_cache_free_chunk(struct mm_memory_heap *const heap, void *const ptr)
 	const uint32_t inner_mask = 1u << inner_shift;
 	MEMORY_VERIFY((inner->free & inner_mask) == 0, "double free");
 	inner->free |= inner_mask;
-	if (inner->free == 0xfffe) {
-		block->inner_used ^= mask;
-		block->inner_free ^= mask;
+	if (inner->free != 0xfffe) {
+		if (block->inner_free == 0) {
+			block->inner_next = heap->blocks[small_rank];
+			heap->blocks[small_rank] = block;
+		}
+		block->inner_free |= mask;
+	} else {
 		if (block->chunk_free == 0) {
 			block->next = heap->blocks[medium_rank];
 			heap->blocks[medium_rank] = block;
 		}
 		block->chunk_free |= mask;
 
-		struct mm_memory_block *prev = heap->blocks[small_rank];
-		if (prev == block) {
-			heap->blocks[small_rank] = block->inner_next;
-		} else {
-			while (prev) {
-				if (prev->inner_next == block) {
-					prev->inner_next = block->inner_next;
-					break;
+		block->inner_used ^= mask;
+		block->inner_free ^= mask;
+		if (block->inner_free == 0) {
+			struct mm_memory_block *prev = heap->blocks[small_rank];
+			if (prev == block) {
+				heap->blocks[small_rank] = block->inner_next;
+			} else {
+				while (prev) {
+					if (prev->inner_next == block) {
+						prev->inner_next = block->inner_next;
+						break;
+					}
+					prev = prev->inner_next;
 				}
-				prev = prev->inner_next;
 			}
 		}
-	} else {
-		if (block->inner_free == 0) {
-			block->inner_next = heap->blocks[small_rank];
-			heap->blocks[small_rank] = block;
-		}
-		block->inner_free |= mask;
 	}
 }
 
