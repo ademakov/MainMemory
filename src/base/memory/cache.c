@@ -643,16 +643,16 @@ mm_memory_cache_free_chunk(struct mm_memory_heap *const heap, void *const ptr)
 		}
 		block->chunk_free |= mask;
 
-		if (heap->blocks[small_rank] == block) {
+		struct mm_memory_block *prev = heap->blocks[small_rank];
+		if (prev == block) {
 			heap->blocks[small_rank] = block->inner_next;
 		} else {
-			struct mm_memory_block *prev = heap->blocks[small_rank];
 			while (prev) {
 				if (prev->inner_next == block) {
 					prev->inner_next = block->inner_next;
 					break;
 				}
-				prev = prev->next;
+				prev = prev->inner_next;
 			}
 		}
 	} else {
