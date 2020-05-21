@@ -51,7 +51,7 @@ static void
 mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	// Cannot unbind certain kinds of sinks at all.
-	if ((sink->flags & (MM_EVENT_FIXED_LISTENER)) != 0)
+	if ((sink->flags & MM_EVENT_PINNED_LOCAL) != 0)
 		return;
 
 	// Cannot unbind if there is some event handling activity.
@@ -70,12 +70,9 @@ mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *si
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents UNUSED)
+mm_event_listener_handle_start(struct mm_event_listener *listener UNUSED, uint32_t nevents UNUSED)
 {
 	ENTER();
-
-	// Prepare the backend for handling events.
-	mm_event_backend_poller_start(&listener->backend);
 
 #if ENABLE_SMP && ENABLE_EVENT_SINK_LOCK
 	// Acquire coarse-grained event sink lock.
@@ -103,9 +100,6 @@ mm_event_listener_handle_finish(struct mm_event_listener *listener)
 		mm_event_forward_flush(&listener->forward, dispatch);
 #endif
 
-	// Make the backend done with handling events.
-	mm_event_backend_poller_finish(&dispatch->backend, &listener->backend);
-
 	// TODO: at this point it might miss disable and reclaim events.
 #if ENABLE_EVENT_STATS
 	// Update event statistics.
@@ -131,11 +125,12 @@ mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->context == listener->context) {
-		mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_READY);
 		listener->events.direct++;
+		/* Start processing the event. */
+		mm_event_handle_input(sink, MM_EVENT_INPUT_READY);
 	} else {
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT);
 		listener->events.forwarded++;
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT);
 	}
 #else
 	mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_READY);
@@ -160,11 +155,12 @@ mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_even
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->context == listener->context) {
-		mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_ERROR);
 		listener->events.direct++;
+		/* Start processing the event. */
+		mm_event_handle_input(sink, MM_EVENT_INPUT_ERROR);
 	} else {
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT_ERROR);
 		listener->events.forwarded++;
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT_ERROR);
 	}
 #else
 	mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_ERROR);
@@ -189,11 +185,12 @@ mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd 
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to the target thread.
 	if (sink->context == listener->context) {
-		mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_READY);
 		listener->events.direct++;
+		/* Start processing the event. */
+		mm_event_handle_output(sink, MM_EVENT_OUTPUT_READY);
 	} else {
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT);
 		listener->events.forwarded++;
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT);
 	}
 #else
 	mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_READY);
@@ -218,11 +215,12 @@ mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_eve
 	// If the event sink belongs to the poller thread then handle it immediately,
 	// otherwise store it for later delivery to he target thread.
 	if (sink->context == listener->context) {
-		mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_ERROR);
 		listener->events.direct++;
+		/* Start processing the event. */
+		mm_event_handle_output(sink, MM_EVENT_OUTPUT_ERROR);
 	} else {
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT_ERROR);
 		listener->events.forwarded++;
+		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT_ERROR);
 	}
 #else
 	mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_ERROR);
@@ -307,8 +305,8 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.retargeted_forwarded_events = 0;
 #endif
 
-	// Initialize the private part of event backend.
-	mm_event_backend_local_prepare(&listener->backend);
+	// Initialize the local part of event backend.
+	mm_event_backend_local_prepare(&listener->backend, &dispatch->backend);
 
 	LEAVE();
 }
@@ -317,6 +315,9 @@ void NONNULL(1)
 mm_event_listener_cleanup(struct mm_event_listener *listener)
 {
 	ENTER();
+
+	// Clean up the local part of event backend.
+	mm_event_backend_local_cleanup(&listener->backend);
 
 	// Destroy the timer queue.
 	mm_timeq_cleanup(&listener->timer_queue);

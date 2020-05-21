@@ -100,9 +100,14 @@ mm_event_complete(struct mm_event_fd *sink)
 			mm_event_close_fd(sink);
 #if ENABLE_SMP
 	} else {
-		/* Mark the sink as having completed the processing of all
-		   the events delivered to the target thread so far. */
-		/* TODO: release memory fence */
+		// Ensure that new events will be received.
+		mm_event_backend_adjust_fd(&sink->context->listener->backend,
+					   &sink->context->listener->dispatch->backend,
+					   sink);
+
+		// Mark the sink as having completed the processing of all
+		// the events delivered to the target thread so far
+		// TODO: release memory fence
 		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
 #endif
 	}
@@ -191,10 +196,15 @@ mm_event_reassign_io(mm_value_t arg, struct mm_context *context)
 	bool reassigned = false;
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0) {
+	if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_PINNED_LOCAL)) == 0) {
 		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
 		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
 		if (input_started != output_started) {
+			// Ensure that new events will not be received in this context.
+			mm_event_backend_disable_fd(&sink->context->listener->backend,
+						    &sink->context->listener->dispatch->backend,
+						    sink);
+
 			sink->context = context;
 			reassigned = true;
 		}
@@ -257,6 +267,11 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *
 	sink->complete_stamp = 0;
 #endif
 
+	if ((flags & MM_EVENT_REGULAR_INPUT) != 0 && (flags & MM_EVENT_REGULAR_OUTPUT) != 0)
+		mm_fatal(0, "unsupported combination of event flags");
+	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0
+	    && (flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER)) != 0)
+		mm_fatal(0, "unsupported combination of event flags");
 	sink->flags = flags;
 
 	LEAVE();
@@ -470,7 +485,7 @@ mm_event_timer_fire(struct mm_context *context, struct mm_timeq_entry *entry)
  * Event listening and notification.
  **********************************************************************/
 
-#if ENABLE_SMP
+#if ENABLE_SMP && !MM_EVENT_LOCAL_POLL
 
 static void NONNULL(1)
 mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
@@ -511,7 +526,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 
 	if (timeout) {
 		// Cleanup stale event notifications.
-		mm_event_backend_notify_clean(&dispatch->backend);
+		mm_event_backend_notify_clean(&dispatch->backend, &listener->backend);
 
 		// Publish the log before a possible sleep.
 		mm_log_relay();
@@ -561,6 +576,23 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 	}
 
 #if ENABLE_SMP
+
+#if MM_EVENT_LOCAL_POLL
+
+	// Wait for incoming events or timeout expiration.
+	mm_event_poll(listener, dispatch, timeout);
+
+	// Reset the poller spin counter.
+	if (mm_event_listener_got_events(listener)) {
+		mm_event_listener_clear_events(listener);
+		listener->spin_count = dispatch->poll_spin_limit;
+	}
+
+	// Share event tasks with other listeners if feasible.
+	mm_context_distribute_tasks(context);
+
+#else // !MM_EVENT_LOCAL_POLL
+
 	// The first arrived thread is elected to conduct the next event poll.
 	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
 	if (is_poller_thread) {
@@ -600,7 +632,10 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 #endif
 		}
 	}
+#endif // !MM_EVENT_LOCAL_POLL
+
 #else // !ENABLE_SMP
+
 	// Wait for incoming events or timeout expiration.
 	mm_event_poll(listener, dispatch, timeout);
 
@@ -609,6 +644,7 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 		mm_event_listener_clear_events(listener);
 		listener->spin_count = dispatch->poll_spin_limit;
 	}
+
 #endif // !ENABLE_SMP
 
 	// Indicate that clocks need to be updated.
@@ -650,10 +686,12 @@ mm_event_notify(struct mm_context *context, mm_stamp_t stamp)
 		// becomes polling). So listeners should be prepared
 		// to get spurious wake up notifications.
 		status &= MM_CONTEXT_STATUS;
-		if (status == MM_CONTEXT_WAITING)
-			mm_event_listener_signal(context->listener);
-		else if (status == MM_CONTEXT_POLLING)
-			mm_event_backend_notify(&context->listener->dispatch->backend);
+
+		struct mm_event_listener *listener = context->listener;
+		if (status == MM_CONTEXT_POLLING)
+			mm_event_backend_notify(&listener->dispatch->backend, &listener->backend);
+		else if (status == MM_CONTEXT_WAITING)
+			mm_event_listener_signal(listener);
 	}
 
 	LEAVE();

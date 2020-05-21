@@ -61,30 +61,36 @@ typedef enum {
 #define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_INDEX_OUTPUT_ERROR)
 
 /* I/O event sink close flags. */
-#define MM_EVENT_CLOSED		0x000010
-#define MM_EVENT_INPUT_CLOSED	0x000020
-#define MM_EVENT_OUTPUT_CLOSED	0x000040
-#define MM_EVENT_BROKEN		0x000080
+#define MM_EVENT_CLOSED		0x00000010
+#define MM_EVENT_INPUT_CLOSED	0x00000020
+#define MM_EVENT_OUTPUT_CLOSED	0x00000040
+#define MM_EVENT_BROKEN		0x00000080
 
 /* Fiber activity flags. */
-#define MM_EVENT_INPUT_STARTED	0x000100
-#define MM_EVENT_OUTPUT_STARTED	0x000200
-#define MM_EVENT_INPUT_RESTART	0x000400
-#define MM_EVENT_OUTPUT_RESTART	0x000800
+#define MM_EVENT_INPUT_STARTED	0x00000100
+#define MM_EVENT_OUTPUT_STARTED	0x00000200
+#define MM_EVENT_INPUT_RESTART	0x00000400
+#define MM_EVENT_OUTPUT_RESTART	0x00000800
 
 /* Polling mode for I/O events. */
-#define MM_EVENT_REGULAR_INPUT	0x001000
-#define MM_EVENT_REGULAR_OUTPUT	0x002000
-#define MM_EVENT_INPUT_TRIGGER	0x010000
-#define MM_EVENT_OUTPUT_TRIGGER	0x020000
+#define MM_EVENT_REGULAR_INPUT	0x00001000
+#define MM_EVENT_REGULAR_OUTPUT	0x00002000
+#define MM_EVENT_INPUT_TRIGGER	0x00004000
+#define MM_EVENT_OUTPUT_TRIGGER	0x00008000
 
-/* Internal notification fd (selfpipe or eventfd). */
-#define MM_EVENT_NOTIFY_FD	0x040000
-/* Event dispatch is bound to a single listener. */
-#define MM_EVENT_FIXED_LISTENER	0x080000
+/* Event sink registered with a local poller. */
+#define MM_EVENT_LOCAL_ADDED	0x00010000
+/* Event sink polling mode needs to be modified. */
+#define MM_EVENT_LOCAL_MODIFY	0x00020000
+/* Event sink registered with the common poller. */
+#define MM_EVENT_COMMON_ADDED	0x00040000
+/* Event sink currently works with the common poller. */
+#define MM_EVENT_COMMON_ENABLED	0x00080000
+/* Event sink pinned to a fixed local poller. */
+#define MM_EVENT_PINNED_LOCAL	0x00100000
 
 /* A sink has a pending I/O event change. */
-#define MM_EVENT_CHANGE		0x100000
+#define MM_EVENT_CHANGE		0x00200000
 
 /* Per-sink event counter. */
 typedef uint16_t mm_event_stamp_t;
@@ -103,16 +109,16 @@ struct mm_event_io
 /* I/O event sink. */
 struct mm_event_fd
 {
+	/* File descriptor to watch. */
+	int fd;
+	/* State flags. */
+	uint32_t flags;
+
 	/* Task entries to perform I/O. */
 	const struct mm_event_io *io;
 
 	/* The context that owns the sink. */
 	struct mm_context *context;
-
-	/* File descriptor to watch. */
-	int fd;
-	/* State flags. */
-	uint32_t flags;
 
 #if ENABLE_SMP
 	/* The stamp updated by poller threads on every next event received

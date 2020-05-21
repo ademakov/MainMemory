@@ -101,6 +101,11 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 		mm_fatal(0, "event listener attributes are not set");
 #endif
 
+	// Initialize common system-specific resources.
+	mm_event_backend_prepare(&dispatch->backend);
+	// Initialize event sink reclamation data.
+	mm_event_epoch_prepare(&dispatch->global_epoch);
+
 	// Prepare listener info.
 	dispatch->nlisteners = attr->nlisteners;
 	dispatch->listeners = mm_memory_xcalloc(attr->nlisteners, sizeof(struct mm_event_listener));
@@ -112,11 +117,6 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	dispatch->poll_spin_limit = attr->poll_spin_limit;
 	mm_brief("event-lock-spin-limit: %d", dispatch->lock_spin_limit);
 	mm_brief("event-poll-spin-limit: %d", dispatch->poll_spin_limit);
-
-	// Initialize system-specific resources.
-	mm_event_backend_prepare(&dispatch->backend, &dispatch->listeners[0].backend);
-	// Initialize event sink reclamation data.
-	mm_event_epoch_prepare(&dispatch->global_epoch);
 
 #if ENABLE_SMP
 	// Initialize poller thread data.
@@ -137,13 +137,13 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
 {
 	ENTER();
 
-	// Release system-specific resources.
-	mm_event_backend_cleanup(&dispatch->backend);
-
 	// Release listener info.
 	for (mm_thread_t i = 0; i < dispatch->nlisteners; i++)
 		mm_event_listener_cleanup(&dispatch->listeners[i]);
 	mm_memory_free(dispatch->listeners);
+
+	// Release common system-specific resources.
+	mm_event_backend_cleanup(&dispatch->backend);
 
 	LEAVE();
 }

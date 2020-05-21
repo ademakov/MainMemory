@@ -38,11 +38,10 @@ mm_event_forward_handle(struct mm_context *const context,
 			struct mm_event_fd *sink,
 			mm_event_index_t event)
 {
-	struct mm_event_dispatch *const dispatch = listener->dispatch;
-
 	// Check if the event sink has been bound to another target after forwarding the event.
 	struct mm_context *const sink_context = sink->context;
 	if (context != sink_context) {
+		struct mm_event_dispatch *const dispatch = listener->dispatch;
 		mm_thread_t target = sink_context->listener - dispatch->listeners;
 
 		// Add the event to the buffer.
@@ -56,10 +55,12 @@ mm_event_forward_handle(struct mm_context *const context,
 		return 1;
 	}
 
+	/* Start processing the event. */
 	if (event < MM_EVENT_INDEX_OUTPUT) {
-		mm_event_backend_target_input(&dispatch->backend, sink, (1u << event));
+		mm_event_handle_input(sink, (1u << event));
 	} else {
-		mm_event_backend_target_output(&dispatch->backend, sink, (1u << event));
+		/* Start processing the event. */
+		mm_event_handle_output(sink, (1u << event));
 	}
 	return 0;
 }
