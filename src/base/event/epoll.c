@@ -79,29 +79,24 @@ mm_eventfd(unsigned int value, int flags)
 static void
 mm_event_epoll_add_fd(struct mm_event_epoll *backend, int fd, uint32_t events, void *ptr)
 {
-	struct epoll_event ee;
-	ee.events = events;
-	ee.data.ptr = ptr;
-	int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, fd, &ee);
-	if (unlikely(rc < 0))
+	struct epoll_event ee = { .events = events, .data.ptr = ptr };
+	if (unlikely(mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, fd, &ee) < 0))
 		mm_fatal(errno, "epoll_ctl");
 }
 
 static void NONNULL(1, 2, 3)
 mm_event_epoll_acquire_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink, uint32_t events)
 {
-	int rc;
-
 	if ((sink->flags & MM_EVENT_COMMON_ENABLED) != 0) {
 		sink->flags &= ~(MM_EVENT_COMMON_ADDED | MM_EVENT_COMMON_ENABLED);
-		rc = mm_epoll_ctl(common->event_fd, EPOLL_CTL_DEL, sink->fd, NULL);
-		if (unlikely(rc < 0))
+		if (unlikely(mm_epoll_ctl(common->event_fd, EPOLL_CTL_DEL, sink->fd, NULL) < 0))
 			mm_error(errno, "epoll_ctl");
 	}
 
-	sink->flags &= ~MM_EVENT_LOCAL_MODIFY;
+	int rc;
 	struct epoll_event ee = { .events = events, .data.ptr = sink };
 	if ((sink->flags & MM_EVENT_LOCAL_ADDED) != 0) {
+		sink->flags &= ~MM_EVENT_LOCAL_MODIFY;
 		rc = mm_epoll_ctl(local->poll.event_fd, EPOLL_CTL_MOD, sink->fd, &ee);
 	} else {
 		sink->flags |= MM_EVENT_LOCAL_ADDED;
@@ -131,7 +126,7 @@ mm_event_epoll_handle(struct mm_event_listener *listener, struct mm_event_epoll 
 			} else {
 				if ((sink->flags & MM_EVENT_INPUT_TRIGGER) != 0) {
 					sink->flags &= ~MM_EVENT_INPUT_TRIGGER;
-					//sink->flags |= MM_EVENT_LOCAL_MODIFY;
+					sink->flags |= MM_EVENT_LOCAL_MODIFY;
 				}
 				mm_event_listener_input(listener, sink);
 			}
@@ -140,7 +135,7 @@ mm_event_epoll_handle(struct mm_event_listener *listener, struct mm_event_epoll 
 		if ((event->events & EPOLLOUT) != 0) {
 			if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) != 0) {
 				sink->flags &= ~MM_EVENT_OUTPUT_TRIGGER;
-				//sink->flags |= MM_EVENT_LOCAL_MODIFY;
+				sink->flags |= MM_EVENT_LOCAL_MODIFY;
 			}
 			mm_event_listener_output(listener, sink);
 		}
@@ -354,16 +349,18 @@ mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_e
 		if (output)
 			events |= EPOLLOUT;
 
+		int fd;
 		if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_PINNED_LOCAL)) == 0) {
 			sink->flags |= MM_EVENT_COMMON_ADDED | MM_EVENT_COMMON_ENABLED;
 			events |= EPOLLONESHOT;
+			fd = common->event_fd;
 		} else {
 			sink->flags |= MM_EVENT_LOCAL_ADDED;
-			common = &local->poll;
+			fd = local->poll.event_fd;
 		}
 
 		struct epoll_event ee = { .events = events, .data.ptr = sink };
-		int rc = mm_epoll_ctl(common->event_fd, EPOLL_CTL_ADD, sink->fd, &ee);
+		int rc = mm_epoll_ctl(fd, EPOLL_CTL_ADD, sink->fd, &ee);
 		if (unlikely(rc < 0))
 			mm_error(errno, "epoll_ctl");
 	}
