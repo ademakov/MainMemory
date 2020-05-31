@@ -144,11 +144,11 @@ mm_lock_get_stat_set(struct mm_lock_stat_info *info)
 		return stat_set;
 
 	// Copy identification information.
-	char *location = mm_memory_strdup(info->location);
-	char *moreinfo = info->moreinfo == NULL ? NULL : mm_memory_strdup(info->moreinfo);
+	char *location = mm_memory_fixed_strdup(info->location);
+	char *moreinfo = info->moreinfo == NULL ? NULL : mm_memory_fixed_strdup(info->moreinfo);
 
 	// Allocate a new statistics collection entry.
-	stat_set = mm_memory_xalloc(sizeof(struct mm_lock_stat_set));
+	stat_set = mm_memory_fixed_xalloc(sizeof(struct mm_lock_stat_set));
 	stat_set->location = location;
 	stat_set->moreinfo = moreinfo; 
 
@@ -166,9 +166,9 @@ mm_lock_get_stat_set(struct mm_lock_stat_info *info)
 	if (unlikely(recheck_stat != NULL)) {
 		// Bail out if so.
 		mm_global_unlock(&mm_lock_stat_lock);
-		mm_memory_free(location);
-		mm_memory_free(moreinfo);
-		mm_memory_free(stat_set);
+		mm_memory_fixed_free(location);
+		mm_memory_fixed_free(moreinfo);
+		mm_memory_fixed_free(stat_set);
 		return recheck_stat;
 	}
 
@@ -221,7 +221,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 		return MM_THREAD_LOCAL_DEREF(dom_index, dom_stat->stat);
 
 	// Allocate a new statistics entry.
-	dom_stat = mm_memory_xalloc(sizeof(struct mm_lock_domain_stat));
+	dom_stat = mm_memory_fixed_xalloc(sizeof(struct mm_lock_domain_stat));
 	dom_stat->domain = domain;
 
 	// Mark it as not ready.
@@ -236,7 +236,7 @@ mm_lock_get_domain_stat(struct mm_lock_stat_set *stat_set,
 	if (unlikely(recheck_stat != NULL)) {
 		// Bail out if so.
 		mm_global_unlock(&stat_set->domain_lock);
-		mm_memory_free(dom_stat);
+		mm_memory_fixed_free(dom_stat);
 		return MM_THREAD_LOCAL_DEREF(dom_index, recheck_stat->stat);
 	}
 
@@ -285,7 +285,7 @@ mm_lock_get_thread_stat(struct mm_lock_stat_set *stat_set,
 	}
 
 	// If not found create a new entry.
-	thr_stat = mm_memory_xalloc(sizeof(struct mm_lock_thread_stat));
+	thr_stat = mm_memory_fixed_xalloc(sizeof(struct mm_lock_thread_stat));
 	thr_stat->thread = thread;
 	thr_stat->stat.lock_count = 0;
 	thr_stat->stat.fail_count = 0;
