@@ -38,7 +38,7 @@ mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
 
 	// Update the read readiness flags.
 	sink->flags |= flags;
-	sink->flags &= ~MM_EVENT_INPUT_TRIGGER;
+	sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
 #if ENABLE_SMP
 	// Count the delivered event.
 	sink->dispatch_stamp++;
@@ -64,7 +64,7 @@ mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
 
 	// Update the write readiness flags.
 	sink->flags |= flags;
-	sink->flags &= ~MM_EVENT_OUTPUT_TRIGGER;
+	sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
 #if ENABLE_SMP
 	// Count the delivered event.
 	sink->dispatch_stamp++;
@@ -196,7 +196,7 @@ mm_event_reassign_io(mm_value_t arg, struct mm_context *context)
 	bool reassigned = false;
 
 	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_PINNED_LOCAL)) == 0) {
+	if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_LOCAL_ONLY)) == 0) {
 		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
 		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
 		if (input_started != output_started) {
@@ -270,7 +270,7 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *
 	if ((flags & MM_EVENT_REGULAR_INPUT) != 0 && (flags & MM_EVENT_REGULAR_OUTPUT) != 0)
 		mm_fatal(0, "unsupported combination of event flags");
 	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0
-	    && (flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER)) != 0)
+	    && (flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
 		mm_fatal(0, "unsupported combination of event flags");
 	sink->flags = flags;
 
@@ -342,8 +342,8 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 
 	mm_event_reset_input_ready(sink);
 
-	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) == 0) {
-		sink->flags |= MM_EVENT_INPUT_TRIGGER;
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) == 0) {
+		sink->flags |= MM_EVENT_ONESHOT_INPUT;
 
 		struct mm_context *context = sink->context;
 		ASSERT(context == mm_context_selfptr());
@@ -364,8 +364,8 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 
 	mm_event_reset_output_ready(sink);
 
-	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) == 0) {
-		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0) {
+		sink->flags |= MM_EVENT_ONESHOT_OUTPUT;
 
 		struct mm_context *context = sink->context;
 		ASSERT(context == mm_context_selfptr());

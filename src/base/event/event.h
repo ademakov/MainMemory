@@ -75,8 +75,8 @@ typedef enum {
 /* Polling mode for I/O events. */
 #define MM_EVENT_REGULAR_INPUT	0x00001000
 #define MM_EVENT_REGULAR_OUTPUT	0x00002000
-#define MM_EVENT_INPUT_TRIGGER	0x00004000
-#define MM_EVENT_OUTPUT_TRIGGER	0x00008000
+#define MM_EVENT_ONESHOT_INPUT	0x00004000
+#define MM_EVENT_ONESHOT_OUTPUT	0x00008000
 
 /* Event sink registered with a local poller. */
 #define MM_EVENT_LOCAL_ADDED	0x00010000
@@ -86,8 +86,9 @@ typedef enum {
 #define MM_EVENT_COMMON_ADDED	0x00040000
 /* Event sink currently works with the common poller. */
 #define MM_EVENT_COMMON_ENABLED	0x00080000
+
 /* Event sink pinned to a fixed local poller. */
-#define MM_EVENT_PINNED_LOCAL	0x00100000
+#define MM_EVENT_LOCAL_ONLY	0x00100000
 
 /* A sink has a pending I/O event change. */
 #define MM_EVENT_CHANGE		0x00200000

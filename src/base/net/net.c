@@ -163,7 +163,7 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_server *srv, i
 		flags |= MM_EVENT_REGULAR_OUTPUT;
 	}
 	if ((options & MM_NET_BOUND) != 0)
-		flags = MM_EVENT_PINNED_LOCAL;
+		flags = MM_EVENT_LOCAL_ONLY;
 
 	// Initialize basic fields.
 	mm_net_prepare(sock, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
@@ -363,7 +363,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks, MM_EVENT_REGULAR_INPUT | MM_EVENT_PINNED_LOCAL);
+	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks, MM_EVENT_REGULAR_INPUT | MM_EVENT_LOCAL_ONLY);
 
 	MM_TASK(register_task, mm_net_register_server, mm_task_complete_noop, mm_task_reassign_off);
 	struct mm_context *context = mm_thread_ident_to_context(target);
@@ -535,9 +535,9 @@ retry:
 
 	// Initialize the event sink. In the EINPROGRESS case it is required
 	// to wait for output readiness, otherwise assume it ready right away.
-	uint32_t flags = MM_EVENT_PINNED_LOCAL;
+	uint32_t flags = MM_EVENT_LOCAL_ONLY;
 	if (rc < 0)
-		flags |= MM_EVENT_OUTPUT_TRIGGER;
+		flags |= MM_EVENT_ONESHOT_OUTPUT;
 	else
 		flags |= MM_EVENT_OUTPUT_READY;
 	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), flags);

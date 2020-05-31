@@ -124,8 +124,8 @@ mm_event_epoll_handle(struct mm_event_listener *listener, struct mm_event_epoll 
 				listener->backend.notified = true;
 				listener->notifications++;
 			} else {
-				if ((sink->flags & MM_EVENT_INPUT_TRIGGER) != 0) {
-					sink->flags &= ~MM_EVENT_INPUT_TRIGGER;
+				if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+					sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
 					sink->flags |= MM_EVENT_LOCAL_MODIFY;
 				}
 				mm_event_listener_input(listener, sink);
@@ -133,16 +133,16 @@ mm_event_epoll_handle(struct mm_event_listener *listener, struct mm_event_epoll 
 		}
 
 		if ((event->events & EPOLLOUT) != 0) {
-			if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) != 0) {
-				sink->flags &= ~MM_EVENT_OUTPUT_TRIGGER;
+			if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+				sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
 				sink->flags |= MM_EVENT_LOCAL_MODIFY;
 			}
 			mm_event_listener_output(listener, sink);
 		}
 
 		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
-			bool output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
+			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+			bool output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
 			if (input)
 				mm_event_listener_input_error(listener, sink);
 			if (output && (event->events & (EPOLLERR | EPOLLHUP)) != 0)
@@ -340,8 +340,8 @@ mm_event_epoll_notify_clean(struct mm_event_epoll_local *local)
 void NONNULL(1, 2, 3)
 mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
 {
-	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
-	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
+	uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+	uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
 	if ((input | output) != 0) {
 		int events = EPOLLET;
 		if (input)
@@ -350,7 +350,7 @@ mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_e
 			events |= EPOLLOUT;
 
 		int fd;
-		if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_PINNED_LOCAL)) == 0) {
+		if ((sink->flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT | MM_EVENT_LOCAL_ONLY)) == 0) {
 			sink->flags |= MM_EVENT_COMMON_ADDED | MM_EVENT_COMMON_ENABLED;
 			events |= EPOLLONESHOT;
 			fd = common->event_fd;
@@ -402,7 +402,7 @@ void NONNULL(1, 2, 3)
 mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
 {
 	uint32_t events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0)
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
 		events |= EPOLLOUT;
 	mm_event_epoll_acquire_fd(local, common, sink, events);
 }
@@ -411,7 +411,7 @@ void NONNULL(1, 2, 3)
 mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
 {
 	uint32_t events = EPOLLET | EPOLLOUT;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER)) != 0)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
 		events |= EPOLLIN | EPOLLRDHUP;
 	mm_event_epoll_acquire_fd(local, common, sink, events);
 }
@@ -420,8 +420,8 @@ void NONNULL(1, 2, 3)
 mm_event_epoll_adjust_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
 {
 	if ((sink->flags & (MM_EVENT_LOCAL_ADDED | MM_EVENT_LOCAL_MODIFY)) != MM_EVENT_LOCAL_ADDED) {
-		uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
-		uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
+		uint32_t input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
+		uint32_t output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
 		if ((input | output) != 0) {
 			int events = EPOLLET;
 			if (input)

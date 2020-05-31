@@ -51,7 +51,7 @@ static void
 mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	// Cannot unbind certain kinds of sinks at all.
-	if ((sink->flags & MM_EVENT_PINNED_LOCAL) != 0)
+	if ((sink->flags & MM_EVENT_LOCAL_ADDED) != 0)
 		return;
 
 	// Cannot unbind if there is some event handling activity.
