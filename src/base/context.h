@@ -73,6 +73,9 @@ struct mm_context
 	/* Tasks to execute locally. */
 	struct mm_task_list tasks;
 
+	/* The context is waiting for a 'request_tasks' response. */
+	bool tasks_request_in_progress;
+
 	/* Asynchronous call queue. */
 	struct mm_ring_mpmc async_queue;
 
@@ -142,8 +145,18 @@ void NONNULL(1)
 mm_context_post_task(mm_task_t task, mm_value_t arg);
 
 #if ENABLE_SMP
+
+void NONNULL(1)
+mm_context_request_tasks(struct mm_context *self);
+
 void NONNULL(1)
 mm_context_distribute_tasks(struct mm_context *self);
+
+#else
+
+#define mm_context_request_tasks(x) ((void) x)
+#define mm_context_distribute_tasks(x) ((void) x)
+
 #endif
 
 /**********************************************************************

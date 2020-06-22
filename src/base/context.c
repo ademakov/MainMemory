@@ -29,6 +29,9 @@
 
 #define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
+#define MM_TASK_REQUEST_THRESHOLD	(5 * MM_TASK_SEND_MAX)
+#define MM_TASK_DISTRIBUTE_THRESHOLD	(20 * MM_TASK_SEND_MAX)
+
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
 
@@ -36,6 +39,7 @@ void NONNULL(1)
 mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async_queue_size)
 {
 	context->status = MM_CONTEXT_PENDING;
+	context->tasks_request_in_progress = false;
 
 	// Gather pointers to main runtime components.
 	context->strand = mm_thread_ident_to_strand(ident);
@@ -157,30 +161,78 @@ mm_context_post_task(mm_task_t task, mm_value_t arg)
 }
 
 #if ENABLE_SMP
+
+static void
+mm_context_no_tasks(struct mm_context *context, uintptr_t *arguments UNUSED)
+{
+	ENTER();
+
+	context->tasks_request_in_progress = false;
+
+	LEAVE();
+}
+
+static void
+mm_context_tasks_req(struct mm_context *context, uintptr_t *arguments)
+{
+	ENTER();
+
+	struct mm_context *const target = (struct mm_context *) arguments[0];
+
+	uint32_t count = 0;
+	if (mm_task_list_size(&context->tasks) > MM_TASK_REQUEST_THRESHOLD)
+		count = mm_task_list_reassign(&context->tasks, target);
+	if (count == 0)
+		mm_async_call_0(target, mm_context_no_tasks);
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_context_request_tasks(struct mm_context *self)
+{
+	ENTER();
+
+	if (!self->tasks_request_in_progress) {
+		struct mm_context *source = NULL;
+		size_t max_size = MM_TASK_REQUEST_THRESHOLD;
+
+		const mm_thread_t ncontexts = mm_number_of_regular_threads();
+		for (mm_thread_t index = 0; index < ncontexts; index++) {
+			struct mm_context *const peer = mm_thread_ident_to_context(index);
+			size_t size = mm_task_peer_list_size(&peer->tasks);
+			if (max_size <= size) {
+				max_size = size;
+				source = peer;
+			}
+		}
+
+		ASSERT(source != self);
+		if (source != NULL)
+			self->tasks_request_in_progress = mm_async_trycall_1(source, mm_context_tasks_req, (intptr_t) self);
+	}
+
+	LEAVE();
+}
+
 void NONNULL(1)
 mm_context_distribute_tasks(struct mm_context *const self)
 {
 	ENTER();
 
-	const size_t ntasks = mm_task_list_size(&self->tasks);
-	if (ntasks > (10 * MM_TASK_SEND_MAX)) {
-		static const uint32_t limit = 2 * MM_TASK_SEND_MAX;
-		const mm_thread_t ncontexts = mm_number_of_regular_threads();
-
-		uint32_t count = 0;
-		for (mm_thread_t index = 0; index < ncontexts && count < 2; index++) {
-			struct mm_context *const peer = mm_thread_ident_to_context(index);
-			if (peer == self)
-				continue;
-
-			uint64_t n = mm_task_peer_list_size(&peer->tasks);
-			n += mm_ring_mpmc_size(&peer->async_queue) * MM_TASK_SEND_MAX;
-			while (n < limit && mm_task_list_reassign(&self->tasks, peer))
-				n += MM_TASK_SEND_MAX;
-			count++;
+	size_t ntasks = mm_task_list_size(&self->tasks);
+	const mm_thread_t ncontexts = mm_number_of_regular_threads();
+	for (mm_thread_t index = 0; index < ncontexts && ntasks > MM_TASK_DISTRIBUTE_THRESHOLD; index++) {
+		struct mm_context *const peer = mm_thread_ident_to_context(index);
+		if (mm_task_peer_list_size(&peer->tasks) == 0) {
+			uint32_t count = mm_task_list_reassign(&self->tasks, peer);
+			if (count < MM_TASK_SEND_MAX)
+				break;
+			ntasks -= count;
 		}
 	}
 
 	LEAVE();
 }
+
 #endif

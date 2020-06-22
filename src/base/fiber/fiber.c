@@ -463,7 +463,7 @@ mm_fiber_yield(struct mm_context *context)
 {
 	ENTER();
 
-	// Handle any pending async calls. This might unblock some fibers.
+	// Handle pending async calls if any. This might resume some blocked fibers.
 	mm_async_handle_calls(context);
 
 	// Let run some other fibers with equal or higher priority.

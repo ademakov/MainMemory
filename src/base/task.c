@@ -1,7 +1,7 @@
 /*
  * base/task.h - MainMemory asynchronous tasks.
  *
- * Copyright (C) 2019  Aleksey Demakov
+ * Copyright (C) 2019-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -35,6 +35,7 @@ mm_task_add_1(struct mm_context *context, uintptr_t *arguments)
 	ENTER();
 
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[0], arguments[1]);
+	context->tasks_request_in_progress = false;
 
 	LEAVE();
 }
@@ -46,6 +47,7 @@ mm_task_add_2(struct mm_context *context, uintptr_t *arguments)
 
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[0], arguments[1]);
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[2], arguments[3]);
+	context->tasks_request_in_progress = false;
 
 	LEAVE();
 }
@@ -58,6 +60,7 @@ mm_task_add_3(struct mm_context *context, uintptr_t *arguments)
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[0], arguments[1]);
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[2], arguments[3]);
 	mm_task_list_add(&context->tasks, (mm_task_t) arguments[4], arguments[5]);
+	context->tasks_request_in_progress = false;
 
 	LEAVE();
 }
@@ -156,7 +159,7 @@ mm_task_list_get_ring(struct mm_task_list *list)
 	return containerof(mm_queue_head(&list->list), struct mm_task_ring, link);
 }
 
-bool NONNULL(1, 2)
+uint32_t NONNULL(1, 2)
 mm_task_list_reassign(struct mm_task_list *list, struct mm_context *target)
 {
 	ENTER();
@@ -188,7 +191,7 @@ mm_task_list_reassign(struct mm_task_list *list, struct mm_context *target)
 	mm_task_submit(target, tasks, count);
 
 	LEAVE();
-	return count == MM_TASK_SEND_MAX;
+	return count;
 }
 
 /**********************************************************************

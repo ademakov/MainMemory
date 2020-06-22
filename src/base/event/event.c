@@ -581,9 +581,6 @@ mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 
 		// Give up the poller thread role.
 		mm_regular_unlock(&dispatch->poller_lock);
-
-		// Share event tasks with other listeners if feasible.
-		mm_context_distribute_tasks(context);
 	} else {
 		// Flush event poll changes if any.
 		if (mm_event_backend_has_changes(&listener->backend)) {
