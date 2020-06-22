@@ -29,8 +29,8 @@
 
 #define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
-#define MM_TASK_REQUEST_THRESHOLD	(5 * MM_TASK_SEND_MAX)
-#define MM_TASK_DISTRIBUTE_THRESHOLD	(20 * MM_TASK_SEND_MAX)
+#define MM_TASK_REQUEST_THRESHOLD	(8 * MM_TASK_SEND_MAX)
+#define MM_TASK_DISTRIBUTE_THRESHOLD	(MM_EVENT_BACKEND_NEVENTS - 1)
 
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
