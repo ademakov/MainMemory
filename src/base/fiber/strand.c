@@ -217,44 +217,65 @@ mm_strand_master(mm_value_t arg)
 	struct mm_strand *const strand = context->strand;
 
 	// Run until stopped by a user request.
-	while (!mm_memory_load(strand->stop)) {
-		// Check for available worker fibers.
-		if (strand->nidle) {
-			// Check for available tasks.
-			if (mm_task_list_empty(&context->tasks)) {
-				// Cleanup the temporary data.
-				mm_wait_cache_truncate(&strand->wait_cache);
-				// Collect released context memory.
-				mm_memory_cache_collect(&context->cache);
-				// Wait for I/O events and timers.
+	for (;;) {
+		// Run active fibers if any.
+		mm_fiber_yield(context);
+
+		// Check for stop signal.
+		if (unlikely(strand->stop))
+			break;
+
+		// Check for available tasks.
+		if (mm_task_list_empty(&context->tasks)) {
+			// Request tasks from a peer thread.
+			mm_context_request_tasks(context);
+
+			// Cleanup the temporary data.
+			mm_wait_cache_truncate(&strand->wait_cache);
+			// Collect released context memory.
+			mm_memory_cache_collect(&context->cache);
+
+			// Check for I/O events and timers.
+			if (context->tasks_request_in_progress) {
+				mm_event_listen(context, 0);
+			} else {
 				mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
 			}
-			// Activate a worker fiber to handle pending tasks.
+
+			// If there are too many tasks now then share them with peers.
+			mm_context_distribute_tasks(context);
+			// Yield.
+			continue;
+		}
+
+		// Check for idle worker fibers to handle available tasks.
+		if (strand->nidle) {
+			// Wake an idle worker fiber.
 			mm_strand_poke(strand);
-			// Run active fibers and handle async calls if any.
-			mm_fiber_yield(context);
+			// Yield.
+			continue;
+		}
+
+		// Check for I/O events and timers which might activate some
+		// blocked worker fibers.
+		mm_event_listen(context, 0);
+		// Run active fibers if any.
+		mm_fiber_yield(context);
+
+		// Check to see if any worker fibers indeed made progress and
+		// are idle now.
+		if (strand->nidle)
+			continue;
+
+		// Report the status of all fibers.
+		if (mm_get_verbose_enabled())
+			mm_strand_print_fibers(strand);
+
+		// Add a new worker if feasible.
+		if (strand->nworkers < strand->nworkers_max) {
+			mm_strand_worker_create(strand);
 		} else {
-			// Check for I/O events and timers which might let
-			// some blocked fibers run again.
-			mm_event_listen(context, 0);
-			// Run active fibers and handle async calls if any.
-			mm_fiber_yield(context);
-
-			// Check to see if some fibers indeed made progress
-			// and are available now.
-			if (strand->nidle)
-				continue;
-
-			// Report the status of all fibers.
-			if (mm_get_verbose_enabled())
-				mm_strand_print_fibers(strand);
-
-			// Add a new worker if feasible.
-			if (strand->nworkers < strand->nworkers_max) {
-				mm_strand_worker_create(strand);
-			} else {
-				mm_warning(0, "all possible worker fibers are busy");
-			}
+			mm_warning(0, "all possible worker fibers are busy");
 		}
 	}
 

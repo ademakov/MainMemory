@@ -1,7 +1,7 @@
 /*
  * base/task.h - MainMemory asynchronous tasks.
  *
- * Copyright (C) 2019  Aleksey Demakov
+ * Copyright (C) 2019-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -173,7 +173,7 @@ mm_task_list_get(struct mm_task_list *list, struct mm_task_slot *slot)
 	return true;
 }
 
-bool NONNULL(1, 2)
+uint32_t NONNULL(1, 2)
 mm_task_list_reassign(struct mm_task_list *list, struct mm_context *target);
 
 /**********************************************************************
