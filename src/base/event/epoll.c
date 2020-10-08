@@ -274,7 +274,7 @@ mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *b
 			timeout = 0;
 		} else {
 			// Calculate the event wait timeout.
-			timeout /= 1000;
+			timeout = (timeout + 1000 - 1) / 1000;
 		}
 	}
 
