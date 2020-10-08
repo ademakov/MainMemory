@@ -25,14 +25,14 @@
 #include <sys/time.h>
 
 #if ENABLE_TIMEPIECE_TIMESTAMP
-# define MM_TIMEPIECE_COUNT		(25)
+# define MM_TIMEPIECE_COUNT		(16)
 #else
-# define MM_TIMEPIECE_COUNT		(250)
+# define MM_TIMEPIECE_COUNT		(128)
 #endif
 
 #if ENABLE_TIMEPIECE_TIMESTAMP
 
-#define MM_TIMEPIECE_DELTA_USEC		(2000)
+#define MM_TIMEPIECE_DELTA_USEC		(1000)
 
 #define MM_TIMEPIECE_RETRY_LOG_STEP	(50)
 #define MM_TIMEPIECE_RETRY_LIMIT	(1000)
@@ -108,9 +108,7 @@ mm_timepiece_init(void)
 void NONNULL(1)
 mm_timepiece_prepare(struct mm_timepiece *tp)
 {
-	tp->clock_count = 0;
-	tp->real_clock_count = 0;
-
+	mm_timepiece_reset(tp);
 #if ENABLE_TIMEPIECE_TIMESTAMP
 	tp->clock_stamp = 0;
 	tp->real_clock_stamp = 0;
