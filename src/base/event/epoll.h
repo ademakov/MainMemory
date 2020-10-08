@@ -38,6 +38,13 @@ struct mm_event_epoll
 	int event_fd;
 };
 
+/* A deferred event (used for errors). */
+struct mm_event_epoll_stash
+{
+	struct mm_event_fd *sink;
+	uint32_t flags;
+};
+
 /* Per-listener data for epoll support. */
 struct mm_event_epoll_local
 {
@@ -49,6 +56,11 @@ struct mm_event_epoll_local
 
 	/* Notification flag. */
 	bool notified;
+
+	/* Deferred events (used for errors). */
+	uint32_t stash_size;
+	uint32_t stash_capacity;
+	struct mm_event_epoll_stash *stash;
 
 	/* The epoll list. */
 	struct epoll_event events[MM_EVENT_EPOLL_NEVENTS];
@@ -98,20 +110,11 @@ mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_e
 void NONNULL(1, 2, 3)
 mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
 
-void NONNULL(1, 2, 3)
-mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
-void NONNULL(1, 2, 3)
-mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
-
-void NONNULL(1, 2, 3)
-mm_event_epoll_adjust_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
-
-void NONNULL(1, 2, 3)
-mm_event_epoll_disable_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
-
-void NONNULL(1, 2, 3)
-mm_event_epoll_dispose_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */

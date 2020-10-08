@@ -23,6 +23,7 @@
 #include "base/bitset.h"
 #include "base/exit.h"
 #include "base/logger.h"
+#include "base/settings.h"
 #include "base/fiber/fiber.h"
 #include "base/thread/local.h"
 #include "base/thread/thread.h"
@@ -216,6 +217,9 @@ mm_strand_master(mm_value_t arg)
 	struct mm_context *const context = (struct mm_context *) arg;
 	struct mm_strand *const strand = context->strand;
 
+	uint32_t spin_limit = mm_settings_get_uint32("event-poll-spin-limit", 4);
+	uint32_t spin_count = 0;
+
 	// Run until stopped by a user request.
 	for (;;) {
 		// Run active fibers if any.
@@ -227,19 +231,19 @@ mm_strand_master(mm_value_t arg)
 
 		// Check for available tasks.
 		if (mm_task_list_empty(&context->tasks)) {
-			// Request tasks from a peer thread.
-			mm_context_request_tasks(context);
-
 			// Cleanup the temporary data.
 			mm_wait_cache_truncate(&strand->wait_cache);
 			// Collect released context memory.
 			mm_memory_cache_collect(&context->cache);
 
 			// Check for I/O events and timers.
-			if (context->tasks_request_in_progress) {
-				mm_event_listen(context, 0);
+			const bool spin = spin_count < spin_limit || context->tasks_request_in_progress;
+			if (mm_event_poll(context, spin ? 0 : MM_STRAND_HALT_TIMEOUT)) {
+				spin_count = 0;
 			} else {
-				mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
+				spin_count++;
+				// Request tasks from a peer thread.
+				mm_context_request_tasks(context);
 			}
 
 			// If there are too many tasks now then share them with peers.
@@ -258,7 +262,7 @@ mm_strand_master(mm_value_t arg)
 
 		// Check for I/O events and timers which might activate some
 		// blocked worker fibers.
-		mm_event_listen(context, 0);
+		mm_event_poll(context, 0);
 		// Run active fibers if any.
 		mm_fiber_yield(context);
 
@@ -275,7 +279,7 @@ mm_strand_master(mm_value_t arg)
 		if (strand->nworkers < strand->nworkers_max) {
 			mm_strand_worker_create(strand);
 		} else {
-			mm_warning(0, "all possible worker fibers are busy");
+			mm_warning(0, "all allowed worker fibers are busy");
 		}
 	}
 

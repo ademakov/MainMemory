@@ -19,9 +19,12 @@
 
 #include "base/event/listener.h"
 
+#include "base/async.h"
 #include "base/report.h"
 #include "base/stdcall.h"
 #include "base/event/dispatch.h"
+#include "base/event/event.h"
+#include "base/fiber/fiber.h"
 #include "base/memory/alloc.h"
 
 #if ENABLE_MACH_SEMAPHORE
@@ -29,216 +32,148 @@
 # include <mach/task.h>
 #endif
 
-#if ENABLE_SMP
-
-/* Mark a sink as having an incoming event received from the system. */
-static inline void
-mm_event_update(struct mm_event_fd *sink UNUSED)
-{
-	sink->receive_stamp++;
-}
-
-/* Check if a sink has some not yet fully processed events. */
-static inline bool NONNULL(1)
-mm_event_active(const struct mm_event_fd *sink UNUSED)
-{
-	// TODO: acquire memory fence
-	mm_event_stamp_t stamp = mm_memory_load(sink->complete_stamp);
-	return sink->receive_stamp != stamp;
-}
-
-static void
-mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	// Cannot unbind certain kinds of sinks at all.
-	if ((sink->flags & MM_EVENT_LOCAL_ADDED) != 0)
-		return;
-
-	// Cannot unbind if there is some event handling activity.
-	ASSERT(sink->context != NULL);
-	if (mm_event_active(sink))
-		return;
-
-	// Attach the sink to the poller.
-	sink->context = listener->context;
-}
-
-#endif
-
 /**********************************************************************
  * Interface for handling incoming events.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener UNUSED, uint32_t nevents UNUSED)
+static void NONNULL(1)
+mm_event_listener_handle_input(struct mm_context *context, struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
 
-#if ENABLE_SMP && ENABLE_EVENT_SINK_LOCK
-	// Acquire coarse-grained event sink lock.
-	mm_regular_lock(&listener->dispatch->sink_lock);
-#endif
+	// Update the read readiness flags.
+	sink->flags |= flags;
+
+	if (sink->input_fiber != NULL) {
+		// Run the fiber blocked on input.
+		mm_fiber_run(sink->input_fiber);
+	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
+		// Start a new input work.
+		sink->flags |= MM_EVENT_INPUT_STARTED;
+		mm_context_add_task(context, &sink->tasks->input, (mm_value_t) sink);
+	}
 
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_event_listener_handle_finish(struct mm_event_listener *listener)
+static void NONNULL(1)
+mm_event_listener_handle_output(struct mm_context *context, struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
 
-	struct mm_event_dispatch *dispatch = listener->dispatch;
+	// Update the write readiness flags.
+	sink->flags |= flags;
+
+	if (sink->output_fiber != NULL) {
+		// Run the fiber blocked on output.
+		mm_fiber_run(sink->output_fiber);
+	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
+		// Start a new output work.
+		sink->flags |= MM_EVENT_OUTPUT_STARTED;
+		mm_context_add_task(context, &sink->tasks->output, (mm_value_t) sink);
+	}
+
+	LEAVE();
+}
 
 #if ENABLE_SMP
-#if ENABLE_EVENT_SINK_LOCK
-	// Release coarse-grained event sink lock.
-	mm_regular_unlock(&dispatch->sink_lock);
-#endif
 
-	// Flush forwarded events.
-	if (listener->events.forwarded)
-		mm_event_forward_flush(&listener->forward, dispatch);
-#endif
+static void
+mm_event_listener_input_req(struct mm_context *const context, uintptr_t *arguments)
+{
+	// Fetch the arguments.
+	struct mm_event_fd *const sink = (struct mm_event_fd *) arguments[0];
+	const uint32_t flags = arguments[1];
 
-	// TODO: at this point it might miss disable and reclaim events.
+	// Check to see if the event sink is already re-assigned to another
+	// context and re-submit it there if needed.
+	struct mm_context *const task_context = sink->context;
+	if (unlikely(task_context != context)) {
+		mm_async_call_2(task_context, mm_event_listener_input_req, (uintptr_t) sink, flags);
 #if ENABLE_EVENT_STATS
+		context->listener->stats.repeatedly_forwarded_events++;
+#endif
+		return;
+	}
+
+	// Start processing the event.
+	mm_event_listener_handle_input(context, sink, flags);
+}
+
+static void
+mm_event_listener_output_req(struct mm_context *const context, uintptr_t *arguments)
+{
+	// Fetch the arguments.
+	struct mm_event_fd *const sink = (struct mm_event_fd *) arguments[0];
+	const uint32_t flags = arguments[1];
+
+	// Check to see if the event sink is already re-assigned to another
+	// context and re-submit it there if needed.
+	struct mm_context *const task_context = sink->context;
+	if (unlikely(task_context != context)) {
+		mm_async_call_2(task_context, mm_event_listener_output_req, (uintptr_t) sink, flags);
+#if ENABLE_EVENT_STATS
+		context->listener->stats.repeatedly_forwarded_events++;
+#endif
+		return;
+	}
+
+	// Start processing the event.
+	mm_event_listener_handle_output(context, sink, flags);
+}
+
+#endif
+
+void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *const listener, struct mm_event_fd *const sink, const uint32_t flags)
+{
+	struct mm_context *const task_context = sink->context;
+
 	// Update event statistics.
-	listener->stats.direct_events += listener->events.direct;
-	listener->stats.forwarded_events += listener->events.forwarded;
+	listener->events++;
+
+#if ENABLE_SMP
+	// Submit the event to a peer context if needed.
+	if (task_context != listener->context) {
+		mm_async_call_2(task_context, mm_event_listener_input_req, (uintptr_t) sink, flags);
+#if ENABLE_EVENT_STATS
+		listener->stats.forwarded_events++;
+#endif
+		return;
+	}
 #endif
 
-	LEAVE();
+	// Start processing the event locally.
+	mm_event_listener_handle_input(task_context, sink, flags);
 }
 
 void NONNULL(1, 2)
-mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink)
+mm_event_listener_output(struct mm_event_listener *const listener, struct mm_event_fd *const sink, const uint32_t flags)
 {
-	ENTER();
+	struct mm_context *const task_context = sink->context;
+
+	// Update event statistics.
+	listener->events++;
 
 #if ENABLE_SMP
-	// Unbind or rebind the sink if appropriate.
-	mm_event_test_binding(listener, sink);
-
-	// Count the received event.
-	mm_event_update(sink);
-
-	// If the event sink belongs to the poller thread then handle it immediately,
-	// otherwise store it for later delivery to the target thread.
-	if (sink->context == listener->context) {
-		listener->events.direct++;
-		/* Start processing the event. */
-		mm_event_handle_input(sink, MM_EVENT_INPUT_READY);
-	} else {
-		listener->events.forwarded++;
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT);
+	// Submit the event to a peer context if needed.
+	if (task_context != listener->context) {
+		mm_async_call_2(task_context, mm_event_listener_output_req, (uintptr_t) sink, flags);
+#if ENABLE_EVENT_STATS
+		listener->stats.forwarded_events++;
+#endif
+		return;
 	}
-#else
-	mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_READY);
-	listener->events.direct++;
 #endif
 
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	ENTER();
-
-#if ENABLE_SMP
-	// Unbind or rebind the sink if appropriate.
-	mm_event_test_binding(listener, sink);
-
-	// Count the received event.
-	mm_event_update(sink);
-
-	// If the event sink belongs to the poller thread then handle it immediately,
-	// otherwise store it for later delivery to the target thread.
-	if (sink->context == listener->context) {
-		listener->events.direct++;
-		/* Start processing the event. */
-		mm_event_handle_input(sink, MM_EVENT_INPUT_ERROR);
-	} else {
-		listener->events.forwarded++;
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_INPUT_ERROR);
-	}
-#else
-	mm_event_backend_poller_input(&listener->backend, sink, MM_EVENT_INPUT_ERROR);
-	listener->events.direct++;
-#endif
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	ENTER();
-
-#if ENABLE_SMP
-	// Unbind or rebind the sink if appropriate.
-	mm_event_test_binding(listener, sink);
-
-	// Count the received event.
-	mm_event_update(sink);
-
-	// If the event sink belongs to the poller thread then handle it immediately,
-	// otherwise store it for later delivery to the target thread.
-	if (sink->context == listener->context) {
-		listener->events.direct++;
-		/* Start processing the event. */
-		mm_event_handle_output(sink, MM_EVENT_OUTPUT_READY);
-	} else {
-		listener->events.forwarded++;
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT);
-	}
-#else
-	mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_READY);
-	listener->events.direct++;
-#endif
-
-	LEAVE();
-}
-
-void NONNULL(1, 2)
-mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink)
-{
-	ENTER();
-
-#if ENABLE_SMP
-	// Unbind or rebind the sink if appropriate.
-	mm_event_test_binding(listener, sink);
-
-	// Count the received event.
-	mm_event_update(sink);
-
-	// If the event sink belongs to the poller thread then handle it immediately,
-	// otherwise store it for later delivery to he target thread.
-	if (sink->context == listener->context) {
-		listener->events.direct++;
-		/* Start processing the event. */
-		mm_event_handle_output(sink, MM_EVENT_OUTPUT_ERROR);
-	} else {
-		listener->events.forwarded++;
-		mm_event_forward(&listener->forward, sink, MM_EVENT_INDEX_OUTPUT_ERROR);
-	}
-#else
-	mm_event_backend_poller_output(&listener->backend, sink, MM_EVENT_OUTPUT_ERROR);
-	listener->events.direct++;
-#endif
-
-	LEAVE();
+	// Start processing the event locally.
+	mm_event_listener_handle_output(task_context, sink, flags);
 }
 
 void NONNULL(1, 2)
 mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	ENTER();
-
-#if ENABLE_SMP
-	// Count the received event.
-	mm_event_update(sink);
-#endif
 
 	// Initiate event sink reclamation unless the client code asked otherwise.
 	if (likely((sink->flags & MM_EVENT_BROKEN) == 0)) {
@@ -263,8 +198,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 {
 	ENTER();
 
-	listener->spin_count = 0;
-
 	// Set the pointers among associated entities.
 	listener->context = NULL;
 	listener->dispatch = dispatch;
@@ -275,8 +208,7 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.
 #elif ENABLE_MACH_SEMAPHORE
-	kern_return_t r = semaphore_create(mach_task_self(), &listener->semaphore,
-					   SYNC_POLICY_FIFO, 0);
+	kern_return_t r = semaphore_create(mach_task_self(), &listener->semaphore, SYNC_POLICY_FIFO, 0);
 	if (r != KERN_SUCCESS)
 		mm_fatal(0, "semaphore_create");
 #else
@@ -286,11 +218,6 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare_local(&listener->epoch);
 
-#if ENABLE_SMP
-	// Initialize event forwarding data.
-	mm_event_forward_prepare(&listener->forward, dispatch->nlisteners);
-#endif
-
 	// Initialize the statistic counters.
 	mm_event_listener_clear_events(listener);
 	listener->notifications = 0;
@@ -298,11 +225,9 @@ mm_event_listener_prepare(struct mm_event_listener *listener, struct mm_event_di
 	listener->stats.poll_calls = 0;
 	listener->stats.zero_poll_calls = 0;
 	listener->stats.wait_calls = 0;
-	listener->stats.spin_count = 0;
-	listener->stats.direct_events = 0;
+	listener->stats.events = 0;
 	listener->stats.forwarded_events = 0;
-	listener->stats.received_forwarded_events = 0;
-	listener->stats.retargeted_forwarded_events = 0;
+	listener->stats.repeatedly_forwarded_events = 0;
 #endif
 
 	// Initialize the local part of event backend.
@@ -321,11 +246,6 @@ mm_event_listener_cleanup(struct mm_event_listener *listener)
 
 	// Destroy the timer queue.
 	mm_timeq_cleanup(&listener->timer_queue);
-
-#if ENABLE_SMP
-	// Release event forwarding data.
-	mm_event_forward_cleanup(&listener->forward);
-#endif
 
 #if ENABLE_LINUX_FUTEX
 	// Nothing to do for futexes.

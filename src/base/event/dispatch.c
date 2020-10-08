@@ -1,7 +1,7 @@
 /*
  * base/event/dispatch.c - MainMemory event dispatch.
  *
- * Copyright (C) 2015-2019  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -59,18 +59,6 @@ mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thre
 	}
 }
 
-void NONNULL(1)
-mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value)
-{
-	attr->lock_spin_limit = value;
-}
-
-void NONNULL(1)
-mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value)
-{
-	attr->poll_spin_limit = value;
-}
-
 #if DISPATCH_ATTRS
 void NONNULL(1, 3)
 mm_event_dispatch_attr_setxxx(struct mm_event_dispatch_attr *attr, mm_thread_t n, xxx_t xxx)
@@ -112,23 +100,6 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	for (mm_thread_t i = 0; i < attr->nlisteners; i++)
 		mm_event_listener_prepare(&dispatch->listeners[i], dispatch);
 
-	// Initialize spinning parameters.
-	dispatch->lock_spin_limit = attr->lock_spin_limit;
-	dispatch->poll_spin_limit = attr->poll_spin_limit;
-	mm_brief("event-lock-spin-limit: %d", dispatch->lock_spin_limit);
-	mm_brief("event-poll-spin-limit: %d", dispatch->poll_spin_limit);
-
-#if ENABLE_SMP
-	// Initialize poller thread data.
-	dispatch->poller_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-	dispatch->poll_spin_count = 0;
-
-#if ENABLE_EVENT_SINK_LOCK
-	// Initialize the event sink lock.
-	dispatch->sink_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
-#endif
-#endif
-
 	LEAVE();
 }
 
@@ -166,18 +137,16 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 #if ENABLE_EVENT_STATS
 		struct mm_event_listener_stats *stats = &listener->stats;
 
-		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu spin=%llu)\n"
-			   " notifications=%llu direct=%llu forwarded=%llu received=%llu retargeted=%llu\n",
-			   (unsigned long long) (stats->wait_calls + stats->poll_calls + stats->spin_count),
+		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu)\n"
+			   " notifications=%llu events=%llu/%llu/%llu\n",
+			   (unsigned long long) (stats->wait_calls + stats->poll_calls),
 			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
 			   (unsigned long long) stats->zero_poll_calls,
-			   (unsigned long long) stats->spin_count,
 			   (unsigned long long) listener->notifications,
-			   (unsigned long long) stats->direct_events,
+			   (unsigned long long) stats->events,
 			   (unsigned long long) stats->forwarded_events,
-			   (unsigned long long) stats->received_forwarded_events,
-			   (unsigned long long) stats->retargeted_forwarded_events);
+			   (unsigned long long) stats->repeatedly_forwarded_events);
 
 		for (int j = 0; j <= MM_EVENT_BACKEND_NEVENTS; j++) {
 			uint64_t n = listener->backend.nevents_stats[j];

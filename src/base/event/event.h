@@ -28,14 +28,6 @@
 /* Forward declarations. */
 struct mm_context;
 
-/* I/O event IDs. */
-typedef enum {
-	MM_EVENT_INDEX_INPUT = 0,
-	MM_EVENT_INDEX_INPUT_ERROR = 1,
-	MM_EVENT_INDEX_OUTPUT = 2,
-	MM_EVENT_INDEX_OUTPUT_ERROR = 3,
-} mm_event_index_t;
-
 /*
  * NB: Oneshot event sinks have some restrictions.
  *
@@ -55,10 +47,10 @@ typedef enum {
  */
 
 /* I/O status flags. */
-#define MM_EVENT_INPUT_READY	(1u << MM_EVENT_INDEX_INPUT)
-#define MM_EVENT_OUTPUT_READY	(1u << MM_EVENT_INDEX_OUTPUT)
-#define MM_EVENT_INPUT_ERROR	(1u << MM_EVENT_INDEX_INPUT_ERROR)
-#define MM_EVENT_OUTPUT_ERROR	(1u << MM_EVENT_INDEX_OUTPUT_ERROR)
+#define MM_EVENT_INPUT_READY	0x00000001
+#define MM_EVENT_OUTPUT_READY	0x00000002
+#define MM_EVENT_INPUT_ERROR	0x00000004
+#define MM_EVENT_OUTPUT_ERROR	0x00000008
 
 /* I/O event sink close flags. */
 #define MM_EVENT_CLOSED		0x00000010
@@ -78,20 +70,13 @@ typedef enum {
 #define MM_EVENT_ONESHOT_INPUT	0x00004000
 #define MM_EVENT_ONESHOT_OUTPUT	0x00008000
 
-/* Event sink registered with a local poller. */
-#define MM_EVENT_LOCAL_ADDED	0x00010000
-/* Event sink polling mode needs to be modified. */
-#define MM_EVENT_LOCAL_MODIFY	0x00020000
-/* Event sink registered with the common poller. */
-#define MM_EVENT_COMMON_ADDED	0x00040000
-/* Event sink currently works with the common poller. */
-#define MM_EVENT_COMMON_ENABLED	0x00080000
-
 /* Event sink pinned to a fixed local poller. */
-#define MM_EVENT_LOCAL_ONLY	0x00100000
+#define MM_EVENT_FIXED_POLLER	0x00010000
+/* Event sink registered with the common poller. */
+#define MM_EVENT_COMMON_POLLER	0x00020000
 
 /* A sink has a pending I/O event change. */
-#define MM_EVENT_CHANGE		0x00200000
+#define MM_EVENT_CHANGE		0x00100000
 
 /* Per-sink event counter. */
 typedef uint16_t mm_event_stamp_t;
@@ -116,25 +101,12 @@ struct mm_event_fd
 	uint32_t flags;
 
 	/* Task entries to perform I/O. */
-	const struct mm_event_io *io;
+	const struct mm_event_io *tasks;
 
-	/* The context that owns the sink. */
+	/* The context assigned to execute tasks. */
 	struct mm_context *context;
-
-#if ENABLE_SMP
-	/* The stamp updated by poller threads on every next event received
-	   from the system. */
-	mm_event_stamp_t receive_stamp;
-	/* The stamp updated by the target thread on every next event
-	   delivered to it from poller threads. */
-	mm_event_stamp_t dispatch_stamp;
-	/* The stamp updated by the target thread when completing all
-	   the events delivered so far. When it is equal to the current
-	   receive_stamp value it will not change until another event
-	   is received and dispatched. So for a poller thread that sees
-	   such a condition it is safe to switch the sink's target thread. */
-	mm_event_stamp_t complete_stamp;
-#endif
+	/* The event listener for regular events. */
+	struct mm_event_listener *regular_listener;
 
 	/* Fibers bound to perform I/O. */
 	struct mm_fiber *input_fiber;
@@ -168,8 +140,11 @@ struct mm_event_timer
  * Event handling entry point.
  **********************************************************************/
 
+bool NONNULL(1)
+mm_event_poll(struct mm_context *context, mm_timeout_t timeout);
+
 void NONNULL(1)
-mm_event_listen(struct mm_context *context, mm_timeout_t timeout);
+mm_event_wait(struct mm_context *const context, mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_notify(struct mm_context *context, mm_stamp_t stamp);
@@ -194,6 +169,18 @@ static inline bool NONNULL(1)
 mm_event_output_closed(struct mm_event_fd *sink)
 {
 	return (sink->flags & (MM_EVENT_CLOSED | MM_EVENT_OUTPUT_CLOSED)) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_input_error(struct mm_event_fd *sink)
+{
+	return (sink->flags & MM_EVENT_INPUT_ERROR) != 0;
+}
+
+static inline bool NONNULL(1)
+mm_event_output_error(struct mm_event_fd *sink)
+{
+	return (sink->flags & MM_EVENT_OUTPUT_ERROR) != 0;
 }
 
 static inline bool NONNULL(1)
@@ -269,29 +256,29 @@ struct mm_event_io *
 mm_event_instant_io(void);
 
 /* Prepare an I/O event sink. */
-void NONNULL(1, 3)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io, uint32_t flags);
+void NONNULL(1, 4, 5)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, uint32_t flags, const struct mm_event_io *tasks, void (*destroy)(struct mm_event_fd *));
 
 void NONNULL(1, 2)
-mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink);
+mm_event_register_fd(struct mm_event_fd *sink, struct mm_context *context);
 
-void NONNULL(1)
-mm_event_close_fd(struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_trigger_input(struct mm_event_fd *sink, struct mm_context *context);
 
-void NONNULL(1)
-mm_event_close_broken_fd(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_trigger_input(struct mm_event_fd *sink);
-
-void NONNULL(1)
-mm_event_trigger_output(struct mm_event_fd *sink);
+void NONNULL(1, 2)
+mm_event_trigger_output(struct mm_event_fd *sink, struct mm_context *context);
 
 void NONNULL(1)
 mm_event_submit_input(struct mm_event_fd *sink);
 
 void NONNULL(1)
 mm_event_submit_output(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_close_fd(struct mm_event_fd *sink);
+
+void NONNULL(1)
+mm_event_close_broken_fd(struct mm_event_fd *sink);
 
 /**********************************************************************
  * Timer event sink control.
@@ -314,16 +301,5 @@ mm_event_arm_timer(struct mm_context *context, struct mm_event_timer *sink, mm_t
 
 void NONNULL(1, 2)
 mm_event_disarm_timer(struct mm_context *context, struct mm_event_timer *sink);
-
-/**********************************************************************
- * Internal event processing for I/O event sinks: start asynchronous
-   handling of an event as it is delivered to the target thread.
- **********************************************************************/
-
-void NONNULL(1)
-mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags);
-
-void NONNULL(1)
-mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags);
 
 #endif /* BASE_EVENT_EVENT_H */

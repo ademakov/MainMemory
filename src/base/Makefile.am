@@ -48,7 +48,6 @@ libmainbase_la_SOURCES = \
 	event/epoch.c event/epoch.h \
 	event/epoll.c event/epoll.h \
 	event/event.c event/event.h \
-	event/forward.c event/forward.h \
 	event/kqueue.c event/kqueue.h \
 	event/listener.c event/listener.h \
 	event/nonblock.c event/nonblock.h \

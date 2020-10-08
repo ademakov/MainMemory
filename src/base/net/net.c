@@ -1,7 +1,7 @@
 /*
  * base/net/net.c - MainMemory networking.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 
 #include "net/net.h"
 
+#include "base/async.h"
 #include "base/context.h"
 #include "base/exit.h"
 #include "base/format.h"
@@ -135,19 +136,15 @@ mm_net_create_accepted(struct mm_net_proto *proto)
  * Socket initialization.
  **********************************************************************/
 
-void NONNULL(1, 2)
-mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *))
+static void NONNULL(1)
+mm_net_prepare(struct mm_net_socket *sock)
 {
-	// Initialize common socket fields.
-	sock->event.fd = -1;
-	sock->event.flags = 0;
-	sock->event.destroy = destroy;
 	sock->read_timeout = MM_TIMEOUT_INFINITE;
 	sock->write_timeout = MM_TIMEOUT_INFINITE;
 }
 
 static void
-mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_server *srv, int fd)
+mm_net_prepare_accepted(struct mm_net_socket *sock, int fd, struct mm_net_server *srv)
 {
 	uint32_t options = srv->proto->options;
 	if (srv->proto->reader == NULL && srv->proto->writer != NULL)
@@ -163,20 +160,30 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, struct mm_net_server *srv, i
 		flags |= MM_EVENT_REGULAR_OUTPUT;
 	}
 	if ((options & MM_NET_BOUND) != 0)
-		flags = MM_EVENT_LOCAL_ONLY;
+		flags = MM_EVENT_FIXED_POLLER;
 
-	// Initialize basic fields.
-	mm_net_prepare(sock, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
 	// Initialize the event sink.
-	mm_event_prepare_fd(&sock->event, fd, &srv->tasks, flags);
+	mm_event_prepare_fd(&sock->event, fd, flags, &srv->tasks, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
+	// Initialize common socket fields.
+	mm_net_prepare(sock);
 }
 
 /**********************************************************************
  * Server connection acceptor.
  **********************************************************************/
 
+static void
+mm_net_register_sock_req(struct mm_context *const context, uintptr_t *arguments)
+{
+	// Fetch the arguments.
+	struct mm_net_socket *const sock = (struct mm_net_socket *) arguments[0];
+
+	// Register the socket for event dispatch.
+	mm_event_register_fd(&sock->event, context);
+}
+
 static bool
-mm_net_accept(struct mm_net_server *srv)
+mm_net_accept(struct mm_net_server *srv, struct mm_context *const context)
 {
 	ENTER();
 	bool rc = true;
@@ -214,7 +221,7 @@ retry:
 	}
 
 	// Initialize the socket structure.
-	mm_net_prepare_accepted(sock, srv, fd);
+	mm_net_prepare_accepted(sock, fd, srv);
 	if (sa.ss_family == AF_INET)
 		memcpy(&sock->peer.in_addr, &sa, sizeof(sock->peer.in_addr));
 	else if (sa.ss_family == AF_INET6)
@@ -222,8 +229,25 @@ retry:
 	else
 		sock->peer.addr.sa_family = sa.ss_family;
 
+	// Choose a target context.
+	struct mm_context *const target_context = mm_thread_ident_to_context(srv->assignment_target);
+	if (++(srv->assignment_counter) >= 2) {
+		size_t next = mm_bitset_find(&srv->affinity, srv->assignment_target + 1);
+		if (next == MM_BITSET_NONE) {
+			next = mm_bitset_find(&srv->affinity, 0);
+			if (next == MM_BITSET_NONE)
+				next = 0;
+		}
+		srv->assignment_target = next;
+		srv->assignment_counter = 0;
+	}
+
 	// Register the socket for event dispatch.
-	mm_event_register_fd(mm_net_get_server_context(srv), &sock->event);
+	if (target_context == context) {
+		mm_event_register_fd(&sock->event, context);
+	} else {
+		mm_async_call_1(target_context, mm_net_register_sock_req, (uintptr_t) sock);
+	}
 
 leave:
 	LEAVE();
@@ -237,10 +261,10 @@ mm_net_acceptor(mm_value_t arg)
 
 	// Find the pertinent server.
 	struct mm_net_server *const server = (struct mm_net_server *) arg;
-	struct mm_context *const context = server->event.context;
+	struct mm_context *const context = mm_net_get_server_context(server);
 
 	// Accept incoming connections.
-	while (mm_net_accept(server))
+	while (mm_net_accept(server, context))
 		mm_fiber_yield(context);
 
 	LEAVE();
@@ -299,10 +323,10 @@ mm_net_register_server(mm_value_t arg)
 {
 	ENTER();
 
-	// Register a server for events.
+	// Register the server socket with the event loop.
 	struct mm_net_server *srv = (struct mm_net_server *) arg;
 	ASSERT(srv->event.fd >= 0);
-	mm_event_register_fd(mm_context_selfptr(), &srv->event);
+	mm_event_register_fd(&srv->event, mm_context_selfptr());
 
 	LEAVE();
 	return 0;
@@ -342,6 +366,15 @@ mm_net_alloc_server(struct mm_net_proto *proto)
 	return srv;
 }
 
+static void
+mm_net_destroy_server(struct mm_event_fd *sink UNUSED)
+{
+	// TODO: This is a stub that never gets called as servers are never
+	// unregistered from event listeners. As servers are created before
+	// event loops are started so logically servers should be destroyed
+	// after event loops are finished. But that never happens too.
+}
+
 static void NONNULL(1)
 mm_net_start_server(struct mm_net_server *srv)
 {
@@ -352,18 +385,31 @@ mm_net_start_server(struct mm_net_server *srv)
 
 	// Find the thread to run the server on.
 	size_t target = 0;
-	if (mm_bitset_size(&srv->affinity)) {
-		target = mm_bitset_find(&srv->affinity, 0);
-		if (target == MM_BITSET_NONE)
-			target = 0;
+	const size_t nthreads = mm_number_of_regular_threads();
+	if (mm_bitset_size(&srv->affinity) == 0) {
+		mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
+		mm_bitset_prepare(&srv->affinity, &mm_memory_xarena, nthreads);
+		mm_bitset_set_all(&srv->affinity);
+	} else if (!mm_bitset_any(&srv->affinity)) {
+		mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
+		mm_bitset_prepare(&srv->affinity, &mm_memory_xarena, 1);
+		mm_bitset_set_all(&srv->affinity);
+	} else if (mm_bitset_size(&srv->affinity) > nthreads) {
+		struct mm_bitset tmp;
+		mm_bitset_prepare(&tmp, &mm_memory_xarena, nthreads);
+		mm_bitset_or(&tmp, &srv->affinity);
+		mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
+		srv->affinity = tmp;
 	}
+	srv->assignment_target = mm_bitset_find(&srv->affinity, 0);
+	srv->assignment_counter = 0;
 
 	// Create the server socket.
 	int fd = mm_net_open_server_socket(&srv->addr, 0);
 	mm_verbose("bind server '%s' to socket %d", srv->name, fd);
 
 	// Register the server socket with the event loop.
-	mm_event_prepare_fd(&srv->event, fd, &mm_net_acceptor_tasks, MM_EVENT_REGULAR_INPUT | MM_EVENT_LOCAL_ONLY);
+	mm_event_prepare_fd(&srv->event, fd, MM_EVENT_REGULAR_INPUT, &mm_net_acceptor_tasks, mm_net_destroy_server);
 
 	MM_TASK(register_task, mm_net_register_server, mm_task_complete_noop, mm_task_reassign_off);
 	struct mm_context *context = mm_thread_ident_to_context(target);
@@ -474,6 +520,15 @@ mm_net_setup_server(struct mm_net_server *srv)
  * Network client connection sockets.
  **********************************************************************/
 
+void NONNULL(1, 2)
+mm_net_prepare_for_connect(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *))
+{
+	// Initialize the event sink.
+	mm_event_prepare_fd(&sock->event, -1, MM_EVENT_FIXED_POLLER | MM_EVENT_OUTPUT_READY, mm_event_instant_io(), destroy);
+	// Initialize common socket fields.
+	mm_net_prepare(sock);
+}
+
 struct mm_net_socket *
 mm_net_create(void)
 {
@@ -482,7 +537,7 @@ mm_net_create(void)
 	// Create the socket.
 	struct mm_net_socket *sock = mm_net_socket_alloc();
 	// Initialize the socket basic fields.
-	mm_net_prepare(sock, mm_net_socket_free);
+	mm_net_prepare_for_connect(sock, mm_net_socket_free);
 
 	LEAVE();
 	return sock;
@@ -506,13 +561,14 @@ mm_net_connect(struct mm_net_socket *sock, const struct mm_net_addr *addr)
 	int rc = -1;
 
 	// Create the socket.
-	int fd = mm_socket(addr->addr.sa_family, SOCK_STREAM, 0);
+	const int fd = mm_socket(addr->addr.sa_family, SOCK_STREAM, 0);
 	if (fd < 0) {
 		int saved_errno = errno;
 		mm_error(saved_errno, "socket()");
 		errno = saved_errno;
 		goto leave;
 	}
+	sock->event.fd = fd;
 
 	// Set common socket options.
 	mm_net_set_socket_options(fd, 0);
@@ -533,21 +589,14 @@ retry:
 		}
 	}
 
-	// Initialize the event sink. In the EINPROGRESS case it is required
-	// to wait for output readiness, otherwise assume it ready right away.
-	uint32_t flags = MM_EVENT_LOCAL_ONLY;
-	if (rc < 0)
-		flags |= MM_EVENT_ONESHOT_OUTPUT;
-	else
-		flags |= MM_EVENT_OUTPUT_READY;
-	mm_event_prepare_fd(&sock->event, fd, mm_event_instant_io(), flags);
-
 	// Register the socket in the event loop.
 	struct mm_context *const context = mm_context_selfptr();
-	mm_event_register_fd(context, &sock->event);
+	mm_event_register_fd(&sock->event, context);
 
 	// Handle the EINPROGRESS case.
 	if (rc < 0) {
+		mm_event_trigger_output(&sock->event, context);
+
 		// Block the fiber waiting for connection completion.
 		sock->event.output_fiber = context->fiber;
 		while ((sock->event.flags & (MM_EVENT_OUTPUT_READY | MM_EVENT_OUTPUT_ERROR)) == 0) {
@@ -760,14 +809,14 @@ retry:
 	}
 
 	// Remember the wait time.
-	struct mm_context *const context = sock->event.context;
+	struct mm_context *const context = mm_net_get_socket_context(sock);
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_context_gettime(context) + sock->read_timeout;
 
 	for (;;) {
 		// Turn on the input event notification if needed.
-		mm_event_trigger_input(&sock->event);
+		mm_event_trigger_input(&sock->event, context);
 
 		// Try to read again (nonblocking).
 		if ((n = mm_read(sock->event.fd, buffer, nbytes)) >= 0)
@@ -823,14 +872,14 @@ retry:
 	}
 
 	// Remember the wait time.
-	struct mm_context *const context = sock->event.context;
+	struct mm_context *const context = mm_net_get_socket_context(sock);
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_context_gettime(context) + sock->write_timeout;
 
 	for (;;) {
 		// Turn on the output event notification if needed.
-		mm_event_trigger_output(&sock->event);
+		mm_event_trigger_output(&sock->event, context);
 
 		// Try to write again (nonblocking).
 		if ((n = mm_write(sock->event.fd, buffer, nbytes)) >= 0)
@@ -886,14 +935,14 @@ retry:
 	}
 
 	// Remember the start time.
-	struct mm_context *const context = sock->event.context;
+	struct mm_context *const context = mm_net_get_socket_context(sock);
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->read_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_context_gettime(context) + sock->read_timeout;
 
 	for (;;) {
 		// Turn on the input event notification if needed.
-		mm_event_trigger_input(&sock->event);
+		mm_event_trigger_input(&sock->event, context);
 
 		// Try to read again (nonblocking).
 		n = mm_readv(sock->event.fd, iov, iovcnt);
@@ -950,14 +999,14 @@ retry:
 	}
 
 	// Remember the start time.
-	struct mm_context *const context = sock->event.context;
+	struct mm_context *const context = mm_net_get_socket_context(sock);
 	mm_timeval_t deadline = MM_TIMEVAL_MAX;
 	if (sock->write_timeout != MM_TIMEOUT_INFINITE)
 		deadline = mm_context_gettime(context) + sock->write_timeout;
 
 	for (;;) {
 		// Turn on the output event notification if needed.
-		mm_event_trigger_output(&sock->event);
+		mm_event_trigger_output(&sock->event, context);
 
 		// Try to write again (nonblocking).
 		n = mm_writev(sock->event.fd, iov, iovcnt);

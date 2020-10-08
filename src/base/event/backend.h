@@ -161,46 +161,22 @@ mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_input(struct mm_event_backend *backend, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+mm_event_backend_trigger_input(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_trigger_input(local, &backend->backend, sink);
+	mm_event_epoll_trigger_input(local, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_input(&backend->backend, local, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_output(struct mm_event_backend *backend, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+mm_event_backend_trigger_output(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_trigger_output(local, &backend->backend, sink);
+	mm_event_epoll_trigger_output(local, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_output(&backend->backend, local, sink);
-#endif
-}
-
-static inline void NONNULL(1, 2, 3)
-mm_event_backend_adjust_fd(struct mm_event_backend_local *local, struct mm_event_backend *backend, struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_adjust_fd(local, &backend->backend, sink);
-#endif
-}
-
-static inline void NONNULL(1, 2, 3)
-mm_event_backend_disable_fd(struct mm_event_backend_local *local, struct mm_event_backend *backend, struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_disable_fd(local, &backend->backend, sink);
-#endif
-}
-
-static inline void NONNULL(1, 2, 3)
-mm_event_backend_dispose_fd(struct mm_event_backend_local *local, struct mm_event_backend *backend, struct mm_event_fd *sink)
-{
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_dispose_fd(local, &backend->backend, sink);
 #endif
 }
 
