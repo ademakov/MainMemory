@@ -248,8 +248,6 @@ mm_strand_master(mm_value_t arg)
 
 			// If there are too many tasks now then share them with peers.
 			mm_context_distribute_tasks(context);
-			// Yield.
-			continue;
 		}
 
 		// Check for idle worker fibers to handle available tasks.
