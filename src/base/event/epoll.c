@@ -134,29 +134,29 @@ mm_event_epoll_poll_common(struct mm_event_listener *listener, struct mm_event_e
 	for (int i = 0; i < n; i++) {
 		struct epoll_event *const event = &listener->backend.events[i];
 		struct mm_event_fd *const sink = event->data.ptr;
-		if ((sink->flags & MM_EVENT_REGULAR_INPUT) != 0) {
-			if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) == 0)
-				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
-			else
+		const uint32_t ev = event->events;
+		if ((ev & EPOLLIN) != 0)
+			mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
+		if ((ev & EPOLLOUT) != 0)
+			mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
+		if ((ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			if ((sink->flags & MM_EVENT_REGULAR_INPUT) != 0)
 				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-		}
-		if ((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0) {
-			if ((event->events & (EPOLLERR | EPOLLHUP)) == 0)
-				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
-			else
+			if ((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0 && (ev & (EPOLLERR | EPOLLHUP)) != 0)
 				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
 		}
 	}
 }
 
 static bool
-mm_event_epoll_handle_local(struct mm_event_listener *listener, int nevents)
+mm_event_epoll_handle_local(struct mm_event_listener *const listener, const int nevents)
 {
 	bool do_common_poll = false;
 
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *const event = &listener->backend.events[i];
 		struct mm_event_fd *const sink = event->data.ptr;
+
 		if (sink == MM_EVENT_EPOLL_COMMON_FD) {
 			do_common_poll = true;
 			continue;
@@ -167,54 +167,52 @@ mm_event_epoll_handle_local(struct mm_event_listener *listener, int nevents)
 			continue;
 		}
 
+		const uint32_t ev = event->events;
 		const uint32_t flags = sink->flags;
-		const uint32_t input = flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT);
-		const uint32_t output = flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT);
-		if (input != 0 && (event->events & (EPOLLIN | EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			if ((event->events & EPOLLIN) != 0) {
-				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
 
-				if ((flags & MM_EVENT_ONESHOT_INPUT) != 0) {
-					struct mm_event_epoll_local *const local = &listener->backend;
-					if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
-						if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
-								            EPOLLET | EPOLLOUT))
-							mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-						else
-							sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
-					} else {
-						if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
-							mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-						else
-							sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
-					}
+		if ((ev & EPOLLIN) != 0) {
+			mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
+
+			if ((flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+				struct mm_event_epoll_local *const local = &listener->backend;
+				if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
+							            EPOLLET | EPOLLOUT))
+						mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
+					else
+						sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
+				} else {
+					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
+						mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
+					else
+						sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
 				}
-			} else {
-				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
 			}
 		}
-		if (output != 0 && (event->events & (EPOLLOUT | EPOLLERR | EPOLLHUP)) != 0) {
-			if ((event->events & EPOLLOUT) != 0) {
-				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
+		if ((ev & EPOLLOUT) != 0) {
+			mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
 
-				if ((flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
-					struct mm_event_epoll_local *const local = &listener->backend;
-					if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_INPUT) != 0) {
-						if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
-								            EPOLLET | EPOLLIN | EPOLLRDHUP))
-							mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
-						else
-							sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
-					} else {
-						if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
-							mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
-						else
-							sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
-					}
+			if ((flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+				struct mm_event_epoll_local *const local = &listener->backend;
+				if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
+							            EPOLLET | EPOLLIN | EPOLLRDHUP))
+						mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
+					else
+						sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
+				} else {
+					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
+						mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
+					else
+						sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
 				}
-			} else {
-				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
 			}
+		}
+		if ((ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
+				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
+			if ((flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0 && (ev & (EPOLLERR | EPOLLHUP)) != 0)
+				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
 		}
 	}
 
