@@ -37,9 +37,13 @@ mm_event_complete(struct mm_event_fd *sink)
 
 	/* Close the sink on a error unless there is still some active task using it. */
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_CLOSED | MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) == 0
-	    && (flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0)
-		mm_event_close_fd(sink);
+	if ((flags & (MM_EVENT_CLOSED | MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) == 0) {
+		if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
+			mm_event_close_fd(sink);
+		} else if (sink->regular_listener) {
+			sink->context = sink->regular_listener->context;
+		}
+	}
 
 	LEAVE();
 }
