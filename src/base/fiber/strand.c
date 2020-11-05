@@ -237,17 +237,19 @@ mm_strand_master(mm_value_t arg)
 			mm_memory_cache_collect(&context->cache);
 
 			// Check for I/O events and timers.
-			const bool spin = spin_count < spin_limit || context->tasks_request_in_progress;
-			if (mm_event_poll(context, spin ? 0 : MM_STRAND_HALT_TIMEOUT)) {
+			if (mm_event_poll(context, spin_count < spin_limit ? 0 : MM_STRAND_HALT_TIMEOUT)) {
 				spin_count = 0;
+				// If there are too many tasks now then share them with peers.
+				mm_context_distribute_tasks(context);
 			} else {
-				spin_count++;
 				// Request tasks from a peer thread.
 				mm_context_request_tasks(context);
+				if (context->tasks_request_in_progress) {
+					spin_count = 0;
+				} else {
+					spin_count++;
+				}
 			}
-
-			// If there are too many tasks now then share them with peers.
-			mm_context_distribute_tasks(context);
 		}
 
 		// Check for idle worker fibers to handle available tasks.
