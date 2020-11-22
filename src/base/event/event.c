@@ -431,10 +431,11 @@ mm_event_arm_timer(struct mm_context *context, struct mm_event_timer *sink, mm_t
 
 	if (mm_event_timer_armed(sink))
 		mm_timeq_delete(&context->listener->timer_queue, &sink->entry);
-	mm_timeq_insert(&context->listener->timer_queue, &sink->entry);
 
 	mm_timeval_t time = mm_context_gettime(context) + timeout;
 	mm_timeq_entry_settime(&sink->entry, time);
+	mm_timeq_insert(&context->listener->timer_queue, &sink->entry);
+
 	DEBUG("armed timer: %lld", (long long) time);
 
 	LEAVE();
