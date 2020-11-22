@@ -159,8 +159,10 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, int fd, struct mm_net_server
 		VERIFY(srv->proto->writer != NULL);
 		flags |= MM_EVENT_REGULAR_OUTPUT;
 	}
-	if ((options & MM_NET_BOUND) != 0)
-		flags = MM_EVENT_FIXED_POLLER;
+	if ((options & MM_NET_BOUND) == 0)
+		/*flags |= MM_EVENT_COMMON_POLLER*/;
+	else
+		flags |= MM_EVENT_FIXED_POLLER;
 
 	// Initialize the event sink.
 	mm_event_prepare_fd(&sock->event, fd, flags, &srv->tasks, srv->proto->destroy != NULL ? srv->proto->destroy : mm_net_socket_free);
@@ -384,7 +386,6 @@ mm_net_start_server(struct mm_net_server *srv)
 	ASSERT(srv->event.fd == -1);
 
 	// Find the thread to run the server on.
-	size_t target = 0;
 	const size_t nthreads = mm_number_of_regular_threads();
 	if (mm_bitset_size(&srv->affinity) == 0) {
 		mm_bitset_cleanup(&srv->affinity, &mm_memory_xarena);
@@ -412,7 +413,7 @@ mm_net_start_server(struct mm_net_server *srv)
 	mm_event_prepare_fd(&srv->event, fd, MM_EVENT_REGULAR_INPUT, &mm_net_acceptor_tasks, mm_net_destroy_server);
 
 	MM_TASK(register_task, mm_net_register_server, mm_task_complete_noop, mm_task_reassign_off);
-	struct mm_context *context = mm_thread_ident_to_context(target);
+	struct mm_context *context = mm_thread_ident_to_context(srv->assignment_target);
 	mm_context_send_task(context, &register_task, (mm_value_t) srv);
 
 	LEAVE();
