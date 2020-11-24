@@ -29,6 +29,7 @@
 #include "base/fiber/fiber.h"
 #include "base/memory/alloc.h"
 #include "base/memory/cache.h"
+#include "base/thread/domain.h"
 
 #include <sys/mman.h>
 
@@ -486,6 +487,13 @@ mc_table_start(const struct mm_memcache_config *config)
 		mc_table_init_part(index, NULL);
 	}
 #endif
+
+	struct mm_domain *domain = mm_domain_ident_to_domain(0);
+	MM_THREAD_LOCAL_ALLOC(domain, "mc_stat", mc_table.stat);
+	for (mm_thread_t i = 0; i < mm_domain_getsize(domain); i++) {
+		struct mc_stat *stat = MM_THREAD_LOCAL_DEREF(i, mc_table.stat);
+		memset(stat, 0, sizeof(*stat));
+	}
 
 	LEAVE();
 }

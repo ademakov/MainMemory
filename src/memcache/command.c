@@ -25,9 +25,11 @@
 
 #include "base/bytes.h"
 #include "base/report.h"
+#include "base/runtime.h"
 #include "base/memory/alloc.h"
 #include "base/memory/buffer.h"
 #include "base/net/net.h"
+#include "base/thread/domain.h"
 
 // The logging verbosity level.
 static uint8_t mc_verbose = 0;
@@ -53,7 +55,7 @@ static char mc_result_version[] = "VERSION " VERSION "\r\n";
 #define WRITE(sock, res)	mm_netbuf_write(sock, res, RES_N(res))
 
 /**********************************************************************
- * Command type declarations.
+ * Command type definitions.
  **********************************************************************/
 
 /*
@@ -75,6 +77,32 @@ static char mc_result_version[] = "VERSION " VERSION "\r\n";
 MC_COMMAND_LIST(MC_COMMAND_TYPE)
 
 #undef MC_COMMAND_TYPE
+
+/**********************************************************************
+ * Statistics.
+ **********************************************************************/
+
+struct mc_command_stat
+{
+#define MM_STAT_RFIELD(x)	unsigned long long x;
+	MC_STAT_LIST(MM_STAT_RFIELD)
+#undef MC_STAT_RFIELD
+};
+
+static void
+mc_command_stat_aggregate(struct mc_command_stat *stat)
+{
+#define MC_STAT_ADD(x)	stat->x += mm_counter_shared_load(&s->x);
+
+	memset(stat, 0, sizeof(*stat));
+	struct mm_domain *domain = mm_domain_ident_to_domain(0);
+	for (mm_thread_t i = 0; i < mm_domain_getsize(domain); i++) {
+		struct mc_stat *s = MM_THREAD_LOCAL_DEREF(i, mc_table.stat);
+		MC_STAT_LIST(MC_STAT_ADD);
+	}
+
+#undef MC_STAT_ADD
+}
 
 /**********************************************************************
  * Memcache command creation.
@@ -570,10 +598,15 @@ mc_command_execute_ascii_get(struct mc_state *state, struct mc_command_simple *c
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_entry(state, command, false);
-	else if (command->action.ascii_get_last)
-		WRITE(&state->sock, mc_result_end);
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
+		if (command->action.ascii_get_last)
+			WRITE(&state->sock, mc_result_end);
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -584,10 +617,15 @@ mc_command_execute_ascii_gets(struct mc_state *state, struct mc_command_simple *
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_entry(state, command, true);
-	else if (command->action.ascii_get_last)
-		WRITE(&state->sock, mc_result_end);
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
+		if (command->action.ascii_get_last)
+			WRITE(&state->sock, mc_result_end);
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -602,6 +640,7 @@ mc_command_execute_ascii_set(struct mc_state *state, struct mc_command_storage *
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_stored);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -618,6 +657,7 @@ mc_command_execute_ascii_add(struct mc_state *state, struct mc_command_storage *
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -634,6 +674,7 @@ mc_command_execute_ascii_replace(struct mc_state *state, struct mc_command_stora
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -644,14 +685,20 @@ mc_command_execute_ascii_cas(struct mc_state *state, struct mc_command_storage *
 	ENTER();
 
 	mc_action_update(&command->action);
-	if (command->action.base.ascii_noreply)
-		/* Be quiet. */;
-	else if (command->action.entry_match)
-		WRITE(&state->sock, mc_result_stored);
-	else if (command->action.base.old_entry != NULL)
-		WRITE(&state->sock, mc_result_exists);
-	else
-		WRITE(&state->sock, mc_result_not_stored);
+	if (command->action.entry_match) {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_stored);
+		mm_counter_local_inc(&state->stat->cas_hits);
+	} else if (command->action.base.old_entry != NULL) {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_exists);
+		mm_counter_local_inc(&state->stat->cas_badval);
+	} else {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_not_stored);
+		mm_counter_local_inc(&state->stat->cas_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -668,6 +715,7 @@ mc_command_execute_ascii_append(struct mc_state *state, struct mc_command_storag
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -684,6 +732,7 @@ mc_command_execute_ascii_prepend(struct mc_state *state, struct mc_command_stora
 		WRITE(&state->sock, mc_result_stored);
 	else
 		WRITE(&state->sock, mc_result_not_stored);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -695,14 +744,18 @@ mc_command_execute_ascii_incr(struct mc_state *state, struct mc_command_storage 
 
 	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
 	mc_command_increment(command, true, buffer);
-	if (command->action.base.ascii_noreply)
-		/* Be quiet. */;
-	else if (command->action.new_entry != NULL)
-		mc_command_transmit_delta(state, buffer);
-	else if (command->action.base.old_entry != NULL)
-		WRITE(&state->sock, mc_result_delta_non_num);
-	else
-		WRITE(&state->sock, mc_result_not_found);
+	if (command->action.new_entry != NULL) {
+		if (command->action.base.ascii_noreply)
+			mc_command_transmit_delta(state, buffer);
+		mm_counter_local_inc(&state->stat->incr_hits);
+	} else if (command->action.base.old_entry != NULL) {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_delta_non_num);
+	} else {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_not_found);
+		mm_counter_local_inc(&state->stat->incr_misses);
+	}
 
 	LEAVE();
 }
@@ -714,14 +767,18 @@ mc_command_execute_ascii_decr(struct mc_state *state, struct mc_command_storage 
 
 	char buffer[MC_ENTRY_NUM_LEN_MAX + 1];
 	mc_command_decrement(command, true, buffer);
-	if (command->action.base.ascii_noreply)
-		/* Be quiet. */;
-	else if (command->action.new_entry != NULL)
-		mc_command_transmit_delta(state, buffer);
-	else if (command->action.base.old_entry != NULL)
-		WRITE(&state->sock, mc_result_delta_non_num);
-	else
-		WRITE(&state->sock, mc_result_not_found);
+	if (command->action.new_entry != NULL) {
+		if (command->action.base.ascii_noreply)
+			mc_command_transmit_delta(state, buffer);
+		mm_counter_local_inc(&state->stat->decr_hits);
+	} else if (command->action.base.old_entry != NULL) {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_delta_non_num);
+	} else {
+		if (command->action.base.ascii_noreply)
+			WRITE(&state->sock, mc_result_not_found);
+		mm_counter_local_inc(&state->stat->decr_misses);
+	}
 
 	LEAVE();
 }
@@ -732,12 +789,15 @@ mc_command_execute_ascii_delete(struct mc_state *state, struct mc_command_simple
 	ENTER();
 
 	mc_action_delete(&command->action);
-	if (command->action.ascii_noreply)
-		/* Be quiet. */;
-	else if (command->action.old_entry != NULL)
-		WRITE(&state->sock, mc_result_deleted);
-	else
-		WRITE(&state->sock, mc_result_not_found);
+	if (command->action.old_entry != NULL) {
+		if (!command->action.ascii_noreply)
+			WRITE(&state->sock, mc_result_deleted);
+		mm_counter_local_inc(&state->stat->delete_hits);
+	} else {
+		if (!command->action.ascii_noreply)
+			WRITE(&state->sock, mc_result_not_found);
+		mm_counter_local_inc(&state->stat->delete_misses);
+	}
 
 	LEAVE();
 }
@@ -766,12 +826,16 @@ mc_command_execute_ascii_touch(struct mc_state *state, struct mc_command_simple 
 		mc_action_finish(&command->action);
 	}
 
-	if (command->action.ascii_noreply)
-		/* Be quiet. */;
-	else if (command->action.old_entry != NULL)
-		WRITE(&state->sock, mc_result_touched);
-	else
-		WRITE(&state->sock, mc_result_not_found);
+	if (command->action.old_entry != NULL) {
+		if (command->action.ascii_noreply)
+			WRITE(&state->sock, mc_result_touched);
+		mm_counter_local_inc(&state->stat->touch_misses);
+	} else {
+		if (command->action.ascii_noreply)
+			WRITE(&state->sock, mc_result_not_found);
+		mm_counter_local_inc(&state->stat->touch_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_touch);
 
 	LEAVE();
 }
@@ -787,10 +851,18 @@ mc_command_execute_ascii_stats(struct mc_state *state, struct mc_command_simple 
 {
 	ENTER();
 
-	if (command->action.ascii_stats)
+#define MC_STAT_APPEND(x) mm_netbuf_printf(&state->sock, "STAT %s %llu\r\n", stringify_expanded(x), stat.x);
+
+	if (command->action.ascii_stats) {
 		WRITE(&state->sock, mc_result_not_implemented);
-	else
+	} else {
+		struct mc_command_stat stat;
+		mc_command_stat_aggregate(&stat);
+		MC_STAT_LIST(MC_STAT_APPEND)
 		WRITE(&state->sock, mc_result_end);
+	}
+
+#undef MC_STAT_APPEND
 
 	LEAVE();
 }
@@ -805,6 +877,7 @@ mc_command_execute_ascii_flush_all(struct mc_state *state, struct mc_command_sim
 		/* Be quiet. */;
 	else
 		WRITE(&state->sock, mc_result_ok);
+	mm_counter_local_inc(&state->stat->cmd_flush);
 
 	LEAVE();
 }
@@ -864,10 +937,14 @@ mc_command_execute_binary_get(struct mc_state *state, struct mc_command_simple *
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_binary_entry(state, &command->action, false);
-	else
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
 		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -878,8 +955,13 @@ mc_command_execute_binary_getq(struct mc_state *state, struct mc_command_simple 
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_binary_entry(state, &command->action, false);
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -890,10 +972,14 @@ mc_command_execute_binary_getk(struct mc_state *state, struct mc_command_simple 
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_binary_entry(state, &command->action, true);
-	else
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
 		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -904,8 +990,13 @@ mc_command_execute_binary_getkq(struct mc_state *state, struct mc_command_simple
 	ENTER();
 
 	mc_action_lookup(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_binary_entry(state, &command->action, true);
+		mm_counter_local_inc(&state->stat->get_hits);
+	} else {
+		mm_counter_local_inc(&state->stat->get_misses);
+	}
+	mm_counter_local_inc(&state->stat->cmd_get);
 
 	LEAVE();
 }
@@ -917,16 +1008,21 @@ mc_command_execute_binary_set(struct mc_state *state, struct mc_command_storage 
 
 	if (command->action.stamp) {
 		mc_action_update(&command->action);
-		if (command->action.entry_match)
+		if (command->action.entry_match) {
 			mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
-		else if (command->action.base.old_entry != NULL)
+			mm_counter_local_inc(&state->stat->cas_hits);
+		} else if (command->action.base.old_entry != NULL) {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
-		else
+			mm_counter_local_inc(&state->stat->cas_badval);
+		} else {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_ITEM_NOT_STORED);
+			mm_counter_local_inc(&state->stat->cas_misses);
+		}
 	} else {
 		mc_action_upsert(&command->action);
 		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	}
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -938,15 +1034,19 @@ mc_command_execute_binary_setq(struct mc_state *state, struct mc_command_storage
 
 	if (command->action.stamp) {
 		mc_action_update(&command->action);
-		if (command->action.entry_match)
-			/* Be quiet. */;
-		else if (command->action.base.old_entry != NULL)
+		if (command->action.entry_match) {
+			mm_counter_local_inc(&state->stat->cas_hits);
+		} else if (command->action.base.old_entry != NULL) {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
-		else
+			mm_counter_local_inc(&state->stat->cas_badval);
+		} else {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_ITEM_NOT_STORED);
+			mm_counter_local_inc(&state->stat->cas_misses);
+		}
 	} else {
 		mc_action_upsert(&command->action);
 	}
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -961,6 +1061,7 @@ mc_command_execute_binary_add(struct mc_state *state, struct mc_command_storage 
 		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -975,6 +1076,7 @@ mc_command_execute_binary_addq(struct mc_state *state, struct mc_command_storage
 		/* Be quiet. */;
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -986,12 +1088,16 @@ mc_command_execute_binary_replace(struct mc_state *state, struct mc_command_stor
 
 	if (command->action.stamp) {
 		mc_action_update(&command->action);
-		if (command->action.entry_match)
+		if (command->action.entry_match) {
 			mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
-		else if (command->action.base.old_entry != NULL)
+			mm_counter_local_inc(&state->stat->cas_hits);
+		} else if (command->action.base.old_entry != NULL) {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
-		else
+			mm_counter_local_inc(&state->stat->cas_badval);
+		} else {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mm_counter_local_inc(&state->stat->cas_misses);
+		}
 	} else {
 		mc_action_update(&command->action);
 		if (command->action.base.old_entry != NULL)
@@ -999,6 +1105,7 @@ mc_command_execute_binary_replace(struct mc_state *state, struct mc_command_stor
 		else
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	}
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1010,12 +1117,15 @@ mc_command_execute_binary_replaceq(struct mc_state *state, struct mc_command_sto
 
 	if (command->action.stamp) {
 		mc_action_update(&command->action);
-		if (command->action.entry_match)
-			/* Be quiet. */;
-		else if (command->action.base.old_entry != NULL)
+		if (command->action.entry_match) {
+			mm_counter_local_inc(&state->stat->cas_hits);
+		} else if (command->action.base.old_entry != NULL) {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_EXISTS);
-		else
+			mm_counter_local_inc(&state->stat->cas_badval);
+		} else {
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+			mm_counter_local_inc(&state->stat->cas_misses);
+		}
 	} else {
 		mc_action_update(&command->action);
 		if (command->action.base.old_entry != NULL)
@@ -1023,6 +1133,7 @@ mc_command_execute_binary_replaceq(struct mc_state *state, struct mc_command_sto
 		else
 			mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
 	}
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1037,6 +1148,7 @@ mc_command_execute_binary_append(struct mc_state *state, struct mc_command_stora
 		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1051,6 +1163,7 @@ mc_command_execute_binary_appendq(struct mc_state *state, struct mc_command_stor
 		/* Be quiet. */;
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1065,6 +1178,7 @@ mc_command_execute_binary_prepend(struct mc_state *state, struct mc_command_stor
 		mc_command_transmit_binary_stamp(state, &command->action.base, command->action.stamp);
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1079,6 +1193,7 @@ mc_command_execute_binary_prependq(struct mc_state *state, struct mc_command_sto
 		/* Be quiet. */;
 	else
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+	mm_counter_local_inc(&state->stat->cmd_set);
 
 	LEAVE();
 }
@@ -1089,12 +1204,15 @@ mc_command_execute_binary_increment(struct mc_state *state, struct mc_command_st
 	ENTER();
 
 	uint64_t value = mc_command_increment(command, false, NULL);
-	if (command->action.new_entry != NULL)
+	if (command->action.new_entry != NULL) {
 		mc_command_transmit_binary_value(state, &command->action, value);
-	else if (command->action.base.old_entry != NULL)
+		mm_counter_local_inc(&state->stat->incr_hits);
+	} else if (command->action.base.old_entry != NULL) {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
-	else
+	} else {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->incr_misses);
+	}
 
 	LEAVE();
 }
@@ -1105,12 +1223,14 @@ mc_command_execute_binary_incrementq(struct mc_state *state, struct mc_command_s
 	ENTER();
 
 	mc_command_increment(command, false, NULL);
-	if (command->action.new_entry != NULL)
-		/* Be quiet. */;
-	else if (command->action.base.old_entry != NULL)
+	if (command->action.new_entry != NULL) {
+		mm_counter_local_inc(&state->stat->incr_hits);
+	} else if (command->action.base.old_entry != NULL) {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
-	else
+	} else {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->incr_misses);
+	}
 
 	LEAVE();
 }
@@ -1121,12 +1241,15 @@ mc_command_execute_binary_decrement(struct mc_state *state, struct mc_command_st
 	ENTER();
 
 	uint64_t value = mc_command_decrement(command, false, NULL);
-	if (command->action.new_entry != NULL)
+	if (command->action.new_entry != NULL) {
 		mc_command_transmit_binary_value(state, &command->action, value);
-	else if (command->action.base.old_entry != NULL)
+		mm_counter_local_inc(&state->stat->decr_hits);
+	} else if (command->action.base.old_entry != NULL) {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
-	else
+	} else {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->decr_misses);
+	}
 
 	LEAVE();
 }
@@ -1137,12 +1260,14 @@ mc_command_execute_binary_decrementq(struct mc_state *state, struct mc_command_s
 	ENTER();
 
 	mc_command_decrement(command, false, NULL);
-	if (command->action.new_entry != NULL)
-		/* Be quiet. */;
-	else if (command->action.base.old_entry != NULL)
+	if (command->action.new_entry != NULL) {
+		mm_counter_local_inc(&state->stat->decr_hits);
+	} else if (command->action.base.old_entry != NULL) {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_NON_NUMERIC_VALUE);
-	else
+	} else {
 		mc_command_transmit_binary_status(state, &command->action.base, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->decr_misses);
+	}
 
 	LEAVE();
 }
@@ -1153,10 +1278,13 @@ mc_command_execute_binary_delete(struct mc_state *state, struct mc_command_simpl
 	ENTER();
 
 	mc_action_delete(&command->action);
-	if (command->action.old_entry != NULL)
+	if (command->action.old_entry != NULL) {
 		mc_command_transmit_binary_stamp(state, &command->action, 0);
-	else
+		mm_counter_local_inc(&state->stat->delete_hits);
+	} else {
 		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->delete_misses);
+	}
 
 	LEAVE();
 }
@@ -1167,10 +1295,12 @@ mc_command_execute_binary_deleteq(struct mc_state *state, struct mc_command_simp
 	ENTER();
 
 	mc_action_delete(&command->action);
-	if (command->action.old_entry != NULL)
-		;
-	else
+	if (command->action.old_entry != NULL) {
+		mm_counter_local_inc(&state->stat->delete_hits);
+	} else {
 		mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_KEY_NOT_FOUND);
+		mm_counter_local_inc(&state->stat->delete_misses);
+	}
 
 	LEAVE();
 }
@@ -1213,6 +1343,7 @@ mc_command_execute_binary_flush(struct mc_state *state, struct mc_command_simple
 
 	mc_command_flush(command->action.binary_exp_time);
 	mc_command_transmit_binary_status(state, &command->action, MC_BINARY_STATUS_NO_ERROR);
+	mm_counter_local_inc(&state->stat->cmd_flush);
 
 	LEAVE();
 }
@@ -1223,6 +1354,7 @@ mc_command_execute_binary_flushq(struct mc_state *state UNUSED, struct mc_comman
 	ENTER();
 
 	mc_command_flush(command->action.binary_exp_time);
+	mm_counter_local_inc(&state->stat->cmd_flush);
 
 	LEAVE();
 }

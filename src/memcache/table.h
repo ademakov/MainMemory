@@ -24,13 +24,41 @@
 #include "memcache/entry.h"
 
 #include "base/bitops.h"
+#include "base/counter.h"
 #include "base/list.h"
 #include "base/event/event.h"
 #include "base/memory/cache.h"
+#include "base/thread/local.h"
 
 #if ENABLE_MEMCACHE_LOCKING
 # include "base/lock.h"
 #endif
+
+#define MC_STAT_LIST(_) 	\
+	_(cmd_get)		\
+	_(cmd_set)		\
+	_(cmd_touch)		\
+	_(cmd_flush)		\
+	_(get_hits)		\
+	_(get_misses)		\
+	_(delete_hits)		\
+	_(delete_misses)	\
+	_(incr_hits)		\
+	_(incr_misses)		\
+	_(decr_hits)		\
+	_(decr_misses)		\
+	_(cas_hits)		\
+	_(cas_misses)		\
+	_(cas_badval)		\
+	_(touch_hits)		\
+	_(touch_misses)
+
+struct mc_stat
+{
+#define MM_STAT_FIELD(x)	struct mm_counter x;
+	MC_STAT_LIST(MM_STAT_FIELD)
+#undef MM_STAT_FIELD
+};
 
 /* A partition of table of memcache entries. */
 struct mc_tpart
@@ -114,6 +142,9 @@ struct mc_table
 
 	/* Entry expiration timer. */
 	struct mm_event_timer exp_timer;
+
+	/* Statistics. */
+	MM_THREAD_LOCAL(struct mc_stat, stat);
 };
 
 extern struct mc_table mc_table;
