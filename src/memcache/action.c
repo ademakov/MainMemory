@@ -198,7 +198,7 @@ mc_action_find_victims(struct mc_tpart *part,
 		part->clock_hand = hand + 1;
 	}
 
-	return (nvictims > 0 && nvictims == nrequired);
+	return nvictims != 0;
 }
 
 static bool
