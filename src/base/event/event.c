@@ -216,7 +216,7 @@ mm_event_register_fd(struct mm_event_fd *sink, struct mm_context *const context)
 		sink->regular_listener = context->listener;
 
 	// Register with the event backend.
-	struct mm_event_listener *listener = context->listener;
+	struct mm_event_listener *const listener = context->listener;
 	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->backend, sink);
 
 	LEAVE();
@@ -234,8 +234,9 @@ mm_event_trigger_input(struct mm_event_fd *sink, struct mm_context *const contex
 	mm_event_reset_input_ready(sink);
 
 	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) == 0) {
-		struct mm_event_listener *const listener = context->listener;
 		sink->flags |= MM_EVENT_ONESHOT_INPUT;
+
+		struct mm_event_listener *const listener = context->listener;
 		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->backend, sink);
 	}
 
@@ -254,8 +255,9 @@ mm_event_trigger_output(struct mm_event_fd *sink, struct mm_context *const conte
 	mm_event_reset_output_ready(sink);
 
 	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0) {
-		struct mm_event_listener *const listener = context->listener;
 		sink->flags |= MM_EVENT_ONESHOT_OUTPUT;
+
+		struct mm_event_listener *const listener = context->listener;
 		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->backend, sink);
 	}
 

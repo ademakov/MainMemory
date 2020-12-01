@@ -41,6 +41,9 @@ struct mc_state
 	struct mc_command_base *command_first;
 	struct mc_command_base *command_last;
 
+	/* Statistics shard for current thread. */
+	struct mc_stat *stat;
+
 	/* Memcache protocol. */
 	uint8_t protocol;
 

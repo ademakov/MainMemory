@@ -198,7 +198,7 @@ mc_action_find_victims(struct mc_tpart *part,
 		part->clock_hand = hand + 1;
 	}
 
-	return (nvictims > 0 && nvictims == nrequired);
+	return nvictims != 0;
 }
 
 static bool
@@ -612,15 +612,17 @@ mc_action_stride_low(struct mc_action *action)
 
 	mc_table_lookup_lock(action->part);
 
-	uint32_t used = action->part->nbuckets;
-	uint32_t half_size = mm_lower_pow2(used);
+	const uint32_t used = action->part->nbuckets;
+	action->part->nbuckets = used + MC_TABLE_STRIDE;
+
+	const uint32_t half_size = mm_lower_pow2(used);
+	const uint32_t mask = half_size + half_size - 1;
+
 	if (unlikely(used == half_size))
 		mc_table_buckets_resize(action->part, used, used * 2);
 
 	uint32_t target = used;
 	uint32_t source = used - half_size;
-	uint32_t mask = half_size + half_size - 1;
-
 	for (uint32_t count = 0; count < MC_TABLE_STRIDE; count++) {
 		struct mm_stack s_entries, t_entries;
 		mm_stack_prepare(&s_entries);
@@ -645,9 +647,6 @@ mc_action_stride_low(struct mc_action *action)
 		action->part->buckets[source++] = s_entries;
 		action->part->buckets[target++] = t_entries;
 	}
-
-	used += MC_TABLE_STRIDE;
-	action->part->nbuckets = used;
 
 	mc_table_lookup_unlock(action->part);
 

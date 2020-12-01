@@ -31,6 +31,7 @@
 #include "base/runtime.h"
 #include "base/fiber/fiber.h"
 #include "base/fiber/future.h"
+#include "base/thread/thread.h"
 
 struct mm_memcache_config mc_config;
 
@@ -63,6 +64,7 @@ mc_reader_routine(mm_value_t arg)
 
 	struct mm_net_socket *const sock = mm_net_arg_to_socket(arg);
 	struct mc_state *const state = containerof(sock, struct mc_state, sock.sock);
+	state->stat = MM_THREAD_LOCAL_DEREF(mm_thread_self(), mc_table.stat);
 	state->command_first = NULL;
 	state->command_last = NULL;
 
