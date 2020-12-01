@@ -327,7 +327,7 @@ mm_event_trigger_input(struct mm_event_fd *sink)
 
 	mm_event_reset_input_ready(sink);
 
-	if ((sink->flags & MM_EVENT_INPUT_TRIGGER) == 0) {
+	if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_REGULAR_INPUT)) == 0) {
 		sink->flags |= MM_EVENT_INPUT_TRIGGER;
 
 		struct mm_context *context = sink->context;
@@ -349,7 +349,7 @@ mm_event_trigger_output(struct mm_event_fd *sink)
 
 	mm_event_reset_output_ready(sink);
 
-	if ((sink->flags & MM_EVENT_OUTPUT_TRIGGER) == 0) {
+	if ((sink->flags & (MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_REGULAR_OUTPUT)) == 0) {
 		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
 
 		struct mm_context *context = sink->context;
