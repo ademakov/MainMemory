@@ -50,12 +50,6 @@ struct mm_event_backend
 # error "Event backend is not implemented"
 #endif
 
-#if HAVE_SYS_EPOLL_H
-#  define MM_EVENT_LOCAL_POLL	(1)
-#else
-#  define MM_EVENT_LOCAL_POLL	(0)
-#endif
-
 /**********************************************************************
  * Event backend initialization and cleanup.
  **********************************************************************/
@@ -161,22 +155,38 @@ mm_event_backend_unregister_fd(struct mm_event_backend *backend, struct mm_event
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_input(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+mm_event_backend_enable_input(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_trigger_input(local, sink);
+	mm_event_epoll_enable_input(local, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_input(&backend->backend, local, sink);
 #endif
 }
 
 static inline void NONNULL(1, 2, 3)
-mm_event_backend_trigger_output(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+mm_event_backend_enable_output(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
 {
 #if HAVE_SYS_EPOLL_H
-	mm_event_epoll_trigger_output(local, sink);
+	mm_event_epoll_enable_output(local, sink);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_trigger_output(&backend->backend, local, sink);
+#endif
+}
+
+static inline void NONNULL(1, 2, 3)
+mm_event_backend_disable_input(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_disable_input(local, sink);
+#endif
+}
+
+static inline void NONNULL(1, 2, 3)
+mm_event_backend_disable_output(struct mm_event_backend *backend UNUSED, struct mm_event_backend_local *local, struct mm_event_fd *sink)
+{
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_disable_output(local, sink);
 #endif
 }
 

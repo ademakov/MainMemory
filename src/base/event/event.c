@@ -237,7 +237,7 @@ mm_event_trigger_input(struct mm_event_fd *sink, struct mm_context *const contex
 		sink->flags |= MM_EVENT_ONESHOT_INPUT;
 
 		struct mm_event_listener *const listener = context->listener;
-		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->backend, sink);
+		mm_event_backend_enable_input(&listener->dispatch->backend, &listener->backend, sink);
 	}
 
 	LEAVE();
@@ -258,7 +258,7 @@ mm_event_trigger_output(struct mm_event_fd *sink, struct mm_context *const conte
 		sink->flags |= MM_EVENT_ONESHOT_OUTPUT;
 
 		struct mm_event_listener *const listener = context->listener;
-		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->backend, sink);
+		mm_event_backend_enable_output(&listener->dispatch->backend, &listener->backend, sink);
 	}
 
 	LEAVE();

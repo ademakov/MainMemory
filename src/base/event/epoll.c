@@ -168,47 +168,13 @@ mm_event_epoll_handle_local(struct mm_event_listener *const listener, const int 
 		}
 
 		const uint32_t ev = event->events;
-		const uint32_t flags = sink->flags;
-
-		if ((ev & EPOLLIN) != 0) {
+		if ((ev & EPOLLIN) != 0)
 			mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
-
-			if ((flags & MM_EVENT_ONESHOT_INPUT) != 0) {
-				struct mm_event_epoll_local *const local = &listener->backend;
-				if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
-					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
-							            EPOLLET | EPOLLOUT))
-						mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-					else
-						sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
-				} else {
-					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
-						mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-					else
-						sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
-				}
-			}
-		}
-		if ((ev & EPOLLOUT) != 0) {
+		if ((ev & EPOLLOUT) != 0)
 			mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
 
-			if ((flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
-				struct mm_event_epoll_local *const local = &listener->backend;
-				if (sink->regular_listener == listener || (flags & MM_EVENT_ONESHOT_INPUT) != 0) {
-					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_MOD, sink,
-							            EPOLLET | EPOLLIN | EPOLLRDHUP))
-						mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
-					else
-						sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
-				} else {
-					if (mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0))
-						mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
-					else
-						sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
-				}
-			}
-		}
 		if ((ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			const uint32_t flags = sink->flags;
 			if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
 				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
 			if ((flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0 && (ev & (EPOLLERR | EPOLLHUP)) != 0)
@@ -445,7 +411,7 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event
 }
 
 void NONNULL(1, 2)
-mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink)
+mm_event_epoll_enable_input(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLIN | EPOLLRDHUP;
@@ -460,7 +426,7 @@ mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event
 }
 
 void NONNULL(1, 2)
-mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink)
+mm_event_epoll_enable_output(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLOUT;
@@ -468,6 +434,36 @@ mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_even
 	    || (sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
 		op = EPOLL_CTL_MOD;
 		events |= EPOLLIN | EPOLLRDHUP;
+	}
+
+	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_OUTPUT_ERROR);
+}
+
+void NONNULL(1, 2)
+mm_event_epoll_disable_input(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_DEL;
+	uint32_t events = 0;
+	if (((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0 && &sink->regular_listener->backend == local)
+	    || (sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+		op = EPOLL_CTL_MOD;
+		events = EPOLLET | EPOLLOUT;
+	}
+
+	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_INPUT_ERROR);
+}
+
+void NONNULL(1, 2)
+mm_event_epoll_disable_output(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_DEL;
+	uint32_t events = 0;
+	if (((sink->flags & MM_EVENT_REGULAR_INPUT) != 0 && &sink->regular_listener->backend == local)
+	    || (sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+		op = EPOLL_CTL_MOD;
+		events = EPOLLET | EPOLLIN | EPOLLRDHUP;
 	}
 
 	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))

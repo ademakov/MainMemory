@@ -41,6 +41,12 @@ mm_event_listener_handle_input(struct mm_context *context, struct mm_event_fd *s
 {
 	ENTER();
 
+	// Cleanup after a oneshot event.
+	if ((sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+		sink->flags &= ~MM_EVENT_ONESHOT_INPUT;
+		mm_event_backend_disable_input(&context->listener->dispatch->backend, &context->listener->backend, sink);
+	}
+
 	// Update the read readiness flags.
 	sink->flags |= flags;
 
@@ -60,6 +66,12 @@ static void NONNULL(1)
 mm_event_listener_handle_output(struct mm_context *context, struct mm_event_fd *sink, uint32_t flags)
 {
 	ENTER();
+
+	// Cleanup after a oneshot event.
+	if ((sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+		sink->flags &= ~MM_EVENT_ONESHOT_OUTPUT;
+		mm_event_backend_disable_output(&context->listener->dispatch->backend, &context->listener->backend, sink);
+	}
 
 	// Update the write readiness flags.
 	sink->flags |= flags;

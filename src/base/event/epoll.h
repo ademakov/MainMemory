@@ -111,10 +111,16 @@ void NONNULL(1, 2, 3)
 mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
 
 void NONNULL(1, 2)
-mm_event_epoll_trigger_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+mm_event_epoll_enable_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 void NONNULL(1, 2)
-mm_event_epoll_trigger_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+mm_event_epoll_enable_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+
+void NONNULL(1, 2)
+mm_event_epoll_disable_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+
+void NONNULL(1, 2)
+mm_event_epoll_disable_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */
