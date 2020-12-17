@@ -41,7 +41,7 @@ mm_event_complete(struct mm_event_fd *sink)
 		if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
 			mm_event_close_fd(sink);
 		} else if (sink->regular_listener) {
-			sink->context = sink->regular_listener->context;
+			//sink->context = sink->regular_listener->context;
 		}
 	}
 
@@ -193,6 +193,8 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, uint32_t flags, const stru
 
 	sink->fd = fd;
 	sink->flags = flags;
+	sink->poll_stamp = 0;
+	sink->task_stamp = 0;
 	sink->tasks = tasks;
 	sink->context = NULL;
 	sink->regular_listener = NULL;
@@ -212,7 +214,7 @@ mm_event_register_fd(struct mm_event_fd *sink, struct mm_context *const context)
 
 	// Bind the sink to this thread's event listener.
 	sink->context = context;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0 && (sink->flags & MM_EVENT_COMMON_POLLER) == 0)
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0)
 		sink->regular_listener = context->listener;
 
 	// Register with the event backend.
@@ -429,8 +431,53 @@ mm_event_fire_timers(struct mm_context *const context, struct mm_timeq_entry *ti
  * Event listening and notification.
  **********************************************************************/
 
+static void NONNULL(1, 2)
+mm_event_poll(struct mm_event_listener *const listener, struct mm_event_dispatch *const dispatch, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (timeout) {
+		// Cleanup stale event notifications.
+		mm_event_backend_notify_clean(&dispatch->backend);
+
+		// Publish the log before a possible sleep.
+		mm_log_relay();
+	}
+
+	// Start a reclamation critical section.
+	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
+
+	// Wait for incoming events or timeout expiration.
+	mm_event_backend_poll(&dispatch->backend, &listener->backend, timeout);
+
+	// End a reclamation critical section.
+	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
+
+	LEAVE();
+}
+
+static void NONNULL(1)
+mm_event_wait(struct mm_event_listener *const listener, mm_timeout_t timeout)
+{
+	ENTER();
+
+	if (timeout) {
+		// Try to reclaim some pending event sinks before sleeping.
+		if (mm_event_epoch_active(&listener->epoch))
+			mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
+
+		// Publish the log before a possible sleep.
+		mm_log_relay();
+
+		// Wait for a wake-up notification or timeout.
+		mm_event_listener_timedwait(listener, timeout);
+	}
+
+	LEAVE();
+}
+
 bool NONNULL(1)
-mm_event_poll(struct mm_context *const context, mm_timeout_t timeout)
+mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
 {
 	ENTER();
 	bool rc = false;
@@ -444,40 +491,55 @@ mm_event_poll(struct mm_context *const context, mm_timeout_t timeout)
 			// There are event poll changes that need to be immediately
 			// acknowledged.
 			timeout = 0;
-		} else if (timer != NULL) {
-			timeout = mm_event_check_timer(context, timer, timeout);
+		} else {
+			// Check for the closest timer timeout.
+			if (timer != NULL)
+				timeout = mm_event_check_timer(context, timer, timeout);
+
+			// Indicate that clocks need to be updated.
+			mm_timepiece_reset(&context->clock);
 		}
 	}
 
-	if (timeout) {
-		// Cleanup stale event notifications.
-		mm_event_backend_notify_clean(&dispatch->backend, &listener->backend);
+#if ENABLE_SMP
+	// The first arrived thread is elected to conduct the next event poll.
+	const bool is_poller_thread = mm_regular_trylock(&dispatch->poll_lock);
+	if (is_poller_thread) {
+		// Wait for incoming events or timeout expiration.
+		mm_event_poll(listener, dispatch, timeout);
 
-		// Publish the log before a possible sleep.
-		mm_log_relay();
+		// Give up the poller thread role.
+		mm_regular_unlock(&dispatch->poll_lock);
 
-		// Indicate that clocks need to be updated.
-		mm_timepiece_reset(&context->clock);
-	}
-
-	// Start a reclamation critical section.
-	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
-
-	// Wait for incoming events or timeout expiration.
-	mm_event_backend_poll(&dispatch->backend, &listener->backend, timeout);
-
-	// End a reclamation critical section.
-	mm_event_epoch_leave(&listener->epoch, &dispatch->global_epoch);
+		// Reset the poller event counter.
+		if (mm_event_listener_got_events(listener)) {
+			mm_event_listener_clear_events(listener);
+			rc = true;
+		}
 
 #if ENABLE_EVENT_STATS
-	// Update statistics.
-	listener->stats.poll_calls++;
-	listener->stats.zero_poll_calls += (timeout == 0);
+		// Update statistics.
+		listener->stats.poll_calls++;
+		listener->stats.zero_poll_calls += (timeout == 0);
 #endif
+	} else {
+		// Flush event poll changes if any.
+		if (mm_event_backend_has_changes(&listener->backend))
+			mm_event_backend_flush(&dispatch->backend, &listener->backend);
 
-	// Execute the timers which time has come.
-	if (timer != NULL)
-		mm_event_fire_timers(context, timer);
+		mm_event_wait(listener, timeout);
+
+#if ENABLE_EVENT_STATS
+		// Update statistics.
+		listener->stats.wait_calls++;
+		listener->stats.zero_wait_calls += (timeout == 0);
+#endif
+	}
+
+#else // !ENABLE_SMP
+
+	// Wait for incoming events or timeout expiration.
+	mm_event_poll(listener, dispatch, timeout);
 
 	// Reset the poller event counter.
 	if (mm_event_listener_got_events(listener)) {
@@ -485,47 +547,19 @@ mm_event_poll(struct mm_context *const context, mm_timeout_t timeout)
 		rc = true;
 	}
 
-	LEAVE();
-	return rc;
-}
-
-void NONNULL(1)
-mm_event_wait(struct mm_context *const context, mm_timeout_t timeout)
-{
-	ENTER();
-	ASSERT(timeout != 0);
-
-	struct mm_event_listener *const listener = context->listener;
-	struct mm_timeq_entry *const timer = mm_timeq_getmin(&listener->timer_queue);
-
-	if (timeout && timer != NULL)
-		timeout = mm_event_check_timer(context, timer, timeout);
-
-	if (timeout) {
-		// Publish the log before a possible sleep.
-		mm_log_relay();
-
-		// Indicate that clocks need to be updated.
-		mm_timepiece_reset(&context->clock);
-
-		// Wait for a wake-up notification or timeout.
-		mm_event_listener_timedwait(listener, timeout);
-	}
-
-	// Try to reclaim some pending event sinks before sleeping.
-	if (mm_event_epoch_active(&listener->epoch))
-		mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
-
 #if ENABLE_EVENT_STATS
 	// Update statistics.
-	listener->stats.wait_calls++;
+	listener->stats.poll_calls++;
+	listener->stats.zero_poll_calls += (timeout == 0);
 #endif
+#endif // !ENABLE_SMP
 
 	// Execute the timers which time has come.
 	if (timer != NULL)
 		mm_event_fire_timers(context, timer);
 
 	LEAVE();
+	return rc;
 }
 
 void NONNULL(1)
@@ -550,7 +584,7 @@ mm_event_notify(struct mm_context *context, mm_stamp_t stamp)
 
 		struct mm_event_listener *listener = context->listener;
 		if (status == MM_CONTEXT_POLLING)
-			mm_event_backend_notify(&listener->dispatch->backend, &listener->backend);
+			mm_event_backend_notify(&listener->dispatch->backend);
 		else if (status == MM_CONTEXT_WAITING)
 			mm_event_listener_signal(listener);
 	}

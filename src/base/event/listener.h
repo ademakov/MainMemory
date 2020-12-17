@@ -54,6 +54,7 @@ struct mm_event_listener_stats
 	uint64_t poll_calls;
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
+	uint64_t zero_wait_calls;
 
 	uint64_t events;
 	uint64_t forwarded_events;

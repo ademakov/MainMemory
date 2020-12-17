@@ -36,6 +36,12 @@ struct mm_event_epoll
 {
 	/* The epoll file descriptor. */
 	int event_fd;
+
+	/* The eventfd descriptor used for notification. */
+	int notify_fd;
+
+	/* Notification flag. */
+	bool notified;
 };
 
 /* A deferred event (used for errors). */
@@ -48,15 +54,6 @@ struct mm_event_epoll_stash
 /* Per-listener data for epoll support. */
 struct mm_event_epoll_local
 {
-	/* A private epoll instance. */
-	struct mm_event_epoll poll;
-
-	/* The eventfd descriptor used for notification. */
-	int notify_fd;
-
-	/* Notification flag. */
-	bool notified;
-
 	/* Deferred events (used for errors). */
 	uint32_t stash_size;
 	uint32_t stash_capacity;
@@ -81,8 +78,8 @@ mm_event_epoll_prepare(struct mm_event_epoll *backend);
 void NONNULL(1)
 mm_event_epoll_cleanup(struct mm_event_epoll *backend);
 
-void NONNULL(1, 2)
-mm_event_epoll_local_prepare(struct mm_event_epoll_local *local, struct mm_event_epoll *common);
+void NONNULL(1)
+mm_event_epoll_local_prepare(struct mm_event_epoll_local *local);
 
 void NONNULL(1)
 mm_event_epoll_local_cleanup(struct mm_event_epoll_local *local);
@@ -92,35 +89,35 @@ mm_event_epoll_local_cleanup(struct mm_event_epoll_local *local);
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *common, mm_timeout_t timeout);
+mm_event_epoll_poll(struct mm_event_epoll *common, struct mm_event_epoll_local *local, mm_timeout_t timeout);
 
 void NONNULL(1)
-mm_event_epoll_notify(struct mm_event_epoll_local *local);
+mm_event_epoll_notify(struct mm_event_epoll *common);
 
 void NONNULL(1)
-mm_event_epoll_notify_clean(struct mm_event_epoll_local *local);
+mm_event_epoll_notify_clean(struct mm_event_epoll *common);
 
 /**********************************************************************
  * Event sink I/O control.
  **********************************************************************/
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
+mm_event_epoll_register_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink);
+mm_event_epoll_unregister_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_epoll_enable_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_epoll_enable_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_epoll_disable_input(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
-void NONNULL(1, 2)
-mm_event_epoll_disable_output(struct mm_event_epoll_local *local, struct mm_event_fd *sink);
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink);
 
 #endif /* HAVE_SYS_EPOLL_H */
 #endif /* BASE_EVENT_EPOLL_H */

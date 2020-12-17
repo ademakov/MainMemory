@@ -20,16 +20,12 @@
 #include "base/fiber/strand.h"
 
 #include "base/async.h"
-#include "base/bitset.h"
-#include "base/exit.h"
 #include "base/logger.h"
+#include "base/report.h"
 #include "base/settings.h"
+#include "base/event/event.h"
 #include "base/fiber/fiber.h"
-#include "base/thread/local.h"
 #include "base/thread/thread.h"
-#include "base/util/hook.h"
-
-#include "net/net.h"
 
 #include <stdio.h>
 
@@ -217,7 +213,7 @@ mm_strand_master(mm_value_t arg)
 	struct mm_context *const context = (struct mm_context *) arg;
 	struct mm_strand *const strand = context->strand;
 
-	uint32_t spin_limit = mm_settings_get_uint32("event-poll-spin-limit", 4);
+	const uint32_t spin_limit = mm_settings_get_uint32("event-poll-spin-limit", 4);
 	uint32_t spin_count = 0;
 
 	// Run until stopped by a user request.
@@ -237,18 +233,16 @@ mm_strand_master(mm_value_t arg)
 			mm_memory_cache_collect(&context->cache);
 
 			// Check for I/O events and timers.
-			if (mm_event_poll(context, spin_count < spin_limit ? 0 : MM_STRAND_HALT_TIMEOUT)) {
-				spin_count = 0;
+			const bool spin = (spin_count != 0) || context->tasks_request_in_progress;
+			if (mm_event_listen(context, spin ? 0 : MM_STRAND_HALT_TIMEOUT)) {
+				spin_count = spin_limit;
 				// If there are too many tasks now then share them with peers.
 				mm_context_distribute_tasks(context);
 			} else {
+				spin_count -= (spin_count != 0);
 				// Request tasks from a peer thread.
 				mm_context_request_tasks(context);
-				if (context->tasks_request_in_progress) {
-					spin_count = 0;
-				} else {
-					spin_count++;
-				}
+				continue;
 			}
 		}
 
@@ -262,7 +256,7 @@ mm_strand_master(mm_value_t arg)
 
 		// Check for I/O events and timers which might activate some
 		// blocked worker fibers.
-		mm_event_poll(context, 0);
+		mm_event_listen(context, 0);
 		// Run active fibers if any.
 		mm_fiber_yield(context);
 

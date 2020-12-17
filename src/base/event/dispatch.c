@@ -94,6 +94,11 @@ mm_event_dispatch_prepare(struct mm_event_dispatch *dispatch, const struct mm_ev
 	// Initialize event sink reclamation data.
 	mm_event_epoch_prepare(&dispatch->global_epoch);
 
+#if ENABLE_SMP
+	// Initialize poller thread data.
+	dispatch->poll_lock = (mm_regular_lock_t) MM_REGULAR_LOCK_INIT;
+#endif
+
 	// Prepare listener info.
 	dispatch->nlisteners = attr->nlisteners;
 	dispatch->listeners = mm_memory_xcalloc(attr->nlisteners, sizeof(struct mm_event_listener));
@@ -137,12 +142,13 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 #if ENABLE_EVENT_STATS
 		struct mm_event_listener_stats *stats = &listener->stats;
 
-		mm_log_fmt(" listen=%llu (wait=%llu poll=%llu/%llu)\n"
+		mm_log_fmt(" listen=%llu (poll=%llu/%llu wait=%llu/%llu)\n"
 			   " notifications=%llu events=%llu/%llu/%llu\n",
 			   (unsigned long long) (stats->wait_calls + stats->poll_calls),
-			   (unsigned long long) stats->wait_calls,
 			   (unsigned long long) stats->poll_calls,
 			   (unsigned long long) stats->zero_poll_calls,
+			   (unsigned long long) stats->wait_calls,
+			   (unsigned long long) stats->zero_wait_calls,
 			   (unsigned long long) listener->notifications,
 			   (unsigned long long) stats->events,
 			   (unsigned long long) stats->forwarded_events,

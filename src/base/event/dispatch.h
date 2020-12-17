@@ -47,6 +47,11 @@ struct mm_event_dispatch
 
 	/* The event sink reclamation epoch. */
 	mm_event_epoch_t global_epoch;
+
+#if ENABLE_SMP
+	/* A lock that protects the poller thread election. */
+	mm_regular_lock_t poll_lock CACHE_ALIGN;
+#endif
 };
 
 /**********************************************************************

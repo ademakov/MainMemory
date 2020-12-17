@@ -36,6 +36,51 @@
  * Interface for handling incoming events.
  **********************************************************************/
 
+#if ENABLE_SMP
+
+/* Mark a sink as having an incoming event received from the system. */
+static inline void
+mm_event_received(struct mm_event_fd *sink)
+{
+	sink->poll_stamp++;
+}
+
+/* Mark a sink as processing a previously received event. */
+static inline void
+mm_event_delivered(struct mm_event_fd *sink)
+{
+	sink->task_stamp++;
+}
+
+/* Check if a sink has some not yet fully processed events. */
+static inline bool NONNULL(1)
+mm_event_active(const struct mm_event_fd *sink UNUSED)
+{
+	uint32_t stamp = mm_memory_load(sink->task_stamp);
+	mm_memory_load_fence();
+	uint32_t flags = mm_memory_load(sink->flags);
+
+	return sink->poll_stamp != stamp || (flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0;
+}
+
+static void
+mm_event_test_binding(struct mm_event_listener *listener, struct mm_event_fd *sink)
+{
+	// Cannot unbind certain kinds of sinks at all.
+	if ((sink->flags & (MM_EVENT_FIXED_POLLER)) != 0)
+		return;
+
+	// Cannot unbind if there is some event handling activity.
+	ASSERT(sink->context != NULL);
+	if (mm_event_active(sink))
+		return;
+
+	// Attach the sink to the poller.
+	sink->context = listener->context;
+}
+
+#endif
+
 static void NONNULL(1)
 mm_event_listener_handle_input(struct mm_context *context, struct mm_event_fd *sink, uint32_t flags)
 {
@@ -58,6 +103,10 @@ mm_event_listener_handle_input(struct mm_context *context, struct mm_event_fd *s
 		sink->flags |= MM_EVENT_INPUT_STARTED;
 		mm_context_add_task(context, &sink->tasks->input, (mm_value_t) sink);
 	}
+
+	// Count the delivered event.
+	mm_memory_store_fence();
+	mm_event_delivered(sink);
 
 	LEAVE();
 }
@@ -84,6 +133,10 @@ mm_event_listener_handle_output(struct mm_context *context, struct mm_event_fd *
 		sink->flags |= MM_EVENT_OUTPUT_STARTED;
 		mm_context_add_task(context, &sink->tasks->output, (mm_value_t) sink);
 	}
+
+	// Count the delivered event.
+	mm_memory_store_fence();
+	mm_event_delivered(sink);
 
 	LEAVE();
 }
@@ -139,13 +192,18 @@ mm_event_listener_output_req(struct mm_context *const context, uintptr_t *argume
 void NONNULL(1, 2)
 mm_event_listener_input(struct mm_event_listener *const listener, struct mm_event_fd *const sink, const uint32_t flags)
 {
-	struct mm_context *const task_context = sink->context;
-
 	// Update event statistics.
 	listener->events++;
 
 #if ENABLE_SMP
+	// Unbind or rebind the sink if appropriate.
+	mm_event_test_binding(listener, sink);
+
+	// Count the received event.
+	mm_event_received(sink);
+
 	// Submit the event to a peer context if needed.
+	struct mm_context *const task_context = sink->context;
 	if (task_context != listener->context) {
 		mm_async_call_2(task_context, mm_event_listener_input_req, (uintptr_t) sink, flags);
 #if ENABLE_EVENT_STATS
@@ -153,6 +211,8 @@ mm_event_listener_input(struct mm_event_listener *const listener, struct mm_even
 #endif
 		return;
 	}
+#else
+	struct mm_context *const task_context = sink->context;
 #endif
 
 	// Start processing the event locally.
@@ -162,13 +222,18 @@ mm_event_listener_input(struct mm_event_listener *const listener, struct mm_even
 void NONNULL(1, 2)
 mm_event_listener_output(struct mm_event_listener *const listener, struct mm_event_fd *const sink, const uint32_t flags)
 {
-	struct mm_context *const task_context = sink->context;
-
 	// Update event statistics.
 	listener->events++;
 
 #if ENABLE_SMP
+	// Unbind or rebind the sink if appropriate.
+	mm_event_test_binding(listener, sink);
+
+	// Count the received event.
+	mm_event_received(sink);
+
 	// Submit the event to a peer context if needed.
+	struct mm_context *const task_context = sink->context;
 	if (task_context != listener->context) {
 		mm_async_call_2(task_context, mm_event_listener_output_req, (uintptr_t) sink, flags);
 #if ENABLE_EVENT_STATS
@@ -176,6 +241,8 @@ mm_event_listener_output(struct mm_event_listener *const listener, struct mm_eve
 #endif
 		return;
 	}
+#else
+	struct mm_context *const task_context = sink->context;
 #endif
 
 	// Start processing the event locally.
@@ -186,6 +253,11 @@ void NONNULL(1, 2)
 mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink)
 {
 	ENTER();
+
+#if ENABLE_SMP
+	// Count the received event.
+	mm_event_received(sink);
+#endif
 
 	// Initiate event sink reclamation unless the client code asked otherwise.
 	if (likely((sink->flags & MM_EVENT_BROKEN) == 0)) {

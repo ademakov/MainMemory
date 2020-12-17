@@ -72,18 +72,16 @@ struct mm_context;
 
 /* Event sink pinned to a fixed local poller. */
 #define MM_EVENT_FIXED_POLLER	0x00010000
-/* Event sink registered with the common poller. */
-#define MM_EVENT_COMMON_POLLER	0x00020000
 
 /* A sink has a pending I/O event change. */
 #define MM_EVENT_CHANGE		0x00100000
 
-/* Per-sink event counter. */
-typedef uint16_t mm_event_stamp_t;
-
 /**********************************************************************
  * I/O event sink.
  **********************************************************************/
+
+/* Per-sink event counter. */
+typedef mm_atomic_uint32_t mm_event_stamp_t;
 
 /* Task entries to perform I/O on a sink. */
 struct mm_event_io
@@ -97,8 +95,18 @@ struct mm_event_fd
 {
 	/* File descriptor to watch. */
 	int fd;
+
 	/* State flags. */
-	uint32_t flags;
+	mm_atomic_uint32_t flags;
+
+#if ENABLE_SMP
+	/* The stamp updated by poller threads on every next event received
+	   from the system. */
+	mm_event_stamp_t poll_stamp;
+	/* The stamp updated by the target thread on every next event
+	   delivered to it from poller threads. */
+	mm_event_stamp_t task_stamp;
+#endif
 
 	/* Task entries to perform I/O. */
 	const struct mm_event_io *tasks;
@@ -141,10 +149,7 @@ struct mm_event_timer
  **********************************************************************/
 
 bool NONNULL(1)
-mm_event_poll(struct mm_context *context, mm_timeout_t timeout);
-
-void NONNULL(1)
-mm_event_wait(struct mm_context *const context, mm_timeout_t timeout);
+mm_event_listen(struct mm_context *context, mm_timeout_t timeout);
 
 void NONNULL(1)
 mm_event_notify(struct mm_context *context, mm_stamp_t stamp);

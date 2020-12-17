@@ -29,9 +29,9 @@
 
 #define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
-#define MM_TASK_REQUEST_THRESHOLD	(12)
-#define MM_TASK_DISTRIBUTE_THRESHOLD	((MM_EVENT_BACKEND_NEVENTS * 15) / 16)
-#define MM_TASK_DISTRIBUTE_PEER_LIMIT	(4)
+#define MM_TASK_REQUEST_THRESHOLD	(9)
+#define MM_TASK_DISTRIBUTE_THRESHOLD	(MM_EVENT_BACKEND_NEVENTS * 3 / 4)
+#define MM_TASK_DISTRIBUTE_PEER_LIMIT	(6)
 
 // A context associated with the running thread.
 __thread struct mm_context *__mm_context_self;
@@ -224,7 +224,7 @@ mm_context_distribute_tasks(struct mm_context *const self)
 			struct mm_context *const peer = mm_thread_ident_to_context(index);
 			uint64_t count = mm_task_peer_list_size(&peer->tasks);
 			count += mm_ring_mpmc_size(&peer->async_queue) * MM_TASK_SEND_MAX;
-			if (count < MM_TASK_DISTRIBUTE_PEER_LIMIT) {
+			if (count <= MM_TASK_DISTRIBUTE_PEER_LIMIT) {
 				mm_task_list_reassign(&self->tasks, peer);
 				break;
 			}

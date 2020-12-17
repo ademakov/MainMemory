@@ -32,7 +32,6 @@
 #include <sys/eventfd.h>
 
 #define MM_EVENT_EPOLL_NOTIFY_FD ((struct mm_event_fd *) -1)
-#define MM_EVENT_EPOLL_COMMON_FD ((struct mm_event_fd *) -2)
 
 /**********************************************************************
  * Wrappers for epoll system calls.
@@ -119,50 +118,14 @@ mm_event_epoll_ctl_sink(int ep, int op, struct mm_event_fd *sink, uint32_t event
 }
 
 static void
-mm_event_epoll_poll_common(struct mm_event_listener *listener, struct mm_event_epoll *common)
+mm_event_epoll_handle(struct mm_event_listener *const listener, struct mm_event_epoll *const common, const int nevents)
 {
-	int n = mm_epoll_wait(common->event_fd, listener->backend.events, MM_EVENT_EPOLL_NEVENTS, 0);
-	if (unlikely(n < 0)) {
-		mm_error(errno, "epoll_wait");
-		return;
-	}
-
-#if ENABLE_EVENT_STATS
-	listener->backend.nevents_stats[n]++;
-#endif
-
-	for (int i = 0; i < n; i++) {
-		struct epoll_event *const event = &listener->backend.events[i];
-		struct mm_event_fd *const sink = event->data.ptr;
-		const uint32_t ev = event->events;
-		if ((ev & EPOLLIN) != 0)
-			mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
-		if ((ev & EPOLLOUT) != 0)
-			mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
-		if ((ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			if ((sink->flags & MM_EVENT_REGULAR_INPUT) != 0)
-				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
-			if ((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0 && (ev & (EPOLLERR | EPOLLHUP)) != 0)
-				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
-		}
-	}
-}
-
-static bool
-mm_event_epoll_handle_local(struct mm_event_listener *const listener, const int nevents)
-{
-	bool do_common_poll = false;
-
 	for (int i = 0; i < nevents; i++) {
 		struct epoll_event *const event = &listener->backend.events[i];
 		struct mm_event_fd *const sink = event->data.ptr;
 
-		if (sink == MM_EVENT_EPOLL_COMMON_FD) {
-			do_common_poll = true;
-			continue;
-		}
 		if (sink == MM_EVENT_EPOLL_NOTIFY_FD) {
-			listener->backend.notified = true;
+			common->notified = true;
 			listener->notifications++;
 			continue;
 		}
@@ -181,8 +144,6 @@ mm_event_epoll_handle_local(struct mm_event_listener *const listener, const int 
 				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
 		}
 	}
-
-	return do_common_poll;
 }
 
 /**********************************************************************
@@ -190,53 +151,50 @@ mm_event_epoll_handle_local(struct mm_event_listener *const listener, const int 
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_epoll_prepare(struct mm_event_epoll *backend)
+mm_event_epoll_prepare(struct mm_event_epoll *common)
 {
 	ENTER();
 
-	// Open a epoll file descriptor.
-	backend->event_fd = mm_epoll_create(EPOLL_CLOEXEC);
-	if (backend->event_fd < 0)
+	// Open an epoll file descriptor.
+	common->event_fd = mm_epoll_create(EPOLL_CLOEXEC);
+	if (common->event_fd < 0)
 		mm_fatal(errno, "failed to create epoll fd");
+
+	// Create a file descriptor for notifications.
+	common->notify_fd = mm_eventfd(0, 0);
+	if (common->notify_fd < 0)
+		mm_fatal(errno, "eventfd");
+	// Set it up for non-blocking I/O.
+	mm_set_nonblocking(common->notify_fd);
+	// Register the file descriptor.
+	if (!mm_event_epoll_add(common->event_fd, common->notify_fd, EPOLLIN | EPOLLET, MM_EVENT_EPOLL_NOTIFY_FD))
+		mm_fatal(errno, "failed to register event fd");
+
+	// Clean the notification flag.
+	common->notified = false;
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_epoll_cleanup(struct mm_event_epoll *backend)
+mm_event_epoll_cleanup(struct mm_event_epoll *common)
 {
 	ENTER();
 
 	// Close the epoll file descriptor.
-	mm_close(backend->event_fd);
+	mm_close(common->event_fd);
+
+	// Close the eventfd file descriptor.
+	if (common->notify_fd >= 0)
+		mm_close(common->notify_fd);
 
 	LEAVE();
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_local_prepare(struct mm_event_epoll_local *local, struct mm_event_epoll *common)
+void NONNULL(1)
+mm_event_epoll_local_prepare(struct mm_event_epoll_local *local)
 {
 	ENTER();
-
-	// Prepare the local epoll instance.
-	mm_event_epoll_prepare(&local->poll);
-
-	// Register the common epoll instance with the local epoll instance.
-	if (!mm_event_epoll_add(local->poll.event_fd, common->event_fd, EPOLLIN | EPOLLET, MM_EVENT_EPOLL_COMMON_FD))
-		mm_fatal(errno, "failed to register epoll fd");
-
-	// Create a file descriptor for notifications.
-	local->notify_fd = mm_eventfd(0, 0);
-	if (local->notify_fd < 0)
-		mm_fatal(errno, "eventfd");
-	// Set it up for non-blocking I/O.
-	mm_set_nonblocking(local->notify_fd);
-	// Register the file descriptor.
-	if (!mm_event_epoll_add(local->poll.event_fd, local->notify_fd, EPOLLIN | EPOLLET, MM_EVENT_EPOLL_NOTIFY_FD))
-		mm_fatal(errno, "failed to register event fd");
-
-	// Clean the notification flag.
-	local->notified = false;
 
 	// Initialize the events stash.
 	local->stash_size = 0;
@@ -257,13 +215,6 @@ mm_event_epoll_local_cleanup(struct mm_event_epoll_local *local)
 {
 	// Free the events stash.
 	mm_memory_free(local->stash);
-
-	// Close the eventfd file descriptor.
-	if (local->notify_fd >= 0)
-		mm_close(local->notify_fd);
-
-	// Cleanup the local epoll instance.
-	mm_event_epoll_cleanup(&local->poll);
 }
 
 /**********************************************************************
@@ -271,7 +222,7 @@ mm_event_epoll_local_cleanup(struct mm_event_epoll_local *local)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *backend, mm_timeout_t timeout)
+mm_event_epoll_poll(struct mm_event_epoll *common, struct mm_event_epoll_local *local, mm_timeout_t timeout)
 {
 	ENTER();
 	DEBUG("timeout=%u", timeout);
@@ -306,7 +257,7 @@ mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *b
 	}
 
 	// Poll the system for events.
-	int n = mm_epoll_wait(local->poll.event_fd, local->events, MM_EVENT_EPOLL_NEVENTS, timeout);
+	int n = mm_epoll_wait(common->event_fd, local->events, MM_EVENT_EPOLL_NEVENTS, timeout);
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "epoll_wait");
@@ -323,8 +274,7 @@ mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *b
 
 	// Handle incoming events.
 	if (n != 0) {
-		if (mm_event_epoll_handle_local(listener, n))
-			mm_event_epoll_poll_common(listener, backend);
+		mm_event_epoll_handle(listener, common, n);
 		mm_event_listener_flush(listener);
 	}
 
@@ -332,12 +282,12 @@ mm_event_epoll_poll(struct mm_event_epoll_local *local, struct mm_event_epoll *b
 }
 
 void NONNULL(1)
-mm_event_epoll_notify(struct mm_event_epoll_local *local)
+mm_event_epoll_notify(struct mm_event_epoll *common)
 {
 	ENTER();
 
 	uint64_t value = 1;
-	int n = mm_write(local->notify_fd, &value, sizeof value);
+	int n = mm_write(common->notify_fd, &value, sizeof value);
 	if (unlikely(n != sizeof value))
 		mm_fatal(errno, "eventfd write");
 
@@ -345,15 +295,15 @@ mm_event_epoll_notify(struct mm_event_epoll_local *local)
 }
 
 void NONNULL(1)
-mm_event_epoll_notify_clean(struct mm_event_epoll_local *local)
+mm_event_epoll_notify_clean(struct mm_event_epoll *common)
 {
 	ENTER();
 
-	if (local->notified) {
-		local->notified = false;
+	if (common->notified) {
+		common->notified = false;
 
 		uint64_t value;
-		int n = mm_read(local->notify_fd, &value, sizeof value);
+		int n = mm_read(common->notify_fd, &value, sizeof value);
 		if (n != sizeof value)
 			mm_warning(errno, "eventfd read");
 	}
@@ -366,7 +316,7 @@ mm_event_epoll_notify_clean(struct mm_event_epoll_local *local)
  **********************************************************************/
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
+mm_event_epoll_register_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
 	const uint32_t flags = sink->flags;
 	const uint32_t input = flags & MM_EVENT_REGULAR_INPUT;
@@ -374,14 +324,13 @@ mm_event_epoll_register_fd(struct mm_event_epoll_local *local, struct mm_event_e
 	if ((input | output) == 0)
 		return;
 
-	const int ep = (flags & MM_EVENT_COMMON_POLLER) != 0 ? common->event_fd : local->poll.event_fd;
 	const int events = input ? EPOLLET | EPOLLIN | EPOLLRDHUP : EPOLLET | EPOLLOUT;
-	if (!mm_event_epoll_ctl_sink(ep, EPOLL_CTL_ADD, sink, events))
+	if (!mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_ADD, sink, events))
 		mm_event_epoll_stash_event(local, sink, input ? MM_EVENT_INPUT_ERROR : MM_EVENT_OUTPUT_ERROR);
 }
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event_epoll *common, struct mm_event_fd *sink)
+mm_event_epoll_unregister_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
 	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
 	struct mm_event_dispatch *dispatch = containerof(common, struct mm_event_dispatch, backend);
@@ -391,16 +340,12 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event
 
 	// Delete the file descriptor from epoll.
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0) {
-		mm_event_epoll_ctl_sink(local->poll.event_fd, EPOLL_CTL_DEL, sink, 0);
-	}
-	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0) {
-		if ((flags & MM_EVENT_COMMON_POLLER) != 0) {
-			mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_DEL, sink, 0);
-		} else if ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0
-			   || &sink->regular_listener->backend != local) {
-			mm_event_epoll_ctl_sink(sink->regular_listener->backend.poll.event_fd, EPOLL_CTL_DEL, sink, 0);
-		}
+	if ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
+		mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_DEL, sink, 0);
+	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0
+	    && ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0
+		|| &sink->regular_listener->backend != local)) {
+		mm_event_epoll_ctl_sink(sink->regular_listener->dispatch->backend.backend.event_fd, EPOLL_CTL_DEL, sink, 0);
 	}
 
 	// Finish unregister call sequence.
@@ -410,8 +355,8 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll_local *local, struct mm_event
 	mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_enable_input(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLIN | EPOLLRDHUP;
@@ -421,12 +366,12 @@ mm_event_epoll_enable_input(struct mm_event_epoll_local *const local, struct mm_
 		events |= EPOLLOUT;
 	}
 
-	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
 		mm_event_epoll_stash_event(local, sink, MM_EVENT_INPUT_ERROR);
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_enable_output(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLOUT;
@@ -436,12 +381,12 @@ mm_event_epoll_enable_output(struct mm_event_epoll_local *const local, struct mm
 		events |= EPOLLIN | EPOLLRDHUP;
 	}
 
-	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
 		mm_event_epoll_stash_event(local, sink, MM_EVENT_OUTPUT_ERROR);
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_disable_input(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_DEL;
 	uint32_t events = 0;
@@ -451,12 +396,12 @@ mm_event_epoll_disable_input(struct mm_event_epoll_local *const local, struct mm
 		events = EPOLLET | EPOLLOUT;
 	}
 
-	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
 		mm_event_epoll_stash_event(local, sink, MM_EVENT_INPUT_ERROR);
 }
 
-void NONNULL(1, 2)
-mm_event_epoll_disable_output(struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
 {
 	int op = EPOLL_CTL_DEL;
 	uint32_t events = 0;
@@ -466,7 +411,7 @@ mm_event_epoll_disable_output(struct mm_event_epoll_local *const local, struct m
 		events = EPOLLET | EPOLLIN | EPOLLRDHUP;
 	}
 
-	if (!mm_event_epoll_ctl_sink(local->poll.event_fd, op, sink, events))
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
 		mm_event_epoll_stash_event(local, sink, MM_EVENT_OUTPUT_ERROR);
 }
 

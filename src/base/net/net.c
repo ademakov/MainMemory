@@ -159,9 +159,7 @@ mm_net_prepare_accepted(struct mm_net_socket *sock, int fd, struct mm_net_server
 		VERIFY(srv->proto->writer != NULL);
 		flags |= MM_EVENT_REGULAR_OUTPUT;
 	}
-	if ((options & MM_NET_BOUND) == 0)
-		/*flags |= MM_EVENT_COMMON_POLLER*/;
-	else
+	if ((options & MM_NET_BOUND) != 0)
 		flags |= MM_EVENT_FIXED_POLLER;
 
 	// Initialize the event sink.
