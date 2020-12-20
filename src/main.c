@@ -115,6 +115,8 @@ static struct mm_args_info mm_args_info_tbl[] = {
 	  "\n\t\tenable thread binding to CPU cores" },
 	{ "thread-number", 't', MM_ARGS_REQUIRED,
 	  "\n\t\tnumber of threads" },
+	{ "threads-per-poll", 'T', MM_ARGS_REQUIRED,
+	  "\n\t\tnumber of threads per event poll instance" },
 	{ NULL, 0, 0, NULL },
 	{ "memcache-ip", 'l', MM_ARGS_REQUIRED,
 	  "\n\t\tmemcache server IP address to listen on" },

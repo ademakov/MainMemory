@@ -57,8 +57,12 @@ static struct mm_domain *mm_regular_domain = NULL;
 // Strands for regular domain threads.
 static struct mm_strand *mm_regular_strands;
 
+// The number of event dispatch instances.
+static mm_thread_t mm_event_dispatch_ninstances = 0;
+static mm_thread_t mm_event_dispatch_nthreads_per_instance = 0;
+
 // Event dispatch for regular thread domain.
-static struct mm_event_dispatch mm_regular_dispatch;
+static struct mm_event_dispatch *mm_event_dispatch_instances;
 
 // Run in a daemon mode.
 static bool mm_daemonize = false;
@@ -116,19 +120,12 @@ mm_thread_ident_to_strand(mm_thread_t ident)
 }
 
 struct mm_event_dispatch *
-mm_domain_ident_to_event_dispatch(mm_thread_t ident)
-{
-	if (ident != 0)
-		return NULL;
-	return &mm_regular_dispatch;
-}
-
-struct mm_event_dispatch *
 mm_thread_ident_to_event_dispatch(mm_thread_t ident)
 {
 	if (ident >= mm_regular_nthreads)
 		return NULL;
-	return &mm_regular_dispatch;
+	mm_thread_t index = ident / mm_event_dispatch_nthreads_per_instance;
+	return &mm_event_dispatch_instances[index];
 }
 
 struct mm_event_listener *
@@ -136,7 +133,9 @@ mm_thread_ident_to_event_listener(mm_thread_t ident)
 {
 	if (ident >= mm_regular_nthreads)
 		return NULL;
-	return &mm_regular_dispatch.listeners[ident];
+	mm_thread_t index = ident / mm_event_dispatch_nthreads_per_instance;
+	mm_thread_t first = index * mm_event_dispatch_nthreads_per_instance;
+	return &mm_event_dispatch_instances[index].listeners[ident - first];
 }
 
 /**********************************************************************
@@ -332,6 +331,8 @@ mm_regular_boot(mm_value_t arg)
 
 	// Initialize per-strand resources.
 	mm_regular_boot_call_start_hooks(strand);
+	// Prepare context for task sharing.
+	mm_context_collect_peers(context);
 
 	// Run fibers machinery for a while.
 	mm_strand_loop(strand, context);
@@ -385,15 +386,22 @@ mm_common_start(void)
 		mm_strand_prepare(&mm_regular_strands[i]);
 
 	// Allocate event dispatch memory and system resources.
-	struct mm_event_dispatch_attr attr;
-	mm_event_dispatch_attr_prepare(&attr);
-	mm_event_dispatch_attr_setlisteners(&attr, mm_regular_nthreads);
+	mm_event_dispatch_instances = mm_memory_aligned_xalloc(MM_CACHELINE, mm_event_dispatch_ninstances * sizeof(struct mm_event_dispatch));
+	for (mm_thread_t i = 0; i < mm_event_dispatch_ninstances; i++) {
+		mm_thread_t nthreads = mm_event_dispatch_nthreads_per_instance;
+		if (i == (mm_event_dispatch_ninstances - 1))
+			nthreads = mm_regular_nthreads - nthreads * i;
+
+		struct mm_event_dispatch_attr attr;
+		mm_event_dispatch_attr_prepare(&attr);
+		mm_event_dispatch_attr_setlisteners(&attr, nthreads);
 #if DISPATCH_ATTRS
-	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
-		mm_event_dispatch_attr_setlistenerxxx(&attr, i, xxx);
+		for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
+			mm_event_dispatch_attr_setlistenerxxx(&attr, i, xxx);
 #endif
-	mm_event_dispatch_prepare(&mm_regular_dispatch, &attr);
-	mm_event_dispatch_attr_cleanup(&attr);
+		mm_event_dispatch_prepare(&mm_event_dispatch_instances[i], &attr);
+		mm_event_dispatch_attr_cleanup(&attr);
+	}
 
 	LEAVE();
 }
@@ -409,11 +417,14 @@ mm_common_stop(void)
 		mm_task_report_stats(&mm_task_stats_store[i]);
 		mm_context_report_stats(&mm_context_stats_store[i]);
 	}
-	mm_event_dispatch_stats(&mm_regular_dispatch);
+	for (mm_thread_t i = 0; i < mm_event_dispatch_ninstances; i++)
+		mm_event_dispatch_stats(&mm_event_dispatch_instances[i], i);
 	mm_lock_stats();
 
 	// Release event dispatch memory and system resources.
-	mm_event_dispatch_cleanup(&mm_regular_dispatch);
+	for (mm_thread_t i = 0; i < mm_event_dispatch_ninstances; i++)
+		mm_event_dispatch_cleanup(&mm_event_dispatch_instances[i]);
+	mm_memory_free(mm_event_dispatch_instances);
 
 	// Cleanup fiber subsystem.
 	for (mm_thread_t i = 0; i < mm_regular_nthreads; i++)
@@ -505,10 +516,15 @@ mm_start(void)
 
 	// Determine the number of regular threads.
 	mm_regular_nthreads = nthreads ? nthreads : ncpus;
-	if (mm_regular_nthreads == 1)
-		mm_brief("using 1 thread");
-	else
-		mm_brief("using %d threads", mm_regular_nthreads);
+	mm_brief("using %d thread(s)", mm_regular_nthreads);
+
+	// Determine the number of event dispatch instances.
+	uint32_t nd = mm_settings_get_uint32("threads-per-poll", 0);
+	if (nd == 0 || nd > nthreads)
+		nd = nthreads;
+	mm_event_dispatch_nthreads_per_instance = nd;
+	mm_event_dispatch_ninstances = (nthreads + nd - 1) / nd;
+	mm_brief("using %d event poll instance(s)", mm_event_dispatch_ninstances);
 
 	// Calibrate internal clock.
 	mm_timepiece_init();

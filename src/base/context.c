@@ -26,6 +26,7 @@
 #include "base/runtime.h"
 #include "base/event/listener.h"
 #include "base/fiber/strand.h"
+#include "base/memory/alloc.h"
 
 #define MM_ASYNC_QUEUE_MIN_SIZE		(16)
 
@@ -54,6 +55,10 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 	// Prepare storage for tasks.
 	mm_task_list_prepare(&context->tasks);
 
+	// Zero-initialize the peers list.
+	context->peers = NULL;
+	context->npeers = 0;
+
 	// Create the async call queue.
 	uint32_t sz = mm_upper_pow2(async_queue_size);
 	if (sz < MM_ASYNC_QUEUE_MIN_SIZE)
@@ -65,8 +70,11 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 }
 
 void NONNULL(1)
-mm_context_cleanup(struct mm_context *context UNUSED)
+mm_context_cleanup(struct mm_context *context)
 {
+	// Destroy the peers list.
+	mm_memory_free(context->peers);
+
 	// Flush logs before the memory with possible log chunks is unmapped.
 	mm_log_relay();
 	mm_log_flush();
@@ -82,6 +90,31 @@ mm_context_cleanup(struct mm_context *context UNUSED)
 
 	context->strand->context = NULL;
 	context->listener->context = NULL;
+}
+
+void NONNULL(1)
+mm_context_collect_peers(struct mm_context *const context)
+{
+	const mm_thread_t ncontexts = mm_number_of_regular_threads();
+
+	// Count the peers.
+	for (mm_thread_t index = 0; index < ncontexts; index++) {
+		struct mm_context *const ctx = mm_thread_ident_to_context(index);
+		if (ctx != context && ctx->listener->dispatch == context->listener->dispatch)
+			context->npeers++;
+	}
+
+	// Collect the peers if any.
+	if (context->npeers) {
+		context->peers = mm_memory_xcalloc(context->npeers, sizeof(struct mm_context *));
+
+		mm_thread_t peer_index = 0;
+		for (mm_thread_t index = 0; index < ncontexts; index++) {
+			struct mm_context *const ctx = mm_thread_ident_to_context(index);
+			if (ctx != context && ctx->listener->dispatch == context->listener->dispatch)
+				context->peers[peer_index++] = ctx;
+		}
+	}
 }
 
 void NONNULL(1)
@@ -195,9 +228,9 @@ mm_context_request_tasks(struct mm_context *self)
 		struct mm_context *source = NULL;
 		size_t max_size = MM_TASK_REQUEST_THRESHOLD;
 
-		const mm_thread_t ncontexts = mm_number_of_regular_threads();
-		for (mm_thread_t index = 0; index < ncontexts; index++) {
-			struct mm_context *const peer = mm_thread_ident_to_context(index);
+		const mm_thread_t npeers = self->npeers;
+		for (mm_thread_t index = 0; index < npeers; index++) {
+			struct mm_context *const peer = self->peers[index];
 			size_t size = mm_task_peer_list_size(&peer->tasks);
 			if (max_size < size) {
 				max_size = size;
@@ -219,9 +252,9 @@ mm_context_distribute_tasks(struct mm_context *const self)
 	ENTER();
 
 	if (mm_task_list_size(&self->tasks) >= MM_TASK_DISTRIBUTE_THRESHOLD) {
-		const mm_thread_t ncontexts = mm_number_of_regular_threads();
-		for (mm_thread_t index = 0; index < ncontexts; index++) {
-			struct mm_context *const peer = mm_thread_ident_to_context(index);
+		const mm_thread_t npeers = self->npeers;
+		for (mm_thread_t index = 0; index < npeers; index++) {
+			struct mm_context *const peer = self->peers[index];
 			uint64_t count = mm_task_peer_list_size(&peer->tasks);
 			count += mm_ring_mpmc_size(&peer->async_queue) * MM_TASK_SEND_MAX;
 			if (count <= MM_TASK_DISTRIBUTE_PEER_LIMIT) {

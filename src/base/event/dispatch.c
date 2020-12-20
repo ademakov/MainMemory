@@ -129,7 +129,7 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch)
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch, mm_thread_t dispatch_index)
 {
 	ENTER();
 
@@ -137,7 +137,7 @@ mm_event_dispatch_stats(struct mm_event_dispatch *dispatch UNUSED)
 	struct mm_event_listener *listeners = dispatch->listeners;
 	for (mm_thread_t i = 0; i < n; i++) {
 		struct mm_event_listener *listener = &listeners[i];
-		mm_log_fmt("listener %d:\n", i);
+		mm_log_fmt("listener %u.%u:\n", dispatch_index, i);
 
 #if ENABLE_EVENT_STATS
 		struct mm_event_listener_stats *stats = &listener->stats;

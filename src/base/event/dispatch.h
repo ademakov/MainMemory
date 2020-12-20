@@ -83,6 +83,6 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_dispatch_stats(struct mm_event_dispatch *dispatch);
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch, mm_thread_t dispatch_index);
 
 #endif /* BASE_EVENT_DISPATCH_H */
