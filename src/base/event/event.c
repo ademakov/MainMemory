@@ -38,11 +38,8 @@ mm_event_complete(struct mm_event_fd *sink)
 	/* Close the sink on a error unless there is still some active task using it. */
 	const uint32_t flags = sink->flags;
 	if ((flags & (MM_EVENT_CLOSED | MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) == 0) {
-		if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
+		if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0)
 			mm_event_close_fd(sink);
-		} else if (sink->regular_listener) {
-			//sink->context = sink->regular_listener->context;
-		}
 	}
 
 	LEAVE();
@@ -197,7 +194,6 @@ mm_event_prepare_fd(struct mm_event_fd *sink, int fd, uint32_t flags, const stru
 	sink->task_stamp = 0;
 	sink->tasks = tasks;
 	sink->context = NULL;
-	sink->regular_listener = NULL;
 	sink->input_fiber = NULL;
 	sink->output_fiber = NULL;
 	sink->destroy = destroy;
@@ -212,10 +208,8 @@ mm_event_register_fd(struct mm_event_fd *sink, struct mm_context *const context)
 	ASSERT(sink->fd >= 0);
 	ASSERT(context == mm_context_selfptr());
 
-	// Bind the sink to this thread's event listener.
+	// Bind the sink to this thread's context.
 	sink->context = context;
-	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0)
-		sink->regular_listener = context->listener;
 
 	// Register with the event backend.
 	struct mm_event_listener *const listener = context->listener;

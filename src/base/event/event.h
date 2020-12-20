@@ -113,8 +113,6 @@ struct mm_event_fd
 
 	/* The context assigned to execute tasks. */
 	struct mm_context *context;
-	/* The event listener for regular events. */
-	struct mm_event_listener *regular_listener;
 
 	/* Fibers bound to perform I/O. */
 	struct mm_fiber *input_fiber;

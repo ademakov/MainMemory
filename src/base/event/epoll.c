@@ -340,13 +340,8 @@ mm_event_epoll_unregister_fd(struct mm_event_epoll *common, struct mm_event_epol
 
 	// Delete the file descriptor from epoll.
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
+	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
 		mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_DEL, sink, 0);
-	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT)) != 0
-	    && ((flags & (MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0
-		|| &sink->regular_listener->backend != local)) {
-		mm_event_epoll_ctl_sink(sink->regular_listener->dispatch->backend.backend.event_fd, EPOLL_CTL_DEL, sink, 0);
-	}
 
 	// Finish unregister call sequence.
 	mm_event_listener_unregister(listener, sink);
@@ -360,8 +355,7 @@ mm_event_epoll_enable_input(struct mm_event_epoll *common, struct mm_event_epoll
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLIN | EPOLLRDHUP;
-	if (((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0 && &sink->regular_listener->backend == local)
-	    || (sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0) {
 		op = EPOLL_CTL_MOD;
 		events |= EPOLLOUT;
 	}
@@ -375,8 +369,7 @@ mm_event_epoll_enable_output(struct mm_event_epoll *common, struct mm_event_epol
 {
 	int op = EPOLL_CTL_ADD;
 	uint32_t events = EPOLLET | EPOLLOUT;
-	if (((sink->flags & MM_EVENT_REGULAR_INPUT) != 0 && &sink->regular_listener->backend == local)
-	    || (sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0) {
 		op = EPOLL_CTL_MOD;
 		events |= EPOLLIN | EPOLLRDHUP;
 	}
@@ -390,8 +383,7 @@ mm_event_epoll_disable_input(struct mm_event_epoll *common, struct mm_event_epol
 {
 	int op = EPOLL_CTL_DEL;
 	uint32_t events = 0;
-	if (((sink->flags & MM_EVENT_REGULAR_OUTPUT) != 0 && &sink->regular_listener->backend == local)
-	    || (sink->flags & MM_EVENT_ONESHOT_OUTPUT) != 0) {
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0) {
 		op = EPOLL_CTL_MOD;
 		events = EPOLLET | EPOLLOUT;
 	}
@@ -405,8 +397,7 @@ mm_event_epoll_disable_output(struct mm_event_epoll *common, struct mm_event_epo
 {
 	int op = EPOLL_CTL_DEL;
 	uint32_t events = 0;
-	if (((sink->flags & MM_EVENT_REGULAR_INPUT) != 0 && &sink->regular_listener->backend == local)
-	    || (sink->flags & MM_EVENT_ONESHOT_INPUT) != 0) {
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0) {
 		op = EPOLL_CTL_MOD;
 		events = EPOLLET | EPOLLIN | EPOLLRDHUP;
 	}
