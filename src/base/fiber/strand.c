@@ -242,12 +242,14 @@ mm_strand_master(mm_value_t arg)
 				spin_count -= (spin_count != 0);
 				// Request tasks from a peer thread.
 				mm_context_request_tasks(context);
-				continue;
+				// There are no I/O tasks here but there may be timer tasks.
+				if (mm_task_list_empty(&context->tasks))
+					continue;
 			}
 		}
 
 		// Check for idle worker fibers to handle available tasks.
-		if (strand->nidle) {
+		if (likely(strand->nidle)) {
 			// Wake an idle worker fiber.
 			mm_strand_poke(strand);
 			// Yield.
@@ -255,8 +257,11 @@ mm_strand_master(mm_value_t arg)
 		}
 
 		// Check for I/O events and timers which might activate some
-		// blocked worker fibers.
+		// blocked fibers.
 		mm_event_listen(context, 0);
+		// Handle any incoming async calls. This might activate some
+		// blocked fibers too.
+		mm_async_handle_calls(context);
 		// Run active fibers if any.
 		mm_fiber_yield(context);
 
