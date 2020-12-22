@@ -488,7 +488,7 @@ mc_table_start(const struct mm_memcache_config *config)
 	}
 #endif
 
-	struct mm_domain *domain = mm_domain_ident_to_domain(0);
+	struct mm_domain *const domain = mm_domain_selfptr();
 	MM_THREAD_LOCAL_ALLOC(domain, "mc_stat", mc_table.stat);
 	for (mm_thread_t i = 0; i < mm_domain_getsize(domain); i++) {
 		struct mc_stat *stat = MM_THREAD_LOCAL_DEREF(i, mc_table.stat);
