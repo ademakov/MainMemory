@@ -21,49 +21,129 @@
 
 #if HAVE_SYS_EPOLL_H
 
+#include "base/report.h"
+#include "base/stdcall.h"
+#include "base/event/event.h"
 #include "base/event/dispatch.h"
 #include "base/event/nonblock.h"
 #include "base/event/listener.h"
+#include "base/memory/alloc.h"
 
-#define MM_EVENT_EPOLL_NOTIFY_SINK ((struct mm_event_fd *) -1)
+#include <sys/eventfd.h>
+
+#define MM_EVENT_EPOLL_NOTIFY_FD ((struct mm_event_fd *) -1)
 
 /**********************************************************************
- * Helper routines for handling incoming events.
+ * Wrappers for epoll system calls.
+ **********************************************************************/
+
+#if ENABLE_INLINE_SYSCALLS
+
+static inline int
+mm_epoll_create(int flags)
+{
+	return mm_syscall_1(SYS_epoll_create1, flags);
+}
+
+static inline int
+mm_epoll_ctl(int ep, int op, int fd, struct epoll_event *event)
+{
+	return mm_syscall_4(SYS_epoll_ctl, ep, op, fd, (uintptr_t) event);
+}
+
+static inline int
+mm_epoll_wait(int ep, struct epoll_event *events, int nevents, int timeout)
+{
+	return mm_syscall_4(SYS_epoll_wait, ep, (uintptr_t) events, nevents, timeout);
+}
+
+static inline int
+mm_eventfd(unsigned int value, int flags)
+{
+	return mm_syscall_2(SYS_eventfd, value, flags);
+}
+
+#else
+
+# define mm_epoll_create	epoll_create
+# define mm_epoll_ctl		epoll_ctl
+# define mm_epoll_wait		epoll_wait
+# define mm_eventfd		eventfd
+
+#endif
+
+/**********************************************************************
+ * Helper routines.
  **********************************************************************/
 
 static void
-mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *listener, int nevents)
+mm_event_epoll_stash_event(struct mm_event_epoll_local *local, struct mm_event_fd *sink, uint32_t flags)
 {
-	mm_event_listener_handle_start(listener, nevents);
+	if (local->stash_size >= local->stash_capacity) {
+		if (unlikely(local->stash_capacity == UINT32_MAX))
+			mm_fatal(0, "too large epoll event stash");
 
-	for (int i = 0; i < nevents; i++) {
-		struct epoll_event *event = &listener->backend.events[i];
-		struct mm_event_fd *sink = event->data.ptr;
-
-		if ((event->events & EPOLLIN) != 0) {
-			if (sink == MM_EVENT_EPOLL_NOTIFY_SINK) {
-				backend->notified = true;
-				listener->notifications++;
-			} else {
-				mm_event_listener_input(listener, sink);
-			}
-		}
-
-		if ((event->events & EPOLLOUT) != 0) {
-			mm_event_listener_output(listener, sink);
-		}
-
-		if ((event->events & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
-			bool input = sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER);
-			bool output = sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER);
-			if (input)
-				mm_event_listener_input_error(listener, sink);
-			if (output && (event->events & (EPOLLERR | EPOLLHUP)) != 0)
-				mm_event_listener_output_error(listener, sink);
-		}
+		local->stash_capacity *= 2;
+		local->stash = ((struct mm_event_epoll_stash *)
+				mm_memory_xrealloc(
+					local->stash,
+					local->stash_capacity * sizeof(struct mm_event_epoll_stash)));
 	}
 
-	mm_event_listener_handle_finish(listener);
+	local->stash[local->stash_size++] = (struct mm_event_epoll_stash) { sink, flags };
+}
+
+static bool
+mm_event_epoll_ctl(int ep, int op, int fd, struct epoll_event *event)
+{
+	if (unlikely(mm_epoll_ctl(ep, op, fd, event) < 0)) {
+		mm_error(errno, "epoll_ctl");
+		return false;
+	}
+	return true;
+}
+
+static bool
+mm_event_epoll_add(int ep, int fd, uint32_t events, void *ptr)
+{
+	struct epoll_event ee = { .events = events, .data.ptr = ptr };
+	return mm_event_epoll_ctl(ep, EPOLL_CTL_ADD, fd, &ee);
+}
+
+static bool
+mm_event_epoll_ctl_sink(int ep, int op, struct mm_event_fd *sink, uint32_t events)
+{
+	struct epoll_event ee = { .events = events, .data.ptr = sink };
+	return mm_event_epoll_ctl(ep, op, sink->fd, &ee);
+}
+
+static void
+mm_event_epoll_handle(struct mm_event_listener *const listener, struct mm_event_epoll *const common, const int nevents)
+{
+	for (int i = 0; i < nevents; i++) {
+		struct epoll_event *const event = &listener->backend.events[i];
+		struct mm_event_fd *const sink = event->data.ptr;
+
+		if (sink == MM_EVENT_EPOLL_NOTIFY_FD) {
+			common->notified = true;
+			listener->notifications++;
+			continue;
+		}
+
+		const uint32_t ev = event->events;
+		if ((ev & EPOLLIN) != 0)
+			mm_event_listener_input(listener, sink, MM_EVENT_INPUT_READY);
+		if ((ev & EPOLLOUT) != 0)
+			mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_READY);
+
+		if ((ev & (EPOLLERR | EPOLLHUP | EPOLLRDHUP)) != 0) {
+			const uint32_t flags = sink->flags;
+			if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0)
+				mm_event_listener_input(listener, sink, MM_EVENT_INPUT_ERROR);
+			if ((flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0 && (ev & (EPOLLERR | EPOLLHUP)) != 0)
+				mm_event_listener_output(listener, sink, MM_EVENT_OUTPUT_ERROR);
+		}
+	}
 }
 
 /**********************************************************************
@@ -71,41 +151,56 @@ mm_event_epoll_handle(struct mm_event_epoll *backend, struct mm_event_listener *
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_epoll_prepare(struct mm_event_epoll *backend)
+mm_event_epoll_prepare(struct mm_event_epoll *common)
 {
 	ENTER();
 
-	// Open a epoll file descriptor.
-	backend->event_fd = epoll_create(511);
-	if (backend->event_fd < 0)
+	// Open an epoll file descriptor.
+	common->event_fd = mm_epoll_create(EPOLL_CLOEXEC);
+	if (common->event_fd < 0)
 		mm_fatal(errno, "failed to create epoll fd");
 
-	// Notification is disabled by default.
-	backend->notify_fd = -1;
-	backend->notified = false;
+	// Create a file descriptor for notifications.
+	common->notify_fd = mm_eventfd(0, 0);
+	if (common->notify_fd < 0)
+		mm_fatal(errno, "eventfd");
+	// Set it up for non-blocking I/O.
+	mm_set_nonblocking(common->notify_fd);
+	// Register the file descriptor.
+	if (!mm_event_epoll_add(common->event_fd, common->notify_fd, EPOLLIN | EPOLLET, MM_EVENT_EPOLL_NOTIFY_FD))
+		mm_fatal(errno, "failed to register event fd");
+
+	// Clean the notification flag.
+	common->notified = false;
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_epoll_cleanup(struct mm_event_epoll *backend)
+mm_event_epoll_cleanup(struct mm_event_epoll *common)
 {
 	ENTER();
-
-	// Close the eventfd file descriptor.
-	if (backend->notify_fd >= 0)
-		mm_close(backend->notify_fd);
 
 	// Close the epoll file descriptor.
-	mm_close(backend->event_fd);
+	mm_close(common->event_fd);
+
+	// Close the eventfd file descriptor.
+	if (common->notify_fd >= 0)
+		mm_close(common->notify_fd);
 
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_epoll_local_prepare(struct mm_event_epoll_local *local UNUSED)
+mm_event_epoll_local_prepare(struct mm_event_epoll_local *local)
 {
 	ENTER();
+
+	// Initialize the events stash.
+	local->stash_size = 0;
+	local->stash_capacity = 10;
+	local->stash = ((struct mm_event_epoll_stash *)
+			mm_memory_xalloc(local->stash_capacity * sizeof(struct mm_event_epoll_stash)));
 
 #if ENABLE_EVENT_STATS
 	for (size_t i = 0; i <= MM_EVENT_EPOLL_NEVENTS; i++)
@@ -115,16 +210,40 @@ mm_event_epoll_local_prepare(struct mm_event_epoll_local *local UNUSED)
 	LEAVE();
 }
 
+void NONNULL(1)
+mm_event_epoll_local_cleanup(struct mm_event_epoll_local *local)
+{
+	// Free the events stash.
+	mm_memory_free(local->stash);
+}
+
 /**********************************************************************
  * Event backend poll and notify routines.
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, mm_timeout_t timeout)
+mm_event_epoll_poll(struct mm_event_epoll *common, struct mm_event_epoll_local *local, mm_timeout_t timeout)
 {
 	ENTER();
-
+	DEBUG("timeout=%u", timeout);
 	struct mm_event_listener *const listener = containerof(local, struct mm_event_listener, backend);
+
+	// Handle deferred errors.
+	const uint32_t stash_size = local->stash_size;
+	if (stash_size != 0) {
+		local->stash_size = 0;
+		for (uint32_t i = 0; i < stash_size; i++) {
+			const uint32_t flags = local->stash[i].flags;
+			switch (flags) {
+			case MM_EVENT_INPUT_ERROR:
+				mm_event_listener_input(listener, local->stash[i].sink, flags);
+				break;
+			case MM_EVENT_OUTPUT_ERROR:
+				mm_event_listener_output(listener, local->stash[i].sink, flags);
+				break;
+			}
+		}
+	}
 
 	if (timeout) {
 		// Announce that the thread is about to sleep.
@@ -138,7 +257,7 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local 
 	}
 
 	// Poll the system for events.
-	int n = mm_epoll_wait(backend->event_fd, local->events, MM_EVENT_EPOLL_NEVENTS, timeout);
+	int n = mm_epoll_wait(common->event_fd, local->events, MM_EVENT_EPOLL_NEVENTS, timeout);
 	if (unlikely(n < 0)) {
 		if (errno == EINTR)
 			mm_warning(errno, "epoll_wait");
@@ -146,54 +265,29 @@ mm_event_epoll_poll(struct mm_event_epoll *backend, struct mm_event_epoll_local 
 			mm_error(errno, "epoll_wait");
 		n = 0;
 	}
+#if ENABLE_EVENT_STATS
+	local->nevents_stats[n]++;
+#endif
 
 	// Announce the start of another working cycle.
 	mm_event_listener_running(listener);
 
 	// Handle incoming events.
 	if (n != 0) {
-		mm_event_epoll_handle(backend, listener, n);
+		mm_event_epoll_handle(listener, common, n);
+		mm_event_listener_flush(listener);
 	}
 
-#if ENABLE_EVENT_STATS
-	local->nevents_stats[n]++;
-#endif
-
 	LEAVE();
 }
 
 void NONNULL(1)
-mm_event_epoll_enable_notify(struct mm_event_epoll *backend)
-{
-	ENTER();
-
-	// Create a file descriptor for notifications.
-	int fd = mm_eventfd(0, 0);
-	if (fd < 0)
-		mm_fatal(errno, "eventfd");
-	backend->notify_fd = fd;
-
-	// Set it up for non-blocking I/O.
-	mm_set_nonblocking(fd);
-
-	// Register the event sink.
-	struct epoll_event ee;
-	ee.events = EPOLLIN | EPOLLET;
-	ee.data.ptr = MM_EVENT_EPOLL_NOTIFY_SINK;
-	int er = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_ADD, fd, &ee);
-	if (unlikely(er < 0))
-		mm_fatal(errno, "epoll_ctl");
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_epoll_notify(struct mm_event_epoll *backend)
+mm_event_epoll_notify(struct mm_event_epoll *common)
 {
 	ENTER();
 
 	uint64_t value = 1;
-	int n = mm_write(backend->notify_fd, &value, sizeof value);
+	int n = mm_write(common->notify_fd, &value, sizeof value);
 	if (unlikely(n != sizeof value))
 		mm_fatal(errno, "eventfd write");
 
@@ -201,15 +295,15 @@ mm_event_epoll_notify(struct mm_event_epoll *backend)
 }
 
 void NONNULL(1)
-mm_event_epoll_notify_clean(struct mm_event_epoll *backend)
+mm_event_epoll_notify_clean(struct mm_event_epoll *common)
 {
 	ENTER();
 
-	if (backend->notified) {
-		backend->notified = false;
+	if (common->notified) {
+		common->notified = false;
 
 		uint64_t value;
-		int n = mm_read(backend->notify_fd, &value, sizeof value);
+		int n = mm_read(common->notify_fd, &value, sizeof value);
 		if (n != sizeof value)
 			mm_warning(errno, "eventfd read");
 	}
@@ -222,33 +316,94 @@ mm_event_epoll_notify_clean(struct mm_event_epoll *backend)
  **********************************************************************/
 
 void NONNULL(1, 2, 3)
-mm_event_epoll_unregister_fd(struct mm_event_epoll *backend, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
+mm_event_epoll_register_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
 {
-	ENTER();
+	const uint32_t flags = sink->flags;
+	const uint32_t input = flags & MM_EVENT_REGULAR_INPUT;
+	const uint32_t output = flags & MM_EVENT_REGULAR_OUTPUT;
+	if ((input | output) == 0)
+		return;
 
+	const int events = input ? EPOLLET | EPOLLIN | EPOLLRDHUP : EPOLLET | EPOLLOUT;
+	if (!mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_ADD, sink, events))
+		mm_event_epoll_stash_event(local, sink, input ? MM_EVENT_INPUT_ERROR : MM_EVENT_OUTPUT_ERROR);
+}
+
+void NONNULL(1, 2, 3)
+mm_event_epoll_unregister_fd(struct mm_event_epoll *common, struct mm_event_epoll_local *local, struct mm_event_fd *sink)
+{
 	struct mm_event_listener *listener = containerof(local, struct mm_event_listener, backend);
-	struct mm_event_dispatch *dispatch = containerof(backend, struct mm_event_dispatch, backend);
+	struct mm_event_dispatch *dispatch = containerof(common, struct mm_event_dispatch, backend);
 
 	// Start a reclamation epoch.
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
 	// Delete the file descriptor from epoll.
-	if ((sink->flags
-	     & (MM_EVENT_REGULAR_INPUT | MM_EVENT_INPUT_TRIGGER
-		| MM_EVENT_REGULAR_OUTPUT | MM_EVENT_OUTPUT_TRIGGER)) != 0) {
-		struct epoll_event ee;
-		int rc = mm_epoll_ctl(backend->event_fd, EPOLL_CTL_DEL, sink->fd, &ee);
-		if (unlikely(rc < 0))
-			mm_error(errno, "epoll_ctl");
-	}
+	const uint32_t flags = sink->flags;
+	if ((flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0)
+		mm_event_epoll_ctl_sink(common->event_fd, EPOLL_CTL_DEL, sink, 0);
 
 	// Finish unregister call sequence.
 	mm_event_listener_unregister(listener, sink);
 
 	// Attempt to advance the reclamation epoch and possibly finish it.
 	mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
+}
 
-	LEAVE();
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_ADD;
+	uint32_t events = EPOLLET | EPOLLIN | EPOLLRDHUP;
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0) {
+		op = EPOLL_CTL_MOD;
+		events |= EPOLLOUT;
+	}
+
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_INPUT_ERROR);
+}
+
+void NONNULL(1, 2, 3)
+mm_event_epoll_enable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_ADD;
+	uint32_t events = EPOLLET | EPOLLOUT;
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0) {
+		op = EPOLL_CTL_MOD;
+		events |= EPOLLIN | EPOLLRDHUP;
+	}
+
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_OUTPUT_ERROR);
+}
+
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_input(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_DEL;
+	uint32_t events = 0;
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) != 0) {
+		op = EPOLL_CTL_MOD;
+		events = EPOLLET | EPOLLOUT;
+	}
+
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_INPUT_ERROR);
+}
+
+void NONNULL(1, 2, 3)
+mm_event_epoll_disable_output(struct mm_event_epoll *common, struct mm_event_epoll_local *const local, struct mm_event_fd *const sink)
+{
+	int op = EPOLL_CTL_DEL;
+	uint32_t events = 0;
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) != 0) {
+		op = EPOLL_CTL_MOD;
+		events = EPOLLET | EPOLLIN | EPOLLRDHUP;
+	}
+
+	if (!mm_event_epoll_ctl_sink(common->event_fd, op, sink, events))
+		mm_event_epoll_stash_event(local, sink, MM_EVENT_OUTPUT_ERROR);
 }
 
 #endif /* HAVE_SYS_EPOLL_H */

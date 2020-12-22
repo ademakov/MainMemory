@@ -46,9 +46,6 @@ struct mm_strand *
 mm_thread_ident_to_strand(mm_thread_t ident);
 
 struct mm_event_dispatch *
-mm_domain_ident_to_event_dispatch(mm_thread_t ident);
-
-struct mm_event_dispatch *
 mm_thread_ident_to_event_dispatch(mm_thread_t ident);
 
 struct mm_event_listener *

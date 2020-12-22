@@ -66,7 +66,7 @@ mm_task_add_3(struct mm_context *context, uintptr_t *arguments)
 }
 
 static void
-mm_task_submit(struct mm_context *context, struct mm_task_slot* tasks, uint32_t count)
+mm_task_submit(struct mm_context *context, struct mm_task_slot *tasks, uint32_t count)
 {
 	ENTER();
 	DEBUG("count: %d", count);

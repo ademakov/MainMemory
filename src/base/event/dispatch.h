@@ -1,7 +1,7 @@
 /*
  * base/event/dispatch.h - MainMemory event dispatch.
  *
- * Copyright (C) 2015-2019  Aleksey Demakov
+ * Copyright (C) 2015-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -25,17 +25,11 @@
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
 
-#define ENABLE_EVENT_SINK_LOCK 0
-
 /* Event dispatch attributes. */
 struct mm_event_dispatch_attr
 {
 	/* The number of event listeners. */
 	mm_thread_t nlisteners;
-
-	/* Spinning parameters. */
-	uint32_t lock_spin_limit;
-	uint32_t poll_spin_limit;
 
 	/* Individual listener parameters. */
 	struct mm_event_dispatch_listener_attr *listeners_attr;
@@ -48,10 +42,6 @@ struct mm_event_dispatch
 	struct mm_event_listener *listeners;
 	mm_thread_t nlisteners;
 
-	/* Spinning parameters. */
-	uint32_t lock_spin_limit;
-	uint32_t poll_spin_limit;
-
 	/* A system-specific event backend. */
 	struct mm_event_backend backend;
 
@@ -60,16 +50,7 @@ struct mm_event_dispatch
 
 #if ENABLE_SMP
 	/* A lock that protects the poller thread election. */
-	mm_regular_lock_t poller_lock CACHE_ALIGN;
-
-	/* Counter for poller thread busy waiting. */
-	uint32_t poll_spin_count;
-
-#if ENABLE_EVENT_SINK_LOCK
-	/* A coarse-grained lock that protects event sinks from
-	   concurrent updates. */
-	mm_regular_lock_t sink_lock CACHE_ALIGN;
-#endif
+	mm_regular_lock_t poll_lock CACHE_ALIGN;
 #endif
 };
 
@@ -85,11 +66,6 @@ mm_event_dispatch_attr_cleanup(struct mm_event_dispatch_attr *attr);
 
 void NONNULL(1)
 mm_event_dispatch_attr_setlisteners(struct mm_event_dispatch_attr *attr, mm_thread_t n);
-
-void NONNULL(1)
-mm_event_dispatch_attr_setlockspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value);
-void NONNULL(1)
-mm_event_dispatch_attr_setpollspinlimit(struct mm_event_dispatch_attr *attr, uint32_t value);
 
 #if DISPATCH_ATTRS
 void NONNULL(1, 3)
@@ -107,6 +83,6 @@ mm_event_dispatch_cleanup(struct mm_event_dispatch *dispatch);
  **********************************************************************/
 
 void NONNULL(1)
-mm_event_dispatch_stats(struct mm_event_dispatch *dispatch);
+mm_event_dispatch_stats(struct mm_event_dispatch *dispatch, mm_thread_t dispatch_index);
 
 #endif /* BASE_EVENT_DISPATCH_H */

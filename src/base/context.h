@@ -73,6 +73,11 @@ struct mm_context
 	/* Tasks to execute locally. */
 	struct mm_task_list tasks;
 
+#if ENABLE_SMP
+	struct mm_context **peers;
+	mm_thread_t npeers;
+#endif
+
 	/* The context is waiting for a 'request_tasks' response. */
 	bool tasks_request_in_progress;
 
@@ -111,6 +116,9 @@ mm_context_prepare(struct mm_context *context, mm_thread_t ident, uint32_t async
 
 void NONNULL(1)
 mm_context_cleanup(struct mm_context *context);
+
+void NONNULL(1)
+mm_context_collect_peers(struct mm_context *context);
 
 void NONNULL(1)
 mm_context_report_stats(struct mm_context_stats *stats);

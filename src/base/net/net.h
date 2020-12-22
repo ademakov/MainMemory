@@ -1,7 +1,7 @@
 /*
  * base/net/net.h - MainMemory networking.
  *
- * Copyright (C) 2012-2018  Aleksey Demakov
+ * Copyright (C) 2012-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,11 +49,15 @@ struct mm_net_server
 	/* Protocol handlers. */
 	struct mm_net_proto *proto;
 
-	/* Global server list link. */
-	struct mm_link link;
-
 	/* Thread affinity. */
 	struct mm_bitset affinity;
+
+	/* Info for thread assignment of accepted sockets. */
+	uint32_t assignment_target;
+	uint32_t assignment_counter;
+
+	/* Global server list link. */
+	struct mm_link link;
 
 	/* Server name. */
 	char *name;
@@ -117,7 +121,7 @@ mm_net_get_server_context(struct mm_net_server *srv)
  **********************************************************************/
 
 void NONNULL(1, 2)
-mm_net_prepare(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *));
+mm_net_prepare_for_connect(struct mm_net_socket *sock, void (*destroy)(struct mm_event_fd *));
 
 struct mm_net_socket *
 mm_net_create(void);

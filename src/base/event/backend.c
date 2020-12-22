@@ -19,8 +19,8 @@
 
 #include "base/event/backend.h"
 
-void NONNULL(1, 2)
-mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backend_local *some_local UNUSED)
+void NONNULL(1)
+mm_event_backend_prepare(struct mm_event_backend *backend)
 {
 	ENTER();
 
@@ -32,9 +32,7 @@ mm_event_backend_prepare(struct mm_event_backend *backend, struct mm_event_backe
 #endif
 
 	// Set up the notification mechanism.
-#if HAVE_SYS_EPOLL_H
-	mm_event_epoll_enable_notify(&backend->backend);
-#elif HAVE_SYS_EVENT_H
+#if HAVE_SYS_EVENT_H
 	mm_event_kqueue_enable_notify(&backend->backend);
 #endif
 
@@ -57,7 +55,7 @@ mm_event_backend_cleanup(struct mm_event_backend *backend)
 }
 
 void NONNULL(1)
-mm_event_backend_local_prepare(struct mm_event_backend_local *local)
+mm_event_backend_local_prepare(struct mm_event_backend_local *local, struct mm_event_backend *common UNUSED)
 {
 	ENTER();
 
@@ -65,6 +63,18 @@ mm_event_backend_local_prepare(struct mm_event_backend_local *local)
 	mm_event_epoll_local_prepare(local);
 #elif HAVE_SYS_EVENT_H
 	mm_event_kqueue_local_prepare(local);
+#endif
+
+	LEAVE();
+}
+
+void NONNULL(1)
+mm_event_backend_local_cleanup(struct mm_event_backend_local *local)
+{
+	ENTER();
+
+#if HAVE_SYS_EPOLL_H
+	mm_event_epoll_local_cleanup(local);
 #endif
 
 	LEAVE();

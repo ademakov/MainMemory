@@ -1,7 +1,7 @@
 /*
  * base/event/epoch.c - MainMemory event sink reclamation epochs.
  *
- * Copyright (C) 2016-2017  Aleksey Demakov
+ * Copyright (C) 2016-2020  Aleksey Demakov
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -79,9 +79,9 @@ mm_event_epoch_reclaim(struct mm_event_fd *sink)
 	// of the work queue submit a work item that might safely cleanup
 	// the socket being the last one that refers to it.
 	MM_TASK(reclaim_task,
-		      mm_event_epoch_reclaim_execute,
-		      mm_task_complete_noop,
-		      mm_task_reassign_off);
+	        mm_event_epoch_reclaim_execute,
+	        mm_task_complete_noop,
+	        mm_task_reassign_off);
 	mm_context_add_task(sink->context, &reclaim_task, (mm_value_t) sink);
 
 	LEAVE();

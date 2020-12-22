@@ -20,15 +20,12 @@
 #include "base/fiber/strand.h"
 
 #include "base/async.h"
-#include "base/bitset.h"
-#include "base/exit.h"
 #include "base/logger.h"
+#include "base/report.h"
+#include "base/settings.h"
+#include "base/event/event.h"
 #include "base/fiber/fiber.h"
-#include "base/thread/local.h"
 #include "base/thread/thread.h"
-#include "base/util/hook.h"
-
-#include "net/net.h"
 
 #include <stdio.h>
 
@@ -216,6 +213,9 @@ mm_strand_master(mm_value_t arg)
 	struct mm_context *const context = (struct mm_context *) arg;
 	struct mm_strand *const strand = context->strand;
 
+	const uint32_t spin_limit = mm_settings_get_uint32("event-poll-spin-limit", 4);
+	uint32_t spin_count = 0;
+
 	// Run until stopped by a user request.
 	for (;;) {
 		// Run active fibers if any.
@@ -227,27 +227,29 @@ mm_strand_master(mm_value_t arg)
 
 		// Check for available tasks.
 		if (mm_task_list_empty(&context->tasks)) {
-			// Request tasks from a peer thread.
-			mm_context_request_tasks(context);
-
 			// Cleanup the temporary data.
 			mm_wait_cache_truncate(&strand->wait_cache);
 			// Collect released context memory.
 			mm_memory_cache_collect(&context->cache);
 
 			// Check for I/O events and timers.
-			if (context->tasks_request_in_progress) {
-				mm_event_listen(context, 0);
+			const bool spin = (spin_count != 0) || context->tasks_request_in_progress;
+			if (mm_event_listen(context, spin ? 0 : MM_STRAND_HALT_TIMEOUT)) {
+				spin_count = spin_limit;
+				// If there are too many tasks now then share them with peers.
+				mm_context_distribute_tasks(context);
 			} else {
-				mm_event_listen(context, MM_STRAND_HALT_TIMEOUT);
+				spin_count -= (spin_count != 0);
+				// Request tasks from a peer thread.
+				mm_context_request_tasks(context);
+				// There are no I/O tasks here but there may be timer tasks.
+				if (mm_task_list_empty(&context->tasks))
+					continue;
 			}
-
-			// If there are too many tasks now then share them with peers.
-			mm_context_distribute_tasks(context);
 		}
 
 		// Check for idle worker fibers to handle available tasks.
-		if (strand->nidle) {
+		if (likely(strand->nidle)) {
 			// Wake an idle worker fiber.
 			mm_strand_poke(strand);
 			// Yield.
@@ -255,8 +257,11 @@ mm_strand_master(mm_value_t arg)
 		}
 
 		// Check for I/O events and timers which might activate some
-		// blocked worker fibers.
+		// blocked fibers.
 		mm_event_listen(context, 0);
+		// Handle any incoming async calls. This might activate some
+		// blocked fibers too.
+		mm_async_handle_calls(context);
 		// Run active fibers if any.
 		mm_fiber_yield(context);
 
@@ -273,7 +278,7 @@ mm_strand_master(mm_value_t arg)
 		if (strand->nworkers < strand->nworkers_max) {
 			mm_strand_worker_create(strand);
 		} else {
-			mm_warning(0, "all possible worker fibers are busy");
+			mm_warning(0, "all allowed worker fibers are busy");
 		}
 	}
 

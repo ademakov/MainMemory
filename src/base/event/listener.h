@@ -26,7 +26,6 @@
 #include "base/timeq.h"
 #include "base/event/backend.h"
 #include "base/event/epoch.h"
-#include "base/event/forward.h"
 
 #if HAVE_LINUX_FUTEX_H
 # define ENABLE_LINUX_FUTEX	1
@@ -55,17 +54,25 @@ struct mm_event_listener_stats
 	uint64_t poll_calls;
 	uint64_t zero_poll_calls;
 	uint64_t wait_calls;
-	uint64_t spin_count;
+	uint64_t zero_wait_calls;
 
-	uint64_t direct_events;
+	uint64_t events;
 	uint64_t forwarded_events;
-	uint64_t received_forwarded_events;
-	uint64_t retargeted_forwarded_events;
+	uint64_t repeatedly_forwarded_events;
 };
 #endif
 
 struct mm_event_listener
 {
+	/* Associated context. */
+	struct mm_context *context;
+
+	/* The top-level event dispatch data. */
+	struct mm_event_dispatch *dispatch;
+
+	/* The number of handled events on the last poll. */
+	uint64_t events;
+
 #if ENABLE_LINUX_FUTEX
 	/* Nothing for futexes. */
 #elif ENABLE_MACH_SEMAPHORE
@@ -74,42 +81,17 @@ struct mm_event_listener
 	struct mm_thread_monitor monitor;
 #endif
 
-	union {
-		struct {
-			/* The number of directly handled events. */
-			uint32_t direct;
-			/* The number of events forwarded to other listeners. */
-			uint32_t forwarded;
-		} events;
-
-		/* Storage for event counters. */
-		uint64_t events_any;
-	};
-
-	/* Counter for poller busy waiting. */
-	uint32_t spin_count;
-
-	/* Associated context. */
-	struct mm_context *context;
-
-	/* The top-level event dispatch data. */
-	struct mm_event_dispatch *dispatch;
-
 	/* Queue of delayed tasks. */
 	struct mm_timeq timer_queue;
 
 	/* Event sink reclamation data. */
 	struct mm_event_epoch_local epoch;
 
-#if ENABLE_SMP
-	/* Listener's helper to forward events. */
-	struct mm_event_forward_cache forward;
-#endif
-
 	/* Private part of the event backend. */
 	struct mm_event_backend_local backend;
 
 	/* Statistics. */
+	/* The number of cross-thread wake-up notifications. */
 	uint64_t notifications;
 #if ENABLE_EVENT_STATS
 	struct mm_event_listener_stats stats;
@@ -230,38 +212,35 @@ leave:
 static inline void NONNULL(1)
 mm_event_listener_clear_events(struct mm_event_listener *listener)
 {
-	listener->events_any = 0;
+	listener->events = 0;
 }
 
 static inline bool NONNULL(1)
 mm_event_listener_got_events(struct mm_event_listener *listener)
 {
-	return listener->events_any != 0;
+	return listener->events != 0;
 }
 
 /**********************************************************************
  * Interface for handling incoming events.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_listener_handle_start(struct mm_event_listener *listener, uint32_t nevents);
-
-void NONNULL(1)
-mm_event_listener_handle_finish(struct mm_event_listener *listener);
+void NONNULL(1, 2)
+mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink, uint32_t flags);
 
 void NONNULL(1, 2)
-mm_event_listener_input(struct mm_event_listener *listener, struct mm_event_fd *sink);
-
-void NONNULL(1, 2)
-mm_event_listener_input_error(struct mm_event_listener *listener, struct mm_event_fd *sink);
-
-void NONNULL(1, 2)
-mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink);
-
-void NONNULL(1, 2)
-mm_event_listener_output_error(struct mm_event_listener *listener, struct mm_event_fd *sink);
+mm_event_listener_output(struct mm_event_listener *listener, struct mm_event_fd *sink, uint32_t flags);
 
 void NONNULL(1, 2)
 mm_event_listener_unregister(struct mm_event_listener *listener, struct mm_event_fd *sink);
+
+static inline void NONNULL(1)
+mm_event_listener_flush(struct mm_event_listener *listener UNUSED)
+{
+#if ENABLE_EVENT_STATS
+	// Update event statistics.
+	listener->stats.events += listener->events;
+#endif
+}
 
 #endif /* BASE_EVENT_LISTENER_H */

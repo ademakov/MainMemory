@@ -27,62 +27,6 @@
 #include "base/fiber/fiber.h"
 
 /**********************************************************************
- * Event sink activity.
- **********************************************************************/
-
-void NONNULL(1)
-mm_event_handle_input(struct mm_event_fd *sink, uint32_t flags)
-{
-	ENTER();
-	ASSERT(sink->context == mm_context_selfptr());
-
-	// Update the read readiness flags.
-	sink->flags |= flags;
-	sink->flags &= ~MM_EVENT_INPUT_TRIGGER;
-#if ENABLE_SMP
-	// Count the delivered event.
-	sink->dispatch_stamp++;
-#endif
-
-	if (sink->input_fiber != NULL) {
-		// Run the fiber blocked on input.
-		mm_fiber_run(sink->input_fiber);
-	} else if ((sink->flags & MM_EVENT_INPUT_STARTED) == 0) {
-		// Start a new input work.
-		sink->flags |= MM_EVENT_INPUT_STARTED;
-		mm_context_add_task(sink->context, &sink->io->input, (mm_value_t) sink);
-	}
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_handle_output(struct mm_event_fd *sink, uint32_t flags)
-{
-	ENTER();
-	ASSERT(sink->context == mm_context_selfptr());
-
-	// Update the write readiness flags.
-	sink->flags |= flags;
-	sink->flags &= ~MM_EVENT_OUTPUT_TRIGGER;
-#if ENABLE_SMP
-	// Count the delivered event.
-	sink->dispatch_stamp++;
-#endif
-
-	if (sink->output_fiber != NULL) {
-		// Run the fiber blocked on output.
-		mm_fiber_run(sink->output_fiber);
-	} else if ((sink->flags & MM_EVENT_OUTPUT_STARTED) == 0) {
-		// Start a new output work.
-		sink->flags |= MM_EVENT_OUTPUT_STARTED;
-		mm_context_add_task(sink->context, &sink->io->output, (mm_value_t) sink);
-	}
-
-	LEAVE();
-}
-
-/**********************************************************************
  * Event sink I/O tasks.
  **********************************************************************/
 
@@ -91,20 +35,11 @@ mm_event_complete(struct mm_event_fd *sink)
 {
 	ENTER();
 
+	/* Close the sink on a error unless there is still some active task using it. */
 	const uint32_t flags = sink->flags;
-	if ((flags & (MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) != 0) {
-		/* Do nothing. */
-	} else if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0) {
-		/* Close the sink on error. */
-		if ((flags & (MM_EVENT_CLOSED | MM_EVENT_BROKEN)) == 0)
+	if ((flags & (MM_EVENT_CLOSED | MM_EVENT_INPUT_STARTED | MM_EVENT_OUTPUT_STARTED)) == 0) {
+		if ((flags & (MM_EVENT_INPUT_ERROR | MM_EVENT_OUTPUT_ERROR)) != 0)
 			mm_event_close_fd(sink);
-#if ENABLE_SMP
-	} else {
-		/* Mark the sink as having completed the processing of all
-		   the events delivered to the target thread so far. */
-		/* TODO: release memory fence */
-		mm_memory_store(sink->complete_stamp, sink->dispatch_stamp);
-#endif
 	}
 
 	LEAVE();
@@ -151,7 +86,7 @@ mm_event_input_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if (mm_event_input_in_progress(sink) && !mm_event_input_closed(sink)) {
 		// Submit an input task for execution again.
 		sink->flags &= ~MM_EVENT_INPUT_RESTART;
-		mm_context_add_task(sink->context, &sink->io->input, arg);
+		mm_context_add_task(sink->context, &sink->tasks->input, arg);
 	} else {
 		// Done with input for now.
 		sink->flags &= ~MM_EVENT_INPUT_STARTED;
@@ -174,7 +109,7 @@ mm_event_output_complete(mm_value_t arg, mm_value_t result UNUSED)
 	if (mm_event_output_in_progress(sink) && !mm_event_output_closed(sink)) {
 		// Submit an output task for execution again.
 		sink->flags &= ~MM_EVENT_OUTPUT_RESTART;
-		mm_context_add_task(sink->context, &sink->io->output, arg);
+		mm_context_add_task(sink->context, &sink->tasks->output, arg);
 	} else {
 		// Done with output for now.
 		sink->flags &= ~MM_EVENT_OUTPUT_STARTED;
@@ -190,14 +125,20 @@ mm_event_reassign_io(mm_value_t arg, struct mm_context *context)
 	ENTER();
 	bool reassigned = false;
 
-	struct mm_event_fd *sink = (struct mm_event_fd *) arg;
-	if ((sink->flags & MM_EVENT_FIXED_LISTENER) == 0) {
-		bool input_started = (sink->flags & MM_EVENT_INPUT_STARTED) != 0;
-		bool output_started = (sink->flags & MM_EVENT_OUTPUT_STARTED) != 0;
-		if (input_started != output_started) {
-			sink->context = context;
-			reassigned = true;
-		}
+	struct mm_event_fd *const sink = (struct mm_event_fd *) arg;
+	const uint32_t flags = sink->flags;
+
+	// Check to see if the task may be reassigned:
+	// 1. it cannot be reassigned for a fixed sink by definition;
+	// 2. a one-shot-enabled sink stays with the context that originally enabled it to keep
+	//    matters simple for epoll code that re-arms file descriptors after one-shot events;
+	// 3. the task in question (whatever it is -- input or output) can only be reassigned if
+	//    this is the only active task associated with the sink otherwise we could end up
+	//    with two tasks for the same sink running on two threads at once.
+	if ((flags & (MM_EVENT_FIXED_POLLER | MM_EVENT_ONESHOT_INPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0
+	    && ((flags & MM_EVENT_INPUT_STARTED) == 0 || (flags & MM_EVENT_OUTPUT_STARTED) == 0)) {
+		sink->context = context;
+		reassigned = true;
 	}
 
 	LEAVE();
@@ -238,43 +179,83 @@ mm_event_instant_io(void)
  * Event sink I/O control.
  **********************************************************************/
 
-void NONNULL(1)
-mm_event_prepare_fd(struct mm_event_fd *sink, int fd, const struct mm_event_io *io, uint32_t flags)
+void NONNULL(1, 4, 5)
+mm_event_prepare_fd(struct mm_event_fd *sink, int fd, uint32_t flags, const struct mm_event_io *tasks, void (*destroy)(struct mm_event_fd *))
 {
 	ENTER();
-	DEBUG("fd %d", fd);
-	ASSERT(fd >= 0);
+	DEBUG("fd %d, status %d", fd, flags);
+	VERIFY((flags & MM_EVENT_ONESHOT_INPUT) == 0);
+	VERIFY((flags & MM_EVENT_ONESHOT_OUTPUT) == 0);
+	VERIFY((flags & MM_EVENT_REGULAR_INPUT) == 0 || (flags & MM_EVENT_REGULAR_OUTPUT) == 0);
 
 	sink->fd = fd;
-	sink->io = io;
+	sink->flags = flags;
+	sink->poll_stamp = 0;
+	sink->task_stamp = 0;
+	sink->tasks = tasks;
 	sink->context = NULL;
 	sink->input_fiber = NULL;
 	sink->output_fiber = NULL;
-
-#if ENABLE_SMP
-	sink->receive_stamp = 0;
-	sink->dispatch_stamp = 0;
-	sink->complete_stamp = 0;
-#endif
-
-	sink->flags = flags;
+	sink->destroy = destroy;
 
 	LEAVE();
 }
 
 void NONNULL(1, 2)
-mm_event_register_fd(struct mm_context *context, struct mm_event_fd *sink)
+mm_event_register_fd(struct mm_event_fd *sink, struct mm_context *const context)
 {
 	ENTER();
-	DEBUG("fd %d, status %d", sink->fd, sink->flags);
-	VERIFY(context == mm_context_selfptr());
+	ASSERT(sink->fd >= 0);
+	ASSERT(context == mm_context_selfptr());
 
-	// Bind the sink to this thread's event listener.
+	// Bind the sink to this thread's context.
 	sink->context = context;
 
 	// Register with the event backend.
-	struct mm_event_listener *listener = context->listener;
+	struct mm_event_listener *const listener = context->listener;
 	mm_event_backend_register_fd(&listener->dispatch->backend, &listener->backend, sink);
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_trigger_input(struct mm_event_fd *sink, struct mm_context *const context)
+{
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->flags);
+	ASSERT(!mm_event_input_closed(sink));
+	ASSERT(context == sink->context);
+	ASSERT(context == mm_context_selfptr());
+
+	mm_event_reset_input_ready(sink);
+
+	if ((sink->flags & (MM_EVENT_REGULAR_INPUT | MM_EVENT_ONESHOT_INPUT)) == 0) {
+		sink->flags |= MM_EVENT_ONESHOT_INPUT;
+
+		struct mm_event_listener *const listener = context->listener;
+		mm_event_backend_enable_input(&listener->dispatch->backend, &listener->backend, sink);
+	}
+
+	LEAVE();
+}
+
+void NONNULL(1, 2)
+mm_event_trigger_output(struct mm_event_fd *sink, struct mm_context *const context)
+{
+	ENTER();
+	DEBUG("fd %d, status %d", sink->fd, sink->flags);
+	ASSERT(!mm_event_output_closed(sink));
+	ASSERT(context == sink->context);
+	ASSERT(context == mm_context_selfptr());
+
+	mm_event_reset_output_ready(sink);
+
+	if ((sink->flags & (MM_EVENT_REGULAR_OUTPUT | MM_EVENT_ONESHOT_OUTPUT)) == 0) {
+		sink->flags |= MM_EVENT_ONESHOT_OUTPUT;
+
+		struct mm_event_listener *const listener = context->listener;
+		mm_event_backend_enable_output(&listener->dispatch->backend, &listener->backend, sink);
+	}
 
 	LEAVE();
 }
@@ -290,9 +271,7 @@ mm_event_close_fd(struct mm_event_fd *sink)
 	mm_event_set_closed(sink);
 
 	// Unregister it.
-	struct mm_context *context = sink->context;
-	ASSERT(context == mm_context_selfptr());
-	struct mm_event_listener *listener = context->listener;
+	struct mm_event_listener *const listener = sink->context->listener;
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->backend, sink);
 
 	LEAVE();
@@ -309,55 +288,9 @@ mm_event_close_broken_fd(struct mm_event_fd *sink)
 	mm_event_set_broken(sink);
 
 	// Unregister it immediately.
-	struct mm_context *context = sink->context;
-	ASSERT(context == mm_context_selfptr());
-	struct mm_event_listener *listener = context->listener;
+	struct mm_event_listener *const listener = sink->context->listener;
 	mm_event_backend_unregister_fd(&listener->dispatch->backend, &listener->backend, sink);
 	mm_event_backend_flush(&listener->dispatch->backend, &listener->backend);
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_trigger_input(struct mm_event_fd *sink)
-{
-	ENTER();
-	DEBUG("fd %d, status %d", sink->fd, sink->flags);
-	ASSERT(!mm_event_input_closed(sink));
-
-	mm_event_reset_input_ready(sink);
-
-	if ((sink->flags & (MM_EVENT_INPUT_TRIGGER | MM_EVENT_REGULAR_INPUT)) == 0) {
-		sink->flags |= MM_EVENT_INPUT_TRIGGER;
-
-		struct mm_context *context = sink->context;
-		ASSERT(context == mm_context_selfptr());
-		struct mm_event_listener *listener = context->listener;
-
-		mm_event_backend_trigger_input(&listener->dispatch->backend, &listener->backend, sink);
-	}
-
-	LEAVE();
-}
-
-void NONNULL(1)
-mm_event_trigger_output(struct mm_event_fd *sink)
-{
-	ENTER();
-	DEBUG("fd %d, status %d", sink->fd, sink->flags);
-	ASSERT(!mm_event_output_closed(sink));
-
-	mm_event_reset_output_ready(sink);
-
-	if ((sink->flags & (MM_EVENT_OUTPUT_TRIGGER | MM_EVENT_REGULAR_OUTPUT)) == 0) {
-		sink->flags |= MM_EVENT_OUTPUT_TRIGGER;
-
-		struct mm_context *context = sink->context;
-		ASSERT(context == mm_context_selfptr());
-		struct mm_event_listener *listener = context->listener;
-
-		mm_event_backend_trigger_output(&listener->dispatch->backend, &listener->backend, sink);
-	}
 
 	LEAVE();
 }
@@ -378,7 +311,7 @@ mm_event_submit_input(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_INPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_INPUT_STARTED;
-			mm_context_add_task(sink->context, &sink->io->input, (mm_value_t) sink);
+			mm_context_add_task(sink->context, &sink->tasks->input, (mm_value_t) sink);
 		}
 	}
 
@@ -397,7 +330,7 @@ mm_event_submit_output(struct mm_event_fd *sink)
 			sink->flags |= MM_EVENT_OUTPUT_RESTART;
 		} else {
 			sink->flags |= MM_EVENT_OUTPUT_STARTED;
-			mm_context_add_task(sink->context, &sink->io->output, (mm_value_t) sink);
+			mm_context_add_task(sink->context, &sink->tasks->output, (mm_value_t) sink);
 		}
 	}
 
@@ -452,63 +385,50 @@ mm_event_disarm_timer(struct mm_context *context, struct mm_event_timer *sink)
 	LEAVE();
 }
 
-static void
-mm_event_timer_fire(struct mm_context *context, struct mm_timeq_entry *entry)
+static mm_timeout_t
+mm_event_check_timer(struct mm_context *const context, struct mm_timeq_entry *timer, mm_timeout_t timeout)
 {
-	ENTER();
-
-	struct mm_event_timer *sink = containerof(entry, struct mm_event_timer, entry);
-	if (sink->fiber != NULL) {
-		mm_fiber_run(sink->fiber);
+	mm_timeval_t timer_time = timer->value;
+	mm_timeval_t clock_time = mm_context_gettime(context);
+	if (timer_time <= clock_time) {
+		timeout = 0;
 	} else {
-		mm_context_add_task(context, sink->task, (mm_value_t) sink);
+		mm_timeval_t timer_timeout = timer_time - clock_time;
+		if (timeout > timer_timeout) {
+			timeout = timer_timeout;
+		}
 	}
+	return timeout;
+}
 
-	LEAVE();
+static void
+mm_event_fire_timers(struct mm_context *const context, struct mm_timeq_entry *timer)
+{
+	mm_timeval_t clock_time = mm_context_gettime(context);
+	while (timer != NULL && timer->value <= clock_time) {
+		// Remove the timer from the queue.
+		mm_timeq_delete(&context->listener->timer_queue, timer);
+
+		// Execute the timer action.
+		struct mm_event_timer *sink = containerof(timer, struct mm_event_timer, entry);
+		if (sink->fiber != NULL)
+			mm_fiber_run(sink->fiber);
+		else
+			mm_context_add_task(context, sink->task, (mm_value_t) sink);
+
+		// Get the next timer.
+		timer = mm_timeq_getmin(&context->listener->timer_queue);
+	}
 }
 
 /**********************************************************************
  * Event listening and notification.
  **********************************************************************/
 
-#if ENABLE_SMP
-
-static void NONNULL(1)
-mm_event_wait(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
+static void NONNULL(1, 2)
+mm_event_poll(struct mm_event_listener *const listener, struct mm_event_dispatch *const dispatch, mm_timeout_t timeout)
 {
 	ENTER();
-	ASSERT(timeout != 0);
-
-#if ENABLE_EVENT_STATS
-	// Update statistics.
-	listener->stats.wait_calls++;
-#endif
-
-	// Try to reclaim some pending event sinks before sleeping.
-	if (mm_event_epoch_active(&listener->epoch))
-		mm_event_epoch_advance(&listener->epoch, &dispatch->global_epoch);
-
-	// Publish the log before a possible sleep.
-	mm_log_relay();
-
-	// Wait for a wake-up notification or timeout.
-	mm_event_listener_timedwait(listener, timeout);
-
-	LEAVE();
-}
-
-#endif
-
-static void NONNULL(1)
-mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *dispatch, mm_timeout_t timeout)
-{
-	ENTER();
-
-#if ENABLE_EVENT_STATS
-	// Update statistics.
-	listener->stats.poll_calls++;
-	listener->stats.zero_poll_calls += (timeout == 0);
-#endif
 
 	if (timeout) {
 		// Cleanup stale event notifications.
@@ -521,7 +441,7 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	// Start a reclamation critical section.
 	mm_event_epoch_enter(&listener->epoch, &dispatch->global_epoch);
 
-	// Check incoming events and wait for notification/timeout.
+	// Wait for incoming events or timeout expiration.
 	mm_event_backend_poll(&dispatch->backend, &listener->backend, timeout);
 
 	// End a reclamation critical section.
@@ -530,103 +450,110 @@ mm_event_poll(struct mm_event_listener *listener, struct mm_event_dispatch *disp
 	LEAVE();
 }
 
-void NONNULL(1)
-mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
+static void NONNULL(1)
+mm_event_wait(struct mm_event_listener *const listener, mm_timeout_t timeout)
 {
 	ENTER();
 
+	if (timeout) {
+		// Try to reclaim some pending event sinks before sleeping.
+		if (mm_event_epoch_active(&listener->epoch))
+			mm_event_epoch_advance(&listener->epoch, &listener->dispatch->global_epoch);
+
+		// Publish the log before a possible sleep.
+		mm_log_relay();
+
+		// Wait for a wake-up notification or timeout.
+		mm_event_listener_timedwait(listener, timeout);
+	}
+
+	LEAVE();
+}
+
+bool NONNULL(1)
+mm_event_listen(struct mm_context *const context, mm_timeout_t timeout)
+{
+	ENTER();
+	bool rc = false;
+
 	struct mm_event_listener *const listener = context->listener;
 	struct mm_event_dispatch *const dispatch = listener->dispatch;
-	struct mm_timeq_entry *timer = mm_timeq_getmin(&listener->timer_queue);
+	struct mm_timeq_entry *const timer = mm_timeq_getmin(&listener->timer_queue);
 
-	if (listener->spin_count) {
-		// If previously received some events then speculate that some
-		// more are coming so keep spinning for a while to avoid extra
-		// context switches.
-		listener->spin_count--;
-		timeout = 0;
-	} else if (mm_event_backend_has_urgent_changes(&listener->backend)) {
-		// There are event poll changes that need to be immediately
-		// acknowledged.
-		timeout = 0;
-	} else if (timer != NULL) {
-		mm_timeval_t timer_time = timer->value;
-		mm_timeval_t clock_time = mm_context_gettime(context);
-		if (timer_time <= clock_time) {
+	if (timeout) {
+		if (mm_event_backend_has_urgent_changes(&listener->backend)) {
+			// There are event poll changes that need to be immediately
+			// acknowledged.
 			timeout = 0;
 		} else {
-			mm_timeval_t timer_timeout = timer_time - clock_time;
-			if (timeout > timer_timeout)
-				timeout = timer_timeout;
+			// Check for the closest timer timeout.
+			if (timer != NULL)
+				timeout = mm_event_check_timer(context, timer, timeout);
+
+			// Indicate that clocks need to be updated.
+			mm_timepiece_reset(&context->clock);
 		}
 	}
 
 #if ENABLE_SMP
 	// The first arrived thread is elected to conduct the next event poll.
-	bool is_poller_thread = mm_regular_trylock(&dispatch->poller_lock);
+	const bool is_poller_thread = mm_regular_trylock(&dispatch->poll_lock);
 	if (is_poller_thread) {
-		if (dispatch->poll_spin_count) {
-			dispatch->poll_spin_count--;
-			timeout = 0;
-		}
-
 		// Wait for incoming events or timeout expiration.
 		mm_event_poll(listener, dispatch, timeout);
 
-		// Reset the poller spin counter.
+		// Give up the poller thread role.
+		mm_regular_unlock(&dispatch->poll_lock);
+
+		// Reset the poller event counter.
 		if (mm_event_listener_got_events(listener)) {
 			mm_event_listener_clear_events(listener);
-			listener->spin_count = dispatch->lock_spin_limit;
-			dispatch->poll_spin_count = dispatch->poll_spin_limit;
+			rc = true;
 		}
 
-		// Give up the poller thread role.
-		mm_regular_unlock(&dispatch->poller_lock);
+#if ENABLE_EVENT_STATS
+		// Update statistics.
+		listener->stats.poll_calls++;
+		listener->stats.zero_poll_calls += (timeout == 0);
+#endif
 	} else {
 		// Flush event poll changes if any.
-		if (mm_event_backend_has_changes(&listener->backend)) {
+		if (mm_event_backend_has_changes(&listener->backend))
 			mm_event_backend_flush(&dispatch->backend, &listener->backend);
-		}
 
-		// Wait for forwarded events or timeout expiration.
-		if (timeout) {
-			mm_event_wait(listener, dispatch, timeout);
+		mm_event_wait(listener, timeout);
+
 #if ENABLE_EVENT_STATS
-		} else {
-			// Update statistics.
-			listener->stats.spin_count++;
+		// Update statistics.
+		listener->stats.wait_calls++;
+		listener->stats.zero_wait_calls += (timeout == 0);
 #endif
-		}
 	}
+
 #else // !ENABLE_SMP
+
 	// Wait for incoming events or timeout expiration.
 	mm_event_poll(listener, dispatch, timeout);
 
-	// Reset the poller spin counter and event counters.
+	// Reset the poller event counter.
 	if (mm_event_listener_got_events(listener)) {
 		mm_event_listener_clear_events(listener);
-		listener->spin_count = dispatch->poll_spin_limit;
+		rc = true;
 	}
+
+#if ENABLE_EVENT_STATS
+	// Update statistics.
+	listener->stats.poll_calls++;
+	listener->stats.zero_poll_calls += (timeout == 0);
+#endif
 #endif // !ENABLE_SMP
 
-	// Indicate that clocks need to be updated.
-	if (timeout)
-		mm_timepiece_reset(&context->clock);
-
 	// Execute the timers which time has come.
-	if (timer != NULL) {
-		mm_timeval_t clock_time = mm_context_gettime(context);
-		while (timer != NULL && timer->value <= clock_time) {
-			// Remove the timer from the queue.
-			mm_timeq_delete(&listener->timer_queue, timer);
-			// Execute the timer action.
-			mm_event_timer_fire(context, timer);
-			// Get the next timer.
-			timer = mm_timeq_getmin(&listener->timer_queue);
-		}
-	}
+	if (timer != NULL)
+		mm_event_fire_timers(context, timer);
 
 	LEAVE();
+	return rc;
 }
 
 void NONNULL(1)
@@ -648,10 +575,12 @@ mm_event_notify(struct mm_context *context, mm_stamp_t stamp)
 		// becomes polling). So listeners should be prepared
 		// to get spurious wake up notifications.
 		status &= MM_CONTEXT_STATUS;
-		if (status == MM_CONTEXT_WAITING)
-			mm_event_listener_signal(context->listener);
-		else if (status == MM_CONTEXT_POLLING)
-			mm_event_backend_notify(&context->listener->dispatch->backend);
+
+		struct mm_event_listener *listener = context->listener;
+		if (status == MM_CONTEXT_POLLING)
+			mm_event_backend_notify(&listener->dispatch->backend);
+		else if (status == MM_CONTEXT_WAITING)
+			mm_event_listener_signal(listener);
 	}
 
 	LEAVE();
